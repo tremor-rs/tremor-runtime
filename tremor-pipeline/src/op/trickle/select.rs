@@ -17,13 +17,11 @@
 #[cfg(test)]
 mod test;
 
-use std::mem;
-
 use super::window::{self, Group, Window};
 use crate::op::prelude::trickle::window::{GroupWindow, SelectCtx, Trait};
+use crate::op::prelude::*;
 use crate::{errors::Result, SignalKind};
-use crate::{op::prelude::*, EventIdGenerator};
-use crate::{Event, EventId, Operator};
+use crate::{Event, Operator};
 use halfbrown::Entry;
 use tremor_common::stry;
 
@@ -42,7 +40,6 @@ pub(crate) struct Select {
     select: ast::SelectStmt<'static>,
     windows: Vec<Window>,
     groups: HashMap<String, Group>,
-    event_id_gen: EventIdGenerator,
     recursion_limit: u32,
     dflt_group: Group,
     max_groups: usize,
@@ -61,12 +58,11 @@ impl Select {
                 window_impl,
             })
             .collect();
-        let event_id_gen = EventIdGenerator::for_operator(operator_uid);
         let SelectStmt { aggregates, .. } = select;
-        let windows_itr = windows.iter();
+        let windows_itr = (0_u64..).zip(windows.iter());
         let dflt_group = Group {
             value: Value::const_null(),
-            windows: GroupWindow::from_windows(aggregates, &EventId::default(), windows_itr),
+            windows: GroupWindow::from_windows(aggregates, operator_uid, windows_itr),
         };
         let windows_itr = windows.iter();
         let max_groups = windows_itr
@@ -77,7 +73,6 @@ impl Select {
             windows,
             select: select.clone(),
             groups: HashMap::new(),
-            event_id_gen,
             recursion_limit: tremor_script::recursion_limit(),
             dflt_group,
             max_groups,
@@ -184,7 +179,6 @@ impl Operator for Select {
         let Self {
             select,
             windows,
-            event_id_gen,
             groups,
             recursion_limit,
             dflt_group,
@@ -267,7 +261,6 @@ impl Operator for Select {
                     opts,
                     ctx: &ctx,
                     event_id: id.clone(),
-                    event_id_gen,
                     ingest_ns,
                     op_meta,
                     origin_uri,
@@ -326,7 +319,6 @@ impl Operator for Select {
         let Self {
             select,
             windows,
-            event_id_gen,
             groups,
             recursion_limit,
             ..
@@ -364,23 +356,21 @@ impl Operator for Select {
         let mut to_remove = vec![];
         for (group_str, g) in groups.iter_mut() {
             if let Some(w) = &mut g.windows {
-                let mut outgoing_event_id = event_id_gen.next_id();
-                mem::swap(&mut w.id, &mut outgoing_event_id);
-
-                let mut run = consts.run();
-                run.group = &g.value;
-                run.window = &w.name;
                 let window_event = w.window.on_tick(ingest_ns);
                 let mut can_remove = window_event.emit;
 
                 if window_event.emit {
                     // push
+
+                    // get the event id for the event emitted by the window
+                    // it should track all the input events
+                    let outgoing_event_id = w.reset_event_id();
+
+                    let mut run = consts.run();
+                    run.group = &g.value;
+                    run.window = &w.name;
                     let mut env = env(&ctx, run, recursion_limit);
                     env.aggrs = &w.aggrs;
-
-                    let mut outgoing_event_id = event_id_gen.next_id();
-
-                    mem::swap(&mut outgoing_event_id, &mut w.id);
 
                     let mut ctx = SelectCtx {
                         select,
@@ -388,7 +378,6 @@ impl Operator for Select {
                         opts,
                         ctx: &ctx,
                         event_id: outgoing_event_id,
-                        event_id_gen,
                         ingest_ns,
                         op_meta: &op_meta,
                         origin_uri: &None,

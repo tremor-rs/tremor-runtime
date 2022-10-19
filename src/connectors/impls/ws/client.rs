@@ -16,9 +16,14 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{WsReader, WsWriter};
-use crate::connectors::utils::tls::{tls_client_connector, TLSClientConfig};
-use crate::{connectors::prelude::*, errors::err_connector_def};
-use async_std::net::TcpStream;
+use crate::{
+    connectors::{
+        prelude::*,
+        utils::tls::{tls_client_connector, TLSClientConfig},
+    },
+    errors::err_connector_def,
+};
+use async_std::{net::TcpStream, sync::Arc};
 use async_tls::TlsConnector;
 use async_tungstenite::client_async;
 use either::Either;
@@ -132,7 +137,10 @@ impl Connector for WsClient {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(builder.qsize());
+        let source = ChannelSource::new(
+            builder.qsize(),
+            Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+        );
         self.source_runtime = Some(source.runtime());
         let addr = builder.spawn(source, source_context)?;
         Ok(Some(addr))

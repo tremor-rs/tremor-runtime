@@ -32,12 +32,11 @@ use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value::StaticValue};
 use value_trait::{Mutable, Value, ValueAccess};
 
-const ELASTICSEARCH_VERSION: &str = "7.17.4";
+const ELASTICSEARCH_VERSION: &str = "8.4.1";
 
 #[async_std::test]
-#[serial(elastic)]
+#[serial(elastic, timeout_ms = 600000)]
 async fn connector_elastic() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
     let _ = env_logger::try_init();
 
     let docker = clients::Cli::default();
@@ -45,7 +44,9 @@ async fn connector_elastic() -> Result<()> {
     let image = RunnableImage::from(
         GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
             .with_env_var("discovery.type", "single-node")
-            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m"),
+            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+            .with_env_var("xpack.security.enabled", "false")
+            .with_env_var("xpack.security.http.ssl.enabled", "false"),
     )
     .with_mapped_port((port, 9200_u16));
 
@@ -117,7 +118,6 @@ async fn connector_elastic() -> Result<()> {
             "elastic": {
                 "_id": "123",
                 "_index": "my_index",
-                "_type": "_doc",
                 "version": 1,
                 "action": "index",
                 "success": true
@@ -137,7 +137,6 @@ async fn connector_elastic() -> Result<()> {
                     "successful": 1,
                     "failed": 0,
                 },
-                "_type": "_doc",
                 "_index": "my_index",
                 "result": "created",
                 "_id": "123",
@@ -185,7 +184,6 @@ async fn connector_elastic() -> Result<()> {
             "elastic": {
                 "_id": "1234",
                 "_index": "my_index",
-                "_type": "_doc",
                 "version": 1,
                 "action": "update",
                 "success": true
@@ -202,7 +200,6 @@ async fn connector_elastic() -> Result<()> {
                     "successful": 1,
                     "failed": 0,
                 },
-                "_type": "_doc",
                 "_index": "my_index",
                 "result": "created",
                 "_id": "1234",
@@ -259,7 +256,6 @@ async fn connector_elastic() -> Result<()> {
     let batched_meta = literal!({
         "elastic": {
             "_index": "my_index",
-            "_type": "_doc"
         }
     });
     let batched_id = EventId::new(0, 0, 1, 1);
@@ -284,7 +280,6 @@ async fn connector_elastic() -> Result<()> {
         literal!({
             "elastic": {
                 "_index": "my_index",
-                "_type": "_doc",
                 "version": 42,
                 "action": "index",
                 "success": true
@@ -306,7 +301,6 @@ async fn connector_elastic() -> Result<()> {
                     "successful": 1,
                     "failed": 0
                 },
-                "_type": "_doc",
                 "_index": "my_index",
                 "result": "created",
                 "_seq_no": 2,
@@ -323,7 +317,6 @@ async fn connector_elastic() -> Result<()> {
             "elastic": {
                 "_id": "123",
                 "_index": "my_index",
-                "_type": "_doc",
                 "action": "update",
                 "success": false
             },
@@ -350,7 +343,6 @@ async fn connector_elastic() -> Result<()> {
             "elastic": {
                 "success": true,
                 "_index": "my_index",
-                "_type": "_doc",
                 "version": 1,
                 "action": "index"
             },
@@ -394,7 +386,6 @@ async fn connector_elastic() -> Result<()> {
             "elastic": {
                 "_id": "1234",
                 "_index": "my_index",
-                "_type": "_doc",
                 "version": 2,
                 "action": "update",
                 "success": true
@@ -411,7 +402,6 @@ async fn connector_elastic() -> Result<()> {
                     "successful": 1,
                     "failed": 0
                 },
-                "_type": "_doc",
                 "_index": "my_index",
                 "result": "updated",
                 "_id": "1234",
@@ -467,8 +457,8 @@ async fn connector_elastic() -> Result<()> {
     );
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
     // will rm the container
     drop(container);
 
@@ -476,9 +466,8 @@ async fn connector_elastic() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic)]
+#[serial(elastic, timeout_ms = 600000)]
 async fn auth_basic() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
     let _ = env_logger::try_init();
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
@@ -541,9 +530,8 @@ async fn auth_basic() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic)]
+#[serial(elastic, timeout_ms = 600000)]
 async fn auth_api_key() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
     let _ = env_logger::try_init();
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
@@ -619,9 +607,8 @@ async fn auth_api_key() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic)]
+#[serial(elastic, timeout_ms = 600000)]
 async fn auth_client_cert() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
     let _ = env_logger::try_init();
     setup_for_tls();
 
@@ -760,9 +747,8 @@ async fn auth_client_cert() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic)]
+#[serial(elastic, timeout_ms = 600000)]
 async fn elastic_https() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
     let _ = env_logger::try_init();
     setup_for_tls();
 
@@ -959,7 +945,6 @@ async fn send_one_event(harness: &ConnectorHarness) -> Result<()> {
                     "successful": 1,
                     "failed": 0
                 },
-                "_type": "_doc",
                 "_index": index,
                 "result": "created",
                 "_id": "snot",
@@ -975,7 +960,6 @@ async fn send_one_event(harness: &ConnectorHarness) -> Result<()> {
             "elastic": {
                 "_id": "snot",
                 "_index": index,
-                "_type": "_doc",
                 "version": 1,
                 "action": "index",
                 "success": true

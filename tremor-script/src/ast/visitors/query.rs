@@ -291,7 +291,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_stream_stmt(&mut self, _stmt: &mut StreamStmt) -> Result<VisitRes> {
+    fn visit_stream_stmt(&mut self, _stmt: &mut StreamCreate) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -299,7 +299,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_stream_stmt(&mut self, _stmt: &mut StreamStmt) -> Result<()> {
+    fn leave_stream_stmt(&mut self, _stmt: &mut StreamCreate) -> Result<()> {
         Ok(())
     }
 

@@ -1,2 +1,2 @@
-{"action":"index","correlation":"tons","doc":"my_little_doc","index":"my_little_index","payload":{"action":null,"cause":"this one has a different type underneath the same key and thus will fail elastic","snot":"tons","tremor":12},"success":false}
-{"action":"index","correlation":"baz","doc":"my_little_doc","index":"my_little_index","payload":{"action":null,"cause":"this one has a different type underneath the same key and thus will fail elastic","snot":"baz","tremor":12},"success":false}
+{"action":"index","correlation":"tons","index":"my_little_index","payload":{"action":null,"cause":"this one has a different type underneath the same key and thus will fail elastic","snot":"tons","tremor":12},"success":false}
+{"action":"index","correlation":"baz","index":"my_little_index","payload":{"action":null,"cause":"this one has a different type underneath the same key and thus will fail elastic","snot":"baz","tremor":12},"success":false}

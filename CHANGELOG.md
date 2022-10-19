@@ -1,6 +1,40 @@
 # Changelog
 
-## Unreleased
+### Fixes
+
+- Fix windows based on `interval` not sending the correct event id when timing out
+
+## [0.13.0-rc.5]
+### Fixes
+- The Google BigQuery connector will now split requests that are longer than the allowed limit (10MB)
+
+### New Features
+- The GoogleBigQuery connector now accepts `table_id` metadata, to allow setting target table per event.
+
+## [0.13.0-rc.4]
+
+### Fixes
+
+- Fix pipeline DAG creation when pipeline has unused nodes (e.g. a stream, operator or script)
+- Fix possible hangs in `http_client`, `kv` and `dns` connectors when no pipelines is connected to their `out` port
+- Fix `gbq_writer` swallow errors for requests that have been successfully sent to gbq, but failed.
+- Fix systemd startup script
+
+## [0.13.0-rc.3]
+
+### New features
+
+- Add `dogstatsd` codec for Datadog DogStasD implementation
+
+### Fixes
+
+- Fix output of `dns_client` being empty for any lookup.
+
+### Breaking Changes
+
+- Remove `$elastic._type` field from `elastic` connector response events
+
+## [0.13.0-rc.2]
 
 ### Fixes
 - Add clear error messages for pipelines for console in, pipeline out, pipeline in
@@ -14,6 +48,7 @@
 
 ### Breaking Changes
 
+- Change `gcs_streamer` and `s3_streamer` to only ack events upon finished uploads.
 - `cb` connector config `path` changed to `paths`.
 - Introduce breaking change in `kafka_consumer` configuration, by adding `mode`.
 - Update grok to 0.2, optional patterns are now omitted no longer ""
@@ -24,7 +59,7 @@
 
 ### New features
 
-- Add `gcl_writer` Google Cloud Platform Cloud Logging connector for writing log entries
+- Add `gcl_writer` Google Cloud Platform Cloud Logging connector for writing log entries, with in-flight concurrency support.
 - Add reverse functions and tests for arrays and strings, add sort test for arrays
 - Add a ClickHouse connector
 - Add a Logging connector

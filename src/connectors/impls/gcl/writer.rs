@@ -15,7 +15,8 @@
 pub(crate) mod meta;
 mod sink;
 
-use crate::connectors::impls::gcl::writer::sink::GclSink;
+use crate::connectors::google::GouthTokenProvider;
+use crate::connectors::impls::gcl::writer::sink::{GclSink, TonicChannelFactory};
 use crate::connectors::prelude::*;
 use crate::connectors::{Alias, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
 use crate::errors::Error;
@@ -24,9 +25,11 @@ use googapis::google::logging::r#type::LogSeverity;
 use serde::Deserialize;
 use simd_json::OwnedValue;
 use std::collections::HashMap;
+use tonic::transport::Channel;
 use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     /// The default `log_name` for this configuration or `default` if not provided.
     /// The `log_name` field can be overridden in metadata.
@@ -100,6 +103,11 @@ pub(crate) struct Config {
     /// basis through metadata
     #[serde(default = "Default::default")]
     pub labels: HashMap<String, String>,
+
+    /// This settings sets an upper limit on the number of concurrent in flight requests
+    /// that can be in progress simultaneously
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
 }
 
 fn default_partial_success() -> bool {
@@ -120,6 +128,10 @@ fn default_request_timeout() -> u64 {
 
 fn default_log_severity() -> i32 {
     LogSeverity::Default as i32
+}
+
+fn default_concurrency() -> usize {
+    4
 }
 
 impl Config {
@@ -231,7 +243,11 @@ impl Connector for Gcl {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GclSink::new(self.config.clone());
+        let sink = GclSink::<GouthTokenProvider, Channel>::new(
+            self.config.clone(),
+            builder.reply_tx(),
+            TonicChannelFactory,
+        );
 
         builder.spawn(sink, sink_context).map(Some)
     }

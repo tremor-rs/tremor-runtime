@@ -205,7 +205,6 @@ impl Sink for MetricsSink {
     ) -> Result<SinkReply> {
         // verify event format
         for (value, _meta) in event.value_meta_iter() {
-            // if it fails here an error event is sent to the ERR port of this connector
             verify_metrics_value(value)?;
         }
 

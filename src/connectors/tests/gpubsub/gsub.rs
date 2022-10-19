@@ -14,14 +14,14 @@
 
 use crate::connectors::impls::gpubsub::consumer::Builder;
 use crate::connectors::tests::ConnectorHarness;
-use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage, Subscription, Topic};
+use googapis::google::pubsub::v1::{
+    GetSubscriptionRequest, PublishRequest, PubsubMessage, Subscription, Topic,
+};
 use serial_test::serial;
 use std::collections::HashMap;
-use std::time::Duration;
 use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
@@ -30,10 +30,8 @@ use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn no_connection() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
@@ -51,65 +49,12 @@ async fn no_connection() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
-#[serial(gpubsub)]
-async fn no_token() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
-    let _ = env_logger::try_init();
-    let mut env = EnvHelper::new();
-    env.remove_var("GOOGLE_APPLICATION_CREDENTIALS");
-    let connector_yaml = literal!({
-        "codec": "binary",
-        "config":{
-            "ack_deadline": 30000000000u64,
-            "connect_timeout": 100000000,
-            "subscription_id": "projects/xxx/subscriptions/test-subscription-a"
-        }
-    });
-
-    let harness =
-        ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
-    assert!(harness.start().await.is_err());
-    Ok(())
-}
-
-#[async_std::test]
-#[serial(gpubsub)]
-async fn simple_subscribe() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
-    let _ = env_logger::try_init();
-
-    let runner = Cli::docker();
-
-    let (pubsub, pubsub_args) =
-        testcontainers::images::google_cloud_sdk_emulators::CloudSdk::pubsub();
-    let runnable_image = RunnableImage::from((pubsub, pubsub_args));
-    let container = runner.run(runnable_image);
-
-    let port = container
-        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
-    let endpoint = format!("http://localhost:{}", port);
-    let endpoint_clone = endpoint.clone();
-
-    let connector_yaml: Value = literal!({
-        "metrics_interval_s": 1,
-        "codec": "binary",
-        "config":{
-            "url": endpoint,
-            "ack_deadline": 30000000000u64,
-            "connect_timeout": 30000000000u64,
-            "subscription_id": "projects/test/subscriptions/test-subscription-a",
-            "skip_authentication": true
-        }
-    });
-
-    let channel = Channel::from_shared(endpoint_clone)?.connect().await?;
+async fn create_subscription(endpoint: String, topic: &str, subscription: &str) -> Result<()> {
+    let channel = Channel::from_shared(endpoint)?.connect().await?;
     let mut publisher = PublisherClient::new(channel.clone());
     publisher
         .create_topic(Topic {
-            name: "projects/test/topics/test".to_string(),
+            name: topic.to_string(),
             labels: Default::default(),
             message_storage_policy: None,
             kms_key_name: "".to_string(),
@@ -122,8 +67,8 @@ async fn simple_subscribe() -> Result<()> {
     let mut subscriber = SubscriberClient::new(channel);
     subscriber
         .create_subscription(Subscription {
-            name: "projects/test/subscriptions/test-subscription-a".to_string(),
-            topic: "projects/test/topics/test".to_string(),
+            name: subscription.to_string(),
+            topic: topic.to_string(),
             push_config: None,
             ack_deadline_seconds: 0,
             retain_acked_messages: false,
@@ -138,6 +83,44 @@ async fn simple_subscribe() -> Result<()> {
             topic_message_retention_duration: None,
         })
         .await?;
+    // assert the system knows about our subscription now
+    subscriber
+        .get_subscription(GetSubscriptionRequest {
+            subscription: subscription.to_string(),
+        })
+        .await?;
+    Ok(())
+}
+
+#[async_std::test]
+#[serial(gpubsub, timeout_ms = 600000)]
+async fn simple_subscribe() -> Result<()> {
+    let _ = env_logger::try_init();
+
+    let runner = Cli::docker();
+
+    let (pubsub, pubsub_args) =
+        testcontainers::images::google_cloud_sdk_emulators::CloudSdk::pubsub();
+    let runnable_image = RunnableImage::from((pubsub, pubsub_args));
+    let container = runner.run(runnable_image);
+
+    let port = container
+        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+    let endpoint = format!("http://localhost:{}", port);
+    let topic = "projects/test/topics/test";
+    let subscription = "projects/test/subscriptions/test-subscription-a";
+
+    let connector_yaml: Value = literal!({
+        "metrics_interval_s": 1,
+        "codec": "binary",
+        "config":{
+            "url": endpoint.clone(),
+            "ack_deadline": 30000000000u64,
+            "connect_timeout": 30000000000u64,
+            "subscription_id": subscription,
+        }
+    });
+    create_subscription(endpoint.clone(), topic, subscription).await?;
 
     let harness =
         ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
@@ -152,6 +135,8 @@ async fn simple_subscribe() -> Result<()> {
     let mut attributes = HashMap::new();
     attributes.insert("a".to_string(), "b".to_string());
 
+    let channel = Channel::from_shared(endpoint)?.connect().await?;
+    let mut publisher = PublisherClient::new(channel.clone());
     publisher
         .publish(PublishRequest {
             topic: "projects/test/topics/test".to_string(),

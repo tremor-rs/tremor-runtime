@@ -21,6 +21,7 @@ use tremor_script::Value;
 pub(crate) mod binary;
 pub(crate) mod binflux;
 pub(crate) mod csv;
+pub(crate) mod dogstatsd;
 pub(crate) mod influx;
 pub(crate) mod json;
 pub(crate) mod msgpack;
@@ -113,6 +114,7 @@ pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
         "null" => Ok(Box::new(null::Null {})),
         "string" => Ok(Box::new(string::String {})),
         "statsd" => Ok(Box::new(statsd::StatsD {})),
+        "dogstatsd" => Ok(Box::new(dogstatsd::DogStatsD {})),
         "yaml" => Ok(Box::new(yaml::Yaml {})),
         "binary" => Ok(Box::new(binary::Binary {})),
         "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
@@ -134,6 +136,7 @@ mod test {
         assert!(super::resolve(&"null".into()).is_ok());
         assert!(super::resolve(&"string".into()).is_ok());
         assert!(super::resolve(&"statsd".into()).is_ok());
+        assert!(super::resolve(&"dogstatsd".into()).is_ok());
         assert!(super::resolve(&"yaml".into()).is_ok());
         assert!(super::resolve(&"syslog".into()).is_ok());
         assert_eq!(

@@ -9,7 +9,7 @@ license = "Apache-2.0"
 name = "tremor-runtime"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.1"
+version = "0.13.0-rc.5"
 rust-version = "1.62"
 
 [workspace]
@@ -80,6 +80,7 @@ hashbrown = { version = "0.12", features = ["serde"] }
 hex = "0.4"
 hostname = "0.3"
 http-types = "2.12"
+http-body = "0.4"
 indexmap = { version = "1", features = ["serde-1"] }
 lazy_static = "1"
 libflate = "1.2"
@@ -98,13 +99,13 @@ simd-json = { version = "0.6", features = ["known-key"] }
 simd-json-derive = "0.4"
 snap = "1"
 
-syslog_loose = "0.17"
+syslog_loose = "0.18"
 tremor-common = { path = "tremor-common" }
 tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
-url = "2.2"
+url = "2.3"
 value-trait = "0.4"
 zstd = "0.11"
 
@@ -143,7 +144,7 @@ http-client = { git = "https://github.com/tremor-rs/http-client", rev = "059b23e
 #] }
 
 # elasticsearch
-elasticsearch = { version = "=7.14.0-alpha.1", default-features = false, features = [
+elasticsearch = { version = "=8.4.0-alpha.1", default-features = false, features = [
   "rustls-tls",
 ] }
 
@@ -160,7 +161,7 @@ rustls = "0.19"
 rustls-native-certs = "0.6"
 
 # dns
-async-std-resolver = "0.21"
+async-std-resolver = "0.22"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
 # we stick with git until we have a release with https://github.com/fede1024/rust-rdkafka/pull/417
@@ -177,7 +178,7 @@ rdkafka-sys = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f
 smol = "1.2.5"
 
 # crononome
-cron = "0.11.0"
+cron = "0.12.0"
 
 # logstash grok patterns
 grok = "2"
@@ -212,15 +213,15 @@ tonic = { version = "0.6.1", default-features = false, features = [
   "transport",
   "tls",
 ] }
-prost = "0.11.0"
+prost = "0.9.0"
 prost-types = "0.9.0"
 tremor-otelapis = { version = "0.2.4" }
 
 # aws-s3
-aws-sdk-s3 = "0.17"
-aws-types = "0.47"
-aws-config = "0.47"
-aws-smithy-http = "0.47"
+aws-sdk-s3 = "0.19"
+aws-types = "0.49"
+aws-config = "0.49"
+aws-smithy-http = "0.49"
 
 # gcp
 googapis = { version = "0.6", default-features = false, features = [
@@ -231,21 +232,21 @@ googapis = { version = "0.6", default-features = false, features = [
 ] }
 gouth = { version = "0.2" }
 http = "0.2.8"
-reqwest = { version = "0.11.11", default-features = false, features = [
+reqwest = { version = "0.11.12", default-features = false, features = [
   "rustls-tls",
   "rustls-tls-native-roots",
 ] }
 
 # http
-uuid = { version = "1.1", features = ["v4"] }
+uuid = { version = "1.2", features = ["v4"] }
 
 # wal
 qwal = { git = "https://github.com/tremor-rs/qwal" }
 
 [dev-dependencies]
-serial_test = { version = "=0.8", features = ["logging"] }
+serial_test = { version = "0.9", features = ["logging"] }
 # path = "../serial_test/serial_test" 
-env_logger = "0.9.0"
+env_logger = "0.9.1"
 matches = "0.1"
 pretty_assertions = "1.3.0"
 proptest = "1.0"

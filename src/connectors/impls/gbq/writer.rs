@@ -14,7 +14,8 @@
 
 mod sink;
 
-use crate::connectors::impls::gbq::writer::sink::GbqSink;
+use crate::connectors::google::GouthTokenProvider;
+use crate::connectors::impls::gbq::writer::sink::{GbqSink, TonicChannelFactory};
 use crate::connectors::prelude::*;
 use crate::connectors::{Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
 use serde::Deserialize;
@@ -25,8 +26,15 @@ pub(crate) struct Config {
     pub table_id: String,
     pub connect_timeout: u64,
     pub request_timeout: u64,
+    #[serde(default = "default_request_size_limit")]
+    pub request_size_limit: usize,
 }
 impl ConfigImpl for Config {}
+
+fn default_request_size_limit() -> usize {
+    // 10MB
+    10 * 1024 * 1024
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -42,7 +50,10 @@ impl Connector for Gbq {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GbqSink::new(self.config.clone());
+        let sink = GbqSink::<GouthTokenProvider, _, _>::new(
+            self.config.clone(),
+            Box::new(TonicChannelFactory),
+        );
 
         builder.spawn(sink, sink_context).map(Some)
     }
@@ -67,5 +78,47 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         Ok(Box::new(Gbq { config }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connectors::metrics::SinkReporter;
+    use crate::connectors::reconnect::ConnectionLostNotifier;
+    use crate::connectors::sink::builder;
+
+    #[async_std::test]
+    pub async fn can_spawn_sink() {
+        let mut connector = Gbq {
+            config: Config {
+                table_id: "test".into(),
+                connect_timeout: 1,
+                request_timeout: 1,
+                request_size_limit: 10 * 1024 * 1024,
+            },
+        };
+
+        let sink_address = connector
+            .create_sink(
+                SinkContext {
+                    uid: Default::default(),
+                    alias: Alias::new("a", "b"),
+                    connector_type: Default::default(),
+                    quiescence_beacon: Default::default(),
+                    notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
+                },
+                builder(
+                    &ConnectorConfig::default(),
+                    CodecReq::Structured,
+                    &Alias::new("a", "b"),
+                    128,
+                    SinkReporter::new(Alias::new("a", "b"), async_broadcast::broadcast(1).0, None),
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(sink_address.is_some());
     }
 }

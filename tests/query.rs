@@ -36,9 +36,8 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[async_std::test]
-            #[serial(query)]
+            #[serial(query, timeout_ms = 120000)]
             async fn $file() -> Result<()> {
-                serial_test::set_max_wait(std::time::Duration::from_secs(120));
 
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/queries/", stringify!($file), "/").to_string();
@@ -127,6 +126,7 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
+    unused_node,
     route_emit,
     drop_event,
     pipeline_group_by_size,

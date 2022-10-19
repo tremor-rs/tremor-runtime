@@ -61,8 +61,8 @@ pub enum Stmt<'script> {
     ScriptDefinition(Box<ScriptDefinition<'script>>),
     /// An pipeline definition
     PipelineDefinition(Box<PipelineDefinition<'script>>),
-    /// A stream
-    StreamStmt(StreamStmt),
+    /// A stream creation
+    StreamCreate(StreamCreate),
     /// An operator creation
     OperatorCreate(OperatorCreate<'script>),
     /// A script creation
@@ -78,7 +78,7 @@ impl<'script> BaseExpr for Stmt<'script> {
     fn meta(&self) -> &NodeMeta {
         match self {
             Stmt::WindowDefinition(s) => s.meta(),
-            Stmt::StreamStmt(s) => s.meta(),
+            Stmt::StreamCreate(s) => s.meta(),
             Stmt::OperatorDefinition(s) => s.meta(),
             Stmt::ScriptDefinition(s) => s.meta(),
             Stmt::PipelineDefinition(s) => s.meta(),
@@ -404,15 +404,15 @@ pub enum GroupBy<'script> {
     },
 }
 
-/// A stream statement
+/// A `create stream` statement
 #[derive(Clone, Debug, PartialEq, Serialize, Eq)]
-pub struct StreamStmt {
+pub struct StreamCreate {
     pub(crate) mid: Box<NodeMeta>,
     /// ID if the stream
     pub id: String,
 }
 
-impl BaseExpr for StreamStmt {
+impl BaseExpr for StreamCreate {
     fn meta(&self) -> &NodeMeta {
         &self.mid
     }
@@ -633,7 +633,7 @@ impl<'script> Stmt<'script> {
             | Stmt::OperatorDefinition(_)
             | Stmt::ScriptDefinition(_)
             | Stmt::PipelineDefinition(_)
-            | Stmt::StreamStmt(_) => (),
+            | Stmt::StreamCreate(_) => (),
             Stmt::SelectStmt(s) => {
                 ArgsRewriter::new(args.clone(), helper, mid).walk_select_stmt(s)?;
                 Optimizer::new(helper).walk_select_stmt(s)?;

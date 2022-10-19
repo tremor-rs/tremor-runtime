@@ -44,10 +44,8 @@ use tremor_value::{literal, Value};
 use value_trait::Builder;
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn transactional_retry() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -255,8 +253,8 @@ async fn transactional_retry() -> Result<()> {
     );
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     // check out the committed offsets with another consumer
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
@@ -276,10 +274,8 @@ async fn transactional_retry() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn custom_no_retry() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -475,8 +471,8 @@ async fn custom_no_retry() -> Result<()> {
     );
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
     assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Invalid));
@@ -491,10 +487,8 @@ async fn custom_no_retry() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn performance() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -684,8 +678,8 @@ async fn performance() -> Result<()> {
     );
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
     assert_eq!(
@@ -707,6 +701,7 @@ async fn performance() -> Result<()> {
 }
 
 #[async_std::test]
+#[serial(kafka, timeout_ms = 600000)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
     let kafka_port = free_port::find_free_tcp_port().await?;
     let _ = env_logger::try_init();
@@ -738,8 +733,8 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
     Ok(())
 }
 
@@ -789,10 +784,8 @@ async fn invalid_rdkafka_options() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn connector_kafka_consumer_pause_resume() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -878,8 +871,8 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     assert_eq!(Value::from("R.I.P."), e2.data.suffix().value());
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     // cleanup
     drop(container);
@@ -887,10 +880,8 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn transactional_store_offset_handling() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -987,8 +978,8 @@ async fn transactional_store_offset_handling() -> Result<()> {
 
     // stop harness
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     debug!("getting offsets...");
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
@@ -1029,6 +1020,10 @@ async fn transactional_store_offset_handling() -> Result<()> {
     harness.wait_for_connected().await?;
     debug!("connected");
 
+    // give the background librdkafka time to start fetching the partitions before we fail
+    // otherwise it will fail silently in the background
+    // consider this a cry for help!
+    task::sleep(Duration::from_millis(200)).await;
     // fail message 2
     harness
         .send_contraflow(CbAction::Fail, event2.id.clone())
@@ -1097,10 +1092,8 @@ async fn transactional_store_offset_handling() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn transactional_commit_offset_handling() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -1196,8 +1189,8 @@ async fn transactional_commit_offset_handling() -> Result<()> {
 
     // stop harness
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
     assert_eq!(

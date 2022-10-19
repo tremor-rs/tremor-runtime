@@ -15,7 +15,7 @@
 use crate::{Event, EventId, EventIdGenerator, OpMeta};
 use beef::Cow;
 use std::borrow::Cow as SCow;
-use tremor_common::stry;
+use tremor_common::{ids::OperatorId, stry};
 use tremor_script::{
     self,
     ast::{AggrSlice, Aggregates, Consts, RunConsts, Select, WindowDefinition},
@@ -33,7 +33,6 @@ pub(crate) struct SelectCtx<'run, 'script, 'local> {
     pub(crate) opts: ExecOpts,
     pub(crate) ctx: &'run EventContext<'run>,
     pub(crate) event_id: EventId,
-    pub(crate) event_id_gen: &'run mut EventIdGenerator,
     pub(crate) ingest_ns: u64,
     pub(crate) op_meta: &'run OpMeta,
     pub(crate) origin_uri: &'run Option<EventOriginUri>,
@@ -56,6 +55,9 @@ pub struct GroupWindow {
     /// The event id(s) of all events that are tracked in this
     /// window
     pub(crate) id: EventId,
+    /// For generating new ids for this window
+    /// each window has a distinct stream id
+    pub(crate) event_id_gen: EventIdGenerator,
     /// If the currently windowed data is considered transactional
     /// or not
     pub(crate) transactional: bool,
@@ -69,20 +71,24 @@ impl GroupWindow {
     /// Crate chain of tilt frames from a iterator of windows
     pub(crate) fn from_windows<'i, I>(
         aggrs: &AggrSlice<'static>,
-        id: &EventId,
+        operator_id: OperatorId,
         mut iter: I,
     ) -> Option<Box<Self>>
     where
-        I: std::iter::Iterator<Item = &'i Window>,
+        I: std::iter::Iterator<Item = (u64, &'i Window)>,
     {
-        iter.next().map(|w| {
+        iter.next().map(|(stream_id, w)| {
+            let mut event_id_gen =
+                EventIdGenerator::for_operator_with_stream(operator_id, stream_id);
+            let id = event_id_gen.next_id();
             Box::new(Self {
                 window: w.window_impl.clone(),
                 aggrs: aggrs.to_vec(),
-                id: id.clone(),
+                id,
+                event_id_gen,
                 name: w.name.clone().into(),
                 transactional: false,
-                next: GroupWindow::from_windows(aggrs, id, iter),
+                next: GroupWindow::from_windows(aggrs, operator_id, iter),
                 holds_data: false,
             })
         })
@@ -222,9 +228,8 @@ impl GroupWindow {
 
             // Move the recorded event ID into the context so it is
             // used for inclusion for the following windows.
-            std::mem::swap(&mut ctx.event_id, &mut self.id);
-            // then create a new event ID for the next window
-            self.id = ctx.event_id_gen.next_id();
+            // and at the same time create a new event ID for the next window
+            ctx.event_id = self.reset_event_id();
 
             // for the context the transactionality of any following window
             // is the transactionality of this window (since we propagate
@@ -283,6 +288,13 @@ impl GroupWindow {
             // since we recorded new data we know we can't delete this group
             Ok(false)
         }
+    }
+
+    /// Return the current `event_id` and reset the internal one to a new one, ready for tracking the next events
+    pub(crate) fn reset_event_id(&mut self) -> EventId {
+        let mut new_id = self.event_id_gen.next_id();
+        std::mem::swap(&mut self.id, &mut new_id);
+        new_id
     }
 }
 

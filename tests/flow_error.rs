@@ -30,11 +30,8 @@ macro_rules! test_cases {
             use pretty_assertions::assert_eq;
         $(
             #[test]
-            #[serial(flow_error)]
+            #[serial(flow_error, timeout_ms = 120000)]
             fn $file() -> Result<()> {
-                serial_test::set_max_wait(std::time::Duration::from_secs(120));
-
-
                 let deploy_dir = concat!("tests/flow_errors/", stringify!($file), "/").to_string();
                 let deploy_file = concat!("tests/flow_errors/", stringify!($file), "/flow.troy");
                 let err_file = concat!("tests/flow_errors/", stringify!($file), "/error.txt");

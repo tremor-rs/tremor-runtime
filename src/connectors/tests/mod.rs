@@ -219,9 +219,11 @@ impl ConnectorHarness {
 
     pub(crate) async fn stop(self) -> Result<(Vec<Event>, Vec<Event>)> {
         let (tx, rx) = bounded(1);
-
+        debug!("Stopping harness...");
         self.addr.stop(tx).await?;
+        debug!("Waiting for stop result...");
         let cr = rx.recv().await?;
+        debug!("Stop result received.");
         cr.res?;
         //self.handle.cancel().await;
         let out_events = self
@@ -236,9 +238,11 @@ impl ConnectorHarness {
             .map(TestPipeline::get_events)
             .unwrap_or(Ok(vec![]))
             .unwrap_or_default();
-        for (_, p) in self.pipes {
+        for (port, p) in self.pipes {
+            debug!("stopping pipeline connected to {port}");
             p.stop().await?;
         }
+        debug!("Pipes stopped");
         Ok((out_events, err_events))
     }
 
@@ -377,9 +381,8 @@ impl TestPipeline {
         let task_rx = rx_mgmt.clone();
         task::spawn(async move {
             while let Ok(msg) = task_rx.recv().await {
-                match dbg!(msg) {
+                match msg {
                     pipeline::MgmtMsg::Stop => {
-                        dbg!();
                         break;
                     }
                     pipeline::MgmtMsg::ConnectInput { tx, .. } => {
@@ -499,7 +502,7 @@ impl TestPipeline {
     feature = "ws-integration",
     feature = "s3-integration"
 ))]
-mod free_port {
+pub(crate) mod free_port {
 
     use std::ops::RangeInclusive;
 

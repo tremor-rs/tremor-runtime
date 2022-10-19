@@ -24,7 +24,7 @@ pub(crate) use crate::ast::{
     Merge, MetadataPath, OperatorCreate, OperatorDefinition, Patch, PatchOperation, Path, Pattern,
     PipelineCreate, PipelineDefinition, PredicateClause, PredicatePattern, Query, Record,
     RecordPattern, Recur, ReservedPath, Script, ScriptCreate, ScriptDefinition, Segment, Select,
-    SelectStmt, StatePath, Stmt, StrLitElement, StreamStmt, StringLit, TestExpr, TuplePattern,
+    SelectStmt, StatePath, Stmt, StrLitElement, StreamCreate, StringLit, TestExpr, TuplePattern,
     UnaryExpr, WindowDefinition, WithExpr,
 };
 

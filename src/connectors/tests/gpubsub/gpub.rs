@@ -31,9 +31,8 @@ use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn no_connection() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
@@ -41,7 +40,6 @@ async fn no_connection() -> Result<()> {
             "url": "https://localhost:9090",
             "connect_timeout": 100000000,
             "topic": "projects/xxx/topics/test-a",
-            "skip_authentication": false
         }
     });
 
@@ -52,9 +50,8 @@ async fn no_connection() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn no_hostname() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
@@ -62,7 +59,6 @@ async fn no_hostname() -> Result<()> {
             "url": "file:///etc/passwd",
             "connect_timeout": 100000000,
             "topic": "projects/xxx/topics/test-a",
-            "skip_authentication": false
         }
     });
 
@@ -75,10 +71,8 @@ async fn no_hostname() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn simple_publish() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let runner = Cli::docker();
@@ -99,7 +93,6 @@ async fn simple_publish() -> Result<()> {
             "url": endpoint,
             "connect_timeout": 30000000000u64,
             "topic": "projects/test/topics/test",
-            "skip_authentication": true
         }
     });
 
@@ -184,10 +177,8 @@ async fn simple_publish() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn simple_publish_with_timeout() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let runner = Cli::docker();
@@ -208,7 +199,6 @@ async fn simple_publish_with_timeout() -> Result<()> {
             "url": endpoint,
             "connect_timeout": 30000000000u64,
             "topic": "projects/test/topics/test",
-            "skip_authentication": true
         }
     });
 

@@ -34,7 +34,7 @@ use petgraph::{
     Graph,
 };
 use rand::Rng;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::iter;
 use tremor_common::ids::{OperatorId, OperatorIdGen};
 use tremor_script::ast::optimizer::Optimizer;
@@ -318,7 +318,7 @@ impl Query {
 
                     nodes_by_name.insert(select_in.id.clone(), id);
                 }
-                Stmt::StreamStmt(s) => {
+                Stmt::StreamCreate(s) => {
                     let name = common_cow(&s.id);
                     let id = name.clone();
                     if nodes_by_name.contains_key(&id) {
@@ -497,7 +497,6 @@ impl Query {
                 );
             }
         }
-
         for (_ig_name, ig) in included_graphs {
             let mut old_index_to_new_index = HashMap::new();
 
@@ -556,9 +555,11 @@ impl Query {
                 }
             }
         }
-
+        // remove unused nodes from the graph
         loop {
-            let mut unused = Vec::new();
+            // we must take care not to remove a node twice from the graph
+            // the results are somewhat surprising - thus a hashset
+            let mut unused = HashSet::new();
             for idx in pipe_graph
                 .externals(Incoming)
                 .chain(pipe_graph.externals(Outgoing))
@@ -570,13 +571,13 @@ impl Query {
                         ..
                     })
                 ) {
-                    unused.push(idx);
+                    unused.insert(idx);
                 }
             }
             if unused.is_empty() {
                 break;
             }
-            for idx in unused.drain(..) {
+            for idx in unused {
                 pipe_graph.remove_node(idx);
             }
         }

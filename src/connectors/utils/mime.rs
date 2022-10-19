@@ -27,7 +27,7 @@ const MIME_TYPES: [(&str, &str); 9] = [
 ];
 
 /// additional mapping from codec to mime-types
-const CODEC_TO_MIME_TYPES: [(&str, &str); 11] = [
+const CODEC_TO_MIME_TYPES: [(&str, &str); 12] = [
     ("json-sorted", "application/json"),
     ("json", "application/json"),
     ("csv", "text/csv"),
@@ -39,6 +39,7 @@ const CODEC_TO_MIME_TYPES: [(&str, &str); 11] = [
     ("influx", "text/plain"),
     ("binflux", "application/octet-stream"),
     ("statsd", "text/plain"),
+    ("dogstatsd", "text/plain"),
 ];
 
 /// Map from mime-type / content-type to codec name

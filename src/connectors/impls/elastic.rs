@@ -398,6 +398,7 @@ impl Sink for ElasticSink {
         vec![]
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -507,22 +508,27 @@ impl Sink for ElasticSink {
 
                     Ok(())
                 })?;
+            Ok(SinkReply::NONE)
         } else {
+            // shouldn't happen actually
             error!("{} No elasticsearch client available.", &ctx);
             handle_error(
-                Error::from("No elasticsearch client available."),
+                Error::from(ErrorKind::ClientNotAvailable(
+                    "elastic",
+                    "No elasticsearch client available.",
+                )),
                 &event,
                 &self.origin_uri,
                 &self.response_tx,
                 self.config.include_payload_in_response,
             )
             .await?;
-            ctx.bail_err(
-                send_fail(event, &self.reply_tx).await,
-                "Error sending fail CB",
-            )?;
+            ctx.swallow_err(
+                ctx.notifier().connection_lost().await,
+                "Error notifying about lost connection",
+            );
+            Ok(SinkReply::FAIL)
         }
-        Ok(SinkReply::NONE)
     }
 
     fn auto_ack(&self) -> bool {
@@ -565,7 +571,6 @@ async fn handle_response(
                     "elastic": {
                         "_id": action_item.get("_id").map(Value::clone_static),
                         "_index": action_item.get("_index").map(Value::clone_static),
-                        "_type": action_item.get("_type").map(Value::clone_static),
                         "action": action.clone(),
                         "success": false
                     }
@@ -584,7 +589,6 @@ async fn handle_response(
                     "elastic": {
                         "_id": action_item.get("_id").map(Value::clone_static),
                         "_index": action_item.get("_index").map(Value::clone_static),
-                        "_type": action_item.get("_type").map(Value::clone_static),
                         "version": action_item.get("_version").map(Value::clone_static),
                         "action": action.clone(),
                         "success": true
@@ -795,10 +799,10 @@ impl<'a, 'value> ESMeta<'a, 'value> {
     }
 
     fn parts<'blk>(&'blk self, default_index: Option<&'blk str>) -> BulkParts<'blk> {
-        match (self.get_index().or(default_index), self.get_type()) {
-            (Some(index), Some(doc_type)) => BulkParts::IndexType(index, doc_type),
-            (Some(index), None) => BulkParts::Index(index),
-            _ => BulkParts::None,
+        if let Some(index) = self.get_index().or(default_index) {
+            BulkParts::Index(index)
+        } else {
+            BulkParts::None
         }
     }
 
@@ -833,7 +837,6 @@ impl<'a, 'value> ESMeta<'a, 'value> {
     fn get_index(&self) -> Option<&str> {
         self.meta.get_str("_index")
     }
-
     fn get_type(&self) -> Option<&str> {
         self.meta.get_str("_type")
     }

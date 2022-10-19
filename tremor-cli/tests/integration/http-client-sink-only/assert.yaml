@@ -1,0 +1,7 @@
+name: http_client sink only
+status: 0
+asserts:
+  - source: fg.err.log
+    contains:
+      - |
+        All required CB events received. 

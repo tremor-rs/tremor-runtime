@@ -337,6 +337,12 @@ impl OpMeta {
     pub fn merge(&mut self, mut other: Self) {
         self.0.append(&mut other.0);
     }
+
+    /// Returns `true` if this instance contains no values
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 pub(crate) fn common_cow(s: &str) -> beef::Cow<'static, str> {
@@ -935,6 +941,12 @@ impl EventIdGenerator {
     /// create a new generator for the `Operator` identified by `operator_id` using the default stream id
     pub fn for_operator(operator_id: OperatorId) -> Self {
         Self(operator_id.id(), DEFAULT_STREAM_ID, 0)
+    }
+
+    #[must_use]
+    /// create a new generator for the `Operator` identified by `operator_id` with `stream_id`
+    pub fn for_operator_with_stream(operator_id: OperatorId, stream_id: u64) -> Self {
+        Self(operator_id.id(), stream_id, 0)
     }
 
     #[must_use]

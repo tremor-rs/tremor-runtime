@@ -16,14 +16,14 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
   elastic:
-    image: "docker.elastic.co/elasticsearch/elasticsearch:7.17.0"
+    image: "docker.elastic.co/elasticsearch/elasticsearch:7.17.6"
     ports:
       - "9200:9200"
       - "9300:9300"
     environment:
       discovery.type: single-node
   kibana:
-    image: "docker.elastic.co/kibana/kibana:7.17.0"
+    image: "docker.elastic.co/kibana/kibana:7.17.6"
     ports:
       - "5601:5601"
     depends_on:

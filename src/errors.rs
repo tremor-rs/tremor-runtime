@@ -252,6 +252,10 @@ error_chain! {
             description("Invalid statsd metric")
                 display("Invalid statsd metric")
         }
+        InvalidDogStatsD {
+            description("Invalid dogstatsd metric")
+                display("Invalid dogstatsd metric")
+        }
         InvalidInfluxData(s: String, e: influx::DecoderError) {
             description("Invalid Influx Line Protocol data")
                 display("Invalid Influx Line Protocol data: {}\n{}", e, s)
@@ -342,6 +346,10 @@ error_chain! {
             description("GBQ Sink failed")
                 display("GBQ Sink failed: {}", msg)
         }
+        GbqSchemaNotProvided(table: String) {
+            description("GBQ Schema not provided")
+                display("GBQ Schema not provided for table {}", table)
+        }
         ClientNotAvailable(name: &'static str, msg: &'static str) {
             description("Client not available")
                 display("{} client not available: {}", name, msg)
@@ -394,9 +402,13 @@ error_chain! {
             description("Type in the message does not match Google Cloud Logging API type")
             display("Type in the message does not match Google Cloud Logging API type. Expected: {}, actual: {:?}", expected, actual)
         }
-        GoogleCloudStorageError(msg: &'static str) {
+        GoogleCloudStorageError(msg: String) {
             description("Google cloud storage error")
                 display("Google cloud storage error: {}", msg)
+        }
+        ObjectStorageError(msg: String) {
+            description("Object storage error")
+                display("{}", msg)
         }
         PipelineSendError(s: String) {
             description("Pipeline send error")
@@ -416,6 +428,14 @@ pub(crate) fn connector_send_err<T>(e: async_std::channel::SendError<T>) -> Erro
 
 pub(crate) fn err_connector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {
     ErrorKind::InvalidConnectorDefinition(c.to_string(), e.to_string()).into()
+}
+
+pub(crate) fn err_gcs(msg: impl Into<String>) -> Error {
+    ErrorKind::GoogleCloudStorageError(msg.into()).into()
+}
+
+pub(crate) fn err_object_storage(msg: impl Into<String>) -> Error {
+    ErrorKind::ObjectStorageError(msg.into()).into()
 }
 
 #[cfg(test)]

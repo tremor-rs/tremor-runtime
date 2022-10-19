@@ -1,0 +1,28 @@
+- dir: "."
+  cmd: "docker"
+  args:
+    - "run"
+    - "--name"
+    - "tremor-minio-consistent-unique"
+    - "-p"
+    - "127.0.0.1:9000:9000"
+    - "-p"
+    - "127.0.0.1:9001:9001"
+    - "-e"
+    - "MINIO_ROOT_USER=tremor"
+    - "-e"
+    - "MINIO_ROOT_PASSWORD=snot_badger"
+    - "-e"
+    - "MINIO_REGION=eu-central-1"
+    - "--entrypoint"
+    - "sh"
+    - "minio/minio:RELEASE.2022-09-01T23-53-36Z"
+    - "-c"
+    - "mkdir -p /data/bucket && minio server /data --console-address :9001"
+  await:
+    "port-open":
+      - "9000"
+      - "9001"
+    "http-ok":
+      - "http://127.0.0.1:9000/minio/health/live"
+  max-await-secs: 30

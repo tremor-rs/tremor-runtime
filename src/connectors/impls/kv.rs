@@ -21,11 +21,14 @@ use crate::{
     connectors::prelude::*,
     errors::err_connector_def,
 };
-use async_std::channel::{bounded, Receiver, Sender};
-use async_std::path::PathBuf;
+use async_std::{
+    channel::{bounded, Receiver, Sender},
+    path::PathBuf,
+    sync::Arc,
+};
 use serde::Deserialize;
 use sled::{CompareAndSwapError, Db, IVec};
-use std::{boxed::Box, convert::TryFrom};
+use std::{boxed::Box, convert::TryFrom, sync::atomic::AtomicBool};
 
 #[derive(Debug)]
 enum Command<'v> {
@@ -192,7 +195,12 @@ impl ConnectorBuilder for Builder {
         }
 
         let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-        Ok(Box::new(Kv { config, rx, tx }))
+        Ok(Box::new(Kv {
+            config,
+            rx,
+            tx,
+            source_is_connected: Arc::default(),
+        }))
     }
 }
 
@@ -203,6 +211,7 @@ pub(crate) struct Kv {
     config: Config,
     rx: Receiver<SourceReply>,
     tx: Sender<SourceReply>,
+    source_is_connected: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait]
@@ -212,7 +221,11 @@ impl Connector for Kv {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::from_channel(self.tx.clone(), self.rx.clone());
+        let source = ChannelSource::from_channel(
+            self.tx.clone(),
+            self.rx.clone(),
+            self.source_is_connected.clone(),
+        );
         builder.spawn(source, source_context).map(Some)
     }
 
@@ -239,6 +252,7 @@ impl Connector for Kv {
             tx: self.tx.clone(),
             codec,
             origin_uri,
+            source_is_connected: self.source_is_connected.clone(),
         };
         builder.spawn(s, sink_context).map(Some)
     }
@@ -253,6 +267,7 @@ struct KvSink {
     tx: Sender<SourceReply>,
     codec: Json<Sorted>,
     origin_uri: EventOriginUri,
+    source_is_connected: Arc<AtomicBool>,
 }
 
 impl KvSink {
@@ -337,6 +352,7 @@ impl Sink for KvSink {
         _start: u64,
     ) -> Result<SinkReply> {
         let ingest_ns = tremor_common::time::nanotime();
+        let send_replies = self.source_is_connected.load(Ordering::Acquire);
 
         let mut r = SinkReply::ACK;
         for (v, m) in event.value_meta_iter() {
@@ -348,43 +364,49 @@ impl Sink for KvSink {
                     self.execute(cmd, name, v, ingest_ns)
                         .map_err(|e| (Some(name), key, e))
                 }
-                Err(e) => Err((None, None, e)),
+                Err(e) => {
+                    error!("{ctx} Invalid KV command: {e}");
+                    Err((None, None, e))
+                }
             };
             match executed {
                 Ok(res) => {
-                    for (data, mut meta) in res {
+                    if send_replies {
+                        for (data, mut meta) in res {
+                            if let Some(correlation) = correlation {
+                                meta.try_insert("correlation", correlation.clone_static());
+                            }
+                            let reply = SourceReply::Structured {
+                                origin_uri: self.origin_uri.clone(),
+                                payload: (data, meta).into(),
+                                stream: DEFAULT_STREAM_ID,
+                                port: Some(OUT),
+                            };
+                            if let Err(e) = self.tx.send(reply).await {
+                                error!("{ctx}, Failed to send to source: {e}");
+                            };
+                        }
+                    }
+                }
+                Err((op, key, e)) => {
+                    error!("{ctx} Error: {e}");
+                    if send_replies {
+                        // send ERR response and log err
+                        let mut meta = literal!({
+                            "error": e.to_string(),
+                            "kv": op.map(|op| literal!({ "op": op, "key": key }))
+                        });
                         if let Some(correlation) = correlation {
                             meta.try_insert("correlation", correlation.clone_static());
                         }
                         let reply = SourceReply::Structured {
                             origin_uri: self.origin_uri.clone(),
-                            payload: (data, meta).into(),
+                            payload: ((), meta).into(),
                             stream: DEFAULT_STREAM_ID,
-                            port: Some(OUT),
+                            port: Some(ERR),
                         };
-                        if let Err(e) = self.tx.send(reply).await {
-                            error!("{}, Failed to send to source: {}", &ctx, e);
-                        };
+                        ctx.swallow_err(self.tx.send(reply).await, "Failed to send to source");
                     }
-                }
-                Err((op, key, e)) => {
-                    // send ERR response and log err
-                    let mut meta = literal!({
-                        "error": e.to_string(),
-                        "kv": op.map(|op| literal!({ "op": op, "key": key }))
-                    });
-                    if let Some(correlation) = correlation {
-                        meta.try_insert("correlation", correlation.clone_static());
-                    }
-                    let reply = SourceReply::Structured {
-                        origin_uri: self.origin_uri.clone(),
-                        payload: ((), meta).into(),
-                        stream: DEFAULT_STREAM_ID,
-                        port: Some(ERR),
-                    };
-                    if let Err(e) = self.tx.send(reply).await {
-                        error!("{}, Failed to send to source: {}", &ctx, e);
-                    };
 
                     r = SinkReply::FAIL;
                 }
@@ -392,6 +414,7 @@ impl Sink for KvSink {
         }
         Ok(r)
     }
+
     fn auto_ack(&self) -> bool {
         false
     }

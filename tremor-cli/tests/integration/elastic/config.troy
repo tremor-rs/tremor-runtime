@@ -29,21 +29,10 @@ flow
     end;
     create operator batch;
 
-    define script process_whole_batch
-    script
-      let $elastic = {
-        "_type": "my_little_doc"
-      };
-      event
-    end;
-    create script process_whole_batch;
-
     select event from in into process_batch_item;
     select event from process_batch_item into batch;
-    select event from batch into process_whole_batch;
-    select event from process_whole_batch into out;
+    select event from batch into out;
     select event from process_batch_item/err into err;
-    select event from process_whole_batch/err into err;
   end;
 
   define pipeline response_handling
@@ -54,7 +43,6 @@ flow
       "success": $elastic.success,
       "payload": event.payload,
       "index": $elastic["_index"],
-      "doc": $elastic["_type"],
       "correlation": $correlation
     }
     from in where $elastic.success == true into out;
@@ -64,7 +52,6 @@ flow
       "payload": event.payload,
       "success": $elastic.success,
       "index": $elastic["_index"],
-      "doc": $elastic["_type"],
       "correlation": $correlation
     }
     from in where $elastic.success == false into err;
