@@ -20,6 +20,7 @@
 #![deny(
     clippy::all,
     clippy::unnecessary_unwrap,
+    clippy::unwrap_used,
     clippy::pedantic,
     clippy::mod_module_files
 )]
@@ -76,7 +77,7 @@ pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
 pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 ///Pluggable-logging Appender
 pub struct PluggableLoggingAppender {
     /// async Sender
@@ -85,27 +86,21 @@ pub struct PluggableLoggingAppender {
 
 impl Append for PluggableLoggingAppender {
     fn append(&self, record: &log::Record) -> anyhow::Result<()> {
-        let vec = (r#"{"level": ""#.to_owned()
-            + &record.level().to_string()
-            + r#"", "args": ""#
-            + &record.args().to_string()
-            + r#"", "path": ""#
-            + record.module_path().expect("")
-            + r#"", "file": ""#
-            + record.file().expect("")
-            + r#"", "line": ""#
-            + &record.line().expect("").to_string()
-            + r#""}"#)
-            .as_bytes()
-            .to_vec();
+        let vec = literal!({
+            "level":record.level().to_string(),
+            "args": record.args().to_string(),
+            "path": record.module_path().map(ToString::to_string),
+            "file": record.file().map(ToString::to_string),
+            "line": record.line(),
+        });
 
-        let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).expect("").into());
         let msg = LoggingMsg {
-            language: LanguageKind::Rust,
-            payload: e,
+            language: LogSource::Tremor,
+            payload: EventPayload::from(vec),
             origin_uri: None,
         };
 
+		println!("{:?}",msg);
         block_on(self.tx.broadcast(msg))?;
         Ok(())
     }
@@ -114,6 +109,7 @@ impl Append for PluggableLoggingAppender {
         todo!()
     }
 }
+
 trait Encode {}
 
 /// A configuration map
@@ -127,21 +123,16 @@ pub type NodeLookupFn = fn(
     helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode>;
 
-/// A channel used to send metrics betwen different parts of the system
 #[derive(Clone, Debug)]
-pub struct MetricsChannel {
-    tx: Sender<MetricsMsg>,
-    rx: Receiver<MetricsMsg>,
-}
-/// Channel for plugging-logging messages
-pub struct LoggingChannel {
-    /// tx Sender
-    pub tx: Sender<LoggingMsg>,
-    /// rx Serveur
-    pub rx: Receiver<LoggingMsg>,
+/// A channel used to send metrics or log betwen different parts of the system
+// MetricsChannel = OverflowingChannel<MetricsMsg>
+// LoggingChannel = OverflowingChannel<LoggingMsg>
+pub struct OverflowingChannel<Msg> {
+    tx: Sender<Msg>,
+    rx: Receiver<Msg>,
 }
 
-impl MetricsChannel {
+impl OverflowingChannel<MetricsMsg> {
     pub(crate) fn new(qsize: usize) -> Self {
         let (mut tx, rx) = broadcast(qsize);
         // We use overflow so that non collected messages can be removed
@@ -163,7 +154,7 @@ impl MetricsChannel {
     }
 }
 
-impl LoggingChannel {
+impl OverflowingChannel<LoggingMsg> {
     pub(crate) fn new(qsize: usize) -> Self {
         let (mut tx, rx) = broadcast(qsize);
         // We use overflow so that non collected messages can be removed
@@ -195,10 +186,10 @@ pub struct MetricsMsg {
 }
 
 #[derive(Debug, Clone)]
-/// Language from which the logs are coming (Rust, Tremor, etc.)
-pub enum LanguageKind {
-    /// The Rust language
-    Rust,
+/// LogSource from which the logs are coming (Rust, Tremor, etc.)
+pub enum LogSource {
+    //The Rust language
+    // Rust,
     /// Tremor language
     Tremor,
 }
@@ -211,7 +202,7 @@ pub struct LoggingMsg {
     /// The origin
     pub origin_uri: Option<EventOriginUri>,
     /// The language
-    pub language: LanguageKind,
+    pub language: LogSource,
 }
 
 impl MetricsMsg {
@@ -230,7 +221,7 @@ impl LoggingMsg {
     pub fn new(
         payload: EventPayload,
         origin_uri: Option<EventOriginUri>,
-        language: LanguageKind,
+        language: LogSource,
     ) -> Self {
         Self {
             payload,
@@ -249,9 +240,9 @@ pub type LoggingSender = Sender<LoggingMsg>;
 
 lazy_static! {
     /// TODO do we want to change this number or can we make it configurable?
-    pub static ref METRICS_CHANNEL: MetricsChannel = MetricsChannel::new(128);
+    pub static ref METRICS_CHANNEL: OverflowingChannel<MetricsMsg> = OverflowingChannel::<MetricsMsg>::new(128);
     /// TODO do we want to change this number or can we make it configurable?
-    pub static ref LOGGING_CHANNEL: LoggingChannel = LoggingChannel::new(128);
+    pub static ref LOGGING_CHANNEL: OverflowingChannel<LoggingMsg> = OverflowingChannel::<LoggingMsg>::new(128);
 }
 
 /// Stringified numeric key

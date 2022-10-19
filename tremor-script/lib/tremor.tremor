@@ -5,10 +5,11 @@
 ### * [system](system.md) - functions related to the running system
 ### * [connectors](connectors.md) - default connectors
 ### * [pipelines](pipelines.md) - default pipelines
+### * [connectors](connectors.md) - default 
 
 use tremor::chash;
 use tremor::origin;
 use tremor::system;
 use tremor::connectors;
 use tremor::pipelines;
-use tremor::logging;
+

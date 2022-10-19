@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use async_broadcast::{broadcast, Receiver};
-use log::{Level, Record};
 use log::{LevelFilter, Log};
 use log4rs::{
     config::{Appender, Config, Root},

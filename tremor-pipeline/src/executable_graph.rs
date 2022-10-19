@@ -817,7 +817,6 @@ mod test {
             ops: vec![Value::null(), Value::null(), Value::null(), Value::null()],
         };
         let mut rx = METRICS_CHANNEL.rx();
-        let _rx_ = LOGGING_CHANNEL.rx();
         let mut g = ExecutableGraph {
             id: "flow::pipe".into(),
             graph,

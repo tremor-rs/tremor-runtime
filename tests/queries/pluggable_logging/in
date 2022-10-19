@@ -1,0 +1,5 @@
+{"level": "INFO", "msg": "This is a pluggable logging info msg with no args but it is the first one in the example list. Thanks", "data": {}}
+{"level": "INFO", "msg": "This is a pluggable logging info msg with no args"}
+{"level": "INFO", "msg": "This {snot} is too smol", "data": {"snot": 1, "badger": [1, 2, 3]}}
+{"level": "INFO", "msg": "This {snot is a bad", "data": {"snot": 1, "badger": [1, 2, 3]}}
+{"level": "INFO", "msg": "This {not_defined}", "data": {"evil": true}}

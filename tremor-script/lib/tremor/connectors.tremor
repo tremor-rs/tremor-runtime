@@ -12,7 +12,7 @@ define connector exit from exit;
 define connector metrics from metrics;
 
 ## The logging connector that can be used to receive logs from the Tremor runtime
-define connector logging from logging;
+define connector logging from logs;
 
 ## A line seperated stdio based connector
 ##
