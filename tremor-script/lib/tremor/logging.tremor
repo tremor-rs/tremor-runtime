@@ -1,4 +1,5 @@
-##
-##
-##
-intrinsic fn info() as logging::info;
+intrinsic fn info(...)  as logging::info; 
+intrinsic fn warn(...)  as logging::warn; 
+intrinsic fn error(...) as logging::error; 
+intrinsic fn trace(...) as logging::trace;
+intrinsic fn debug(...) as logging::debug; 

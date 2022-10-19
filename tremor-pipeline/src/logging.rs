@@ -12,19 +12,454 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
-use tremor_script::registry::Registry;
-use tremor_script::tremor_fn;
+use beef::Cow;
 
+use crate::{errors::Result};
+use halfbrown::HashMap;
+use simd_json::ValueAccess;
+//use simd_json::Builder;
+use tremor_script::{registry::{Registry, FResult, mfa, FunctionError}, TremorFn, EventContext, Value, TremorFnWrapper};
 /// Install's common functions into a registry
 ///
 /// # Errors
 ///  * if we can't install extensions
+
+#[derive(Clone, Debug, Default)]
+struct PluggableLoggingFm {}
+impl TremorFn for PluggableLoggingFm {
+    fn invoke<'event, 'c>(
+        &self,
+        _ctx: &'c EventContext,
+        args: &[&Value<'event>]
+    ) -> FResult<Value<'event>> {
+        let this_mfa = || mfa("logging", "info", args.len());
+        if args.is_empty() {
+            return Err(FunctionError::BadArity {
+                mfa: this_mfa(),
+                calling_a: args.len(),
+            });
+        }
+        if let Some((format, arg_stack)) = args
+            .split_first()
+            .and_then(|(f, arg_stack)| Some((f.as_str()?, arg_stack)))
+        {
+
+			let this_mfa = || mfa("logging", format, args.len()); // because we now know the function
+
+			let mut arg_stack: Vec<_> = arg_stack.iter().collect();
+			let mut format_fields = &HashMap::<Cow<str>, Value>::default();
+			if !arg_stack.is_empty() {
+				format_fields = arg_stack.pop().unwrap().as_object().unwrap(); // retrieve format args as a hashmap
+				if !arg_stack.is_empty() { // `pop()` should empty this supposedly array of length 1
+					warn!("Additional parameters given to logging function {format} will not be used");
+				}
+			}
+
+            let mut out = String::with_capacity(format.len());
+            let mut iter = format.chars().enumerate();
+            while let Some((pos, char)) = iter.next() {
+                match char {
+                    '\\' =>
+						if let Some((_, c)) = iter.next() {
+							if c != '{' && c != '}' {
+								out.push('\\');
+							};
+							out.push(c);
+						} else {
+							return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("bad escape sequence at {pos}: cannot end string with escape character")});
+						},
+                    '{' => {
+						let mut identifier = String::new(); // named placeholder "format specifier"
+						let mut init = true;
+						loop { // reading the identifier name
+							match iter.next() {
+								Some((_, '{')) => {
+									if init {
+										out.push('{');
+										break;
+									} else {
+										return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {pos} is invalid. You have to terminate `{{` with another `{{` to escape it")});
+									}
+								},
+								Some((_, '}')) => {
+									match format_fields.get(identifier.as_str()) {
+										Some(value) =>  {
+											out.push_str(format_tremor_value(value).unwrap().as_str());
+										},
+										None => return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format name at {pos} cannot be found among* the `Value:Object` given. Cannot insert field mapped with name {identifier} because it was not found in the given hashmap of args. *This is sus")})
+									}
+									break;
+								},
+								Some((_, c)) => {
+									init = false;
+									identifier.push(c);
+								},
+        						None => return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {pos} is invalid. Identifier truncated. No ending `}}` found.")})
+							}
+						}
+					}
+                    '}' =>
+						if let Some((_, '}')) = iter.next() {
+							out.push('}');
+						} else {
+							return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {pos} is invalid. You have to terminate `}}` with another `}}` to escape it")});
+						},
+                    c => out.push(c)
+                }
+				/*
+				return Err(FunctionError::RuntimeError{mfa: this_mfa(),
+					error: format!("the format specifier at {pos} is invalid. It only support named formatting, and not positional formatting.") +
+					&format!("You need to place an identifier to name the value to be retrieved and formatted")
+				});
+				//todo you are supposed to handle both formatting by value and positional formatting
+				//todo but in this case only positional formatting is handled
+				return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {pos} can not be filled")});
+				*/
+            }
+            if !arg_stack.is_empty() {
+                return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "too many parameters passed. Ensure that you have the same number of {} in your format string".into()});
+			}
+			info!("{out}");
+			dbg!(out.clone());
+			dbg!(args);
+			Ok(Value::from(out))
+			
+			//TODO add variable argument to sub-record
+			// Ok(Value::from("temp placeholder"))
+			//dbg!(_ctx.origin_uri().unwrap().to_string());
+
+		} else {
+			Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "expected 1st parameter to format to be a format specifier e.g. to print a number use `string::format(\"{}\", 1)`".into()})
+		}
+    }
+
+    fn boxed_clone(&self) -> Box<dyn TremorFn> {
+        Box::new(self.clone())
+    }
+    fn arity(&self) -> std::ops::RangeInclusive<usize> {
+        1_usize..=usize::max_value()
+    }
+    fn is_const(&self) -> bool {
+        true
+    }
+
+    fn valid_arity(&self, n: usize) -> bool {
+        self.arity().contains(&n)
+    }
+}
+
+
+/// Take in account `Tremor::Value`s which can wrap String (&str), Integer (i32), Boolean (bool), Array (Vec), Bytes (bytes), Object (HashMap)
+fn format_tremor_value(value: &Value) -> Result<String> {
+	let mut result = String::new();
+	let error_result =
+	Err("Not Implemented. Could not deserialize from `Tremor::Value` to any supporteed rust types.\nSupported types are either &str, i32, bool, Vec, bytes, HashMap".into());
+
+	if let Some(string) = value.as_str() {
+		result.push_str(string);
+		return Ok(result);
+	}
+
+	if let Some(integer32) = value.as_i32() {
+		result.push_str(&integer32.to_string());
+		return Ok(result);
+	}
+
+	if let Some(boolean) = value.as_bool() {
+		result.push_str(&boolean.to_string());
+		return Ok(result)
+	}
+
+	if let Some(array) = value.as_array() {
+		let mut array = array.clone();
+		result.push('[');
+		let mut last = String::new();
+		if !array.is_empty() {
+			// Keeping the last value of the array for a nice formatting
+			// We will be able to get ["hello", "nice", "last"] instead of ["hello", "nice", "last", ] 
+			last = match format_tremor_value(&array.pop().unwrap()) {
+				Ok(v) => v,
+				Err(_) => {return error_result;}
+			};
+		}
+		for v in array.iter() {
+			result.push_str(
+				&match format_tremor_value(&v.clone_static()) {
+					Ok(v) => v,
+					Err(_) => {return error_result;}
+				});
+			result.push_str(", ");
+		}
+		// last element
+		result.push_str(&last);
+		result.push(']');
+
+		return Ok(result);
+	}
+
+	if let Some(_bytes) = value.as_bytes() {
+		// result.push_str(match str::from_utf8(bytes) {
+		// 	Ok(v) => v,
+		// 	Err(_) => 
+		// })
+		todo!("bytes");
+	}
+
+	if let Some(obj) = value.as_object() {
+		let mut obj = obj.clone();
+		result.push('{');
+		let mut last = String::new();
+		if !obj.is_empty() {
+			// Keeping the last pair of key:value of the object for a nice formatting
+			// We will be able to get ["hello", "nice", "last"] instead of ["hello", "nice", "last", ]
+			let p = obj.iter().last().unwrap();
+			let p = (p.0.clone().unwrap_borrowed(),
+					&match format_tremor_value(&p.1.clone_static()) {
+						Ok(v) => v,
+						Err(_) => {return error_result;}
+					}
+				);
+			obj.remove(p.0);
+			let mut p2 = String::new();
+			p2.push_str(&p.0);
+			p2.push_str(": ");
+			p2.push_str(p.1);
+			last = p2;
+		}
+
+		for pair in obj.iter() {
+			let pair = (pair.0.clone().unwrap_borrowed(), pair.1);
+			result.push_str(pair.0);//  key
+			result.push_str(": ");	//  sep
+			result.push_str(				// value
+				&match format_tremor_value(&pair.1.clone_static()) {
+					Ok(v) => v,
+					Err(_) => {return error_result;}
+				});
+			result.push_str(", ");	//pair sep
+		}
+		// last element
+		result.push_str(&last);
+		result.push('}');
+
+		return Ok(result);
+	}
+
+	return error_result;
+}
+
+
+
+///Todo
 pub fn load(reg: &mut Registry) -> Result<()> {
-    reg.insert(tremor_fn!(logging|info(_context) {
-        // TODO FIXME Add logging logic
-        Ok(Value::from("snot"))
-    }));
+    reg
+    // .insert(tremor_fn!(
+	// 	logging|warn(_context, msg:String) {
+	// 		warn!("{msg}");
+	// 		println!("AAAAAAAAH! {} AAAAAAAAAAAAAAAAAAAAH", _context.origin_uri.unwrap().to_string());
+	// 		Ok(Value::from(msg.to_string()))
+	// 	}
+	// ))
+    // .insert(tremor_fn!(
+	// 	logging|error(_context, msg:String) {
+	// 		error!("{msg}");
+	// 		Ok(Value::from(msg.to_string()))
+	// 	}
+	// ))
+    // .insert(tremor_fn!(
+	// 	logging|debug(_context, msg:String) {
+	// 		debug!("{msg}");
+	// 		Ok(Value::from(msg.to_string()))
+	// 	}
+	// ))
+    // .insert(tremor_fn!(
+	// 	logging|trace(_context, msg:String) {
+	// 		trace!("{msg}");
+	// 		Ok(Value::from(msg.to_string()))
+	// 	}
+	// ))
+	.insert(TremorFnWrapper::new(
+		"logging".to_string(),
+		"info".to_string(),
+		Box::new(PluggableLoggingFm::default())
+	)).insert(TremorFnWrapper::new(
+		"logging".to_string(),
+		"warn".to_string(),
+		Box::new(PluggableLoggingFm::default())
+	)).insert(TremorFnWrapper::new(
+		"logging".to_string(),
+		"debug".to_string(),
+		Box::new(PluggableLoggingFm::default())
+	)).insert(TremorFnWrapper::new(
+		"logging".to_string(),
+		"error".to_string(),
+		Box::new(PluggableLoggingFm::default())
+	)).insert(TremorFnWrapper::new(
+		"logging".to_string(),
+		"trace".to_string(),
+		Box::new(PluggableLoggingFm::default())
+	));
 
     Ok(())
 }
+
+
+#[cfg(test)]
+mod test {
+use tremor_script::{ Registry, Object};
+use tremor_value::Value;
+use tremor_script::{ctx::EventContext};//, prelude::Builder};
+use super::*;
+
+	// #[test]
+    // fn test_info(){
+    //     let mut reg = Registry::default();
+    //     let _k = load(&mut reg);
+    //     let _fun = reg.find("logging", "info").unwrap();
+    //     let _ctx = EventContext::new(0, None);
+
+    //     let _res = _fun.invoke(&_ctx,&[&Value::from("info {}"),&Value::from("info")]);
+    //     assert_eq!(Ok(Value::from("info info")), _res);
+    // }
+
+	#[test]
+    fn test_info() {
+        let mut reg = Registry::default();
+        let _k = load(&mut reg);
+        let _fun = reg.find("logging", "info").unwrap();
+        let _ctx = EventContext::new(0, None);
+
+		let mut obj = Object::new();
+		obj.insert("key".into(), Value::from("value"));
+		obj.insert("key2".into(), Value::Array(vec![Value::from("value2"), Value::from("p"), Value::from("ojn")]));
+
+        let _res = _fun.invoke(&_ctx,&[&Value::from("info {key2} {key}"),&Value::from(obj)]);
+        assert_eq!(Ok(Value::from("info [value2, p, ojn] value")), _res);
+    }
+
+	// #[test]
+    // fn test_warn(){
+    //     let mut reg = Registry::default();
+    //     let _k = load(&mut reg);
+    //     let fun = reg.find("logging", "warn").unwrap();
+    //     let ctx = EventContext::new(0, None);
+
+    //     let res = fun.invoke(&ctx, &[&Value::from("warn")]);
+    //     assert_eq!(Ok(Value::from("warn")), res);
+    // }
+
+	#[test]
+    fn test_warn() {
+        let mut reg = Registry::default();
+        let _k = load(&mut reg);
+        let _fun = reg.find("logging", "warn").unwrap();
+        let _ctx = EventContext::new(0, None);
+
+		let mut obj = Object::new();
+		obj.insert("key".into(), Value::from("value"));
+		obj.insert("key2".into(), Value::Array(vec![Value::from("value2"), Value::from("p"), Value::from("ojn")]));
+
+        let _res = _fun.invoke(&_ctx,&[&Value::from("info {key2} {key}"),&Value::from(obj)]);
+        assert_eq!(Ok(Value::from("info [value2, p, ojn] value")), _res);
+    }
+
+	#[test]
+    fn test_debug() {
+        let mut reg = Registry::default();
+        let _k = load(&mut reg);
+        let _fun = reg.find("logging", "debug").unwrap();
+        let _ctx = EventContext::new(0, None);
+
+		let mut obj = Object::new();
+		obj.insert("key".into(), Value::from("value"));
+		obj.insert("key2".into(), Value::Array(vec![Value::from("value2"), Value::from("p"), Value::from("ojn")]));
+
+        let _res = _fun.invoke(&_ctx,&[&Value::from("info {key2} {key}"),&Value::from(obj)]);
+        assert_eq!(Ok(Value::from("info [value2, p, ojn] value")), _res);
+    }
+
+
+	#[test]
+    fn test_error() {
+        let mut reg = Registry::default();
+        let _k = load(&mut reg);
+        let _fun = reg.find("logging", "error").unwrap();
+        let _ctx = EventContext::new(0, None);
+
+		let mut obj = Object::new();
+		obj.insert("key".into(), Value::from("value"));
+		obj.insert("key2".into(), Value::Array(vec![Value::from("value2"), Value::from("p"), Value::from("ojn")]));
+
+        let _res = _fun.invoke(&_ctx,&[&Value::from("info {key2} {key}"),&Value::from(obj)]);
+        assert_eq!(Ok(Value::from("info [value2, p, ojn] value")), _res);
+    }
+
+
+	#[test]
+    fn test_trace() {
+        let mut reg = Registry::default();
+        let _k = load(&mut reg);
+        let _fun = reg.find("logging", "trace").unwrap();
+        let _ctx = EventContext::new(0, None);
+
+		let mut obj = Object::new();
+		obj.insert("key".into(), Value::from("value"));
+		obj.insert("key2".into(), Value::Array(vec![Value::from("value2"), Value::from("p"), Value::from("ojn")]));
+
+        let _res = _fun.invoke(&_ctx,&[&Value::from("info {key2} {key}"),&Value::from(obj)]);
+        assert_eq!(Ok(Value::from("info [value2, p, ojn] value")), _res);
+    }
+// 	#[test]
+//     fn test_error(){
+//         let mut reg = Registry::default();
+//         let _k = load(&mut reg);
+//         let fun = reg.find("logging", "error").unwrap();
+//         let ctx = EventContext::new(0, None);
+
+//         let res = fun.invoke(&ctx, &[&Value::from("error")]);
+//         assert_eq!(Ok(Value::from("error")), res);
+//     }
+// 	#[test]
+//     fn test_debug(){
+//         let mut reg = Registry::default();
+//         let _k = load(&mut reg);
+//         let fun = reg.find("logging", "debug").unwrap();
+//         let ctx = EventContext::new(0, None);
+
+//         let res = fun.invoke(&ctx, &[&Value::from("debug")]);
+//         assert_eq!(Ok(Value::from("debug")), res);
+//     }
+// 	#[test]
+//     fn test_trace(){
+//         let mut reg = Registry::default();
+//         let _k = load(&mut reg);
+//         let fun = reg.find("logging", "trace").unwrap();
+//         let ctx = EventContext::new(0, None);
+
+//         let res = fun.invoke(&ctx, &[&Value::from("trace")]);
+//         assert_eq!(Ok(Value::from("trace")), res);
+//     }
+
+// 	#[test]
+//     fn format() {
+// 		// let mut reg = Registry::default();
+//         // let _k = load(&mut reg);
+// 		// let fun = reg.find("string", "info").unwrap();
+// 		// dbg!(fun);
+// 		// let ctx = EventContext::new(0, None);
+
+//         // let res = fun.invoke(&ctx, &[&Value::from("trace")]);
+// 		// dbg!(res.unwrap());
+//         // let _f = fun("string", "info");
+//         // let _v1 = Value::from("a string with {}");
+//         // let _v2 = Value::from("more text");
+//         // let _v3 = Value::from(123);
+// 		//dbg!(f(&[&v1, &v2]).unwrap());
+//         // assert_val!(f(&[&v1, &v2]), Value::from("a string with more text"));
+//         // assert_val!(f(&[&v1, &v3]), Value::from("a string with 123"));
+// 	}
+
+}
+
+
+

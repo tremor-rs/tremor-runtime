@@ -118,9 +118,7 @@ pub fn registry() -> Registry {
         }))
         .insert(tremor_fn!(system|version(_context) {
             Ok(Value::String(VERSION.into()).into_static())
-        }))
-        .insert(tremor_fn!(logging|info(_context) {
-            Ok(Value::from("snot"))}));
+        }));
 
     crate::std_lib::load(&mut registry);
     registry
@@ -304,9 +302,9 @@ impl FunctionError {
 /// Wrapper around a function
 pub struct TremorFnWrapper {
     /// Name of the module the function is in
-    module: String,
+    pub module: String,
     /// Name of the function
-    name: String,
+    pub name: String,
     /// Boxed dyn of the implementaiton
     fun: Box<dyn TremorFn>,
 }
@@ -850,22 +848,31 @@ impl Aggr {
         self.functions.get(module)
     }
 }
+///modifié
+// Test utility to grab a function from the registry
+pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
+	let f = registry()
+		.find(m, f)
+		.expect("could not find function")
+		.clone();
+	move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext::new(0, None), args) }
+}
 
-#[cfg(test)]
-pub use tests::fun;
+// #[cfg(test)]
+// pub use tests::fun;
 #[cfg(test)]
 mod tests {
     use super::*;
     use simd_json::prelude::*;
 
-    // Test utility to grab a function from the registry
-    pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
-        let f = registry()
-            .find(m, f)
-            .expect("could not find function")
-            .clone();
-        move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext::new(0, None), args) }
-    }
+    // // Test utility to grab a function from the registry
+    // pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
+    //     let f = registry()
+    //         .find(m, f)
+    //         .expect("could not find function")
+    //         .clone();
+    //     move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext::new(0, None), args) }
+    // }
 
     #[test]
     pub fn fun_error_equality_checks() {

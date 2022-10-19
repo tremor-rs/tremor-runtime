@@ -28,6 +28,49 @@ fn parse(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
     Deploy::parse(deploy, &reg, &aggr_reg)
 }
 
+async fn deploy_test_config(contents: String) -> Result<()> {
+    match parse(&contents) {
+        Ok(deployable) => {
+            let config = WorldConfig {
+                debug_connectors: true,
+                ..WorldConfig::default()
+            };
+            let (world, h) = World::start(config).await?;
+            for flow in deployable.iter_flows() {
+                world.start_flow(flow).await?;
+            }
+            // this isn't good
+            h.timeout(Duration::from_secs(10)).await??;
+        }
+        otherwise => {
+            println!(
+                "Expected valid deployment file, compile phase, but got an unexpected error: {:?}",
+                otherwise
+            );
+            assert!(false);
+        }
+    }
+
+    Ok(())
+}
+
+async fn main_config(file: &str) -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
+    let deploy_dir = &format!("tests/flows/{file}/");
+    let deploy_file = &format!("tests/flows/{file}/flow.troy");
+    Manager::clear_path()?;
+    Manager::add_path(&"tremor-script/lib")?;
+    Manager::add_path(deploy_dir)?;
+
+    println!("Loading deployment file: {deploy_file}");
+    let mut file = file::open(deploy_file)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+
+    deploy_test_config(contents).await
+}
+
 macro_rules! test_cases {
 
     ($($file:ident),* ,) => {
@@ -37,37 +80,7 @@ macro_rules! test_cases {
                 #[async_std::test]
                 #[serial(flow, timeout_ms = 600000)]
                 async fn $file() -> Result<()> {
-
-                    let deploy_dir = concat!("tests/flows/", stringify!($file), "/").to_string();
-                    let deploy_file = concat!("tests/flows/", stringify!($file), "/flow.troy");
-                    Manager::clear_path()?;
-                    Manager::add_path(&"tremor-script/lib")?;
-                    Manager::add_path(&deploy_dir)?;
-
-                    println!("Loading deployment file: {}", deploy_file);
-                    let mut file = file::open(deploy_file)?;
-                    let mut contents = String::new();
-                    file.read_to_string(&mut contents)?;
-                    match parse(&contents) {
-                        Ok(deployable) => {
-                            let config = WorldConfig{
-                                debug_connectors: true,
-                                ..WorldConfig::default()
-                            };
-                            let (world, h) = World::start(config).await?;
-                            for flow in deployable.iter_flows() {
-                                world.start_flow(flow).await?;
-                            }
-                            // this isn't good
-                            h.timeout(Duration::from_secs(10)).await??;
-                        },
-                        otherwise => {
-                            println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
-                            assert!(false);
-                        }
-                    }
-
-                    Ok(())
+					main_config(stringify!($file)).await
                 }
             )*
         }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use async_broadcast::Receiver;
+use async_broadcast::{Receiver, RecvError};
 use tremor_pipeline::{LoggingMsg, LOGGING_CHANNEL};
 
 use crate::connectors::{prelude::KillSwitch, ConnectorBuilder, ConnectorType};
@@ -37,7 +37,7 @@ pub(crate) struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        "logging".into()
+        "logs".into()
     }
     async fn build(
         &self,
@@ -85,7 +85,7 @@ impl LoggingSource {
         Self {
             rx,
             origin_uri: EventOriginUri {
-                scheme: "tremor-logging".to_string(),
+                scheme: "tremor-logs".to_string(),
                 host: hostname(),
                 port: None,
                 path: vec![],
@@ -97,17 +97,22 @@ impl LoggingSource {
 #[async_trait::async_trait()]
 impl Source for LoggingSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        let msg = self
-            .rx
-            .recv()
-            .await
-            .map_err(|e| Error::from(format!("error: {}", e)))?;
-        Ok(SourceReply::Structured {
-            payload: msg.payload,
-            origin_uri: msg.origin_uri.unwrap_or_else(|| self.origin_uri.clone()),
-            stream: DEFAULT_STREAM_ID,
-            port: None,
-        })
+        loop {
+            match self.rx.recv().await {
+                Ok(msg) => {
+                    break Ok(SourceReply::Structured {
+                        payload: msg.payload,
+                        origin_uri: msg.origin_uri.unwrap_or_else(|| self.origin_uri.clone()),
+                        stream: DEFAULT_STREAM_ID,
+                        port: None,
+                    })
+                }
+                Err(RecvError::Overflowed(_)) => continue, // try again, this is expected
+                Err(e) => {
+                    break Err(e.into());
+                }
+            }
+        }
     }
 
     fn is_transactional(&self) -> bool {

@@ -56,8 +56,6 @@ pub(crate) enum Command {
         #[clap( value_parser = clap::value_parser!(String))]
         name: String,
     },
-    /// Pluggable-logging
-    PluggableLogging {},
 }
 
 /// Shell type

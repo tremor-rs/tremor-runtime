@@ -1,0 +1,64 @@
+# #
+define flow logging_flow
+flow
+	use tremor::pipelines;
+	use tremor::connectors;
+	define connector read_file from file
+		args
+				file = "in"
+		with
+				codec = "json-sorted",
+				preprocessors = ["separate"],
+				config = {
+						"path": args.file,
+						"mode": "read"
+				},
+		end;
+	define connector write_file from file
+	args
+			file = "out"
+	with
+			codec = "json-sorted",
+			postprocessors = ["separate"],
+			config = {
+					"path": args.file,
+					"mode": "truncate"
+			},
+	end;
+
+	define pipeline logging_pipeline
+		pipeline
+			use tremor::logging;
+			select match event of
+				case %{level == "INFO" } => logging::info (event.msg, event.data)
+				case %{level == "TRACE"} => logging::trace(event.msg, event.data)
+				case %{level == "DEBUG"} => logging::debug(event.msg, event.data)
+				case %{level == "WARN" } => logging::warn (event.msg, event.data)
+				case %{level == "ERROR"} => logging::error(event.msg, event.data)
+				default => "exit"
+			end
+			from in into out;
+	end;
+
+	# define connector logging from logs;
+	define connector logging from logs;
+	create connector logging; 
+	create connector console from connectors::console;
+
+	# Create read/write file connectors
+	create connector reader from read_file;
+	create connector writer from write_file;
+
+	# Create pipelines
+	create pipeline passthrough from pipelines::passthrough;
+	create pipeline logging_pipeline;
+	create connector exit from connectors::exit;
+
+	#Connection
+	connect /connector/logging to /pipeline/logging_pipeline;
+	connect /pipeline/logging_pipeline to /connector/exit;
+	
+	connect /connector/reader to /pipeline/logging_pipeline;
+	connect /pipeline/logging_pipeline to /connector/writer;	
+end;
+deploy flow logging_flow;
