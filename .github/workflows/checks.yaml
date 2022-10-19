@@ -10,13 +10,13 @@ jobs:
   license:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
       - name: Check license headers
         run: ./.github/checks/copyright.sh
   safety:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
       - name: Safety checks
         run: ./.github/checks/safety.sh -a
   unused-deps:
@@ -26,7 +26,7 @@ jobs:
         run: sudo snap install remarshal
       - name: Install deps
         run: sudo snap install --classic ripgrep
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
       - name: Check for unused dependencies (tremor-runtime)
         run: ./.github/checks/deps.sh .
       - name: Check for unused dependencies (tremor-api)
@@ -47,7 +47,7 @@ jobs:
   format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -57,8 +57,8 @@ jobs:
   clippy-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - uses: Swatinem/rust-cache@v1
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - uses: actions-rs/toolchain@v1

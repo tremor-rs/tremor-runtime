@@ -49,24 +49,23 @@ impl FromStr for Algorithm {
 
 impl Algorithm {
     pub fn into_postprocessor(self, config: Option<&Value>) -> Result<Box<dyn Postprocessor>> {
-        match config.get_i64("level") {
-            Some(compression_level) => match self {
+        if let Some(compression_level) = config.get_i64("level") {
+            match self {
                 Algorithm::Xz2 => Xz2::with_config(compression_level),
                 Algorithm::Zstd => Zstd::with_config(compression_level),
                 Algorithm::Lz4 => Lz4::with_config(compression_level),
                 _ => Err("compression level not supported for given algorithm".into()),
-            },
-            None => {
-                let codec: Box<dyn Postprocessor> = match self {
-                    Algorithm::Gzip => Box::new(Gzip::default()),
-                    Algorithm::Zlib => Box::new(Zlib::default()),
-                    Algorithm::Xz2 => Box::new(Xz2::default()),
-                    Algorithm::Zstd => Box::new(Zstd::default()),
-                    Algorithm::Snappy => Box::new(Snappy::default()),
-                    Algorithm::Lz4 => Box::new(Lz4::default()),
-                };
-                Ok(codec)
             }
+        } else {
+            let codec: Box<dyn Postprocessor> = match self {
+                Algorithm::Gzip => Box::new(Gzip::default()),
+                Algorithm::Zlib => Box::new(Zlib::default()),
+                Algorithm::Xz2 => Box::new(Xz2::default()),
+                Algorithm::Zstd => Box::new(Zstd::default()),
+                Algorithm::Snappy => Box::new(Snappy::default()),
+                Algorithm::Lz4 => Box::new(Lz4::default()),
+            };
+            Ok(codec)
         }
     }
 }
