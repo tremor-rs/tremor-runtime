@@ -101,7 +101,7 @@ impl AfterController {
         let root = &self.base;
         let after_path = root.join("after.yaml");
         // This is optional
-        if (&after_path).is_file() {
+        if after_path.is_file() {
             let after_jsons = load_after_defs(&after_path)?;
             for (i, after_json) in after_jsons.into_iter().enumerate() {
                 let after_process = after_json.spawn(root, &self.env).await?;
