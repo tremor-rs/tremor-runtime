@@ -49,7 +49,7 @@ regex = "1"
 serde = "1.0"
 serde_derive = "1.0"
 simd-json = { version = "0.6", features = ["known-key"] }
-simd-json-derive = "0.4"
+simd-json-derive = "0.6"
 sketches-ddsketch = "0.2.0"
 strip-ansi-escapes = "0.1"
 termcolor = "1.1"
