@@ -1,5 +1,5 @@
 # Changelog
-
+## [0.13.0-rc.6]
 ### Fixes
 
 - Fix windows based on `interval` not sending the correct event id when timing out
