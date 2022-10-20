@@ -28,6 +28,15 @@ impl Script {
 }
 
 impl Operator for Script {
+    fn initial_state(&self) -> Value<'static> {
+        self.script
+            .script
+            .state
+            .clone()
+            .and_then(|v| v.as_lit().cloned())
+            .unwrap_or_default()
+            .into_static()
+    }
     fn on_event(
         &mut self,
         _uid: OperatorId,

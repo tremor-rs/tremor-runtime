@@ -274,6 +274,8 @@ pub struct Script<'script> {
     pub(crate) mid: Box<NodeMeta>,
     /// Expressions of the script
     pub exprs: Exprs<'script>,
+    /// initial state
+    pub state: Option<ImutExpr<'script>>,
     /// Locals
     pub locals: usize,
     #[serde(skip)]

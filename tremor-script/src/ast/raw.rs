@@ -152,6 +152,7 @@ impl<'script> ScriptRaw<'script> {
         Ok(Script {
             mid: self.mid,
             exprs,
+            state: None,
             locals: helper.locals.len(),
             docs: helper.docs.clone(),
         })
