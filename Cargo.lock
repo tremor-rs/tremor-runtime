@@ -4793,9 +4793,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json-derive"
-version = "0.4.0"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e55bb9cf8e9b4da28bc39175fbb9d773806decb42bc6fcaa80fde2556a62a5cc"
+checksum = "de454f4996c6ab2e8d9cfdc4cb937908c22faaed1929a425399ba3da1745c165"
 dependencies = [
  "chrono",
  "itoa 1.0.2",
@@ -4807,9 +4807,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json-derive-int"
-version = "0.4.0"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "605c164d8d8c566973a9cd4cf4712bbc5afb1ffa010a9b0f5b5f9c930119fe75"
+checksum = "03c7f247b265426bf17854724a92608580e16f065f23b2f776fa794598737d08"
 dependencies = [
  "proc-macro2",
  "quote",
