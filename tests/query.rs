@@ -126,6 +126,8 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
+    script_ports,
+    initial_state,
     unused_node,
     route_emit,
     drop_event,

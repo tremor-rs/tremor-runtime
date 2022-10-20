@@ -1,0 +1,15 @@
+define script plus
+args
+  what
+state
+  args.what
+script
+  event + state
+end;
+
+create script plus with
+  what = 23
+end;
+
+select event from in into plus;
+select event from plus into out;

@@ -124,6 +124,9 @@ test_cases!(
     pp_embed_unrecognized_token4,
     pp_embed_unrecognized_token5,
     // INSERT
+    state_not_static,
+    script_in_port,
+    script_duplicate_port,
     pipeline_stream_name_conflict,
     pipeline_out,
     pipeline_in,

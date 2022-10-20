@@ -448,6 +448,12 @@ impl Query {
                     Optimizer::new(&helper).walk_script_defn(&mut defn)?;
 
                     let e = defn.extent();
+                    if let Some(state) = &defn.script.state {
+                        state
+                            .as_lit()
+                            .ok_or_else(|| err_generic(&e, state, &"state not constant"))?;
+                    }
+
                     let mut h = Dumb::new();
                     // We're trimming the code so no spaces are at the end then adding a newline
                     // to ensure we're left justified (this is a dot thing, don't question it)

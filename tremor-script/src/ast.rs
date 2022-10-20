@@ -722,6 +722,7 @@ impl<'script> ImutExpr<'script> {
             None
         }
     }
+    /// Tries to turn the `ImutExpr` into a `Value`
     pub(crate) fn try_into_value(mut self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut self)?;
         if let ImutExpr::Literal(Literal { value: v, .. }) = self {
