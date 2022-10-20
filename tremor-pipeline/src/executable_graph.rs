@@ -120,6 +120,9 @@ pub struct OperatorNode {
 }
 
 impl Operator for OperatorNode {
+    fn initial_state(&self) -> Value<'static> {
+        self.op.initial_state()
+    }
     fn on_event(
         &mut self,
         _uid: OperatorId,
@@ -244,7 +247,7 @@ pub struct ExecutableGraph {
     /// ID of the graph, contains the flow id and pipeline id
     pub id: String,
     pub(crate) graph: Vec<OperatorNode>,
-    pub(crate) state: State,
+    pub(crate) states: State,
     pub(crate) inputs: HashMap<Cow<'static, str>, usize>,
     pub(crate) stack: Vec<(usize, Cow<'static, str>, Event)>,
     pub(crate) signalflow: Vec<usize>,
@@ -481,7 +484,7 @@ impl ExecutableGraph {
                     returns.push((port.clone(), event));
                 } else {
                     // ALLOW: We know the state was initiated
-                    let state = unsafe { self.state.ops.get_unchecked_mut(idx) };
+                    let state = unsafe { self.states.ops.get_unchecked_mut(idx) };
                     let EventAndInsights { events, insights } =
                         stry!(node.on_event(node.uid, &port, state, event));
 
@@ -594,7 +597,7 @@ impl ExecutableGraph {
             let i = unsafe { *self.signalflow.get_unchecked(idx) };
             let EventAndInsights { events, insights } = {
                 let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
-                let state = unsafe { self.state.ops.get_unchecked_mut(i) }; // we know this has been initialized
+                let state = unsafe { self.states.ops.get_unchecked_mut(i) }; // we know this has been initialized
                 stry!(op.on_signal(op.uid, state, &mut signal))
             };
             self.insights.extend(insights.into_iter().map(|cf| (i, cf)));
@@ -814,14 +817,14 @@ mod test {
             NodeMetrics::default(),
         ];
         // Create state for all nodes
-        let state = State {
+        let states = State {
             ops: vec![Value::null(), Value::null(), Value::null(), Value::null()],
         };
         let mut rx = METRICS_CHANNEL.rx();
         let mut g = ExecutableGraph {
             id: "flow::pipe".into(),
             graph,
-            state,
+            states,
             inputs,
             stack: vec![],
             signalflow: vec![2, 3],
@@ -910,7 +913,7 @@ mod test {
             NodeMetrics::default(),
         ];
         // Create state for all nodes
-        let state = State {
+        let states = State {
             ops: vec![
                 Value::null(),
                 Value::null(),
@@ -922,7 +925,7 @@ mod test {
         let mut g = ExecutableGraph {
             id: "test".into(),
             graph,
-            state,
+            states,
             inputs,
             stack: vec![],
             signalflow: vec![2, 3],
