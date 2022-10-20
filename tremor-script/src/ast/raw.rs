@@ -16,6 +16,8 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use std::hash::{Hash, Hasher};
+
 use crate::ast::optimizer::Optimizer;
 use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
@@ -269,12 +271,30 @@ impl<'script> Upable<'script> for BytesRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Debug, PartialEq, Serialize, Clone, Eq)]
+#[derive(Debug, Serialize, Clone, Eq)]
 pub struct IdentRaw<'script> {
     pub(crate) mid: Box<NodeMeta>,
     pub id: beef::Cow<'script, str>,
 }
 impl_expr!(IdentRaw);
+
+impl PartialEq<str> for IdentRaw<'_> {
+    fn eq(&self, other: &str) -> bool {
+        self.id == other
+    }
+}
+
+impl PartialEq for IdentRaw<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Hash for IdentRaw<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
 
 impl<'script> IdentRaw<'script> {
     /// empty ident
@@ -286,7 +306,7 @@ impl<'script> IdentRaw<'script> {
     }
 
     /// literal ident injected at position `mid`
-    pub(crate) fn literal(mid: Box<NodeMeta>, s: &'static str) -> Self {
+    pub(crate) fn literal(mid: Box<NodeMeta>, s: &'script str) -> Self {
         Self {
             mid,
             id: Cow::const_str(s),
