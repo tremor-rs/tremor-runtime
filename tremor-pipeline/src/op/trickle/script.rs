@@ -65,7 +65,12 @@ impl Operator for Script {
                     event_meta,   // $
                 )
             } else {
-                // FIXME: add error event
+                let mut o = literal!({ "error": format!("unknown port: `{port}`") });
+                mem::swap(&mut o, unwind_event);
+                if let Some(error) = unwind_event.as_object_mut() {
+                    error.insert("event".into(), o);
+                };
+
                 return Some(ERR);
             };
 
