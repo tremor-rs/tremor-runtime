@@ -1,0 +1,8 @@
+Error: 
+    3 | define script bad_state
+    4 | state
+    5 |   system::nanotime()
+      |   ^^^^^^^^^^^^^^^^^^ state not constant
+    6 | script
+    7 |   state
+    8 | end;

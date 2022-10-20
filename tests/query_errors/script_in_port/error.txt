@@ -1,0 +1,8 @@
+Error: 
+    1 | define script in_port
+    2 | script from in
+      |             ^^ script port `in` is reserved
+    3 |   event
+    4 | script
+    5 |   event
+    6 | end;
