@@ -182,7 +182,7 @@ pub(crate) fn spawn(
     operator_id_gen: &mut OperatorIdGen,
 ) -> Result<Addr> {
     let qsize = crate::QSIZE.load(Ordering::Relaxed);
-    let mut pipeline = config.to_pipe(operator_id_gen)?;
+    let mut pipeline = config.to_executable_graph(operator_id_gen)?;
     pipeline.optimize();
 
     let (tx, rx) = bounded::<Box<Msg>>(qsize);
@@ -542,7 +542,7 @@ pub(crate) async fn pipeline_task(
                 handle_cf_msg(msg, &mut pipeline, &inputs).await?;
             }
             AnyMsg::Flow(Msg::Event { input, event }) => {
-                match pipeline.enqueue(&input, event, &mut eventset).await {
+                match pipeline.enqueue(input.clone(), event, &mut eventset).await {
                     Ok(()) => {
                         handle_insights(&mut pipeline, &inputs).await;
                         maybe_send(send_events(&mut eventset, &mut dests).await);

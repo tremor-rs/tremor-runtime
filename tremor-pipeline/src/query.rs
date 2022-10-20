@@ -156,7 +156,7 @@ impl Query {
     /// # Errors
     /// if the graph can not be turned into a pipeline
     #[allow(clippy::too_many_lines)]
-    pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<ExecutableGraph> {
+    pub fn to_executable_graph(&self, idgen: &mut OperatorIdGen) -> Result<ExecutableGraph> {
         let aggr_reg = tremor_script::aggr_registry();
         let reg = tremor_script::FN_REGISTRY.read()?;
         let mut helper = Helper::new(&reg, &aggr_reg);
@@ -380,7 +380,7 @@ impl Query {
                             nodes_by_name.insert(name.clone().into(), id);
                         }
 
-                        let mut graph = query.to_pipe(idgen)?;
+                        let mut graph = query.to_executable_graph(idgen)?;
                         graph.optimize();
 
                         if included_graphs
@@ -797,6 +797,7 @@ pub(crate) fn supported_operators(
         Some(ast::Stmt::ScriptDefinition(script)) => {
             Box::new(op::trickle::script::Script::new(tremor_script::Script {
                 script: script.script.clone(),
+                named: script.named.clone(),
                 aid: script.aid(),
                 warnings: BTreeSet::new(),
             }))
@@ -846,7 +847,7 @@ mod test {
 
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();
-        let g = q.to_pipe(&mut idgen).unwrap();
+        let g = q.to_executable_graph(&mut idgen).unwrap();
         assert!(g.inputs.contains_key("in/test_in"));
         assert_eq!(idgen.next_id().id(), first.id() + g.graph.len() as u64 + 1);
         let out = g.graph.get(4).unwrap();

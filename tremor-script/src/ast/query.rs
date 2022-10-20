@@ -204,6 +204,8 @@ pub struct ScriptDefinition<'script> {
     pub params: DefinitionalArgs<'script>,
     /// The script itself
     pub script: Script<'script>,
+    /// The script itself
+    pub named: HashMap<String, Script<'script>>,
 }
 impl_expr!(ScriptDefinition);
 

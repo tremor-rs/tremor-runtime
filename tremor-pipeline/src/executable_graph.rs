@@ -19,7 +19,6 @@ use crate::{
     errors::Result,
     errors::{Error, ErrorKind},
     metrics::value_count,
-    op::prelude::IN,
     ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
@@ -284,6 +283,7 @@ impl ExecutableGraph {
         }
         Some(())
     }
+
     fn optimize_(&mut self) -> Option<bool> {
         let mut did_chage = false;
         // remove skippable nodes from contraflow and signalflow
@@ -419,13 +419,14 @@ impl ExecutableGraph {
         }
         Some(did_chage)
     }
+
     /// This is a performance critial function!
     ///
     /// # Errors
     /// Errors if the event can not be processed, or an operator fails
     pub async fn enqueue(
         &mut self,
-        stream_name: &str,
+        stream_name: Cow<'static, str>,
         event: Event,
         returns: &mut Returns,
     ) -> Result<()> {
@@ -440,13 +441,13 @@ impl ExecutableGraph {
             self.send_metrics("events", tags, event.ingest_ns).await;
             self.last_metrics = event.ingest_ns;
         }
-        let input = *stry!(self.inputs.get(stream_name).ok_or_else(|| {
+        let input = *stry!(self.inputs.get(&stream_name).ok_or_else(|| {
             Error::from(ErrorKind::InvalidInputStreamName(
-                stream_name.to_owned(),
+                stream_name.to_string(),
                 self.id.clone(),
             ))
         }));
-        self.stack.push((input, IN, event));
+        self.stack.push((input, stream_name, event));
         self.run(returns)
     }
 
@@ -608,7 +609,10 @@ impl ExecutableGraph {
 mod test {
     use super::*;
     use crate::{
-        op::{identity::PassthroughFactory, prelude::OUT},
+        op::{
+            identity::PassthroughFactory,
+            prelude::{IN, OUT},
+        },
         METRICS_CHANNEL,
     };
     use tremor_common::ids::Id;
@@ -836,7 +840,7 @@ mod test {
         // Test with one event
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue("in", e, &mut returns).await.unwrap();
+        g.enqueue(IN, e, &mut returns).await.unwrap();
         assert_eq!(returns.len(), 1);
         returns.clear();
 
@@ -850,13 +854,13 @@ mod test {
         // Test with two events
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue("in", e, &mut returns).await.unwrap();
+        g.enqueue(IN, e, &mut returns).await.unwrap();
         assert_eq!(returns.len(), 1);
         returns.clear();
 
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue("in", e, &mut returns).await.unwrap();
+        g.enqueue(IN, e, &mut returns).await.unwrap();
         assert_eq!(returns.len(), 1);
         returns.clear();
 
@@ -937,7 +941,7 @@ mod test {
         // Test with one event
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue("in", e, &mut returns).await.unwrap();
+        g.enqueue(IN, e, &mut returns).await.unwrap();
         assert_eq!(returns.len(), 1);
         returns.clear();
 

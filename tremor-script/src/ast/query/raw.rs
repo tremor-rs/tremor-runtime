@@ -359,6 +359,7 @@ pub struct ScriptDefinitionRaw<'script> {
     pub(crate) id: String,
     pub(crate) params: DefinitionalArgsRaw<'script>,
     pub(crate) script: ScriptRaw<'script>,
+    pub(crate) named: HashMap<String, ScriptRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) mid: Box<NodeMeta>,
 }
@@ -384,12 +385,18 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         // Handle the params in the outside module
         let params = self.params;
         let params = params.up(helper)?;
+        let named = self
+            .named
+            .into_iter()
+            .map(|(k, v)| Ok((k, v.up_script(helper)?)))
+            .collect::<Result<_>>()?;
 
         let script_defn = ScriptDefinition {
             mid,
             id: self.id,
             params,
             script,
+            named,
         };
 
         helper.add_query_doc(&script_defn.id, self.doc);
