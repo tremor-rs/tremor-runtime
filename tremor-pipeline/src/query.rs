@@ -669,6 +669,8 @@ impl Query {
                 }
             }
 
+            let states = State::new(graph.iter().map(op::Operator::initial_state).collect());
+
             Ok(ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())
@@ -676,7 +678,7 @@ impl Query {
                 stack: Vec::with_capacity(graph.len()),
                 id: pipeline_id.to_string(), // TODO make configurable
                 last_metrics: 0,
-                state: State::new(iter::repeat(Value::null()).take(graph.len()).collect()),
+                states,
                 graph,
                 inputs,
                 port_indexes,

@@ -362,6 +362,7 @@ pub struct ScriptDefinitionRaw<'script> {
     pub(crate) named: HashMap<String, ScriptRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) mid: Box<NodeMeta>,
+    pub(crate) state: Option<ImutExprRaw<'script>>,
 }
 impl_expr!(ScriptDefinitionRaw);
 
@@ -378,8 +379,10 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         //
 
         // Handle the content of the script in it's own module
+        let state = self.state.up(helper)?;
         helper.enter_scope();
-        let script = self.script.up_script(helper)?;
+        let mut script = self.script.up_script(helper)?;
+        script.state = state;
         let mid = self.mid.box_with_name(&self.id);
         helper.leave_scope()?;
         // Handle the params in the outside module

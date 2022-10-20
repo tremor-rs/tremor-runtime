@@ -55,6 +55,9 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     /// if the walker function fails
     fn walk_script(&mut self, script: &mut Script<'script>) -> Result<()> {
         stop!(self.visit_script(script), self.leave_script(script));
+        if let Some(state) = script.state.as_mut() {
+            ImutExprWalker::walk_expr(self, state)?;
+        }
         for e in &mut script.exprs {
             ExprWalker::walk_expr(self, e)?;
         }
