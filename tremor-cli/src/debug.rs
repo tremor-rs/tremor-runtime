@@ -267,7 +267,8 @@ impl DbgDot {
             match Query::parse(&data.raw, &env.fun, &env.aggr) {
                 Ok(runnable) => {
                     let mut idgen = OperatorIdGen::new();
-                    let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut idgen)?;
+                    let g =
+                        tremor_pipeline::query::Query(runnable).to_executable_graph(&mut idgen)?;
 
                     println!("{}", g.dot);
                 }

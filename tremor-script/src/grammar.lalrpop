@@ -339,8 +339,27 @@ DefineOperator: OperatorDefinitionRaw<'input> = {
 }
 
 DefineScript: ScriptDefinitionRaw<'input> = {
-    <doc:(DocComment)?> <start:@L> "define" "script" <id:Ident> <params:DefinitionArgs> <script:EmbeddedScript> <end:@L> => {
-        ScriptDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), script, params, doc }
+    <doc:(DocComment)?> <start:@L> "define" "script" <id:Ident> <params:DefinitionArgs> <scripts:NamedScripts> <end:@L> => {
+        let (named, script) = scripts;
+        let named = named.into_iter().collect();
+        ScriptDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), script, params, doc, named }
+    }
+}
+
+NamedScripts: (Vec<(String, ScriptRaw<'input>)>, ScriptRaw<'input>) = {
+    <script:NamedScript> <scripts:NamedScripts> => {
+        let mut scripts = scripts;
+        scripts.0.push(script);
+        scripts
+    },
+    <script:EmbeddedScript> => {
+        (vec![], script)
+    }
+}
+NamedScript: (String, ScriptRaw<'input>) = {
+    <start:@L> "script" "from" <id:Ident> <exprs:TopLevelExprs> <end:@L> => {
+        let script = ScriptRaw::new(NodeMeta::new_box(start, end), exprs, None);
+        (id.to_string(), script)
     }
 }
 

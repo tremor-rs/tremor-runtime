@@ -324,7 +324,7 @@ impl<'script> Script<'script> {
     ///
     /// # Errors
     /// on runtime errors
-    pub(crate) fn run<'event>(
+    pub fn run<'event>(
         &self,
         context: &crate::EventContext,
         aggr: AggrType,

@@ -31,22 +31,34 @@ impl Operator for Script {
     fn on_event(
         &mut self,
         _uid: OperatorId,
-        _port: &str,
+        port: &str,
         state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
         let context = EventContext::new(event.ingest_ns, event.origin_uri.as_ref());
 
-        let port = event.data.rent_mut(|data| {
+        let dst_port = event.data.rent_mut(|data| {
             let (unwind_event, event_meta): (&mut Value, &mut Value) = data.parts_mut();
-
-            let value = self.script.run(
-                &context,
-                AggrType::Emit,
-                unwind_event, // event
-                state,        // state
-                event_meta,   // $
-            );
+            let value = if port == IN {
+                self.script.run(
+                    &context,
+                    AggrType::Emit,
+                    unwind_event, // event
+                    state,        // state
+                    event_meta,   // $
+                )
+            } else if let Some(script) = self.script.named.get(port) {
+                script.run(
+                    &context,
+                    AggrType::Emit,
+                    unwind_event, // event
+                    state,        // state
+                    event_meta,   // $
+                )
+            } else {
+                // FIXME: add error event
+                return Some(ERR);
+            };
 
             match value {
                 Ok(Return::EmitEvent { port }) => Some(port.map_or(OUT, Cow::from)),
@@ -67,6 +79,6 @@ impl Operator for Script {
             }
         });
 
-        Ok(port.map_or_else(EventAndInsights::default, |port| vec![(port, event)].into()))
+        Ok(dst_port.map_or_else(EventAndInsights::default, |port| vec![(port, event)].into()))
     }
 }

@@ -24,11 +24,11 @@ use tremor_script::highlighter::Dumb;
 use tremor_script::module::Manager;
 use tremor_script::FN_REGISTRY;
 
-fn to_pipe(query: &str) -> Result<ExecutableGraph> {
+fn to_executable_graph(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
     let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
-    Ok(q.to_pipe(&mut idgen)?)
+    Ok(q.to_executable_graph(&mut idgen)?)
 }
 macro_rules! test_cases {
 
@@ -52,7 +52,7 @@ macro_rules! test_cases {
                 Manager::clear_path()?;
                 Manager::add_path(&query_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
-                let s = to_pipe( &contents);
+                let s = to_executable_graph( &contents);
                 if Path::new(err_re_file).exists() {
                     println!("Loading error: {}", err_re_file);
                     let mut file = file::open(err_re_file)?;

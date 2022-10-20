@@ -29,6 +29,7 @@ use crate::{
     registry::{Aggr as AggrRegistry, Registry},
     Value,
 };
+use halfbrown::HashMap;
 use serde::Serialize;
 use std::io;
 
@@ -58,6 +59,8 @@ pub enum Return<'event> {
 pub struct Script {
     /// Rental for the runnable script
     pub script: crate::ast::Script<'static>,
+    /// Rental for the runnable script
+    pub named: HashMap<String, crate::ast::Script<'static>>,
     /// Arena index of the string
     pub aid: crate::arena::Index,
     /// A set of warnings if any
@@ -130,6 +133,7 @@ impl Script {
 
         Ok(Self {
             script,
+            named: HashMap::new(),
             aid,
             warnings: helper.warnings,
         })
