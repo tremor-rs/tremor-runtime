@@ -27,7 +27,7 @@ use super::{
     ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamCreate, Upable,
     WindowDefinition, WindowKind,
 };
-use crate::ast::optimizer::Optimizer;
+use crate::{ast::optimizer::Optimizer, prelude::Ranged};
 use crate::{ast::NodeMeta, impl_expr};
 use crate::{
     ast::{
@@ -359,7 +359,7 @@ pub struct ScriptDefinitionRaw<'script> {
     pub(crate) id: String,
     pub(crate) params: DefinitionalArgsRaw<'script>,
     pub(crate) script: ScriptRaw<'script>,
-    pub(crate) named: HashMap<String, ScriptRaw<'script>>,
+    pub(crate) named: Vec<(IdentRaw<'script>, ScriptRaw<'script>)>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) mid: Box<NodeMeta>,
     pub(crate) state: Option<ImutExprRaw<'script>>,
@@ -378,6 +378,7 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         // below. The actual function registration occurs in the up() call in the usual way.
         //
 
+        let extent = self.extent();
         // Handle the content of the script in it's own module
         let state = self.state.up(helper)?;
         helper.enter_scope();
@@ -388,11 +389,18 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         // Handle the params in the outside module
         let params = self.params;
         let params = params.up(helper)?;
-        let named = self
-            .named
-            .into_iter()
-            .map(|(k, v)| Ok((k, v.up_script(helper)?)))
-            .collect::<Result<_>>()?;
+        let mut named = HashMap::new();
+        let mut named_in = self.named;
+        named_in.reverse(); // so we get nice errors
+        for (name, script) in named_in {
+            if &name == "in" {
+                return error_generic(&extent, &name, &"script port `in` is reserved");
+            }
+            let script = script.up_script(helper)?;
+            if named.insert(name.clone().to_string(), script).is_some() {
+                return error_generic(&extent, &name, &"script port already defined");
+            }
+        }
 
         let script_defn = ScriptDefinition {
             mid,
