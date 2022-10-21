@@ -59,7 +59,7 @@ pub enum Return<'event> {
 pub struct Script {
     /// Rental for the runnable script
     pub script: crate::ast::Script<'static>,
-    /// Rental for the runnable script
+    /// A map from input port to runnable script
     pub named: HashMap<String, crate::ast::Script<'static>>,
     /// Arena index of the string
     pub aid: crate::arena::Index,
