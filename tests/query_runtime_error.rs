@@ -126,6 +126,7 @@ macro_rules! test_cases {
 test_cases!(
     branch_error_then_ok,
     // INSERT
+    script_bad_port,
     meta_and_use,
     binary_operators_or_left,
     binary_operators_or_right,
