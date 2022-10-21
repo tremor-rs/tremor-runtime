@@ -1,4 +1,3 @@
-use crate::raft::{TremorNodeId, TremorTypeConfig};
 use openraft::{
     error::{AppendEntriesError, InstallSnapshotError, VoteError},
     raft::{
@@ -7,6 +6,8 @@ use openraft::{
     },
 };
 
+use super::store::TremorRequest;
+
 pub mod api;
 pub mod management;
 pub mod raft;
@@ -14,13 +15,11 @@ pub mod raft_network_impl;
 
 #[tarpc::service]
 pub(crate) trait Raft {
-    async fn vote(
-        vote: VoteRequest<TremorNodeId>,
-    ) -> Result<VoteResponse<TremorNodeId>, VoteError<TremorNodeId>>;
+    async fn vote(vote: VoteRequest) -> Result<VoteResponse, VoteError>;
     async fn append(
-        req: AppendEntriesRequest<TremorTypeConfig>,
-    ) -> Result<AppendEntriesResponse<TremorNodeId>, AppendEntriesError<TremorNodeId>>;
+        req: AppendEntriesRequest<TremorRequest>,
+    ) -> Result<AppendEntriesResponse, AppendEntriesError>;
     async fn snapshot(
-        req: InstallSnapshotRequest<TremorTypeConfig>,
-    ) -> Result<InstallSnapshotResponse<TremorNodeId>, InstallSnapshotError<TremorNodeId>>;
+        req: InstallSnapshotRequest,
+    ) -> Result<InstallSnapshotResponse, InstallSnapshotError>;
 }

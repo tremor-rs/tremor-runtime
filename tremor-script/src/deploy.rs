@@ -46,15 +46,24 @@ where
     'event: 'run,
 {
     /// Removes a deploy from the arena, freeing the memory and marking it valid for reause
-    /// this function generally should not ever be used. It is a special case for the language
+    /// this function generally should not ever be used.
+    ///
+    /// # Safety
+    /// It is a special case for the language
     /// server where we know that we really only parse the script to check for errors and
     /// warnings.
+    ///
     /// That's also why it's behind a feature falg
+    /// # Errors
+    /// if the deploy and it's related data is not found in the arena
+    /// # Safety
+    /// The function is unsafe because if the deploy is still referenced somewhere it could lead
+    /// to memory unsaftey. To combat that we ensure that it is consumed when freed.
     #[cfg(feature = "arena-delete")]
     pub unsafe fn consume_and_free(self) -> Result<()> {
         let Deploy { aid, deploy, .. } = self;
         drop(deploy);
-        Arena::delte_index_this_is_really_unsafe_dont_use_it(aid)
+        Arena::delete_index_this_is_really_unsafe_dont_use_it(aid)
     }
 
     /// Retrieve deployment unit
@@ -127,10 +136,12 @@ where
         aggr_reg: &AggrRegistry,
     ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
     where
-        S: ToString + ?Sized,
+        S: std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
-        Self::parse_(aid, src, reg, aggr_reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
+        let empty = HashMap::new();
+        Self::parse_(aid, src, reg, aggr_reg, &empty)
+            .map_err(|e| crate::errors::ErrorWithIndex(aid, e))
     }
 
     /// Parses a string into a deployment
@@ -139,7 +150,7 @@ where
     /// if the deployment can not be parsed
     pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
-        S: ToString + ?Sized,
+        S: std::ops::Deref<Target = str>,
     {
         Self::parse_with_cache(src, reg, aggr_reg, &HashMap::new())
     }
@@ -154,7 +165,7 @@ where
         precached: &HashMap<NodeId, arena::Index>,
     ) -> Result<Self>
     where
-        S: ToString + ?Sized,
+        S: std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg, aggr_reg, precached)
@@ -181,7 +192,7 @@ mod test {
     fn parse(query: &str) {
         let reg = crate::registry();
         let aggr_reg = crate::aggr_registry();
-        if let Err(e) = Deploy::parse(query, &reg, &aggr_reg) {
+        if let Err(e) = Deploy::parse(&query, &reg, &aggr_reg) {
             eprintln!("{e}");
             panic!("error during parsing");
         }

@@ -27,7 +27,7 @@ use tremor_script::FN_REGISTRY;
 fn to_executable_graph(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
+    let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_executable_graph(&mut idgen)?)
 }
 macro_rules! test_cases {

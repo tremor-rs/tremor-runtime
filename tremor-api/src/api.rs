@@ -274,6 +274,7 @@ mod tests {
             })
             .expect("No deploy in the given troy file");
         world.deploy_flow(&deploy).await?;
+        world.start_flow("api_test".into()).await?;
 
         // check the status endpoint
         let start = Instant::now();

@@ -525,6 +525,7 @@ impl Manager {
             let (arena_idx, src) = if let Some(aid) = aid {
                 (aid, src.unwrap_borrowed())
             } else {
+                let src: &str = &src;
                 Arena::insert(&src)?
             };
             drop(mm);

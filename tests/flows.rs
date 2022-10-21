@@ -17,14 +17,14 @@ use std::time::Duration;
 use tremor_common::file;
 use tremor_runtime::{
     errors::*,
-    system::{Runtime, WorldConfig},
+    system::{Runtime, ShutdownMode, WorldConfig},
 };
 use tremor_script::{deploy::Deploy, module::Manager};
 
 fn parse(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::registry::registry();
-    Deploy::parse(deploy, &reg, &aggr_reg)
+    Deploy::parse(&deploy, &reg, &aggr_reg)
 }
 
 macro_rules! test_cases {
@@ -54,8 +54,11 @@ macro_rules! test_cases {
                             };
                             let (runtime, h) = Runtime::start(config).await?;
                             for flow in deployable.iter_flows() {
-                                runtime.start_flow(flow).await?;
+                                let flow_alias = flow.instance_alias.to_string().into();
+                                runtime.deploy_flow(flow).await?;
+                                runtime.start_flow(flow_alias).await?;
                             }
+                            runtime.stop(ShutdownMode::Forceful).await?;
                             // this isn't good
                             tokio::time::timeout(Duration::from_secs(10), h).await???;
                         },

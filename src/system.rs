@@ -27,7 +27,12 @@ use crate::{
 };
 use std::time::Duration;
 use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
-use tremor_script::{ast, deploy::Deploy, highlighter::Highlighter, FN_REGISTRY};
+use tremor_script::{
+    ast,
+    deploy::Deploy,
+    highlighter::{self, Highlighter},
+    FN_REGISTRY,
+};
 
 /// Configuration for the runtime
 #[derive(Default)]
@@ -124,7 +129,7 @@ impl Runtime {
         let aggr_reg = tremor_script::registry::aggr();
 
         let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg);
-        let mut h = tremor_script::highlighter::Term::stderr();
+        let mut h = highlighter::Term::stderr();
         let deployable = match deployable {
             Ok(deployable) => {
                 deployable.format_warnings_with(&mut h)?;
@@ -152,8 +157,10 @@ impl Runtime {
     }
 
     /// Deploy a flow - create an instance of it
+    ///
+    /// This flow instance is not started yet.
     /// # Errors
-    /// If the flow can't be started
+    /// If the flow can't be deployed
     pub async fn deploy_flow(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         self.flows
@@ -186,44 +193,54 @@ impl Runtime {
         }
     }
 
+    /// # Errors
+    /// if the flow state change fails
+    pub async fn change_flow_state(
+        &self,
+        id: flow::Alias,
+        intended_state: IntendedInstanceState,
+    ) -> Result<()> {
+        let (reply_tx, mut reply_rx) = bounded(1);
+        self.flows
+            .send(flow_supervisor::Msg::ChangeInstanceState {
+                id,
+                intended_state,
+                reply_tx,
+            })
+            .await?;
+        reply_rx.recv().await.ok_or_else(empty_error)?
+    }
+
+    /// start a flow and wait for the result
+    ///
+    /// # Errors
+    /// if the flow can't be started
     pub async fn start_flow(&self, id: flow::Alias) -> Result<()> {
-        let (reply_tx, mut reply_rx) = bounded(1);
-        self.flows
-            .send(flow_supervisor::Msg::ChangeInstanceState {
-                id,
-                intended_state: IntendedInstanceState::Running,
-                reply_tx,
-            })
-            .await?;
-        reply_rx.recv().await.ok_or_else(empty_error)?
+        self.change_flow_state(id, IntendedInstanceState::Running)
+            .await
     }
 
-    /// stops a flow
+    /// stops a flow and waits for the result
+    ///
+    /// # Errors
+    /// if the flow can't be stopped
     pub async fn stop_flow(&self, id: flow::Alias) -> Result<()> {
-        let (reply_tx, mut reply_rx) = bounded(1);
-        self.flows
-            .send(flow_supervisor::Msg::ChangeInstanceState {
-                id,
-                intended_state: IntendedInstanceState::Stopped,
-                reply_tx,
-            })
-            .await?;
-        reply_rx.recv().await.ok_or_else(empty_error)?
+        self.change_flow_state(id, IntendedInstanceState::Stopped)
+            .await
     }
 
-    /// pauses a flow
+    /// pauses a flow and waits for the result
+    ///
+    /// # Errors
+    /// if the flow can't be paused
     pub async fn pause_flow(&self, id: flow::Alias) -> Result<()> {
-        let (reply_tx, mut reply_rx) = bounded(1);
-        self.flows
-            .send(flow_supervisor::Msg::ChangeInstanceState {
-                id,
-                intended_state: IntendedInstanceState::Paused,
-                reply_tx,
-            })
-            .await?;
-        reply_rx.recv().await.ok_or_else(empty_error)?
+        self.change_flow_state(id, IntendedInstanceState::Paused)
+            .await
     }
     /// resumes a flow
+    ///
+    /// # Errors
+    /// if the flow can't be resumed
     pub async fn resume_flow(&self, id: flow::Alias) -> Result<()> {
         self.start_flow(id).await // equivalent
     }

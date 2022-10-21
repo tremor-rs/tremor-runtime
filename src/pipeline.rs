@@ -732,7 +732,7 @@ mod tests {
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
         let query =
-            tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
+            tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(
             Alias::new("report", "test-pipe1"),
             &query,
@@ -839,7 +839,7 @@ mod tests {
         let aggr_reg = aggr_registry();
         let pipeline_id = Alias::new("flow", "test-pipe");
         let query =
-            tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
+            tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(pipeline_id, &query, &mut operator_id_gen)?;
 
         let (tx, mut rx) = bounded(1);

@@ -158,7 +158,7 @@ impl Query {
     /// if the trickle script can not be parsed
     pub fn parse<S>(script: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
-        S: ToString + ?Sized,
+        S: std::ops::Deref<Target = str>,
     {
         Ok(Self(tremor_script::query::Query::parse(
             script, reg, aggr_reg,
@@ -850,12 +850,12 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in into out;";
-        let query = Query::parse(src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
+        let query = Query::parse(&src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
         assert!(query.id().is_none());
 
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
-        let query = Query::parse(src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
+        let query = Query::parse(&src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
         assert_eq!(query.id(), Some("test"));
         Ok(())
     }
@@ -865,7 +865,7 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in/test_in into out/test_out;";
-        let q = Query::parse(src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
+        let q = Query::parse(&src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
 
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();

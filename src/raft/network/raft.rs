@@ -1,52 +1,45 @@
 use std::sync::Arc;
 
-use openraft::raft::AppendEntriesResponse;
-use openraft::raft::InstallSnapshotRequest;
-use openraft::raft::InstallSnapshotResponse;
-use openraft::raft::VoteRequest;
-use openraft::raft::VoteResponse;
 use openraft::{
     error::{AppendEntriesError, InstallSnapshotError, VoteError},
-    raft::AppendEntriesRequest,
+    raft::{
+        AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest,
+        InstallSnapshotResponse, VoteRequest, VoteResponse,
+    },
 };
 use tarpc::context;
 
-use crate::raft::TremorTypeConfig;
-use crate::raft::{app::TremorApp, TremorNodeId};
+use crate::raft::{app, store::TremorRequest};
 
 // --- Raft communication server side
 #[derive(Clone)]
-pub struct RaftServer {
-    app: Arc<TremorApp>,
+pub struct Server {
+    app: Arc<app::Tremor>,
 }
 
-impl RaftServer {
-    pub(crate) fn new(app: Arc<TremorApp>) -> Self {
+impl Server {
+    pub(crate) fn new(app: Arc<app::Tremor>) -> Self {
         Self { app }
     }
 }
 
 #[tarpc::server]
-impl super::Raft for RaftServer {
-    async fn vote(
-        self,
-        _: context::Context,
-        vote: VoteRequest<TremorNodeId>,
-    ) -> Result<VoteResponse<TremorNodeId>, VoteError<TremorNodeId>> {
+impl super::Raft for Server {
+    async fn vote(self, _: context::Context, vote: VoteRequest) -> Result<VoteResponse, VoteError> {
         self.app.raft.vote(vote).await
     }
     async fn append(
         self,
         _: context::Context,
-        req: AppendEntriesRequest<TremorTypeConfig>,
-    ) -> Result<AppendEntriesResponse<TremorNodeId>, AppendEntriesError<TremorNodeId>> {
+        req: AppendEntriesRequest<TremorRequest>,
+    ) -> Result<AppendEntriesResponse, AppendEntriesError> {
         self.app.raft.append_entries(req).await
     }
     async fn snapshot(
         self,
         _: context::Context,
-        req: InstallSnapshotRequest<TremorTypeConfig>,
-    ) -> Result<InstallSnapshotResponse<TremorNodeId>, InstallSnapshotError<TremorNodeId>> {
+        req: InstallSnapshotRequest,
+    ) -> Result<InstallSnapshotResponse, InstallSnapshotError> {
         self.app.raft.install_snapshot(req).await
     }
 }

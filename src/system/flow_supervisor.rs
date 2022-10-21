@@ -221,7 +221,7 @@ impl FlowSupervisor {
             flow.change_state(intended_state, reply_tx).await?;
             Ok(())
         } else {
-            return Err(ErrorKind::FlowNotFound(id.to_string()).into());
+            Err(ErrorKind::FlowNotFound(id.to_string()).into())
         }
     }
 

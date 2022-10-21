@@ -5624,7 +5624,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-serde",
- "tokio-util 0.7.4",
+ "tokio-util 0.7.7",
  "tracing",
  "tracing-opentelemetry",
 ]

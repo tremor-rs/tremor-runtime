@@ -746,8 +746,9 @@ impl<'script> ImutExpr<'script> {
         }
     }
     /// Tries to turn the `ImutExpr` into a `Value`
+    ///
     /// # Errors
-    /// If the expression is not constant
+    /// If the expression can't be evaluated to a literal value
     pub fn try_into_value(mut self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut self)?;
         if let ImutExpr::Literal(Literal { value: v, .. }) = self {

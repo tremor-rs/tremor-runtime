@@ -50,12 +50,12 @@ pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
             current_status
         }
         (InstanceState::Running, InstanceState::Paused) => {
-            flow.pause().await?;
+            world.pause_flow(flow_id.into()).await?;
             flow.report_status().await?
         }
 
         (InstanceState::Paused, InstanceState::Running) => {
-            flow.resume().await?;
+            world.resume_flow(flow_id.into()).await?;
             flow.report_status().await?
         }
         // TODO: we could stop a flow by patching its status to `Stopped`

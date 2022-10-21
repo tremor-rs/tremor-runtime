@@ -40,15 +40,25 @@ where
     'event: 'run,
 {
     /// Removes a deploy from the arena, freeing the memory and marking it valid for reause
-    /// this function generally should not ever be used. It is a special case for the language
+    /// this function generally should not ever be used.
+    ///
+    /// # Safety
+    /// It is a special case for the language
     /// server where we know that we really only parse the script to check for errors and
     /// warnings.
+    ///
     /// That's also why it's behind a feature falg
+    /// # Errors
+    /// if then query and it's related data is not found in the arena
+    /// # Safety
+    /// The function is unsafe because if the deploy is still referenced somewhere it could lead
+    /// to memory unsaftey. To combat that we ensure that it is consumed when freed.
+
     #[cfg(feature = "arena-delete")]
     pub unsafe fn consume_and_free(self) -> Result<()> {
         let Query { aid, query, .. } = self;
         drop(query);
-        Arena::delte_index_this_is_really_unsafe_dont_use_it(aid)
+        Arena::delete_index_this_is_really_unsafe_dont_use_it(aid)
     }
 
     /// Converts a troy embedded pipeline with resolved arguments to a runnable query
@@ -79,7 +89,7 @@ where
         aggr_reg: &AggrRegistry,
     ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
     where
-        S: ToString + ?Sized,
+        S: std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg, aggr_reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
@@ -92,7 +102,7 @@ where
 
     pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
-        S: ToString + ?Sized,
+        S: std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg, aggr_reg)

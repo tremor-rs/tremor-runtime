@@ -98,7 +98,7 @@ syslog_loose = "0.18"
 tremor-common = { path = "tremor-common" }
 tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
-tremor-script = { path = "tremor-script" }
+tremor-script = { path = "tremor-script", features = ["arena-delete"] }
 tremor-value = { path = "tremor-value" }
 url = "2.3"
 value-trait = "0.5"

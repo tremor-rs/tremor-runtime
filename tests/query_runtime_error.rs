@@ -31,7 +31,7 @@ use tremor_script::utils::*;
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
+    let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_executable_graph(&mut idgen)?)
 }
 

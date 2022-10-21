@@ -1,15 +1,12 @@
+use crate::raft;
 use std::sync::Arc;
-
-use super::TremorNodeId;
-use super::TremorRaft;
-use super::TremorStore;
 
 /// Representation of an application state. This struct can be shared around to share
 /// instances of raft, store and more.
-pub struct TremorApp {
-    pub id: TremorNodeId,
+pub struct Tremor {
+    pub id: raft::NodeId,
     pub api_addr: String,
     pub rpc_addr: String,
-    pub raft: TremorRaft,
-    pub store: Arc<TremorStore>,
+    pub raft: raft::Tremor,
+    pub store: Arc<raft::Store>,
 }

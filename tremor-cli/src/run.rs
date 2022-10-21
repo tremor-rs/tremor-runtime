@@ -235,7 +235,7 @@ impl Run {
         let env = env::setup()?;
 
         let mut h = TermHighlighter::stderr();
-        match Script::parse(raw, &env.fun) {
+        match Script::parse(&raw, &env.fun) {
             Ok(mut script) => {
                 script.format_warnings_with(&mut h)?;
 

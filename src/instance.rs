@@ -60,7 +60,7 @@ impl Display for State {
 
 /// Representing the state an instance should be in
 /// subset of `State` as those are the only states instances can be transitioned to
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub enum IntendedState {
     #[default]
     Running,
@@ -70,20 +70,16 @@ pub enum IntendedState {
 
 impl Display for IntendedState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Running => "running",
-                Self::Paused => "paused",
-                Self::Stopped => "stopped",
-            }
-        )
+        f.write_str(match self {
+            Self::Running => "running",
+            Self::Paused => "paused",
+            Self::Stopped => "stopped",
+        })
     }
 }
 
-impl From<&IntendedState> for State {
-    fn from(intended: &IntendedState) -> Self {
+impl From<IntendedState> for State {
+    fn from(intended: IntendedState) -> Self {
         match intended {
             IntendedState::Paused => State::Paused,
             IntendedState::Running => State::Running,

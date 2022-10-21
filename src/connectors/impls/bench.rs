@@ -18,7 +18,6 @@ use crate::{
     connectors::prelude::*,
     system::{KillSwitch, ShutdownMode},
 };
-use base64::Engine;
 use hdrhistogram::Histogram;
 use std::{
     cmp::min,
@@ -26,7 +25,7 @@ use std::{
     io::{stdout, BufRead as StdBufRead, BufReader, Read, Write},
     time::Duration,
 };
-use tremor_common::{base64::BASE64, file, time::nanotime};
+use tremor_common::{base64, file, time::nanotime};
 use xz2::read::XzDecoder;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -75,7 +74,7 @@ pub(crate) struct Builder {}
 
 fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
     if base64 {
-        Ok(BASE64.decode(data)?)
+        Ok(base64::decode(data)?)
     } else {
         let d: &[u8] = data.as_ref();
         Ok(d.to_vec())

@@ -270,10 +270,9 @@ impl Flow {
         let addr = spawn_task(
             flow_alias.clone(),
             pipelines,
-            connectors,
+            &connectors,
             &flow.defn.connections,
-        )
-        .await?;
+        );
 
         let this = Flow {
             alias: flow_alias.clone(),
@@ -444,7 +443,7 @@ impl RunningFlow {
     fn new(
         id: Alias,
         pipelines: HashMap<String, pipeline::Addr>,
-        connectors: HashMap<String, connectors::Addr>,
+        connectors: &HashMap<String, connectors::Addr>,
         links: &[ConnectStmt],
     ) -> Self {
         let (msg_tx, msg_rx) = bounded(crate::qsize());
@@ -540,6 +539,18 @@ impl RunningFlow {
             .chain(&self.source_and_sink_connectors)
             .chain(&self.source_only_connectors)
     }
+    fn insert_state_change_sender(
+        &mut self,
+        intended_state: IntendedState,
+        sender: Sender<Result<()>>,
+    ) {
+        self.state_change_senders
+            .entry(State::from(intended_state))
+            .or_insert_with(Vec::new)
+            .push(sender);
+    }
+
+    #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
         let prefix = format!("[Flow::{}]", self.id);
 
@@ -550,13 +561,10 @@ impl RunningFlow {
                     reply_tx,
                 }) => {
                     // store sender
-                    self.state_change_senders
-                        .entry(State::from(&intended_state))
-                        .or_insert_with(|| Vec::with_capacity(1))
-                        .push(reply_tx);
 
                     match (self.state, intended_state) {
                         (State::Initializing, IntendedState::Running) => {
+                            self.insert_state_change_sender(intended_state, reply_tx);
                             if let Err(e) = self.handle_start(&prefix).await {
                                 error!("{prefix} Error starting: {e}");
                                 self.change_state(State::Failed).await;
@@ -568,6 +576,10 @@ impl RunningFlow {
                             // this might lead to unwanted traffic along the way, so we keep it as it is
                             // Initializing is a good enough Pause for now
                             // We didn't connect yet, though, so we do not realize if config is broken just yet
+                            log_error!(
+                                reply_tx.send(Ok(())).await,
+                                "{prefix} Error sending StateChagnge response: {e}"
+                            );
                             info!("{prefix} Paused.");
                         }
                         (state, IntendedState::Stopped) => {
@@ -578,10 +590,15 @@ impl RunningFlow {
                                 }
                                 State::Running | State::Paused => ShutdownMode::Graceful, // always drain
                                 State::Stopped => {
+                                    log_error!(
+                                        reply_tx.send(Ok(())).await,
+                                        "{prefix} Error sending StateChagnge response: {e}"
+                                    );
                                     info!("{prefix} Already in state {state}");
                                     continue;
                                 }
                             };
+                            self.insert_state_change_sender(intended_state, reply_tx);
                             match self.handle_stop(mode, &prefix).await {
                                 Ok(ControlFlow::Continue(())) => {}
                                 Ok(ControlFlow::Break(())) => {
@@ -596,17 +613,22 @@ impl RunningFlow {
                             }
                         }
                         (state @ State::Running, IntendedState::Running)
-                        | (state @ State::Paused, IntendedState::Paused)
-                        | (state @ State::Stopped, IntendedState::Stopped) => {
+                        | (state @ State::Paused, IntendedState::Paused) => {
+                            log_error!(
+                                reply_tx.send(Ok(())).await,
+                                "{prefix} Error sending StateChagnge response: {e}"
+                            );
                             info!("{prefix} Already in state {state}");
                         }
                         (State::Running, IntendedState::Paused) => {
+                            self.insert_state_change_sender(intended_state, reply_tx);
                             if let Err(e) = self.handle_pause(&prefix).await {
                                 error!("{prefix} Error during pausing: {e}");
                                 self.change_state(State::Failed).await;
                             }
                         }
                         (State::Paused, IntendedState::Running) => {
+                            self.insert_state_change_sender(intended_state, reply_tx);
                             if let Err(e) = self.handle_resume(&prefix).await {
                                 error!("{prefix} Error during resuming: {e}");
                                 self.change_state(State::Failed).await;
@@ -614,12 +636,17 @@ impl RunningFlow {
                         }
                         (State::Draining, IntendedState::Running | IntendedState::Paused)
                         | (State::Stopped, _) => {
+                            log_error!(
+                                reply_tx.send(Err("illegal state change".into())).await,
+                                "{prefix} Error sending StateChagnge response: {e}"
+                            );
                             todo!("illegal state change")
                         }
                         (State::Failed, intended) => {
+                            self.insert_state_change_sender(intended_state, reply_tx);
                             error!("{prefix} Cannot change state from failed to {intended}");
                             // trigger erroring all listeners
-                            self.change_state(State::Failed).await
+                            self.change_state(State::Failed).await;
                         }
                     }
                 }
@@ -779,43 +806,40 @@ impl RunningFlow {
         prefix: impl std::fmt::Display,
     ) -> Result<ControlFlow<()>> {
         if self.has_connectors() {
-            match mode {
-                ShutdownMode::Graceful => {
-                    info!("{prefix} Draining...");
+            if let ShutdownMode::Graceful = mode {
+                info!("{prefix} Draining...");
 
-                    self.change_state(State::Draining).await;
+                self.change_state(State::Draining).await;
 
-                    // QUIESCENCE
-                    // - send drain msg to all connectors
-                    // - wait until
-                    //   a) all connectors are drained (means all pipelines in between are also drained) or
-                    let mut drained = 0_usize;
-                    for addr in self.connectors_start_to_end() {
-                        if !log_error!(
-                            addr.drain(self.drain_tx.clone()).await,
-                            "{prefix} Error starting Draining Connector {addr:?}: {e}"
-                        ) {
-                            drained += 1;
-                        }
+                // QUIESCENCE
+                // - send drain msg to all connectors
+                // - wait until
+                //   a) all connectors are drained (means all pipelines in between are also drained) or
+                let mut drained = 0_usize;
+                for addr in self.connectors_start_to_end() {
+                    if !log_error!(
+                        addr.drain(self.drain_tx.clone()).await,
+                        "{prefix} Error starting Draining Connector {addr:?}: {e}"
+                    ) {
+                        drained += 1;
                     }
-                    self.expected_drains = drained;
                 }
-                _ => {
-                    info!("{prefix} Stopping...");
-                    let mut stopped = 0_usize;
-                    for connector in self.connectors_end_to_start() {
-                        if !log_error!(
-                            connector.stop(self.stop_tx.clone()).await,
-                            "{prefix} Error stopping connector {connector}: {e}"
-                        ) {
-                            stopped += 1;
-                        }
+                self.expected_drains = drained;
+            } else {
+                info!("{prefix} Stopping...");
+                let mut stopped = 0_usize;
+                for connector in self.connectors_end_to_start() {
+                    if !log_error!(
+                        connector.stop(self.stop_tx.clone()).await,
+                        "{prefix} Error stopping connector {connector}: {e}"
+                    ) {
+                        stopped += 1;
                     }
-                    self.expected_stops = stopped;
-                    for pipeline in self.pipelines.values() {
-                        if let Err(e) = pipeline.stop().await {
-                            error!("{prefix} Error stopping pipeline {pipeline:?}: {e}");
-                        }
+                }
+                self.expected_stops = stopped;
+                for pipeline in self.pipelines.values() {
+                    if let Err(e) = pipeline.stop().await {
+                        error!("{prefix} Error stopping pipeline {pipeline:?}: {e}");
                     }
                 }
             }
@@ -884,7 +908,6 @@ impl RunningFlow {
 
     async fn change_state(&mut self, new_state: State) {
         if self.state != new_state {
-            self.state = new_state;
             if let Some(senders) = self.state_change_senders.get_mut(&new_state) {
                 for sender in senders.drain(..) {
                     log_error!(
@@ -893,6 +916,7 @@ impl RunningFlow {
                     );
                 }
             }
+            self.state = new_state;
             // upon failed state, error out all other listeners of valid non-failed states, as there is no recovery
             if let State::Failed = new_state {
                 for state in &[State::Running, State::Paused, State::Draining] {
@@ -914,22 +938,22 @@ impl RunningFlow {
 
 /// task handling flow instance control plane
 #[allow(clippy::too_many_lines)]
-async fn spawn_task(
+fn spawn_task(
     id: Alias,
     pipelines: HashMap<String, pipeline::Addr>,
-    connectors: HashMap<String, connectors::Addr>,
+    connectors: &HashMap<String, connectors::Addr>,
     links: &[ConnectStmt],
-) -> Result<Addr> {
+) -> Addr {
     let flow = RunningFlow::new(id, pipelines, connectors, links);
     let addr = flow.addr();
     task::spawn(flow.run());
-    Ok(addr)
+    addr
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{connectors::ConnectorBuilder, instance};
+    use crate::{connectors::ConnectorBuilder, instance, qsize};
 
     use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
     use tremor_script::{ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
@@ -1097,6 +1121,11 @@ mod tests {
             &kill_switch,
         )
         .await?;
+
+        let (start_tx, mut start_rx) = crate::channel::bounded(qsize());
+        flow.start(start_tx).await?;
+        start_rx.recv().await??;
+
         let connector = flow.get_connector("foo".to_string()).await?;
         assert_eq!(String::from("test::foo"), connector.alias.to_string());
 

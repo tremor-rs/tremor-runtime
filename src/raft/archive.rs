@@ -14,12 +14,13 @@
 
 use crate::errors::Result;
 use async_std::path::PathBuf;
+use sha2::{Digest, Sha256};
 use simd_json::OwnedValue;
 use std::collections::HashMap;
 use std::{collections::BTreeSet, io::Read};
 use tar::{Archive, Header};
 use tokio::io::AsyncWriteExt;
-use tremor_common::asy::file;
+use tremor_common::{asy::file, base64};
 use tremor_script::{arena, NodeMeta};
 use tremor_script::{
     arena::Arena,
@@ -38,22 +39,30 @@ use super::store::{AppId, FlowId};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AppFlow {
+    /// arguments with possible default values
+    /// arguments without default values are required
     pub args: HashMap<String, Option<OwnedValue>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TremorAppDef {
     pub name: AppId,
+    /// hash of all the included files
+    /// starting with the main.troy and then all `use`d files in order
+    pub sha256: String,
     pub flows: HashMap<FlowId, AppFlow>,
 }
 
 impl TremorAppDef {
+    #[must_use]
     pub fn name(&self) -> &AppId {
         &self.name
     }
 }
 
 /// Packages a tremor application into a tarball, entry point is the `main.troy` file, target the tar.gz file
+/// # Errors
+/// if the tarball cannot be created
 pub async fn package(target: &str, entrypoint: &str, name: Option<String>) -> Result<()> {
     let mut output = file::create(target).await?;
     let name = PathBuf::from(entrypoint)
@@ -61,7 +70,7 @@ pub async fn package(target: &str, entrypoint: &str, name: Option<String>) -> Re
         .map(PathBuf::from)
         .and_then(|p| {
             p.file_stem()
-                .and_then(|p| p.to_str())
+                .and_then(std::ffi::OsStr::to_str)
                 .map(ToString::to_string)
         })
         .or(name)
@@ -72,40 +81,43 @@ pub async fn package(target: &str, entrypoint: &str, name: Option<String>) -> Re
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn build_archive(name: &str, entrypoint: &str) -> Result<Vec<u8>> {
     use tar::Builder;
     let src = file::read_to_string(entrypoint).await?;
+    let mut hasher = Sha256::new();
 
     let aggr_reg = tremor_script::registry::aggr();
-    let mut h = highlighter::Term::stderr();
-    let mut d = match Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg) {
-        Ok(d) => d,
+    let mut hl = highlighter::Term::stderr();
+    let src_str: &str = &src;
+    let mut deploy = match Deploy::parse(src_str, &*FN_REGISTRY.read()?, &aggr_reg) {
+        Ok(deploy) => deploy,
         Err(e) => {
-            h.format_error(&e)?;
+            hl.format_error(&e)?;
             return Err(e.into());
         }
     };
     let mut other_warnings = BTreeSet::new();
     let reg = &*FN_REGISTRY.read()?;
-    let helper = Helper::new(&reg, &aggr_reg);
+    let helper = Helper::new(reg, &aggr_reg);
 
-    for s in &d.deploy.stmts {
-        match s {
+    for stmt in &deploy.deploy.stmts {
+        match stmt {
             DeployStmt::FlowDefinition(_)
             | DeployStmt::PipelineDefinition(_)
             | DeployStmt::ConnectorDefinition(_) => (),
             DeployStmt::DeployFlowStmt(f) => {
-                let w = Warning {
+                let warning = Warning {
                     class: Class::Behaviour,
                     outer: f.extent(),
                     inner: f.extent(),
-                    msg: "Deploying flows in applications is not supported this statement will be ignored".to_string(),
+                    msg: "Deploying flows in applications is not supported. This statement will be ignored".to_string(),
                 };
-                other_warnings.insert(w);
+                other_warnings.insert(warning);
             }
         }
     }
-    let flows: HashMap<_, _> = d
+    let flows: HashMap<_, _> = deploy
         .deploy
         .scope
         .content
@@ -138,18 +150,30 @@ async fn build_archive(name: &str, entrypoint: &str) -> Result<Vec<u8>> {
     if !flows.contains_key(&FlowId("main".to_string())) {
         let w = Warning {
             class: Class::Behaviour,
-            outer: d.extent(),
-            inner: d.extent(),
+            outer: deploy.extent(),
+            inner: deploy.extent(),
             msg: "No main flow found".to_string(),
         };
         other_warnings.insert(w);
     }
 
-    d.warnings.extend(other_warnings);
-    d.format_warnings_with(&mut h)?;
+    deploy.warnings.extend(other_warnings);
+    deploy.format_warnings_with(&mut hl)?;
+
+    // first hash main.troy
+    hasher.update(src.as_bytes());
+    // then hash all the modules
+    for aid in MODULES.read()?.modules().iter().map(|m| m.arena_idx) {
+        if let Some(src) = Arena::get(aid)? {
+            hasher.update(src.as_bytes());
+        }
+    }
+    let hash = base64::encode(hasher.finalize().as_slice());
+    info!("App {} Package hash: {}", name, hash);
 
     let app = TremorAppDef {
         name: AppId(name.to_string()),
+        sha256: hash,
         flows,
     };
 
@@ -186,6 +210,9 @@ async fn build_archive(name: &str, entrypoint: &str) -> Result<Vec<u8>> {
     Ok(ar.into_inner()?)
 }
 
+/// gets the app name from an archive
+/// # Errors
+/// if the archive is invalid
 pub fn get_app(src: &[u8]) -> Result<TremorAppDef> {
     let mut ar = Archive::new(src);
 
@@ -203,6 +230,8 @@ pub fn get_app(src: &[u8]) -> Result<TremorAppDef> {
 }
 
 /// Extract app deploy an all used arena indices
+/// # Errors
+/// if the archive is invalid
 pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> {
     let mut ar = Archive::new(src);
 

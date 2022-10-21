@@ -153,7 +153,7 @@ fn try_enqueue_two(op: &mut Select, event: Event) -> Result<Option<[(Port<'stati
 fn parse_query(query: &str) -> Result<crate::op::trickle::select::Select> {
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
-    let query = tremor_script::query::Query::parse(query, &reg, &aggr_reg)?;
+    let query = tremor_script::query::Query::parse(&query, &reg, &aggr_reg)?;
     let stmt = query
         .query
         .stmts
@@ -201,7 +201,7 @@ fn as_select<'a, 'b>(stmt: &'a Stmt<'b>) -> Option<&'a SelectStmt<'b>> {
 fn select_stmt_from_query(query_str: &str) -> Result<Select> {
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
-    let query = tremor_script::query::Query::parse(query_str, &reg, &aggr_reg)?;
+    let query = tremor_script::query::Query::parse(&query_str, &reg, &aggr_reg)?;
     let stmt = query
         .query
         .stmts
@@ -836,7 +836,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     let reg = Registry::default();
     let aggr_reg = AggrRegistry::default();
     let q = tremor_script::query::Query::parse(
-        r#"
+        &r#"
             define window my_window from tumbling
             with
                 interval = 1000000000 # 1 second

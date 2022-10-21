@@ -71,15 +71,23 @@ pub struct Script {
 
 impl Script {
     /// Removes a deploy from the arena, freeing the memory and marking it valid for reause
-    /// this function generally should not ever be used. It is a special case for the language
+    /// this function generally should not ever be used.
+    ///
+    /// # Safety
+    /// It is a special case for the language
     /// server where we know that we really only parse the script to check for errors and
     /// warnings.
     /// That's also why it's behind a feature falg
+    /// # Errors
+    /// if the script and it's related data is not found in the arena
+    /// # Safety
+    /// The function is unsafe because if the deploy is still referenced somewhere it could lead
+    /// to memory unsaftey. To combat that we ensure that it is consumed when freed.
     #[cfg(feature = "arena-delete")]
     pub unsafe fn consume_and_free(self) -> Result<()> {
         let Script { aid, script, .. } = self;
         drop(script);
-        Arena::delte_index_this_is_really_unsafe_dont_use_it(aid)
+        Arena::delete_index_this_is_really_unsafe_dont_use_it(aid)
     }
     /// Get script warnings
     pub fn warnings(&self) -> impl Iterator<Item = &Warning> {
@@ -99,7 +107,7 @@ impl Script {
         reg: &Registry,
     ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
     where
-        S: ToString + ?Sized,
+        S: std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
@@ -111,7 +119,7 @@ impl Script {
     /// if the script can not be parsed
     pub fn parse<S>(src: &S, reg: &Registry) -> Result<Self>
     where
-        S: ToString + ?Sized,
+        S: std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg)

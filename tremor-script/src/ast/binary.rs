@@ -245,7 +245,7 @@ mod test {
 
     fn eval_binary(src: &str) -> Vec<u8> {
         let reg: Registry = registry::registry();
-        let script = Script::parse(src, &reg).expect("failed to compile test script");
+        let script = Script::parse(&src, &reg).expect("failed to compile test script");
 
         let mut event = Value::object();
         let mut meta = Value::object();

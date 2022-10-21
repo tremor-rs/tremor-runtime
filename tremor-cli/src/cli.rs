@@ -77,6 +77,9 @@ pub(crate) enum ClusterCommand {
         /// Raft API IP and endpoint to listen to
         #[clap(short, long, value_parser = clap::value_parser!(String))]
         api: String,
+        /// Removes the node from the cluster when it's shut down with SIGTERM
+        #[clap(long, action = clap::ArgAction::SetTrue)]
+        remove_on_sigterm: bool,
     },
     /// Starts a cluster node that is part as a cluster already
     Start {
@@ -101,6 +104,12 @@ pub(crate) enum ClusterCommand {
         /// except the one it is already part of
         #[clap(short, long, value_parser = clap::value_parser!(String))]
         join: Vec<String>,
+        /// If set to true the node will join the cluster as learner and not take part in voting
+        #[clap(long, action = clap::ArgAction::SetTrue)]
+        passive: bool,
+        /// Removes the node from the cluster when it's shut down with SIGTERM
+        #[clap(long, action = clap::ArgAction::SetTrue)]
+        remove_on_sigterm: bool,
     },
     /// Removes a node from the cluster (the node still has to be stopped after this)
     Remove {
@@ -140,6 +149,7 @@ pub(crate) enum ClusterCommand {
     },
 }
 
+// TODO: do we want to split out start/stop/pause/resume into a own sub command
 #[derive(Parser, Clone, Debug)]
 pub(crate) enum AppsCommands {
     /// lists all installed apps
@@ -154,20 +164,57 @@ pub(crate) enum AppsCommands {
         #[clap( value_parser = clap::value_parser!(String))]
         file: String,
     },
-    /// Starts an instance of a flow in an installed app
-    Start {
-        /// The app to start
+    /// Installs  new app
+    Uninstall {
+        /// The app
         #[clap(value_parser = clap::value_parser!(String))]
         app: String,
-        /// the instance to start
+    },
+    /// Starts an instance of a flow in an installed app
+    Start {
+        /// The app containing the flow
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+        /// the instance of the flow to start
         #[clap(value_parser = clap::value_parser!(String))]
         instance: String,
-        /// The flow to start defaults to main
+        /// The flow to start defaults to `main`
         #[clap(long, short, value_parser = clap::value_parser!(String))]
         flow: Option<String>,
-        /// Data
+        /// Configuration for the flow instance to start
         #[clap(long, short, value_parser = clap::value_parser!(String))]
         config: Option<String>,
+        /// Deploys the pipeline in paused state
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        paused: bool,
+    },
+
+    /// Stops and removes an instance of a flow in an installed app
+    Stop {
+        /// The app
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+        /// the instance to stop
+        #[clap(value_parser = clap::value_parser!(String))]
+        instance: String,
+    },
+    /// Pauses an instance of a flow in an installed app
+    Pause {
+        /// The app
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+        /// the instance to stop
+        #[clap(value_parser = clap::value_parser!(String))]
+        instance: String,
+    },
+    /// Resumes an instance of a flow in an installed app
+    Resume {
+        /// The app
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+        /// the instance to stop
+        #[clap(value_parser = clap::value_parser!(String))]
+        instance: String,
     },
 }
 
