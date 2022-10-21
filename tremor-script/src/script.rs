@@ -57,7 +57,7 @@ pub enum Return<'event> {
 /// A tremor script
 #[derive(Debug)]
 pub struct Script {
-    /// Rental for the runnable script
+    /// Script to be executed upon events entering via `in` port
     pub script: crate::ast::Script<'static>,
     /// A map from input port to runnable script
     pub named: HashMap<String, crate::ast::Script<'static>>,

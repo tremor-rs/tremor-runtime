@@ -1,7 +1,7 @@
 Error: 
     1 | define script in_port
     2 | script from in
-      |             ^^ script port `in` is reserved
+      |             ^^ port `in` is reserved for the `script` section
     3 |   event
     4 | script
     5 |   event
