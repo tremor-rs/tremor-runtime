@@ -378,7 +378,7 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         // below. The actual function registration occurs in the up() call in the usual way.
         //
 
-        let extent = self.extent();
+        let ex = self.extent();
         // Handle the content of the script in it's own module
         let state = self.state.up(helper)?;
         helper.enter_scope();
@@ -392,13 +392,13 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         let mut named = HashMap::new();
         let mut named_in = self.named;
         named_in.reverse(); // so we get nice errors
-        for (name, script) in named_in {
-            if &name == "in" {
-                return error_generic(&extent, &name, &"script port `in` is reserved");
+        for (n, script) in named_in {
+            if &n == "in" {
+                return error_generic(&ex, &n, &"port `in` is reserved for the `script` section");
             }
             let script = script.up_script(helper)?;
-            if named.insert(name.clone().to_string(), script).is_some() {
-                return error_generic(&extent, &name, &"script port already defined");
+            if named.insert(n.clone().to_string(), script).is_some() {
+                return error_generic(&ex, &n, &"script port already defined");
             }
         }
 
