@@ -1,5 +1,11 @@
-{"level": "INFO", "msg": "This is a pluggable logging info msg with no args but it is the first one in the example list. Thanks", "data": {}}
-{"level": "INFO", "msg": "This is a pluggable logging info msg with no args"}
-{"level": "INFO", "msg": "This {snot} is too smol", "data": {"snot": 1, "badger": [1, 2, 3]}}
-{"level": "INFO", "msg": "This {snot is a bad", "data": {"snot": 1, "badger": [1, 2, 3]}}
-{"level": "INFO", "msg": "This {not_defined}", "data": {"evil": true}}
+{"level": "DEBUG", "msg": "(good) This is a pluggable logging info msg with no args, but actually an empty arg dict is provided eheh", "data": {}}
+{"level": "ERROR", "msg": "(good) This is a pluggable logging info msg with no args", "data": {}}
+{"level": "INFO", "msg": "(nope) This {not_defined} field was not provided/defined/whatever: in the end, nothing to plug :c", "data": {"evil": true}}
+{"level": "INFO", "msg": "(good) This is the {good} thing we expected in the same order: {with}", "data": {"good": 1, "with": [1, 2, 3]}}
+{"level": "INFO", "msg": "(nope) Our {lone}expectations were low, but holy {nonoword}! (too few args provided)", "data": {"nonoword": "we don't do that here"}}
+{"level": "TRACE", "msg": "(good) We expected {with} in that {good} reversed order, that's right", "data": {"good": 1, "with": [1, 2, 3]}}
+{"level": "WARN", "msg": "(good) This {irember} is too smol, but too many args is better than not enough", "data": {"iforgor": [1, 2, 3], "irember": "second argument"}}
+{"level": "INFO", "msg": "(good) Exotic field name (low+up case, spaces, misc characters) give soomething unexpected: {W/ me: Never... G0nna G1ve-U up!!}", "data": {"W/ me: Never... G0nna G1ve-U up!!": "~ The Span1sh Inquisiti0n!|"}}
+{"level": "INFO", "msg": "(nope) Ayo synthax error in there: {field provided is a bad idk", "data": {"field provided": 1}}
+{"level": "WARN", "msg": "(nope) Bad Tremor::Value for format value field 'data'", "data": ["example", "ewo"]}
+{"level": "DEBUG", "msg": "(good) Last sentence to be {what?}", "data": {"what?": "sure", "what": "actually no"}}

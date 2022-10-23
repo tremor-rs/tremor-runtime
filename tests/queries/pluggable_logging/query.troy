@@ -30,11 +30,11 @@ flow
 		pipeline
 			use tremor::logging;
 			select match event of
+				case %{level == "DEBUG"} => logging::debug(event.msg, event.data)
+				case %{level == "ERROR"} => logging::error(event.msg, event.data)
 				case %{level == "INFO" } => logging::info (event.msg, event.data)
 				case %{level == "TRACE"} => logging::trace(event.msg, event.data)
-				case %{level == "DEBUG"} => logging::debug(event.msg, event.data)
 				case %{level == "WARN" } => logging::warn (event.msg, event.data)
-				case %{level == "ERROR"} => logging::error(event.msg, event.data)
 				default => "exit"
 			end
 			from in into out;

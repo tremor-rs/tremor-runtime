@@ -1,2 +1,7 @@
-//{"# here put the expected ouput to compare to \"out\" file": "NOK"}
-"coucou"
+"(good) This is a pluggable logging info msg with no args, but actually an empty arg dict is provided eheh"
+"(good) This is a pluggable logging info msg with no args"
+"(good) This is the 1 thing we expected in the same order: [1, 2, 3]"
+"(good) We expected [1, 2, 3] in that 1 reversed order, that's right"
+"(good) This second argument is too smol, but too many args is better than not enough"
+"(good) Exotic field name (low+up case, spaces, misc characters) give soomething unexpected: ~ The Span1sh Inquisiti0n!|"
+"(good) Last sentence to be sure"

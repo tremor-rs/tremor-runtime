@@ -65,18 +65,15 @@ async fn deploy_test_config(contents: String, file: &str) -> Result<()> {
                 ..WorldConfig::default()
             };
 
-            dbg!(get_cwd());
-
             let (world, handle) = World::start(config).await?;
             for flow in deployable.iter_flows() {
                 world.start_flow(flow).await?;
-				//dbg!("Ici");
             }
-			if let Err(e) = world.stop(ShutdownMode::Graceful).await {
-				error!("Error shutting down gracefully: {e}");
-				//dbg!("Là");
-			}
             handle.timeout(Duration::from_secs(10)).await??; // let the time to finish previous async flows
+            match world.stop(ShutdownMode::Graceful).await {
+                Ok(anything) => println!("Shutting down world gave: \"{anything:?}\""),
+                Err(error) => error!("Error shutting down world gracefully: {error}")
+            }
         }
         otherwise => {
             println!(
@@ -186,7 +183,7 @@ fn or_exists_then_get<'a>(
 
 async fn main_config(file: &str) -> Result<()> {
 
-    serial_test::set_max_wait(std::time::Duration::from_secs(120));
+    // serial_test::set_max_wait(std::time::Duration::from_secs(120));
 
     tremor_runtime::functions::load()?;
     let query_dir = &format!("tests/queries/{file}/");

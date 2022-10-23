@@ -49,13 +49,18 @@ impl TremorFn for PluggableLoggingFm {
 			let mut arg_stack: Vec<_> = arg_stack.iter().collect();
 			let mut format_fields = &HashMap::<Cow<str>, Value>::default();
 			if !arg_stack.is_empty() {
-				format_fields = arg_stack.pop().unwrap().as_object().unwrap(); // retrieve format args as a hashmap
+				//tdo manage when data is not object
+				format_fields = match arg_stack.pop().unwrap().as_object() { // retrieve format args as a hashmap
+					Some(obj) => obj,
+					None => return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("wrong Tremor::Value given to contain format values: object expected, but another type was given (fyi arrays are supported, because it is not a positionnal formatting, but only named formatting)")})
+				};
 				if !arg_stack.is_empty() { // `pop()` should empty this supposedly array of length 1
 					warn!("Additional parameters given to logging function {format} will not be used");
 				}
 			}
 
             let mut out = String::with_capacity(format.len());
+			// out.push('['); out.push_str(format); out.push(']');
             let mut iter = format.chars().enumerate();
             while let Some((pos, char)) = iter.next() {
                 match char {
@@ -119,9 +124,10 @@ impl TremorFn for PluggableLoggingFm {
             if !arg_stack.is_empty() {
                 return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "too many parameters passed. Ensure that you have the same number of {} in your format string".into()});
 			}
-			info!("{out}");
 			dbg!(out.clone());
 			dbg!(args);
+
+			info!("{out}");
 			Ok(Value::from(out))
 			
 			//TODO add variable argument to sub-record

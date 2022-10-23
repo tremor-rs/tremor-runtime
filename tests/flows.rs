@@ -55,7 +55,7 @@ async fn deploy_test_config(contents: String) -> Result<()> {
 }
 
 async fn main_config(file: &str) -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
+    // serial_test::set_max_wait(Duration::from_secs(600));
 
     let deploy_dir = &format!("tests/flows/{file}/");
     let deploy_file = &format!("tests/flows/{file}/flow.troy");
