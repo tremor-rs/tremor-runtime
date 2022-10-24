@@ -54,8 +54,6 @@ async fn deploy_test_config(contents: String, file: &str) -> Result<()> {
     let out_file = "out".to_string();
     let expected_file = "expected".to_string();
 
-    let _original_path = get_cwd();
-
     tremor_runtime::functions::load()?;
     match parse(&contents) {
         Ok(deployable) => {
@@ -204,11 +202,16 @@ async fn main_config(file: &str) -> Result<()> {
     let mut contents = String::new();
     file_obj.read_to_string(&mut contents)?;
 
+    let result: Result<()>;
+
+    let original_path = get_cwd();
     if type_name == type_name_deploy {
-        deploy_test_config(contents, file).await
+        result = deploy_test_config(contents, file).await;
     } else {
-        query_test_config(contents, file).await
+        result = query_test_config(contents, file).await;
     }
+    cd(original_path);
+    result
 }
 
 
