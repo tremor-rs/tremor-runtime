@@ -148,7 +148,7 @@ elasticsearch = { version = "=8.4.0-alpha.1", default-features = false, features
 ] }
 
 # ws
-async-tungstenite = { version = "0.17.2", features = [
+async-tungstenite = { version = "0.18.0", features = [
   "async-std-runtime",
   "async-tls",
 ] }

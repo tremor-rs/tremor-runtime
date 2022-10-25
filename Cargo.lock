@@ -474,8 +474,6 @@ version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1b71b31561643aa8e7df3effe284fa83ab1a840e52294c5f4bd7bfd8b2becbb"
 dependencies = [
- "async-std",
- "async-tls 0.11.0",
  "futures-io",
  "futures-util",
  "log",
@@ -484,6 +482,21 @@ dependencies = [
  "tokio-rustls 0.23.4",
  "tungstenite",
  "webpki-roots 0.22.3",
+]
+
+[[package]]
+name = "async-tungstenite"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b750efd83b7e716a015eed5ebb583cda83c52d9b24a8f0125e5c48c3313c9f8"
+dependencies = [
+ "async-std",
+ "async-tls 0.11.0",
+ "futures-io",
+ "futures-util",
+ "log",
+ "pin-project-lite 0.2.9",
+ "tungstenite",
 ]
 
 [[package]]
@@ -4631,7 +4644,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d1a6cef5e72d4e5787c96413ec0a45f9317c59f0099e2ff2038b73cb352fefd"
 dependencies = [
  "async-trait",
- "async-tungstenite",
+ "async-tungstenite 0.17.2",
  "base64 0.13.1",
  "bitflags",
  "bytes 1.2.1",
@@ -5803,7 +5816,7 @@ dependencies = [
  "async-stream",
  "async-tls 0.11.0",
  "async-trait",
- "async-tungstenite",
+ "async-tungstenite 0.18.0",
  "aws-config",
  "aws-sdk-s3",
  "aws-smithy-http",
