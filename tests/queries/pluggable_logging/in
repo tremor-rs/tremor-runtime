@@ -1,11 +1,25 @@
-{"level": "DEBUG", "msg": "(good) This is a pluggable logging info msg with no args, but actually an empty arg dict is provided eheh", "data": {}}
-{"level": "ERROR", "msg": "(good) This is a pluggable logging info msg with no args", "data": {}}
-{"level": "INFO", "msg": "(nope) This {not_defined} field was not provided/defined/whatever: in the end, nothing to plug :c", "data": {"evil": true}}
-{"level": "INFO", "msg": "(good) This is the {good} thing we expected in the same order: {with}", "data": {"good": 1, "with": [1, 2, 3]}}
-{"level": "INFO", "msg": "(nope) Our {lone}expectations were low, but holy {nonoword}! (too few args provided)", "data": {"nonoword": "we don't do that here"}}
-{"level": "TRACE", "msg": "(good) We expected {with} in that {good} reversed order, that's right", "data": {"good": 1, "with": [1, 2, 3]}}
-{"level": "WARN", "msg": "(good) This {irember} is too smol, but too many args is better than not enough", "data": {"iforgor": [1, 2, 3], "irember": "second argument"}}
-{"level": "INFO", "msg": "(good) Exotic field name (low+up case, spaces, misc characters) give soomething unexpected: {W/ me: Never... G0nna G1ve-U up!!}", "data": {"W/ me: Never... G0nna G1ve-U up!!": "~ The Span1sh Inquisiti0n!|"}}
-{"level": "INFO", "msg": "(nope) Ayo synthax error in there: {field provided is a bad idk", "data": {"field provided": 1}}
-{"level": "WARN", "msg": "(nope) Bad Tremor::Value for format value field 'data'", "data": ["example", "ewo"]}
-{"level": "DEBUG", "msg": "(good) Last sentence to be {what?}", "data": {"what?": "sure", "what": "actually no"}}
+{"level": "INFO" , "msg": "(good)    None    - Message without any arg"}
+{"level": "INFO" , "msg": "(good)   Named    - Pluggable logging message with no args, but actually an empty arg dict/hashmap/object is provided eheh", "data": {}}
+{"level": "INFO" , "msg": "(good) Positional - Pluggable logging message with no args, but actually an empty arg array/list is provided eheh", "data": []}
+{"level": "INFO" , "msg": "(good)   Named    - Single argument ({e}) of type string", "data": {"e": "Boring generic argument"}}
+{"level": "INFO" , "msg": "(good) Positional - Single argument ({}) of type string", "data": ["Déjà-Vu!"]}
+{"level": "INFO" , "msg": "(nope)   Named    - Field {not_defined} was not provided/defined/whatever: in the end, nothing to plug :c", "data": {"evil": true}}
+{"level": "INFO" , "msg": "(nope)   Named    - Too few args provided: Our expectations were low{miss_me}, but holy {nonoword}!", "data": {"nonoword": "we don't do that here"}}
+{"level": "INFO" , "msg": "(nope) Positional - Too few args provided: Our expectations were low{}, but holy {}!", "data": ["we don't do that here"]}
+{"level": "INFO" , "msg": "(good)   Named    - Look at this object argument: {exotic} ... isn't it beautiful?", "data": {"exotic": {"Ooooh": "Shiny", "Who said...": [-1, 3, 156]}}}
+{"level": "INFO" , "msg": "(good) Positional - Look at this object argument: {} ... isn't it beautiful?", "data": [{"Ooooh": "Shiny", "Who said...": [-1, 3, 156]}]}
+{"level": "INFO" , "msg": "(good){mty} Named    - And this array: you seein this? Of course not because it was at the begining, and empty", "data": {"mty": []}}
+{"level": "INFO" , "msg": "(good){}Positional- And this array: you seein this? Of course not because it was at the begining, and empty", "data": [[]]}
+{"level": "INFO" , "msg": "(good)   Named    - Multiple things (like {good}) expected, and given in the same order: {with}", "data": {"good": false, "with": [1, 2, 3]}}
+{"level": "INFO" , "msg": "(good)   Named    - Multiple args, different order: {second} {third} {first}", "data": {"third": 3, "second": [2], "first": "1"}}
+{"level": "INFO" , "msg": "(good) Positional - Multiple things expected: {} {} {}", "data": [3, [2], "1"]}
+{"level": "INFO" , "msg": "(nope) Positional - Array/list is given implying positional formatting, however named fields {hey} and {monika} expecting keys (named args)", "data": ["Alors...", "non"]}
+{"level": "INFO" , "msg": "(nope)   Named    - Dict/hashmap/object (with non empty keys) provided implying named formatting, however positional field {} expecting empty key or positional arg", "data": {"Alors...": "non"}}
+{"level": "INFO" , "msg": "(good)   Named    - Dict/hashmap/object with empty keys provided implying named formatting: {} <= this placeholder was empty, just like positional formatting, but in this case it isn't", "data": {"": "*pop* Nice!"}}
+{"level": "INFO" , "msg": "(good)   Named    - Too many args given is better than not enough: {irember}", "data": {"iforgor": "second argument", "irember": [1, 2, 3]}}
+{"level": "INFO" , "msg": "(good) Positional - Too many args given is better than not enough: {}", "data": [[1, 2, 3], "second argument"]}
+{"level": "INFO" , "msg": "(good)   Named    - Multiple usage of the same key: <{eyo}> should be the same as <{eyo}>{question}?", "data": {"eyo": true, "question": ", right.."}}
+{"level": "INFO" , "msg": "(good)   Named    - Exotic field name (low+up case, spaces, misc characters) give something unexpected: {W/ me: Never... G0nna G1ve-U up!!}", "data": {"W/ me: Never... G0nna G1ve-U up!!": "~ The Span1sh Inquisiti0n!|"}}
+{"level": "INFO" , "msg": "(nope)   Named    - Ayo syntax error in there: {field provided is a bad idk", "data": {"field provided": 1}}
+{"level": "INFO" , "msg": "(nope) Positional - Ayo syntax error in there: {field provided is a bad idk", "data": [1]}
+{"level": "INFO" , "msg": "(good)   Named    - Last sentence to be {what?}", "data": {"what?": "sure", "what": "actually no"}}
