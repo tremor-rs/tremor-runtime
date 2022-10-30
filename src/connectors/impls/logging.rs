@@ -126,7 +126,12 @@ impl Source for LoggingSource {
     /// we don't need to flush logging data. Also the producing ends do not use the quiescence_beacon
     /// which would tell them to stop sending. There could be multiple logging connectors running at the same time
     /// and one connector quiescing should not lead to logging being stopped for each and every other connector.
-    fn asynchronous(&self) -> bool {
+    #[cfg(test)]
+	fn asynchronous(&self) -> bool {
         false
+    }
+	#[cfg(not(test))]
+	fn asynchronous(&self) -> bool {
+        true
     }
 }

@@ -86,27 +86,36 @@ pub struct PluggableLoggingAppender {
 
 impl Append for PluggableLoggingAppender {
     fn append(&self, record: &log::Record) -> anyhow::Result<()> {
+
+        let path = record.module_path().map(ToString::to_string).unwrap();
+        let lang = if path == "tremor_pipeline::logging" {
+            LogSource::Tremor
+        } else {
+            LogSource::Rust
+        };
+
         let vec = literal!({
             "level":record.level().to_string(),
             "args": record.args().to_string(),
-            "path": record.module_path().map(ToString::to_string),
-            "file": record.file().map(ToString::to_string),
-            "line": record.line(),
+            "origin": lang.to_string(),
+            "path": path,
+            "file": record.file().map(ToString::to_string).unwrap(),
+            "line": record.line()
         });
 
         let msg = LoggingMsg {
-            language: LogSource::Tremor,
+            language: lang,
             payload: EventPayload::from(vec),
             origin_uri: None,
         };
 
-		println!("{:?}",msg);
+		println!("{:?}", msg);
         block_on(self.tx.broadcast(msg))?;
         Ok(())
     }
 
     fn flush(&self) {
-        todo!()
+        todo!("TODO logging impl Append for PluggableLoggingAppender :: fn flush");
     }
 }
 
@@ -188,10 +197,16 @@ pub struct MetricsMsg {
 #[derive(Debug, Clone)]
 /// LogSource from which the logs are coming (Rust, Tremor, etc.)
 pub enum LogSource {
-    //The Rust language
-    // Rust,
-    /// Tremor language
+    /// The Rust language: system logs
+    Rust,
+    /// Tremor language: user logs
     Tremor,
+}
+
+impl std::fmt::Display for LogSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -234,14 +249,13 @@ impl LoggingMsg {
 /// Sender for metrics
 pub type MetricsSender = Sender<MetricsMsg>;
 
-// TODO FIX ME NOTE Add LogsSender
 /// Sender for plugging logging messagers
 pub type LoggingSender = Sender<LoggingMsg>;
 
 lazy_static! {
-    /// TODO do we want to change this number or can we make it configurable?
+    /// TODO metrics do we want to change this number or can we make it configurable?
     pub static ref METRICS_CHANNEL: OverflowingChannel<MetricsMsg> = OverflowingChannel::<MetricsMsg>::new(128);
-    /// TODO do we want to change this number or can we make it configurable?
+    /// TODO logging do we want to change this number or can we make it configurable?
     pub static ref LOGGING_CHANNEL: OverflowingChannel<LoggingMsg> = OverflowingChannel::<LoggingMsg>::new(128);
 }
 

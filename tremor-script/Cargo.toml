@@ -44,6 +44,7 @@ jumphash = "0.1"
 lalrpop-util = "0.19"
 lazy_static = "1.4"
 log = "0.4"
+log4rs = "1.2.0"
 matches = "0.1.9"
 percent-encoding = "2.1"
 rand = { version = "0.8", features = ["small_rng"] }

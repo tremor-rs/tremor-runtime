@@ -257,7 +257,7 @@ pub struct ExecutableGraph {
     pub(crate) metrics_channel: MetricsSender,
     
     #[allow(dead_code)]
-    // TODO fix
+    // TODO logging `pub(crate) logging_channel: LoggingSender`
     pub(crate) logging_channel: LoggingSender,
     /// outputs in pipeline
     pub outputs: HashMap<Cow<'static, str>, usize>,

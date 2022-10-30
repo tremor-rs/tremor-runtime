@@ -1,0 +1,18 @@
+{"args": "(good)    None    - Message without any arg", "level":"INFO"}
+{"args": "(good)   Named    - Pluggable logging message with no args, but actually an empty arg dict/hashmap/object is provided eheh", "level":"DEBUG"}
+{"args": "(good) Positional - Pluggable logging message with no args, but actually an empty arg array/list is provided eheh", "level":"WARN"}
+{"args": "(good)   Named    - Single argument (Boring generic argument) of type string", "level":"TRACE"}
+{"args": "(good) Positional - Single argument (Déjà-Vu!) of type string", "level":"ERROR"}
+{"args": "(good)   Named    - Look at this object argument: {Ooooh: Shiny, Who said...: [-1, 3, 156]} ... isn't it beautiful?", "level":"TRACE"}
+{"args": "(good) Positional - Look at this object argument: {Ooooh: Shiny, Who said...: [-1, 3, 156]} ... isn't it beautiful?", "level":"ERROR"}
+{"args": "(good)[] Named    - And this array: you seein this? Of course not because it was at the begining, and empty", "level":"INFO"}
+{"args": "(good)[]Positional- And this array: you seein this? Of course not because it was at the begining, and empty", "level":"DEBUG"}
+{"args": "(good)   Named    - Multiple things (like false) expected, and given in the same order: [1, 2, 3]", "level":"WARN"}
+{"args": "(good)   Named    - Multiple args, different order: [2] 3 1", "level":"TRACE"}
+{"args": "(good) Positional - Multiple things expected: 3 [2] 1", "level":"ERROR"}
+{"args": "(good)   Named    - Dict/hashmap/object with empty keys provided implying named formatting: *pop* Nice! <= this placeholder was empty, just like positional formatting, but in this case it isn't", "level":"WARN"}
+{"args": "(good)   Named    - Too many args given is better than not enough: [1, 2, 3]", "level":"TRACE"}
+{"args": "(good) Positional - Too many args given is better than not enough: [1, 2, 3]", "level":"ERROR"}
+{"args": "(good)   Named    - Multiple usage of the same key: <true> should be the same as <true>, right..?", "level":"INFO"}
+{"args": "(good)   Named    - Exotic field name (low+up case, spaces, misc characters) give something unexpected: ~ The Span1sh Inquisiti0n!|", "level":"DEBUG"}
+{"args": "(good)   Named    - Last sentence to be sure", "level":"ERROR"}

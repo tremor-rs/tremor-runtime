@@ -11,12 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 use async_std::prelude::FutureExt;
-// use std::future::Future;
 use pretty_assertions::assert_eq;
 use serial_test::serial;
-use std::fs::File;
-use std::io::prelude::*;
+use std::fs;
+use std::io::Read;
 use std::time::Duration;
 use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline::query::Query;
@@ -30,7 +30,13 @@ use tremor_runtime::{
 };
 use tremor_script::module::Manager;
 use tremor_script::utils::*;
-use log::error;
+use log::LevelFilter;
+use log4rs::{
+    config::{Appender, Root},
+    Config,
+};
+use tremor_pipeline::{PluggableLoggingAppender, LOGGING_CHANNEL};
+
 
 fn cd(path: String) {
     std::env::set_current_dir(path).unwrap();
@@ -41,6 +47,10 @@ fn get_cwd() -> String {
         .to_str()
         .unwrap()
         .to_string()
+}
+fn delete(path: String) -> Result<()> {
+    fs::remove_file(path)?;
+    Ok(())
 }
 
 /// Exact copy from the `parse(&str) -> Result<Deploy>` function in "flows.rs"
@@ -70,15 +80,12 @@ async fn deploy_test_config(contents: String, file: &str) -> Result<()> {
             handle.timeout(Duration::from_secs(10)).await??; // let the time to finish previous async flows
             match world.stop(ShutdownMode::Graceful).await {
                 Ok(anything) => println!("Shutting down world gave: \"{anything:?}\""),
-                Err(error) => error!("Error shutting down world gracefully: {error}")
+                Err(error) => println!("Error shutting down world gracefully: {error}")
             }
         }
         otherwise => {
-            println!(
-                "Expected valid deployment file, compile phase, but got an unexpected error: {:?}",
-                otherwise
-            );
-            assert!(false);
+            println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
+            otherwise?;
         }
     }
 
@@ -101,6 +108,9 @@ async fn deploy_test_config(contents: String, file: &str) -> Result<()> {
             assert_eq!(serialized, sorted_serialize(&expected)?);
         }
     }
+
+    // delete output file created generated for by this test
+    delete(out_file)?;
 
     Ok(())
 }
@@ -157,14 +167,13 @@ async fn query_test_config(contents: String, file: &str) -> Result<()> {
 fn or_exists_then_get<'a>(
     this: (&str, &str),
     that: (&str, &str),
-) -> Result<(String, String, File)> {
+) -> Result<(String, String, fs::File)> {
     let type_name: &str;
     let file_name: &str;
-    let file_obj: File;
+    let file_obj: fs::File;
 
     match file::open(this.1) {
         Ok(value) => {
-            // file::open(that.1).expect_err("Both files exists"); //todo manage this panic reason
             type_name = this.0;
             file_name = this.1;
             file_obj = value;
@@ -173,16 +182,12 @@ fn or_exists_then_get<'a>(
             type_name = that.0;
             file_name = that.1;
             file_obj = file::open(that.1).expect("None of the files exists");
-            //todo: manage this panic reason
         }
     }
     Ok((type_name.to_string(), file_name.to_string(), file_obj))
 }
 
 async fn main_config(file: &str) -> Result<()> {
-
-    // serial_test::set_max_wait(std::time::Duration::from_secs(120));
-
     tremor_runtime::functions::load()?;
     let query_dir = &format!("tests/queries/{file}/");
     let query_file = &format!("tests/queries/{file}/query.trickle");
@@ -215,18 +220,41 @@ async fn main_config(file: &str) -> Result<()> {
 }
 
 
+async fn run() {
+    let tx = LOGGING_CHANNEL.tx();
+
+    let stdout = PluggableLoggingAppender { tx };
+
+    let config = Config::builder()
+        .appender(Appender::builder().build("stdout", Box::new(stdout)))
+        .build(Root::builder().appender("stdout").build(LevelFilter::Debug))
+        .unwrap();
+
+    log4rs::init_config(config).unwrap();
+}
+
+
+
 macro_rules! test_cases {
-    ($($file:ident),* ,) => {
+    ($($file:ident),*) => {
         $(
             #[async_std::test]
             #[serial(query, timeout_ms = 120000)]
             async fn $file() -> Result<()> {
-				// println!("[PATH BEFORE] ======== \"{}\" ========", get_cwd());
 				main_config(stringify!($file)).await
-				// ?;
-				// println!("[PATH AFTER] ======== \"{}\" ========", get_cwd());
-				// assert!(false);
-				// Ok(())
+            }
+        )*
+    };
+}
+
+macro_rules! test_cases_with_server {
+    ($($file:ident),*) => {
+        $(
+            #[async_std::test]
+            #[serial(query, timeout_ms = 120000)]
+            async fn $file() -> Result<()> {
+				run().await;
+				main_config(stringify!($file)).await
             }
         )*
     };
@@ -293,5 +321,9 @@ test_cases!(
     guard_having,
     history,
     roundrobin,
-    pluggable_logging,
+    pluggable_logging_dev
+);
+
+test_cases_with_server!(
+	pluggable_logging_operator
 );

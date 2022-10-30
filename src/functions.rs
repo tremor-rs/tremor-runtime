@@ -37,7 +37,7 @@ pub fn load() -> Result<()> {
 pub fn install(reg: &mut Registry) -> Result<()> {
     otel::load(reg);
     gcl::load(reg);
-    logging::load(reg)?;
+    logging::load(reg);
     reg.insert(tremor_fn!(system|instance(_context) {
         Ok(Value::from(instance!()))
     }))
