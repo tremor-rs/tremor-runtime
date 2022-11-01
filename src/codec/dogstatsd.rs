@@ -67,13 +67,18 @@ fn encode(data: &Value) -> Result<Vec<u8>> {
 }
 
 fn encode_metric(value: &Value) -> Result<Vec<u8>> {
-    let mut r = String::with_capacity(512);
-    r.push_str(value.get_str("metric").ok_or(ErrorKind::InvalidDogStatsD)?);
+    let mut r = Vec::with_capacity(512);
+    r.extend_from_slice(
+        value
+            .get_str("metric")
+            .ok_or(ErrorKind::InvalidDogStatsD)?
+            .as_bytes(),
+    );
     let t = value.get_str("type").ok_or(ErrorKind::InvalidDogStatsD)?;
     let values = value
         .get_array("values")
         .ok_or(ErrorKind::InvalidDogStatsD)?;
-    let value_array: Vec<String> = values
+    let mut values = values
         .iter()
         .filter_map(simd_json::ValueAccess::as_f64)
         .map(|x| {
@@ -84,142 +89,140 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
             } else {
                 x.to_string()
             }
-        })
-        .collect();
+        });
 
-    r.push(':');
-
-    r.push_str(&value_array.join(":"));
-    r.push('|');
-    r.push_str(t);
+    r.push(b':');
+    if let Some(v) = values.next() {
+        r.extend_from_slice(v.as_bytes());
+    }
+    for v in values {
+        r.push(b':');
+        r.extend_from_slice(v.as_bytes());
+    }
+    r.push(b'|');
+    r.extend_from_slice(t.as_bytes());
 
     if let Some(val) = value.get("sample_rate") {
         if val.is_number() {
-            r.push_str("|@");
-            r.push_str(&val.encode());
+            r.extend_from_slice(b"|@");
+            r.extend_from_slice(&val.encode().as_bytes());
         } else {
             return Err(ErrorKind::InvalidDogStatsD.into());
         }
     }
 
-    if let Some(tags) = value.get_array("tags") {
-        r.push_str("|#");
-        let tag_array: Vec<&str> = tags
-            .iter()
-            .filter_map(simd_json::ValueAccess::as_str)
-            .collect();
-        r.push_str(&tag_array.join(","));
-    }
+    write_tags(value, &mut r);
 
     if let Some(container_id) = value.get_str("container_id") {
-        r.push_str("|c:");
-        r.push_str(container_id);
+        r.extend_from_slice(b"|c:");
+        r.extend_from_slice(container_id.as_bytes());
     }
 
-    Ok(r.as_bytes().to_vec())
+    Ok(r)
 }
 
 fn encode_event(value: &Value) -> Result<Vec<u8>> {
-    let mut r = String::with_capacity(512);
+    let mut r = Vec::with_capacity(512);
     let title = value.get_str("title").ok_or(ErrorKind::InvalidDogStatsD)?;
     let text = value.get_str("text").ok_or(ErrorKind::InvalidDogStatsD)?;
 
-    r.push_str("_e{");
-    r.push_str(&title.len().to_string());
-    r.push(',');
-    r.push_str(&text.len().to_string());
-    r.push_str("}:");
-    r.push_str(title);
-    r.push('|');
-    r.push_str(text);
+    r.extend_from_slice(b"_e{");
+    r.extend_from_slice(&title.len().to_string().as_bytes());
+    r.push(b',');
+    r.extend_from_slice(&text.len().to_string().as_bytes());
+    r.extend_from_slice(b"}:");
+    r.extend_from_slice(title.as_bytes());
+    r.push(b'|');
+    r.extend_from_slice(text.as_bytes());
 
     if let Some(timestamp) = value.get_u32("timestamp") {
-        r.push_str("|d:");
-        r.push_str(&timestamp.to_string());
+        r.extend_from_slice(b"|d:");
+        r.extend_from_slice(&timestamp.to_string().as_bytes());
     }
 
     if let Some(hostname) = value.get_str("hostname") {
-        r.push_str("|h:");
-        r.push_str(hostname);
+        r.extend_from_slice(b"|h:");
+        r.extend_from_slice(hostname.as_bytes());
     }
 
     if let Some(aggregation_key) = value.get_str("aggregation_key") {
-        r.push_str("|k:");
-        r.push_str(aggregation_key);
+        r.extend_from_slice(b"|k:");
+        r.extend_from_slice(aggregation_key.as_bytes());
     }
 
     if let Some(priority) = value.get_str("priority") {
-        r.push_str("|p:");
-        r.push_str(priority);
+        r.extend_from_slice(b"|p:");
+        r.extend_from_slice(priority.as_bytes());
     }
 
     if let Some(source) = value.get_str("source") {
-        r.push_str("|s:");
-        r.push_str(source);
+        r.extend_from_slice(b"|s:");
+        r.extend_from_slice(source.as_bytes());
     }
 
     if let Some(dogstatsd_type) = value.get_str("type") {
-        r.push_str("|t:");
-        r.push_str(dogstatsd_type);
+        r.extend_from_slice(b"|t:");
+        r.extend_from_slice(dogstatsd_type.as_bytes());
     }
 
-    if let Some(tags) = value.get_array("tags") {
-        r.push_str("|#");
-        let tag_array: Vec<&str> = tags
-            .iter()
-            .filter_map(simd_json::ValueAccess::as_str)
-            .collect();
-        r.push_str(&tag_array.join(","));
-    }
+    write_tags(value, &mut r);
 
     if let Some(container_id) = value.get_str("container_id") {
-        r.push_str("|c:");
-        r.push_str(container_id);
+        r.extend_from_slice(b"|c:");
+        r.extend_from_slice(container_id.as_bytes());
     }
 
-    Ok(r.as_bytes().to_vec())
+    Ok(r)
 }
 
 fn encode_service_check(value: &Value) -> Result<Vec<u8>> {
-    let mut r = String::with_capacity(512);
+    let mut r = Vec::with_capacity(512);
     let name = value.get_str("name").ok_or(ErrorKind::InvalidDogStatsD)?;
     let status = value.get_i32("status").ok_or(ErrorKind::InvalidDogStatsD)?;
 
-    r.push_str("_sc|");
-    r.push_str(name);
-    r.push('|');
-    r.push_str(&status.to_string());
+    r.extend_from_slice(b"_sc|");
+    r.extend_from_slice(name.as_bytes());
+    r.push(b'|');
+    r.extend_from_slice(&status.to_string().as_bytes());
 
     if let Some(timestamp) = value.get_u32("timestamp") {
-        r.push_str("|d:");
-        r.push_str(&timestamp.to_string());
+        r.extend_from_slice(b"|d:");
+        r.extend_from_slice(&timestamp.to_string().as_bytes());
     }
 
     if let Some(hostname) = value.get_str("hostname") {
-        r.push_str("|h:");
-        r.push_str(hostname);
+        r.extend_from_slice(b"|h:");
+        r.extend_from_slice(hostname.as_bytes());
     }
 
-    if let Some(tags) = value.get_array("tags") {
-        r.push_str("|#");
-        let tag_array: Vec<&str> = tags
-            .iter()
-            .filter_map(simd_json::ValueAccess::as_str)
-            .collect();
-        r.push_str(&tag_array.join(","));
-    }
+    write_tags(value, &mut r);
 
     if let Some(message) = value.get_str("message") {
-        r.push_str("|m:");
-        r.push_str(message);
+        r.extend_from_slice(b"|m:");
+        r.extend_from_slice(message.as_bytes());
     }
 
     if let Some(container_id) = value.get_str("container_id") {
-        r.push_str("|c:");
-        r.push_str(container_id);
+        r.extend_from_slice(b"|c:");
+        r.extend_from_slice(container_id.as_bytes());
     }
 
-    Ok(r.as_bytes().to_vec())
+    Ok(r)
+}
+
+#[inline]
+fn write_tags(value: &Value, r: &mut Vec<u8>) {
+    if let Some(tags) = value.get_array("tags") {
+        r.extend_from_slice(b"|#");
+        let mut tags = tags.iter().filter_map(simd_json::ValueAccess::as_str);
+        if let Some(t) = tags.next() {
+            r.extend_from_slice(t.as_bytes());
+        }
+        for t in tags {
+            r.push(b',');
+            r.extend_from_slice(t.as_bytes());
+        }
+    }
 }
 
 fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
