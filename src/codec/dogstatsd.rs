@@ -67,7 +67,7 @@ fn encode(data: &Value) -> Result<Vec<u8>> {
 }
 
 fn encode_metric(value: &Value) -> Result<Vec<u8>> {
-    let mut r = String::new();
+    let mut r = String::with_capacity(512);
     r.push_str(value.get_str("metric").ok_or(ErrorKind::InvalidDogStatsD)?);
     let t = value.get_str("type").ok_or(ErrorKind::InvalidDogStatsD)?;
     let values = value
@@ -120,7 +120,7 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
 }
 
 fn encode_event(value: &Value) -> Result<Vec<u8>> {
-    let mut r = String::new();
+    let mut r = String::with_capacity(512);
     let title = value.get_str("title").ok_or(ErrorKind::InvalidDogStatsD)?;
     let text = value.get_str("text").ok_or(ErrorKind::InvalidDogStatsD)?;
 
@@ -181,7 +181,7 @@ fn encode_event(value: &Value) -> Result<Vec<u8>> {
 }
 
 fn encode_service_check(value: &Value) -> Result<Vec<u8>> {
-    let mut r = String::new();
+    let mut r = String::with_capacity(512);
     let name = value.get_str("name").ok_or(ErrorKind::InvalidDogStatsD)?;
     let status = value.get_i32("status").ok_or(ErrorKind::InvalidDogStatsD)?;
 
