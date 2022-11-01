@@ -67,6 +67,8 @@ fn encode(data: &Value) -> Result<Vec<u8>> {
 }
 
 fn encode_metric(value: &Value) -> Result<Vec<u8>> {
+    let mut itoa_buf = itoa::Buffer::new();
+    let mut ryu_buf = ryu::Buffer::new();
     let mut r = Vec::with_capacity(512);
     r.extend_from_slice(
         value
@@ -78,26 +80,27 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
     let values = value
         .get_array("values")
         .ok_or(ErrorKind::InvalidDogStatsD)?;
-    let mut values = values
-        .iter()
-        .filter_map(simd_json::ValueAccess::as_f64)
-        .map(|x| {
-            if x.fract() == 0.0 {
-                #[allow(clippy::cast_possible_truncation)]
-                let n = x as i64;
-                n.to_string()
-            } else {
-                x.to_string()
-            }
-        });
+    let mut values = values.iter().filter_map(simd_json::ValueAccess::as_f64);
 
     r.push(b':');
-    if let Some(v) = values.next() {
-        r.extend_from_slice(v.as_bytes());
+    if let Some(x) = values.next() {
+        if x.fract() == 0.0 {
+            #[allow(clippy::cast_possible_truncation)]
+            let n = x as i64;
+            r.extend_from_slice(itoa_buf.format(n).as_bytes())
+        } else {
+            r.extend_from_slice(ryu_buf.format(x).as_bytes())
+        }
     }
-    for v in values {
+    for x in values {
         r.push(b':');
-        r.extend_from_slice(v.as_bytes());
+        if x.fract() == 0.0 {
+            #[allow(clippy::cast_possible_truncation)]
+            let n = x as i64;
+            r.extend_from_slice(itoa_buf.format(n).as_bytes())
+        } else {
+            r.extend_from_slice(ryu_buf.format(x).as_bytes())
+        }
     }
     r.push(b'|');
     r.extend_from_slice(t.as_bytes());
@@ -122,14 +125,15 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
 }
 
 fn encode_event(value: &Value) -> Result<Vec<u8>> {
+    let mut buf = itoa::Buffer::new();
     let mut r = Vec::with_capacity(512);
     let title = value.get_str("title").ok_or(ErrorKind::InvalidDogStatsD)?;
     let text = value.get_str("text").ok_or(ErrorKind::InvalidDogStatsD)?;
 
     r.extend_from_slice(b"_e{");
-    r.extend_from_slice(&title.len().to_string().as_bytes());
+    r.extend_from_slice(&buf.format(title.len()).as_bytes());
     r.push(b',');
-    r.extend_from_slice(&text.len().to_string().as_bytes());
+    r.extend_from_slice(&buf.format(text.len()).as_bytes());
     r.extend_from_slice(b"}:");
     r.extend_from_slice(title.as_bytes());
     r.push(b'|');
@@ -137,7 +141,7 @@ fn encode_event(value: &Value) -> Result<Vec<u8>> {
 
     if let Some(timestamp) = value.get_u32("timestamp") {
         r.extend_from_slice(b"|d:");
-        r.extend_from_slice(&timestamp.to_string().as_bytes());
+        r.extend_from_slice(&buf.format(timestamp).as_bytes());
     }
 
     if let Some(hostname) = value.get_str("hostname") {
@@ -176,6 +180,7 @@ fn encode_event(value: &Value) -> Result<Vec<u8>> {
 }
 
 fn encode_service_check(value: &Value) -> Result<Vec<u8>> {
+    let mut buf = itoa::Buffer::new();
     let mut r = Vec::with_capacity(512);
     let name = value.get_str("name").ok_or(ErrorKind::InvalidDogStatsD)?;
     let status = value.get_i32("status").ok_or(ErrorKind::InvalidDogStatsD)?;
@@ -183,11 +188,11 @@ fn encode_service_check(value: &Value) -> Result<Vec<u8>> {
     r.extend_from_slice(b"_sc|");
     r.extend_from_slice(name.as_bytes());
     r.push(b'|');
-    r.extend_from_slice(&status.to_string().as_bytes());
+    r.extend_from_slice(&buf.format(status).as_bytes());
 
     if let Some(timestamp) = value.get_u32("timestamp") {
         r.extend_from_slice(b"|d:");
-        r.extend_from_slice(&timestamp.to_string().as_bytes());
+        r.extend_from_slice(&buf.format(timestamp).as_bytes());
     }
 
     if let Some(hostname) = value.get_str("hostname") {
