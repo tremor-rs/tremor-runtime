@@ -4,6 +4,7 @@
 
 ## New Features
 * implement script enhancement RFC (initial state and port based scripts)
+* Improve dogstatsd performance
 
 ## [0.13.0-rc.6]
 ### Fixes
