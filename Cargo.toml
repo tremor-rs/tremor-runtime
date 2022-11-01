@@ -243,6 +243,7 @@ uuid = { version = "1.2", features = ["v4"] }
 qwal = { git = "https://github.com/tremor-rs/qwal" }
 itoa = "1"
 ryu = "1"
+lexical = "6.1.1"
 
 [dev-dependencies]
 serial_test = { version = "0.9", features = ["logging"] }

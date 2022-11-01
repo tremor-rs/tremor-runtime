@@ -266,7 +266,7 @@ fn decode_metric(data: &[u8]) -> Result<Value> {
         match d.next() {
             Some((idx, b':' | b'|')) => {
                 let s = substr(data, section_start..idx)?;
-                let v: f64 = s.parse()?;
+                let v: f64 = lexical::parse(s)?;
                 let value = Value::from(v);
                 values.push(value);
                 section_start = idx + 1;
@@ -302,7 +302,7 @@ fn decode_metric(data: &[u8]) -> Result<Value> {
     for section in substr(data, section_start..)?.split('|') {
         if section.starts_with('@') {
             let sample_rate = section.get(1..).ok_or(ErrorKind::InvalidDogStatsD)?;
-            let sample_rate_float: f64 = sample_rate.parse()?;
+            let sample_rate_float: f64 = lexical::parse(sample_rate)?;
             m.insert_nocheck("sample_rate".into(), Value::from(sample_rate_float));
         } else if section.starts_with('#') {
             let tags: Vec<&str> = section
@@ -373,10 +373,8 @@ fn decode_event(data: &[u8]) -> Result<Value> {
     if optional_sections {
         for section in substr(data, optional_text_idx..)?.split('|') {
             if section.starts_with('d') {
-                let timestamp: u32 = section
-                    .get(2..)
-                    .ok_or(ErrorKind::InvalidDogStatsD)?
-                    .parse()?;
+                let timestamp: u32 =
+                    lexical::parse(section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?)?;
                 m.insert_nocheck("timestamp".into(), Value::from(timestamp));
             } else if section.starts_with('h') {
                 let hostname = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
@@ -442,7 +440,7 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
     match d.next() {
         Some((idx, b'0' | b'1' | b'2' | b'3')) => {
             let status_str = substr(data, idx..=idx)?;
-            let status: i32 = status_str.parse()?;
+            let status: i32 = lexical::parse(status_str)?;
             m.insert_nocheck("status".into(), Value::from(status));
         }
         _ => return Err(invalid()),
@@ -453,10 +451,8 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
         Some((idx, b'|')) => {
             for section in substr(data, idx + 1..)?.split('|') {
                 if section.starts_with('d') {
-                    let timestamp: u32 = section
-                        .get(2..)
-                        .ok_or(ErrorKind::InvalidDogStatsD)?
-                        .parse()?;
+                    let timestamp: u32 =
+                        lexical::parse(section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?)?;
                     m.insert_nocheck("timestamp".into(), Value::from(timestamp));
                 } else if section.starts_with('h') {
                     let hostname = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;

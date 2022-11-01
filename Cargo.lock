@@ -5820,6 +5820,7 @@ dependencies = [
  "indexmap",
  "itoa 1.0.2",
  "lazy_static",
+ "lexical",
  "libflate",
  "log",
  "lz4",
