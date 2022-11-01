@@ -229,7 +229,7 @@ fn write_tags(value: &Value, r: &mut Vec<u8>) {
 }
 
 fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
-    let data = std::str::from_utf8(data)?;
+    let data = simdutf8::basic::from_utf8(data)?;
     if let Some(data) = data.strip_prefix("_e{") {
         decode_event(data)
     } else if let Some(data) = data.strip_prefix("_sc|") {
