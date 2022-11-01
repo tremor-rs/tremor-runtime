@@ -200,6 +200,7 @@ error_chain! {
         Uuid(uuid::Error);
         Serenity(serenity::Error);
         InvalidMetadataValue(tonic::metadata::errors::InvalidMetadataValue);
+        Lexical(lexical::Error);
     }
 
     errors {
