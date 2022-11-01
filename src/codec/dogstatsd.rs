@@ -252,7 +252,7 @@ fn decode_metric(data: &[u8]) -> Result<Value> {
             Some((idx, b':')) => {
                 let v = substr(data, 0..idx)?;
                 section_start = idx + 1;
-                m.insert("metric".into(), Value::from(v));
+                m.insert_nocheck("metric".into(), Value::from(v));
                 break;
             }
             Some(_) => (),
@@ -279,17 +279,17 @@ fn decode_metric(data: &[u8]) -> Result<Value> {
             None => return Err(invalid()),
         }
     }
-    m.insert("values".into(), Value::from(values));
+    m.insert_nocheck("values".into(), Value::from(values));
 
     // <TYPE>
     match d.next() {
         Some((i, b'c' | b'd' | b'g' | b'h' | b's')) => {
             section_start = i + 1;
-            m.insert("type".into(), substr(data, i..=i)?.into());
+            m.insert_nocheck("type".into(), substr(data, i..=i)?.into());
         }
         Some((i, b'm')) => {
             if let Some((j, b's')) = d.next() {
-                m.insert("type".into(), substr(data, i..=j)?.into());
+                m.insert_nocheck("type".into(), substr(data, i..=j)?.into());
                 section_start = i + 1;
             } else {
                 return Err(invalid());
@@ -303,20 +303,20 @@ fn decode_metric(data: &[u8]) -> Result<Value> {
         if section.starts_with('@') {
             let sample_rate = section.get(1..).ok_or(ErrorKind::InvalidDogStatsD)?;
             let sample_rate_float: f64 = sample_rate.parse()?;
-            m.insert("sample_rate".into(), Value::from(sample_rate_float));
+            m.insert_nocheck("sample_rate".into(), Value::from(sample_rate_float));
         } else if section.starts_with('#') {
             let tags: Vec<&str> = section
                 .get(1..)
                 .ok_or(ErrorKind::InvalidDogStatsD)?
                 .split(',')
                 .collect();
-            m.insert("tags".into(), Value::from(tags));
+            m.insert_nocheck("tags".into(), Value::from(tags));
         } else if section.starts_with('c') {
             let container_id = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-            m.insert("container_id".into(), Value::from(container_id));
+            m.insert_nocheck("container_id".into(), Value::from(container_id));
         }
     }
-    map.insert("metric".into(), Value::from(m));
+    map.insert_nocheck("metric".into(), Value::from(m));
 
     Ok(Value::from(map))
 }
@@ -335,7 +335,7 @@ fn decode_event(data: &[u8]) -> Result<Value> {
             Some((idx, b'|')) => {
                 let v: Vec<&str> = substr(data, 2..idx)?.split(':').collect();
                 let title: &str = v.get(1).ok_or(ErrorKind::InvalidDogStatsD)?;
-                m.insert("title".into(), Value::from(title));
+                m.insert_nocheck("title".into(), Value::from(title));
                 section_start = idx + 1;
                 break;
             }
@@ -361,7 +361,7 @@ fn decode_event(data: &[u8]) -> Result<Value> {
                 }
                 if is_end && text_end_index > 0 {
                     let text = substr(data, section_start..=text_end_index)?;
-                    m.insert("text".into(), Value::from(text));
+                    m.insert_nocheck("text".into(), Value::from(text));
                     break;
                 }
             }
@@ -377,37 +377,37 @@ fn decode_event(data: &[u8]) -> Result<Value> {
                     .get(2..)
                     .ok_or(ErrorKind::InvalidDogStatsD)?
                     .parse()?;
-                m.insert("timestamp".into(), Value::from(timestamp));
+                m.insert_nocheck("timestamp".into(), Value::from(timestamp));
             } else if section.starts_with('h') {
                 let hostname = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-                m.insert("hostname".into(), Value::from(hostname));
+                m.insert_nocheck("hostname".into(), Value::from(hostname));
             } else if section.starts_with('p') {
                 let priority = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-                m.insert("priority".into(), Value::from(priority));
+                m.insert_nocheck("priority".into(), Value::from(priority));
             } else if section.starts_with('s') {
                 let source = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-                m.insert("source".into(), Value::from(source));
+                m.insert_nocheck("source".into(), Value::from(source));
             } else if section.starts_with('t') {
                 let event_type = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-                m.insert("type".into(), Value::from(event_type));
+                m.insert_nocheck("type".into(), Value::from(event_type));
             } else if section.starts_with('k') {
                 let aggregation = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-                m.insert("aggregation_key".into(), Value::from(aggregation));
+                m.insert_nocheck("aggregation_key".into(), Value::from(aggregation));
             } else if section.starts_with('#') {
                 let tags: Vec<&str> = section
                     .get(1..)
                     .ok_or(ErrorKind::InvalidDogStatsD)?
                     .split(',')
                     .collect();
-                m.insert("tags".into(), Value::from(tags));
+                m.insert_nocheck("tags".into(), Value::from(tags));
             } else if section.starts_with('c') {
                 let container_id = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-                m.insert("container_id".into(), Value::from(container_id));
+                m.insert_nocheck("container_id".into(), Value::from(container_id));
             }
         }
     }
 
-    map.insert("event".into(), Value::from(m));
+    map.insert_nocheck("event".into(), Value::from(m));
     Ok(Value::from(map))
 }
 
@@ -430,7 +430,7 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
         match d.next() {
             Some((idx, b'|')) => {
                 let name = substr(data, start_index..idx)?;
-                m.insert("name".into(), Value::from(name));
+                m.insert_nocheck("name".into(), Value::from(name));
                 break;
             }
             Some(_) => (),
@@ -443,7 +443,7 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
         Some((idx, b'0' | b'1' | b'2' | b'3')) => {
             let status_str = substr(data, idx..=idx)?;
             let status: i32 = status_str.parse()?;
-            m.insert("status".into(), Value::from(status));
+            m.insert_nocheck("status".into(), Value::from(status));
         }
         _ => return Err(invalid()),
     }
@@ -457,23 +457,23 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
                         .get(2..)
                         .ok_or(ErrorKind::InvalidDogStatsD)?
                         .parse()?;
-                    m.insert("timestamp".into(), Value::from(timestamp));
+                    m.insert_nocheck("timestamp".into(), Value::from(timestamp));
                 } else if section.starts_with('h') {
                     let hostname = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-                    m.insert("hostname".into(), Value::from(hostname));
+                    m.insert_nocheck("hostname".into(), Value::from(hostname));
                 } else if section.starts_with('#') {
                     let tags: Vec<&str> = section
                         .get(1..)
                         .ok_or(ErrorKind::InvalidDogStatsD)?
                         .split(',')
                         .collect();
-                    m.insert("tags".into(), Value::from(tags));
+                    m.insert_nocheck("tags".into(), Value::from(tags));
                 } else if section.starts_with('m') {
                     let message = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-                    m.insert("message".into(), Value::from(message));
+                    m.insert_nocheck("message".into(), Value::from(message));
                 } else if section.starts_with('c') {
                     let container_id = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
-                    m.insert("container_id".into(), Value::from(container_id));
+                    m.insert_nocheck("container_id".into(), Value::from(container_id));
                 }
             }
         }
@@ -481,7 +481,7 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
         None => (),
     }
 
-    map.insert("service_check".into(), Value::from(m));
+    map.insert_nocheck("service_check".into(), Value::from(m));
     Ok(Value::from(map))
 }
 
