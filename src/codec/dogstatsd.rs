@@ -85,9 +85,9 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
         if x.fract() == 0.0 {
             #[allow(clippy::cast_possible_truncation)]
             let n = x as i64;
-            r.extend_from_slice(itoa_buf.format(n).as_bytes())
+            r.extend_from_slice(itoa_buf.format(n).as_bytes());
         } else {
-            r.extend_from_slice(ryu_buf.format(x).as_bytes())
+            r.extend_from_slice(ryu_buf.format(x).as_bytes());
         }
     }
     for x in values {
@@ -95,9 +95,9 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
         if x.fract() == 0.0 {
             #[allow(clippy::cast_possible_truncation)]
             let n = x as i64;
-            r.extend_from_slice(itoa_buf.format(n).as_bytes())
+            r.extend_from_slice(itoa_buf.format(n).as_bytes());
         } else {
-            r.extend_from_slice(ryu_buf.format(x).as_bytes())
+            r.extend_from_slice(ryu_buf.format(x).as_bytes());
         }
     }
     r.push(b'|');
@@ -106,7 +106,7 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
     if let Some(val) = value.get("sample_rate") {
         if val.is_number() {
             r.extend_from_slice(b"|@");
-            r.extend_from_slice(&val.encode().as_bytes());
+            r.extend_from_slice(val.encode().as_bytes());
         } else {
             return Err(ErrorKind::InvalidDogStatsD.into());
         }
@@ -129,9 +129,9 @@ fn encode_event(value: &Value) -> Result<Vec<u8>> {
     let text = value.get_str("text").ok_or(ErrorKind::InvalidDogStatsD)?;
 
     r.extend_from_slice(b"_e{");
-    r.extend_from_slice(&buf.format(title.len()).as_bytes());
+    r.extend_from_slice(buf.format(title.len()).as_bytes());
     r.push(b',');
-    r.extend_from_slice(&buf.format(text.len()).as_bytes());
+    r.extend_from_slice(buf.format(text.len()).as_bytes());
     r.extend_from_slice(b"}:");
     r.extend_from_slice(title.as_bytes());
     r.push(b'|');
@@ -139,7 +139,7 @@ fn encode_event(value: &Value) -> Result<Vec<u8>> {
 
     if let Some(timestamp) = value.get_u32("timestamp") {
         r.extend_from_slice(b"|d:");
-        r.extend_from_slice(&buf.format(timestamp).as_bytes());
+        r.extend_from_slice(buf.format(timestamp).as_bytes());
     }
 
     if let Some(hostname) = value.get_str("hostname") {
@@ -186,11 +186,11 @@ fn encode_service_check(value: &Value) -> Result<Vec<u8>> {
     r.extend_from_slice(b"_sc|");
     r.extend_from_slice(name.as_bytes());
     r.push(b'|');
-    r.extend_from_slice(&buf.format(status).as_bytes());
+    r.extend_from_slice(buf.format(status).as_bytes());
 
     if let Some(timestamp) = value.get_u32("timestamp") {
         r.extend_from_slice(b"|d:");
-        r.extend_from_slice(&buf.format(timestamp).as_bytes());
+        r.extend_from_slice(buf.format(timestamp).as_bytes());
     }
 
     if let Some(hostname) = value.get_str("hostname") {
