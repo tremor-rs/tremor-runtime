@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::prelude::*;
-use tremor_common::string::substr;
 
 #[derive(Clone)]
 pub struct StatsD {}
@@ -41,128 +40,122 @@ impl Codec for StatsD {
 }
 
 fn encode(value: &Value) -> Result<Vec<u8>> {
-    let mut r = String::new();
-    r.push_str(value.get_str("metric").ok_or(ErrorKind::InvalidStatsD)?);
+    let mut itoa_buf = itoa::Buffer::new();
+    let mut ryu_buf = ryu::Buffer::new();
+
+    let mut r = Vec::with_capacity(512);
+    r.extend_from_slice(
+        value
+            .get_str("metric")
+            .ok_or(ErrorKind::InvalidStatsD)?
+            .as_bytes(),
+    );
     let t = value.get_str("type").ok_or(ErrorKind::InvalidStatsD)?;
     let val = value.get("value").ok_or(ErrorKind::InvalidStatsD)?;
     if !val.is_number() {
         return Err(ErrorKind::InvalidStatsD.into());
     };
-    r.push(':');
+
+    r.push(b':');
     if t == "g" {
         match value.get_str("action") {
-            Some("add") => r.push('+'),
-            Some("sub") => r.push('-'),
+            Some("add") => r.push(b'+'),
+            Some("sub") => r.push(b'-'),
             _ => (),
         }
     };
 
-    r.push_str(&val.encode());
-    r.push('|');
-    r.push_str(t);
+    r.extend_from_slice(val.encode().as_bytes());
+    r.push(b'|');
+    r.extend_from_slice(t.as_bytes());
 
-    if let Some(val) = value.get("sample_rate") {
-        if val.is_number() {
-            r.push_str("|@");
-            r.push_str(&val.encode());
-        } else {
-            return Err(ErrorKind::InvalidStatsD.into());
-        }
+    if let Some(n) = value.get_u64("sample_rate") {
+        r.extend_from_slice(b"|@");
+        r.extend_from_slice(itoa_buf.format(n).as_bytes());
+    } else if let Some(n) = value.get_f64("sample_rate") {
+        r.extend_from_slice(b"|@");
+        r.extend_from_slice(ryu_buf.format(n).as_bytes());
     }
 
-    Ok(r.as_bytes().to_vec())
+    Ok(r)
 }
 
 fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
+    #[derive(Debug, PartialEq)]
     enum Sign {
         Plus,
         Minus,
         None,
     }
-    let mut d = data.iter().enumerate().peekable();
+    let data = simdutf8::basic::from_utf8(data)?;
+
     let mut m = Object::with_capacity(4);
-    let value_start: usize;
-    let mut is_float = false;
-    loop {
-        match d.next() {
-            Some((idx, b':')) => {
-                let v = substr(data, 0..idx)?;
-                value_start = idx + 1;
-                m.insert("metric".into(), Value::from(v));
-                break;
-            }
-            Some(_) => (),
-            None => return Err(invalid()),
-        }
-    }
-    let sign = match d.peek() {
-        Some((_, b'+')) => Sign::Plus,
-        Some((_, b'-')) => Sign::Minus,
-        _ => Sign::None,
+
+    let (metric, data) = data.split_once(':').ok_or_else(invalid)?;
+    m.insert_nocheck("metric".into(), Value::from(metric));
+
+    let (sign, data) = if let Some(data) = data.strip_prefix('+') {
+        (Sign::Plus, data)
+    } else if data.starts_with('-') {
+        (Sign::Minus, data)
+    } else {
+        (Sign::None, data)
     };
-    let mut value: Value;
-    loop {
-        match d.next() {
-            Some((_, b'.')) => is_float = true,
-            Some((idx, b'|')) => {
-                let s = substr(data, value_start..idx)?;
-                if is_float {
-                    let v: f64 = s.parse()?;
-                    value = Value::from(v);
+
+    let (v, data) = data.split_once('|').ok_or_else(invalid)?;
+
+    let mut value = if v.contains('.') {
+        lexical::parse::<f64, _>(v)
+            .map(Value::from)
+            .map_err(Error::from)?
+    } else if v.starts_with('-') {
+        lexical::parse::<i64, _>(v)
+            .map(Value::from)
+            .map_err(Error::from)?
+    } else {
+        lexical::parse::<u64, _>(v)
+            .map(Value::from)
+            .map_err(Error::from)?
+    };
+
+    let data = if data.starts_with(|c| matches!(c, 'c' | 'h' | 's')) {
+        let (t, data) = data.split_at(1);
+        m.insert_nocheck("type".into(), t.into());
+        data
+    } else if data.starts_with("ms") {
+        m.insert_nocheck("type".into(), "ms".into());
+        data.get(2..).ok_or_else(invalid)?
+    } else if data.starts_with('g') {
+        let (t, data) = data.split_at(1);
+        m.insert_nocheck("type".into(), t.into());
+        match sign {
+            Sign::Plus => {
+                m.insert("action".into(), "add".into());
+            }
+            Sign::Minus => {
+                // If it was a `-` we got to negate the number
+                value = if let Some(v) = value.as_i64() {
+                    Value::from(-v)
+                } else if let Some(v) = value.as_f64() {
+                    Value::from(-v)
                 } else {
-                    let v: i64 = s.parse()?;
-                    value = Value::from(v);
+                    return Err(invalid());
                 };
-                break;
+                m.insert("action".into(), "sub".into());
             }
-            Some(_) => (),
-            None => return Err(invalid()),
-        }
-    }
-    match d.next() {
-        Some((i, b'c' | b'h' | b's')) => m.insert("type".into(), substr(data, i..=i)?.into()),
-        Some((i, b'm')) => {
-            if let Some((j, b's')) = d.next() {
-                m.insert("type".into(), substr(data, i..=j)?.into())
-            } else {
-                return Err(invalid());
-            }
-        }
-        Some((i, b'g')) => {
-            match sign {
-                Sign::Plus => {
-                    m.insert("action".into(), "add".into());
-                }
-                Sign::Minus => {
-                    // If it was a `-` we got to negate the number
-                    value = if let Some(v) = value.as_i64() {
-                        Value::from(-v)
-                    } else if let Some(v) = value.as_f64() {
-                        Value::from(-v)
-                    } else {
-                        return Err(invalid());
-                    };
-                    m.insert("action".into(), "sub".into());
-                }
-                Sign::None => (),
-            };
-            m.insert("type".into(), substr(data, i..=i)?.into())
-        }
-        _ => return Err(invalid()),
+            Sign::None => (),
+        };
+        data
+    } else {
+        data
     };
-    match d.next() {
-        Some((_, b'|')) => {
-            if let Some((sample_start, b'@')) = d.next() {
-                let s = substr(data, sample_start + 1..)?;
-                let v: f64 = s.parse()?;
-                m.insert("sample_rate".into(), Value::from(v));
-            } else {
-                return Err(invalid());
-            }
-        }
-        Some(_) => return Err(invalid()),
-        None => (),
+    if let Some(s) = data.strip_prefix("|@") {
+        let v: f64 = lexical::parse(s)?;
+        m.insert("sample_rate".into(), Value::from(v));
+    } else if !data.is_empty() {
+        return Err(invalid());
     };
+
     m.insert("value".into(), value);
     Ok(Value::from(m))
 }
