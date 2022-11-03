@@ -99,7 +99,15 @@ test::suite({
     }),
     test::test({
       "name": "array flatten 1",
-      "test": test::assert("array flatten 1", array::flatten([["a","b"],[1,2]]), [ "a", "b", 1, 2] )
+      "test": test::assert("array flatten 1", array::flatten([["a","b"],[1,2], [[3, 4, null, {}], [[5, 6], [[7, 8], [], 9]]]]), [ "a", "b", 1, 2, 3, 4, null, {}, 5, 6, 7, 8, 9] )
+    }),
+    test::test({
+      "name": "array flatten 2",
+      "test": test::assert("array flatten 2", array::flatten([]), [] )
+    }),
+    test::test({
+      "name": "array flatten 3",
+      "test": test::assert("array flatten 2", array::flatten([false, [], [[], [[[]], [[], [null]]]]], true), [false, null, true] )
     }),
     test::test({
       "name": "array coalesce 1",
