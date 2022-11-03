@@ -77,8 +77,8 @@ fn array_flatten(c: &mut Criterion) {
         ("one", tremor_script::literal!([["1", "2", "3"]])),
         ("baseline", tremor_script::literal!([])),
     ];
-    let mut group = c.benchmark_group("array::flatten");
-    for input in inputs {
+    let mut group = c.benchmark_group("array_flatten");
+    for (label, input) in inputs {
         group.throughput(Throughput::Elements(
             input.as_array().map(Vec::len).unwrap_or_default() as u64,
         ));
@@ -93,11 +93,7 @@ fn array_flatten(c: &mut Criterion) {
         let expr = ImutExpr::Invoke1(invoke.clone());
         let input = (expr, input);
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(&input.1),
-            &input,
-            do_array_flatten,
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(label), &input, do_array_flatten);
     }
     group.finish();
 }
