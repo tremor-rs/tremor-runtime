@@ -105,7 +105,7 @@ pub fn load(registry: &mut Registry) {
 fn array_iter<'borrow, 'value>(
     value: &'borrow Value<'value>,
 ) -> Option<impl Iterator<Item = &'borrow Value<'value>>> {
-    value.as_array().map(|a| a.iter())
+    value.as_array().map(Vec::iter)
 }
 
 fn flatten_iter<'event, 'borrow>(
