@@ -80,3 +80,7 @@ erlang-float-testing = []
 arena-delete = []
 # This is required for the language server as w3e want to allow the use of it without platfor specific flags
 allow-non-simd = ["simd-json/allow-non-simd"]
+
+[[bench]]
+name = "array_flatten"
+harness = false
