@@ -51,7 +51,7 @@ bimap = { version = "0.6", features = ["serde"] }
 byteorder = "1"
 bytes = "1.2"
 chrono = "0.4"
-chrono-tz = "0.6"
+chrono-tz = "0.8"
 
 # Once a new version of clickhouse-rs is released, we can stop using a git
 # repository as a dependency. The declaration can then be replaced with the
