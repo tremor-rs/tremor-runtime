@@ -18,7 +18,7 @@ rustc-args = ["-C target-feature=+avx,+avx2,+sse4.2"]
 
 [dependencies]
 lexical = "6.1.1"
-value-trait = "0.4"
+value-trait = "0.5"
 
 [dev-dependencies]
 criterion = "0.4"
