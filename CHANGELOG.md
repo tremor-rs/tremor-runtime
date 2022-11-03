@@ -2,10 +2,14 @@
 
 ## Unreleased
 
-## New Features
+### Performance
+
+* Improve dogstatsd performance
+* Improve performance of `std::array::flatten` by roughly 30%
+
+### New Features
 
 * implement script enhancement RFC (initial state and port based scripts)
-* Improve dogstatsd performance
 
 ## [0.13.0-rc.6]
 ### Fixes
