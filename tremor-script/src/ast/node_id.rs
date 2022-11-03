@@ -46,7 +46,7 @@ impl<'script> From<IdentRaw<'script>> for NodeId {
 impl NodeId {
     /// Create a new `NodeId` from an ID and Module list.
     #[must_use]
-    pub fn new<T: ToString>(id: &T, module: &[String]) -> Self {
+    pub fn new<T: ToString + ?Sized>(id: &T, module: &[String]) -> Self {
         Self {
             id: id.to_string(),
             module: module.to_vec(),
