@@ -4,3 +4,4 @@ depricated
 tests
 build.rs
 benches.old
+benches
