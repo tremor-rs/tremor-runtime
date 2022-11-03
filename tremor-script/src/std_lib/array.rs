@@ -102,10 +102,16 @@ pub fn load(registry: &mut Registry) {
         }));
 }
 
+fn array_iter<'borrow, 'value>(
+    value: &'borrow Value<'value>,
+) -> Option<impl Iterator<Item = &'borrow Value<'value>>> {
+    value.as_array().map(|a| a.iter())
+}
+
 fn flatten_iter<'event, 'borrow>(
     v: &'borrow Value<'event>,
 ) -> Box<dyn Iterator<Item = &'borrow Value<'event>> + 'borrow> {
-    match v.array_iter() {
+    match array_iter(v) {
         Some(iter) => Box::new(iter.flat_map(flatten_iter)),
         None => Box::new(std::iter::once(v)),
     }
