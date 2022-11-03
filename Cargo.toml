@@ -143,7 +143,7 @@ http-client = { git = "https://github.com/tremor-rs/http-client", rev = "059b23e
 #] }
 
 # elasticsearch
-elasticsearch = { version = "=8.4.0-alpha.1", default-features = false, features = [
+elasticsearch = { version = "=8.5.0-alpha.1", default-features = false, features = [
   "rustls-tls",
 ] }
 
