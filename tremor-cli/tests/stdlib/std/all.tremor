@@ -107,7 +107,7 @@ test::suite({
     }),
     test::test({
       "name": "array flatten 3",
-      "test": test::assert("array flatten 2", array::flatten([false, [], [[], [[[]], [[], [null]]]]], true), [false, null, true] )
+      "test": test::assert("array flatten 2", array::flatten([false, [], [[], [[[]], [[], [null]]]], true]), [false, null, true] )
     }),
     test::test({
       "name": "array coalesce 1",
