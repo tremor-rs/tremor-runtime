@@ -82,14 +82,11 @@ impl<'value, 'borrow> Iterator for MutValueIter<'value, 'borrow> {
 impl<'value> Value<'value> {
     /// Return an iterator over array values.
     /// For non-arrays, returns `None`.
+    #[must_use]
     pub fn array_iter<'borrow>(
         &'borrow self,
     ) -> Option<impl Iterator<Item = &'borrow Value<'value>>> {
-        if let Some(a) = self.as_array() {
-            Some(a.iter())
-        } else {
-            None
-        }
+        self.as_array().map(|a| a.iter())
     }
 }
 
