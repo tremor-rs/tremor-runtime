@@ -102,13 +102,17 @@ pub fn load(registry: &mut Registry) {
         }));
 }
 
-//TODO this is not very nice
-fn flatten_value<'event>(v: &Value<'event>) -> Vec<Value<'event>> {
-    if let Some(a) = v.as_array() {
-        a.iter().flat_map(flatten_value).collect()
-    } else {
-        vec![v.clone()]
+fn flatten_iter<'event, 'borrow>(
+    v: &'borrow Value<'event>,
+) -> Box<dyn Iterator<Item = &'borrow Value<'event>> + 'borrow> {
+    match v.array_iter() {
+        Some(iter) => Box::new(iter.flat_map(flatten_iter)),
+        None => Box::new(std::iter::once(v)),
     }
+}
+
+pub fn flatten_value<'event>(v: &Value<'event>) -> Vec<Value<'event>> {
+    flatten_iter(v).cloned().collect()
 }
 
 #[cfg(test)]
