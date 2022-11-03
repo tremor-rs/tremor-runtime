@@ -20,9 +20,6 @@ mod serialize;
 /// a static value newtype workaround for rust quirks
 pub mod r#static;
 
-/// Iterator impls for Value
-pub mod iter;
-
 use crate::{Error, Result};
 use beef::Cow;
 use halfbrown::HashMap;
