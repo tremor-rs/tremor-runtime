@@ -35,6 +35,7 @@ Assertion for {} failed:
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::registry::FResult;
 
@@ -46,15 +47,20 @@ mod tests {
         let mut ctx = EventContext::new(0, None);
         let one = Value::from(1_u64);
         let two = Value::from(2_i64);
-        let res = fun.invoke(&ctx, &[&Value::from("DESC"), &one, &one]);
-        assert_eq!(Ok(Value::from(true)), res);
+        assert_eq!(
+            fun.invoke(&ctx, &[&Value::from("DESC"), &one, &one]),
+            Ok(Value::from(true))
+        );
 
-        let res = fun.invoke(&ctx, &[&Value::from("DESC"), &one, &two]);
-        assert_eq!(Ok(Value::from(vec![one.clone(), two.clone()])), res);
+        assert_eq!(
+            fun.invoke(&ctx, &[&Value::from("DESC"), &one, &two]),
+            Ok(Value::from(vec![one.clone(), two.clone()]))
+        );
 
         ctx.panic_on_assert = true;
-        let res = fun.invoke(&ctx, &[&Value::from("DESC"), &one, &two]);
-        assert!(res.is_err());
+        assert!(fun
+            .invoke(&ctx, &[&Value::from("DESC"), &one, &two])
+            .is_err());
         Ok(())
     }
 }

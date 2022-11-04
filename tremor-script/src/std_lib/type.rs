@@ -66,7 +66,7 @@ mod test {
         let f = fun("type", "is_null");
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
-        assert_val!(f(&[&Value::null()]), true)
+        assert_val!(f(&[&Value::null()]), true);
     }
 
     #[test]
@@ -75,7 +75,7 @@ mod test {
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
         let v = Value::from(true);
-        assert_val!(f(&[&v]), true)
+        assert_val!(f(&[&v]), true);
     }
 
     #[test]
@@ -84,7 +84,7 @@ mod test {
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
         let v = Value::from(42);
-        assert_val!(f(&[&v]), true)
+        assert_val!(f(&[&v]), true);
     }
 
     #[test]
@@ -93,7 +93,7 @@ mod test {
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), false);
         let v = Value::from(42.0);
-        assert_val!(f(&[&v]), true)
+        assert_val!(f(&[&v]), true);
     }
 
     #[test]

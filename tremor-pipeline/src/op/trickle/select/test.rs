@@ -34,7 +34,7 @@ fn test_uid() -> OperatorId {
     OperatorId::new(42)
 }
 
-fn test_select_stmt<'s>(stmt: tremor_script::ast::Select<'s>) -> SelectStmt<'s> {
+fn test_select_stmt(stmt: tremor_script::ast::Select) -> SelectStmt {
     SelectStmt {
         stmt: Box::new(stmt),
         aggregates: vec![],
@@ -100,7 +100,7 @@ fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
     }
 }
 
-fn test_select(uid: OperatorId, stmt: SelectStmt<'static>) -> Select {
+fn test_select(uid: OperatorId, stmt: &SelectStmt<'static>) -> Select {
     let windows = vec![
         (
             "w15s".into(),
@@ -121,7 +121,7 @@ fn test_select(uid: OperatorId, stmt: SelectStmt<'static>) -> Select {
             .into(),
         ),
     ];
-    Select::from_stmt(uid, windows, &stmt)
+    Select::from_stmt(uid, windows, stmt)
 }
 
 fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str>, Event)>> {
@@ -135,6 +135,7 @@ fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn try_enqueue_two(
     op: &mut Select,
     event: Event,
@@ -160,13 +161,12 @@ fn parse_query(query: &str) -> Result<crate::op::trickle::select::Select> {
         .query
         .stmts
         .into_iter()
-        .filter_map(|s| match s {
+        .find_map(|s| match s {
             Stmt::SelectStmt(s) => Some(s),
             _ => None,
         })
-        .next()
         .ok_or_else(|| Error::from("Invalid query"))?;
-    Ok(test_select(test_uid(), stmt))
+    Ok(test_select(test_uid(), &stmt))
 }
 
 #[test]
@@ -224,16 +224,13 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
                 .content
                 .windows
                 .get(win_defn.id.id())
-                .unwrap()
+                .ok_or("no data")?
                 .clone();
             let mut f = ConstFolder { helper: &h };
-            f.walk_window_defn(&mut window_defn).unwrap();
-            (
-                window_defn.id.clone(),
-                window_defn_to_impl(&window_defn).unwrap(), // yes, indeed!
-            )
+            f.walk_window_defn(&mut window_defn)?;
+            Ok((window_defn.id.clone(), window_defn_to_impl(&window_defn)?))
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
     Ok(Select::from_stmt(test_uid(), windows, &stmt))
 }
@@ -363,7 +360,7 @@ fn select_single_win_on_signal() -> Result<()> {
         r#"[{"g":"group"}]"#,
         sorted_serialize(eis.events[0].1.data.parts().0)?
     );
-    assert_eq!(false, eis.events[0].1.transactional);
+    assert!(!eis.events[0].1.transactional);
     Ok(())
 }
 
@@ -429,7 +426,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
         &event.id,
         &event_id1
     );
-    assert_eq!(true, event.transactional);
+    assert!(event.transactional);
     assert_eq!(
         Some(0), // first event in the first window
         event.id.get_min_by_stream(uid.id(), 0)
@@ -497,10 +494,10 @@ fn test_transactional_single_window() -> Result<()> {
     let id2 = event2.id.clone();
     let mut res = op.on_event(uid, "in", &mut state, event2)?;
     assert_eq!(1, res.events.len());
-    let (_, event) = res.events.pop().unwrap();
-    assert_eq!(true, event.transactional);
-    assert_eq!(true, event.id.is_tracking(&id1));
-    assert_eq!(true, event.id.is_tracking(&id2));
+    let (_, event) = res.events.pop().ok_or("no data")?;
+    assert!(event.transactional);
+    assert!(event.id.is_tracking(&id1));
+    assert!(event.id.is_tracking(&id2));
 
     let event3 = test_event_tx(2, false, 0);
     let id3 = event3.id.clone();
@@ -511,10 +508,10 @@ fn test_transactional_single_window() -> Result<()> {
     let id4 = event4.id.clone();
     let mut res = op.on_event(uid, "in", &mut state, event4)?;
     assert_eq!(1, res.events.len());
-    let (_, event) = res.events.pop().unwrap();
-    assert_eq!(false, event.transactional);
-    assert_eq!(true, event.id.is_tracking(&id3));
-    assert_eq!(true, event.id.is_tracking(&id4));
+    let (_, event) = res.events.pop().ok_or("no data")?;
+    assert!(!event.transactional);
+    assert!(event.id.is_tracking(&id3));
+    assert!(event.id.is_tracking(&id4));
 
     Ok(())
 }
@@ -551,19 +548,19 @@ fn test_transactional_multiple_windows() -> Result<()> {
     let id2 = event2.id.clone();
     let mut res = op.on_event(uid, "in", &mut state, event2)?;
     assert_eq!(1, res.len());
-    let (_, event) = res.events.pop().unwrap();
-    assert_eq!(true, event.transactional);
-    assert_eq!(true, event.id.is_tracking(&id0));
-    assert_eq!(true, event.id.is_tracking(&id2));
+    let (_, event) = res.events.pop().ok_or("no data")?;
+    assert!(event.transactional);
+    assert!(event.id.is_tracking(&id0));
+    assert!(event.id.is_tracking(&id2));
 
     let event3 = test_event_tx(3, false, 1);
     let id3 = event3.id.clone();
     let mut res = op.on_event(uid, "in", &mut state, event3)?;
     assert_eq!(1, res.len());
     let (_, event) = res.events.remove(0);
-    assert_eq!(false, event.transactional);
-    assert_eq!(true, event.id.is_tracking(&id1));
-    assert_eq!(true, event.id.is_tracking(&id3));
+    assert!(!event.transactional);
+    assert!(event.id.is_tracking(&id1));
+    assert!(event.id.is_tracking(&id3));
 
     let event4 = test_event_tx(4, false, 0);
     let id4 = event4.id.clone();
@@ -652,7 +649,7 @@ fn select_nowin_nogrp_nowhr_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(test_uid(), stmt);
+    let mut op = test_select(test_uid(), &stmt);
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
     assert!(try_enqueue(&mut op, test_event(1))?.is_none());
     let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
@@ -674,7 +671,7 @@ fn select_nowin_nogrp_whrt_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(test_uid(), stmt);
+    let mut op = test_select(test_uid(), &stmt);
 
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
 
@@ -696,14 +693,14 @@ fn select_nowin_nogrp_whrf_nohav() -> Result<()> {
     }));
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(test_uid(), stmt);
+    let mut op = test_select(test_uid(), &stmt);
     let next = try_enqueue(&mut op, test_event(0))?;
     assert_eq!(None, next);
     Ok(())
 }
 
 #[test]
-fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
+fn select_nowin_nogrp_whrbad_nohav() {
     let target = test_target();
     let mut stmt_ast = test_stmt(target);
     stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
@@ -713,11 +710,9 @@ fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(test_uid(), stmt);
+    let mut op = test_select(test_uid(), &stmt);
 
     assert!(try_enqueue(&mut op, test_event(0)).is_err());
-
-    Ok(())
 }
 
 #[test]
@@ -735,7 +730,7 @@ fn select_nowin_nogrp_whrt_havt() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(test_uid(), stmt);
+    let mut op = test_select(test_uid(), &stmt);
 
     let event = test_event(0);
     assert!(try_enqueue(&mut op, event)?.is_none());
@@ -762,7 +757,7 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(test_uid(), stmt);
+    let mut op = test_select(test_uid(), &stmt);
     let event = test_event(0);
 
     let next = try_enqueue(&mut op, event)?;
@@ -789,7 +784,7 @@ fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(test_uid(), stmt);
+    let mut op = test_select(test_uid(), &stmt);
     let event = test_event(0);
 
     let next = try_enqueue(&mut op, event)?;
@@ -864,11 +859,11 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     let interval = with
         .get("interval")
         .and_then(Value::as_u64)
-        .ok_or(Error::from("no interval found"))?;
+        .ok_or("no interval found")?;
     let mut window = window::TumblingOnTime::from_stmt(
         interval,
         window::Impl::DEFAULT_MAX_GROUPS,
-        Some(&window_defn),
+        Some(window_defn),
     );
     let json1 = literal!({
         "timestamp": 1_000_000_000

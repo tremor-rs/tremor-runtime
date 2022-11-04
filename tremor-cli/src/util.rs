@@ -54,7 +54,7 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
         // not follow a heirarchic visitation order
         //
 
-        for entry in std::fs::read_dir(&path)? {
+        for entry in std::fs::read_dir(path)? {
             let entry = entry?;
             let path = entry.path();
             let rel_path = path.strip_prefix(base);
@@ -72,7 +72,7 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
             }
         }
 
-        for entry in std::fs::read_dir(&path)? {
+        for entry in std::fs::read_dir(path)? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {

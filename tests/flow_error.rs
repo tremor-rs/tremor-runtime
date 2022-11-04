@@ -16,10 +16,10 @@ use std::io::prelude::*;
 use tremor_common::file;
 use tremor_script::{deploy::Deploy, errors::*, highlighter::Dumb, module::Manager};
 
-fn parse<'script>(deploy: &str) -> tremor_script::Result<Deploy> {
+fn parse(deploy: &str) -> tremor_script::Result<Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::registry::registry();
-    Deploy::parse(deploy, &reg, &aggr_reg).into()
+    Deploy::parse(deploy, &reg, &aggr_reg)
 }
 
 macro_rules! test_cases {

@@ -401,7 +401,7 @@ mod test {
     #[test]
     fn dogstatsd_bad_metric_payload() {
         let data = b"dog:111";
-        assert!(decode(data, 0).is_err())
+        assert!(decode(data, 0).is_err());
     }
 
     #[test]
@@ -430,7 +430,7 @@ mod test {
         let expected = literal!({
             "metric": {
                 "metric": "dog",
-                "values": [111 as f64],
+                "values": [111_f64],
                 "type": "g",
                 "sample_rate": 0.5,
                 "tags": ["foo:bar", "fizz:buzz"],
@@ -600,7 +600,7 @@ mod test {
             "event": {
                 "title": "Test",
                 "text": "A Test",
-                "timestamp": 1663016695 as u32,
+                "timestamp": 1_663_016_695_u32,
                 "hostname": "test.example.com",
                 "aggregation_key": "a1b2c3",
                 "priority": "normal",
@@ -618,7 +618,7 @@ mod test {
     #[test]
     fn dogstatsd_bad_event_payload() {
         let data = b"_e{4,6}:Test";
-        assert!(decode(data, 0).is_err())
+        assert!(decode(data, 0).is_err());
     }
 
     #[test]
@@ -661,7 +661,7 @@ mod test {
             "service_check": {
                 "name": "Redis connection",
                 "status": 2,
-                "timestamp": 1663016695 as u32,
+                "timestamp": 1_663_016_695_u32,
                 "hostname":"test.example.com",
                 "tags": ["env:dev"],
                 "message": "Redis connection timed out after 10s",
@@ -676,7 +676,7 @@ mod test {
     #[test]
     fn dogstatsd_bad_service_check_payload() {
         let data = b"_sc|Redis connection";
-        assert!(decode(data, 0).is_err())
+        assert!(decode(data, 0).is_err());
     }
 
     #[test]

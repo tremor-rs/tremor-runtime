@@ -197,7 +197,7 @@ impl serde::Serializer for Serializer {
         T: Serialize,
     {
         let mut values = Object::with_capacity(1);
-        values.insert(variant.into(), stry!(to_value(&value)));
+        values.insert(variant.into(), stry!(to_value(value)));
         Ok(Value::from(values))
     }
 
@@ -299,7 +299,7 @@ impl serde::ser::SerializeSeq for SerializeVec {
     where
         T: Serialize,
     {
-        self.vec.push(stry!(to_value(&value)));
+        self.vec.push(stry!(to_value(value)));
         Ok(())
     }
 
@@ -348,7 +348,7 @@ impl serde::ser::SerializeTupleVariant for SerializeTupleVariant {
     where
         T: Serialize,
     {
-        self.vec.push(stry!(to_value(&value)));
+        self.vec.push(stry!(to_value(value)));
         Ok(())
     }
 
@@ -391,7 +391,7 @@ impl serde::ser::SerializeMap for SerializeMap {
                 let key = next_key.take();
                 // ALLOW: Panic because this indicates a bug in the program rather than an expected failure.
                 let key = key.expect("serialize_value called before serialize_key");
-                map.insert(key.into(), stry!(to_value(&value)));
+                map.insert(key.into(), stry!(to_value(value)));
                 Ok(())
             }
         }
@@ -615,7 +615,7 @@ impl serde::ser::SerializeStructVariant for SerializeStructVariant {
     where
         T: Serialize,
     {
-        self.map.insert(key.into(), stry!(to_value(&value)));
+        self.map.insert(key.into(), stry!(to_value(value)));
         Ok(())
     }
 
@@ -630,7 +630,7 @@ impl serde::ser::SerializeStructVariant for SerializeStructVariant {
 
 #[cfg(test)]
 mod tests {
-
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::prelude::*;
 
@@ -780,7 +780,7 @@ mod tests {
             NestedStruct {
                 key: "key".to_string(),
                 number: None,
-                tuple: ("".to_string(), false),
+                tuple: (String::new(), false),
             },
             3,
         ));
@@ -791,9 +791,9 @@ mod tests {
         let values = elems
             .first()
             .ok_or("struct in tuple in option not serialized correctly")?;
-        let key = values.get("key").ok_or(Error::Serde(
-            "struct fields not serialized correctly".to_string(),
-        ))?;
+        let key = values
+            .get("key")
+            .ok_or_else(|| Error::Serde("struct fields not serialized correctly".to_string()))?;
 
         assert_eq!(Some("key"), key.as_str());
         assert!(values
@@ -818,9 +818,9 @@ mod tests {
         let values = elems
             .first()
             .ok_or("struct in tuple in option not serialized correctly")?;
-        let key = values.get("key").ok_or(Error::Serde(
-            "struct fields not serialized correctly".to_string(),
-        ))?;
+        let key = values
+            .get("key")
+            .ok_or_else(|| Error::Serde("struct fields not serialized correctly".to_string()))?;
 
         assert_eq!(Some("key"), key.as_str());
         assert!(values
@@ -856,10 +856,10 @@ mod tests {
     fn serialize_tuple() -> Result<()> {
         #[derive(Serialize)]
         struct UnitStruct;
-
-        assert_eq!(Value::Static(StaticNode::Null), to_value(UnitStruct)?);
         #[derive(Serialize)]
         struct TupleStruct(UnitStruct, String);
+
+        assert_eq!(Value::Static(StaticNode::Null), to_value(UnitStruct)?);
 
         let t = (UnitStruct, TupleStruct(UnitStruct, "ABC".to_string()));
         let values = to_value(t)?;
@@ -903,17 +903,14 @@ mod tests {
         if let Value::Object(kvs) = to_value(empty.clone())? {
             assert_eq!(0, kvs.len());
         } else {
-            fail!("Failed to serialize empty map. Got {:?}", to_value(empty)?)
+            fail!("Failed to serialize empty map. Got {:?}", to_value(empty)?);
         }
         Ok(())
     }
 
     #[test]
     fn serialize_seq() -> Result<()> {
-        let mut vec = Vec::with_capacity(2);
-        vec.push(Some("bla"));
-        vec.push(Some(""));
-        vec.push(None);
+        let vec = vec![Some("bla"), Some(""), None];
         let v = to_value(vec)?;
         match v {
             Value::Array(elems) => {
@@ -928,14 +925,13 @@ mod tests {
     }
 
     #[test]
-    fn serialize_map_no_string_keys() -> Result<()> {
+    fn serialize_map_no_string_keys() {
         let mut map = std::collections::HashMap::with_capacity(2);
         map.insert(1_u8, "foo");
         match to_value(map) {
             Err(e) => assert_eq!("Key must be a String.".to_string(), e.to_string()),
             other => fail!("Did not fail for non-string map keys, got: {:?}", other),
         }
-        Ok(())
     }
 
     /*
@@ -969,13 +965,12 @@ mod tests {
     */
 
     #[test]
-    fn serialize_value_bytes() -> Result<()> {
+    fn serialize_value_bytes() {
         let bytes = Value::Bytes(Cow::borrowed(&[1, 2, 3]));
         let serialized = bytes.serialize(Serializer::default());
         assert!(serialized.is_ok());
 
         // stupidly asserting that it remains the same
         assert_eq!(bytes, serialized.unwrap());
-        Ok(())
     }
 }

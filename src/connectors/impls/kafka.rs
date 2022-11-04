@@ -391,7 +391,7 @@ mod tests {
                     "rx_msg_bytes": 42,
                     "consumer_lag": 0,
                 },
-                "timestamp": 100000000000_u64
+                "timestamp": 100_000_000_000_u64
             }),
             metrics_msg.suffix().value()
         );
@@ -399,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn closed_metrics_rx() -> Result<()> {
+    fn closed_metrics_rx() {
         let (ctx_tx, _ctx_rx) = bounded(1);
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, metrics_rx) = broadcast(1);
@@ -440,11 +440,10 @@ mod tests {
             eos: None,
         };
         ctx.stats(s);
-        Ok(())
     }
 
     #[test]
-    fn unknown_statistics_client_type() -> Result<()> {
+    fn unknown_statistics_client_type() {
         let (ctx_tx, _ctx_rx) = bounded(1);
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, metrics_rx) = broadcast(1);
@@ -458,12 +457,10 @@ mod tests {
         let s = Statistics::default();
         ctx.stats(s);
         assert!(metrics_rx.is_empty());
-
-        Ok(())
     }
 
     #[test]
-    fn log_coverage() -> Result<()> {
+    fn log_coverage() {
         let (ctx_tx, _ctx_rx) = bounded(1);
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, _metrics_rx) = broadcast(1);
@@ -491,7 +488,5 @@ mod tests {
         ctx.log(rdkafka::config::RDKafkaLogLevel::Notice, "consumer", "snot");
         ctx.log(rdkafka::config::RDKafkaLogLevel::Info, "consumer", "snot");
         ctx.log(rdkafka::config::RDKafkaLogLevel::Debug, "consumer", "snot");
-
-        Ok(())
     }
 }

@@ -15,7 +15,7 @@ use simd_json::ValueType;
 // limitations under the License.
 
 /// Documentation from constant
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstDoc {
     /// Constant name
     pub name: String,
@@ -143,7 +143,7 @@ impl ToString for FlowDoc {
 }
 
 /// Documentation from a module
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Eq)]
 pub struct Docs {
     /// Constants
     pub consts: Vec<ConstDoc>,

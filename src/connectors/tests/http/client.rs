@@ -47,23 +47,23 @@ struct TestHttpServer {
     acceptor: Option<JoinHandle<Result<()>>>,
 }
 
-async fn fake_server_dispatch(mut req: tide::Request<()>) -> tide::Result<tide::Response> {
+async fn fake_server_dispatch(mut reqest: tide::Request<()>) -> tide::Result<tide::Response> {
     use tide::StatusCode;
     let mut res = tide::Response::new(StatusCode::Ok);
-    dbg!(&req);
-    let chunked = req
+    dbg!(&reqest);
+    let chunked = reqest
         .header(TRANSFER_ENCODING)
         .map(HeaderValues::last)
         .filter(|hv| hv.as_str() == "chunked")
         .is_some();
 
-    let body = req.body_bytes().await?;
+    let body = reqest.body_bytes().await?;
 
     if chunked {
         res.set_content_type(http_types::mime::PLAIN);
         res.set_body(Body::from_reader(Cursor::new(body), None));
     } else {
-        if let Some(ct) = req.content_type() {
+        if let Some(ct) = reqest.content_type() {
             res.set_content_type(ct);
         }
         res.set_body(body);
@@ -640,9 +640,10 @@ async fn missing_tls_config_https() -> Result<()> {
     let res = ConnectorHarness::new(id, &http::client::Builder::default(), &defn)
         .await
         .err()
-        .unwrap();
+        .map(|e| e.to_string())
+        .unwrap_or_default();
 
-    assert_eq!("Invalid Definition for connector \"test::missing_tls_config_https\": missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config.", &res.to_string());
+    assert_eq!("Invalid Definition for connector \"test::missing_tls_config_https\": missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config.", res);
 
     Ok(())
 }
@@ -656,9 +657,10 @@ async fn missing_config() -> Result<()> {
     let res = ConnectorHarness::new(id, &http::client::Builder::default(), &defn)
         .await
         .err()
-        .unwrap();
+        .map(|e| e.to_string())
+        .unwrap_or_default();
 
-    assert!(res.to_string().contains("Missing Configuration"));
+    assert!(res.contains("Missing Configuration"));
 
     Ok(())
 }

@@ -165,7 +165,7 @@ impl Postprocessor for Base64 {
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(vec![base64::encode(&data).as_bytes().to_vec()])
+        Ok(vec![base64::encode(data).as_bytes().to_vec()])
     }
 }
 
@@ -235,12 +235,12 @@ mod test {
 
     #[test]
     fn test_lookup() {
-        for t in LOOKUP_TABLE.iter() {
+        for t in &LOOKUP_TABLE {
             dbg!(t);
             assert!(lookup(t).is_ok());
         }
         let t = "snot";
-        assert!(lookup(&t).is_err());
+        assert!(lookup(t).is_err());
     }
 
     #[test]
@@ -275,8 +275,8 @@ mod test {
     fn textual_length_prefix_postp() -> Result<()> {
         let mut post = TextualLength {};
         let data = vec![1_u8, 2, 3];
-        let encoded = post.process(42, 23, &data).unwrap().pop().unwrap();
-        assert_eq!("3 \u{1}\u{2}\u{3}", str::from_utf8(&encoded).unwrap());
+        let encoded = post.process(42, 23, &data)?.pop().unwrap_or_default();
+        assert_eq!("3 \u{1}\u{2}\u{3}", str::from_utf8(&encoded)?);
         assert!(post.finish(None)?.is_empty());
         Ok(())
     }

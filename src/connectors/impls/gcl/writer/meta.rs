@@ -175,12 +175,12 @@ mod test {
             LogSeverity::Default as i32,
             config.log_severity(Some(&meta))?
         );
-        assert_eq!("".to_string(), insert_id(Some(&meta)));
+        assert_eq!(String::new(), insert_id(Some(&meta)));
         assert_eq!(None, http_request(Some(&meta)));
         assert_eq!(StdHashMap::new(), Config::labels(Some(&meta)));
         assert_eq!(None, operation(Some(&meta)));
-        assert_eq!("".to_string(), trace(Some(&meta)));
-        assert_eq!("".to_string(), span_id(Some(&meta)));
+        assert_eq!(String::new(), trace(Some(&meta)));
+        assert_eq!(String::new(), span_id(Some(&meta)));
         assert_eq!(false, trace_sampled(Some(&meta))?);
         assert_eq!(None, source_location(Some(&meta)));
 
@@ -268,22 +268,22 @@ mod test {
                 "protocol": "websocket"
             }
         });
-        if let Some(_http_request) = http_request(Some(&meta)) {
-            assert_eq!("GET", _http_request.request_method);
-            assert_eq!("https://www.tremor.rs/", _http_request.request_url);
-            assert_eq!(0, _http_request.request_size);
-            assert_eq!(200, _http_request.status);
-            assert_eq!(1024, _http_request.response_size);
-            assert_eq!("Tremor/v12", _http_request.user_agent);
-            assert_eq!("3.125.16.34", _http_request.remote_ip);
-            assert_eq!("127.0.0.1", _http_request.server_ip);
-            assert_eq!("", _http_request.referer);
+        if let Some(http_request) = http_request(Some(&meta)) {
+            assert_eq!("GET", http_request.request_method);
+            assert_eq!("https://www.tremor.rs/", http_request.request_url);
+            assert_eq!(0, http_request.request_size);
+            assert_eq!(200, http_request.status);
+            assert_eq!(1024, http_request.response_size);
+            assert_eq!("Tremor/v12", http_request.user_agent);
+            assert_eq!("3.125.16.34", http_request.remote_ip);
+            assert_eq!("127.0.0.1", http_request.server_ip);
+            assert_eq!("", http_request.referer);
             //                assert_eq!(100_000_000u64, _http_request.latency.into());
-            assert_eq!(false, _http_request.cache_lookup);
-            assert_eq!(false, _http_request.cache_hit);
-            assert_eq!(false, _http_request.cache_validated_with_origin_server);
-            assert_eq!(0, _http_request.cache_fill_bytes);
-            assert_eq!("websocket", _http_request.protocol);
+            assert_eq!(false, http_request.cache_lookup);
+            assert_eq!(false, http_request.cache_hit);
+            assert_eq!(false, http_request.cache_validated_with_origin_server);
+            assert_eq!(0, http_request.cache_fill_bytes);
+            assert_eq!("websocket", http_request.protocol);
             ok_count += 1;
         };
 
@@ -305,8 +305,8 @@ mod test {
                 "protocol": "websocket"
             }
         });
-        if let Some(_http_request) = http_request(Some(&meta)) {
-            assert_eq!(None, _http_request.latency);
+        if let Some(http_request) = http_request(Some(&meta)) {
+            assert_eq!(None, http_request.latency);
             ok_count += 1;
         }
 

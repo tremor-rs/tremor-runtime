@@ -906,7 +906,7 @@ impl<'script> ImutExpr<'script> {
             let replacement = stry!(expr.expr.run(opts, env, event, state, meta, local));
 
             if replacement.is_object() {
-                stry!(merge_values(self, &expr.expr, &mut value, &replacement));
+                stry!(merge_values(&mut value, &replacement));
                 Ok(Cow::Owned(value))
             } else {
                 error_need_obj(self, &expr.expr, replacement.value_type())

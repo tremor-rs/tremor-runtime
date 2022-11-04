@@ -71,7 +71,7 @@ mod tests {
             let r = f.invoke(&context, &[]);
             assert!(r.is_ok());
         } else {
-            assert!(false, "unknown function error for cncf_otel extension");
+            panic!("unknown function error for cncf_otel extension");
         }
     }
 }

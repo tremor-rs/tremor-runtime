@@ -83,13 +83,15 @@ impl ConnectorBuilder for Builder {
 
 #[cfg(test)]
 mod tests {
+    use tremor_common::ids::SinkId;
+
     use super::*;
-    use crate::connectors::metrics::SinkReporter;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::sink::builder;
+    use crate::connectors::{metrics::SinkReporter, utils::quiescence::QuiescenceBeacon};
 
     #[async_std::test]
-    pub async fn can_spawn_sink() {
+    pub async fn can_spawn_sink() -> Result<()> {
         let mut connector = Gbq {
             config: Config {
                 table_id: "test".into(),
@@ -102,10 +104,10 @@ mod tests {
         let sink_address = connector
             .create_sink(
                 SinkContext {
-                    uid: Default::default(),
+                    uid: SinkId::default(),
                     alias: Alias::new("a", "b"),
-                    connector_type: Default::default(),
-                    quiescence_beacon: Default::default(),
+                    connector_type: ConnectorType::default(),
+                    quiescence_beacon: QuiescenceBeacon::default(),
                     notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
                 },
                 builder(
@@ -114,11 +116,10 @@ mod tests {
                     &Alias::new("a", "b"),
                     128,
                     SinkReporter::new(Alias::new("a", "b"), async_broadcast::broadcast(1).0, None),
-                )
-                .unwrap(),
+                )?,
             )
-            .await
-            .unwrap();
+            .await?;
         assert!(sink_address.is_some());
+        Ok(())
     }
 }

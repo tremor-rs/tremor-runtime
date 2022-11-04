@@ -103,14 +103,10 @@ mod tests {
     pub fn removes_expired_entries() {
         let start_time = SystemTime::now();
         let mut hashmap = BlueGreenHashMap::new(Duration::from_secs(10), start_time);
-        hashmap.insert("a".to_string(), "b", start_time.clone());
+        hashmap.insert("a".to_string(), "b", start_time);
 
         // GC is performed on insertion of the next element
-        hashmap.insert(
-            "b".to_string(),
-            "c",
-            start_time.clone() + Duration::from_secs(20),
-        );
+        hashmap.insert("b".to_string(), "c", start_time + Duration::from_secs(20));
 
         assert_eq!(None, hashmap.remove(&"a".to_string()));
         assert_eq!(Some("c"), hashmap.remove(&"b".to_string()));

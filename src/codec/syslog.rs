@@ -358,7 +358,7 @@ mod test {
     struct TestNow {}
     impl Now for TestNow {
         fn now(&self) -> DateTime<Utc> {
-            Utc.ymd(1970, 01, 01).and_hms(0, 0, 0)
+            Utc.ymd(1970, 1, 1).and_hms(0, 0, 0)
         }
     }
 
@@ -371,9 +371,9 @@ mod test {
         let mut s = b"<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut=\"3\" eventSource= \"Application\" eventID=\"1011\"][examplePriority@32473 class=\"high\"] BOMAn application event log entry...".to_vec();
 
         let mut codec = test_codec();
-        let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap();
+        let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap_or_default();
         let mut a = codec.encode(&decoded)?;
-        let b = codec.decode(a.as_mut_slice(), 0)?.unwrap();
+        let b = codec.decode(a.as_mut_slice(), 0)?.unwrap_or_default();
         assert_eq!(decoded, b);
         Ok(())
     }
@@ -382,7 +382,7 @@ mod test {
     fn test_decode_empty() -> Result<()> {
         let mut s = b"<191>1 2021-03-18T20:30:00.123Z - - - - - message".to_vec();
         let mut codec = test_codec();
-        let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap();
+        let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap_or_default();
         let expected = literal!({
             "severity": "debug",
             "facility": "local7",
@@ -402,11 +402,11 @@ mod test {
     fn decode_invalid_message() -> Result<()> {
         let mut msg = b"an invalid message".to_vec();
         let mut codec = test_codec();
-        let decoded = codec.decode(msg.as_mut_slice(), 0)?.unwrap();
-        let expected = Value::from(literal!({
+        let decoded = codec.decode(msg.as_mut_slice(), 0)?.unwrap_or_default();
+        let expected = literal!({
             "msg": "an invalid message",
             "protocol": "RFC3164",
-        }));
+        });
         assert_eq!(
             tremor_script::utils::sorted_serialize(&expected)?,
             tremor_script::utils::sorted_serialize(&decoded)?
@@ -427,15 +427,15 @@ mod test {
         });
         let mut encoded = codec.encode(&msg)?;
         let expected = "<165>1 1970-01-01T00:00:00+00:00 - - - - - test message";
-        assert_eq!(std::str::from_utf8(&encoded).unwrap(), expected);
-        let decoded = codec.decode(&mut encoded, 0)?.unwrap();
+        assert_eq!(std::str::from_utf8(&encoded)?, expected);
+        let decoded = codec.decode(&mut encoded, 0)?.unwrap_or_default();
         assert_eq!(msg, decoded);
 
         Ok(())
     }
 
     #[test]
-    fn encode_invalid_facility() -> Result<()> {
+    fn encode_invalid_facility() {
         let codec = test_codec();
         let msg = literal!({
             "severity": "notice",
@@ -446,12 +446,10 @@ mod test {
             "timestamp": 0_u64
         });
         assert!(codec.encode(&msg).is_err());
-
-        Ok(())
     }
 
     #[test]
-    fn encode_invalid_severity() -> Result<()> {
+    fn encode_invalid_severity() {
         let codec = test_codec();
         let msg = literal!({
             "severity": "snot",
@@ -462,12 +460,10 @@ mod test {
             "timestamp": 0_u64
         });
         assert!(codec.encode(&msg).is_err());
-
-        Ok(())
     }
 
     #[test]
-    fn encode_rfc5424_missing_version() -> Result<()> {
+    fn encode_rfc5424_missing_version() {
         let codec = test_codec();
         let msg = literal!({
             "severity": "debug",
@@ -477,11 +473,10 @@ mod test {
             "timestamp": 0_u64
         });
         assert!(codec.encode(&msg).is_err());
-        Ok(())
     }
 
     #[test]
-    fn encode_missing_protocol() -> Result<()> {
+    fn encode_missing_protocol() {
         let codec = test_codec();
         let msg = literal!({
             "severity": "notice",
@@ -491,11 +486,10 @@ mod test {
             "timestamp": 0_u64
         });
         assert!(codec.encode(&msg).is_err());
-        Ok(())
     }
 
     #[test]
-    fn encode_invalid_protocol() -> Result<()> {
+    fn encode_invalid_protocol() {
         let codec = test_codec();
         let msg = literal!({
             "severity": "notice",
@@ -505,7 +499,6 @@ mod test {
             "timestamp": 0_u64
         });
         assert!(codec.encode(&msg).is_err());
-        Ok(())
     }
 
     #[test]
@@ -519,7 +512,7 @@ mod test {
         }));
         let encoded = codec.encode(&msg)?;
         let expected = "<165>Jan  1 00:00:00 - : test message";
-        assert_eq!(std::str::from_utf8(&encoded).unwrap(), expected);
+        assert_eq!(std::str::from_utf8(&encoded)?, expected);
         Ok(())
     }
 
@@ -529,7 +522,7 @@ mod test {
             b"<13>1 2021-03-18T20:30:00.123Z 74794bfb6795 root 8449 - [incorrect x] message"
                 .to_vec();
         let mut codec = test_codec();
-        let decoded = codec.decode(msg.as_mut_slice(), 0)?.unwrap();
+        let decoded = codec.decode(msg.as_mut_slice(), 0)?.unwrap_or_default();
         let expected = literal!({
             "hostname": "74794bfb6795",
             "severity": "notice",
@@ -552,7 +545,7 @@ mod test {
     fn test_invalid_sd_3164() -> Result<()> {
         let mut s: Vec<u8> = r#"<46>Jan  5 15:33:03 plertrood-ThinkPad-X220 rsyslogd:  [software="rsyslogd" swVersion="8.32.0"] message"#.as_bytes().to_vec();
         let mut codec = test_codec();
-        let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap();
+        let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap_or_default();
         // we use the current year for this shitty old format
         // to not have to change this test every year, we use the current one for the expected timestamp
         let year = chrono::Utc::now().year();
@@ -565,7 +558,7 @@ mod test {
             "appname": "rsyslogd",
             "msg": "[software=\"rsyslogd\" swVersion=\"8.32.0\"] message",
             "protocol": "RFC3164",
-            "timestamp": timestamp.timestamp_nanos() as u64
+            "timestamp": timestamp.timestamp_nanos()
         });
         assert_eq!(
             tremor_script::utils::sorted_serialize(&expected)?,
@@ -575,26 +568,39 @@ mod test {
     }
 
     #[test]
-    fn errors() {
+    fn errors() -> Result<()> {
         let mut o = Value::object();
         let codec = test_codec();
         assert_eq!(
-            codec.encode(&o).err().unwrap().to_string(),
+            codec
+                .encode(&o)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
             "Invalid Syslog Protocol data: facility missing"
         );
 
-        o.insert("facility", "cron").unwrap();
+        o.insert("facility", "cron")?;
         assert_eq!(
-            codec.encode(&o).err().unwrap().to_string(),
+            codec
+                .encode(&o)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
             "Invalid Syslog Protocol data: severity missing"
         );
 
-        o.insert("severity", "info").unwrap();
-        o.insert("structured_data", "sd").unwrap();
+        o.insert("severity", "info")?;
+        o.insert("structured_data", "sd")?;
         assert_eq!(
-            codec.encode(&o).err().unwrap().to_string(),
+            codec
+                .encode(&o)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
             "Invalid Syslog Protocol data: Invalid structured data: structured data not an object"
         );
+        Ok(())
     }
 
     #[test_case(r#"<34>Oct 11 22:14:15 mymachine su: 'su root' failed for lonvick on /dev/pts/8"#, None => Ok(()); "Example 1")]
@@ -606,7 +612,7 @@ mod test {
     fn rfc3164_examples(sample: &'static str, expected: Option<&'static str>) -> Result<()> {
         let mut codec = test_codec();
         let mut vec = sample.as_bytes().to_vec();
-        let decoded = codec.decode(&mut vec, 0)?.unwrap();
+        let decoded = codec.decode(&mut vec, 0)?.unwrap_or_default();
         let a = codec.encode(&decoded)?;
         if let Some(expected) = expected {
             // compare against expected output
@@ -631,7 +637,7 @@ mod test {
     fn rfc5424_examples(sample: &'static str, expected: &'static str) -> Result<()> {
         let mut codec = test_codec();
         let mut vec = sample.as_bytes().to_vec();
-        let decoded = codec.decode(&mut vec, 0)?.unwrap();
+        let decoded = codec.decode(&mut vec, 0)?.unwrap_or_default();
         let a = codec.encode(&decoded)?;
         assert_eq!(expected, std::str::from_utf8(&a)?);
         Ok(())

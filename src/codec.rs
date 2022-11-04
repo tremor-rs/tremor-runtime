@@ -139,9 +139,6 @@ mod test {
         assert!(super::resolve(&"dogstatsd".into()).is_ok());
         assert!(super::resolve(&"yaml".into()).is_ok());
         assert!(super::resolve(&"syslog".into()).is_ok());
-        assert_eq!(
-            super::resolve(&"snot".into()).err().unwrap().to_string(),
-            "Codec \"snot\" not found."
-        )
+        assert!(super::resolve(&"snot".into()).is_err(),);
     }
 }

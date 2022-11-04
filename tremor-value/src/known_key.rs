@@ -33,7 +33,7 @@ impl<'key> std::fmt::Display for KnownKey<'key> {
 }
 
 /// Error for known keys
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub enum Error {
     /// The target passed wasn't an object
     NotAnObject(ValueType),
@@ -399,7 +399,12 @@ impl<'script> KnownKey<'script> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unnecessary_operation, clippy::non_ascii_literal)]
+    #![allow(
+        clippy::unnecessary_operation,
+        clippy::non_ascii_literal,
+        clippy::unwrap_used
+    )]
+
     use super::*;
     use beef::Cow;
     use value_trait::Builder;

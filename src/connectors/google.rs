@@ -160,7 +160,7 @@ pub(crate) mod tests {
     }
 
     /// Some random generated private key that isn't used anywhere else
-    const PRIVATE_KEY: &'static str = "-----BEGIN PRIVATE KEY-----
+    const PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC/SZoFm3528gDJ
 vMQBeTGm6dohSfqstFoYYVtGEDGnt9GwkjbJcnIAIiON+Qw7wV5v24UFJKQ8Eg/q
 Jf8bF0PT6yvSW+cof/94OgGz/PyPwrHVGniEy2Wbe1qYkDaQfxDzyPP5hKetmoof
@@ -215,7 +215,7 @@ PX8efvDMhv16QqDFF0k80d0=
             Ok(simd_json::serde::to_string_pretty(&TokenResponse {
                 token_type: "snot".to_string(),
                 access_token: "access_token".to_string(),
-                expires_in: 1_00_000_000,
+                expires_in: 100_000_000,
             })?)
         });
         let server_handle = async_std::task::spawn(async move {
@@ -237,34 +237,33 @@ PX8efvDMhv16QqDFF0k80d0=
     #[test]
     fn appease_the_coverage_gods() {
         let provider = GouthTokenProvider::default();
-        let mut provider = provider.clone();
+        let mut provider = provider;
         assert!(provider.get_token().is_err());
 
         let provider = FailingTokenProvider::default();
-        let mut provider = provider.clone();
+        let mut provider = provider;
         assert!(provider.get_token().is_err());
     }
 
     #[test]
-    fn interceptor_can_add_the_auth_header() {
+    fn interceptor_can_add_the_auth_header() -> Result<()> {
         let mut interceptor = AuthInterceptor {
             token_provider: TestTokenProvider::new_with_token(Arc::new("test".to_string())),
         };
         let request = Request::new(());
 
-        let result = interceptor.call(request).unwrap();
+        let result = interceptor.call(request)?;
 
-        assert_eq!(result.metadata().get("authorization").unwrap(), "test");
+        assert!(result
+            .metadata()
+            .get("authorization")
+            .map(|m| m == "test")
+            .unwrap_or_default());
+        Ok(())
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Default)]
     struct FailingTokenProvider {}
-
-    impl Default for FailingTokenProvider {
-        fn default() -> Self {
-            Self {}
-        }
-    }
 
     impl TokenProvider for FailingTokenProvider {
         fn get_token(&mut self) -> std::result::Result<Arc<String>, Status> {
@@ -281,7 +280,7 @@ PX8efvDMhv16QqDFF0k80d0=
 
         let result = interceptor.call(request);
 
-        assert_eq!(result.unwrap_err().message(), "boo");
+        assert!(result.is_err());
     }
 
     #[test]

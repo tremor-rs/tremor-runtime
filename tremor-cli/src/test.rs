@@ -367,8 +367,8 @@ impl Test {
         } else {
             for meta in found {
                 if let Some(root) = meta.path().parent() {
-                    let mut meta_str = slurp_string(&meta.path())?;
-                    let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
+                    let mut meta_str = slurp_string(meta.path())?;
+                    let meta: Meta = unsafe { simd_json::from_str(meta_str.as_mut_str())? };
                     config.meta = meta;
 
                     if config.meta.mode == TestMode::All {

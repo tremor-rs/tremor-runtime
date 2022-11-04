@@ -268,14 +268,16 @@ mod test {
     }
 
     #[test]
-    fn from_config_invalid_separator() -> Result<()> {
+    fn from_config_invalid_separator() {
         let config = Some(literal!({
         "separator": "abc"
         }));
-        let res = Separate::from_config(&config).err().unwrap();
+        let res = Separate::from_config(&config)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
 
-        assert_eq!("Invalid Configuration for split preprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res.to_string().as_str());
-        Ok(())
+        assert_eq!("Invalid Configuration for split preprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res);
     }
 
     #[test]
@@ -286,15 +288,15 @@ mod test {
         // Test simple split
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // split test
         assert!(pp.process(&mut i, b"012345")?.is_empty());
         let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
@@ -304,8 +306,8 @@ mod test {
         // Test if we still work with new data
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
@@ -315,8 +317,8 @@ mod test {
         // Test if we still work with new data
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
         assert!(pp.finish(None)?.is_empty());
 
@@ -331,15 +333,15 @@ mod test {
         // Test simple split
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // split test
         assert!(pp.process(&mut i, b"012345")?.is_empty());
         let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
@@ -349,8 +351,8 @@ mod test {
         // Test if we still work with new data
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
@@ -367,15 +369,15 @@ mod test {
         // Test simple split
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // split test
         assert!(pp.process(&mut i, b"012345")?.is_empty());
         let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
@@ -385,8 +387,8 @@ mod test {
         // Test if we still work with new data
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
         assert!(pp.finish(None)?.is_empty());
 
@@ -401,15 +403,15 @@ mod test {
         // Test simple split
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // split test
         assert!(pp.process(&mut i, b"012345")?.is_empty());
         let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
@@ -428,15 +430,15 @@ mod test {
         // Test simple split
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         // split test
         assert!(pp.process(&mut i, b"012345")?.is_empty());
         let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         Ok(())
@@ -451,8 +453,8 @@ mod test {
         // Test simple split
         let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         Ok(())
@@ -464,10 +466,10 @@ mod test {
         let mut i = 0_u64;
 
         // Test simple split
-        let mut r = pp.process(&mut i, b"012345\00123456789\0")?;
+        let mut r = pp.process(&mut i, b"012345\x000123456789\x00")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         Ok(())
@@ -498,9 +500,9 @@ mod test {
         // Test simple split
         let mut r = pp.process(&mut i, b"012345\n0123456789\nabc\n")?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap(), b"abc");
-        assert_eq!(r.pop().unwrap(), b"0123456789");
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"abc");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
         let r = pp.finish(None)?;
         assert!(r.is_empty());
@@ -515,12 +517,12 @@ mod test {
 
         // both split and buffer
         let mut r = pp.process(&mut i, b"0123456789\n012345")?;
-        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
         assert!(r.is_empty());
 
         // test picking up from the buffer
         let mut r = pp.process(&mut i, b"\n")?;
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
         assert!(pp.finish(None)?.is_empty());
 
@@ -534,16 +536,16 @@ mod test {
 
         // both split and buffer
         let mut r = pp.process(&mut i, b"0123456789\n012345")?;
-        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
         assert!(r.is_empty());
 
         // pick up from the buffer and add to buffer
         let mut r = pp.process(&mut i, b"\nabc")?;
-        assert_eq!(r.pop().unwrap(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345");
         assert!(r.is_empty());
 
         let mut r = pp.finish(None)?;
-        assert_eq!(r.pop().unwrap(), b"abc");
+        assert_eq!(r.pop().unwrap_or_default(), b"abc");
         assert!(r.is_empty());
 
         Ok(())
@@ -556,12 +558,12 @@ mod test {
 
         // both split and buffer
         let mut r = pp.process(&mut i, b"0123456789\n012345")?;
-        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
         assert!(r.is_empty());
 
         // pick up from the buffer and add to buffer as well
         let mut r = pp.process(&mut i, b"abc\n")?;
-        assert_eq!(r.pop().unwrap(), b"012345abc");
+        assert_eq!(r.pop().unwrap_or_default(), b"012345abc");
         assert!(r.is_empty());
 
         Ok(())
@@ -574,15 +576,15 @@ mod test {
 
         let data = b"123\n456";
         let mut r = pp.process(&mut ingest_ns, data)?;
-        assert_eq!(r.pop().unwrap(), b"123");
+        assert_eq!(r.pop().unwrap_or_default(), b"123");
         assert!(r.is_empty());
 
         assert!(pp.process(&mut ingest_ns, b"7890")?.is_empty());
         let mut r = pp.process(&mut ingest_ns, data)?;
-        assert_eq!(r.pop().unwrap(), b"4567890123");
+        assert_eq!(r.pop().unwrap_or_default(), b"4567890123");
         assert!(r.is_empty());
         let mut r = pp.finish(None)?;
-        assert_eq!(r.pop().unwrap(), b"456");
+        assert_eq!(r.pop().unwrap_or_default(), b"456");
         assert!(r.is_empty());
         assert!(pp.buffer.is_empty());
         Ok(())

@@ -28,7 +28,7 @@ byteorder = "1.4"
 chrono = "0.4"
 cidr-utils = "0.5"
 codespan = "0.11"
-dissect = "0.4"
+dissect = "0.5"
 distance = "0.4"
 downcast-rs = "1.2"
 error-chain = "0.12"
@@ -48,18 +48,18 @@ rand = { version = "0.8", features = ["small_rng"] }
 regex = "1"
 serde = "1.0"
 serde_derive = "1.0"
-simd-json = { version = "0.6", features = ["known-key"] }
-simd-json-derive = "0.6"
+simd-json = { version = "0.7", features = ["known-key"] }
+simd-json-derive = "0.7"
 sketches-ddsketch = "0.2.0"
 strip-ansi-escapes = "0.1"
 termcolor = "1.1"
 tremor-common = { version = "0.13.0-rc.8", path = "../tremor-common" }
 tremor-influx = { version = "0.13.0-rc.8", path = "../tremor-influx" }
-tremor-kv = "0.4.0"
 tremor-value = { version = "0.13.0-rc.8", path = "../tremor-value" }
+tremor-kv = "0.5"
 unicode-xid = "0.2"
 url = "2"
-value-trait = "0.4"
+value-trait = "0.5"
 xz2 = "0.1"
 
 [build-dependencies]

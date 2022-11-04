@@ -82,6 +82,7 @@ pub fn extension(path: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::unwrap_used)]
     use crate::errors::Error;
 
     #[test]

@@ -97,7 +97,7 @@ pub(crate) async fn suite_command(
             }
 
             let suite_start = nanotime();
-            let command_str = slurp_string(&suite.path())?;
+            let command_str = slurp_string(suite.path())?;
             let suite = serde_yaml::from_str::<CommandRun>(&command_str)?;
             let mut header_printed = false;
             for suite in suite.suites {

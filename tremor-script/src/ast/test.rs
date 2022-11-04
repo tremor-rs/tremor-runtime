@@ -11,11 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use matches::assert_matches;
-
+#![allow(clippy::unwrap_used)]
 use super::*;
 use crate::{CustomFn, NodeMeta};
+use matches::assert_matches;
 
 fn v(s: &'static str) -> ImutExpr<'static> {
     ImutExpr::literal(NodeMeta::dummy(), Value::from(s))
@@ -243,6 +242,7 @@ fn replace_last_shadow_use() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn pp_is_exclusive() {
     let eq = PredicatePattern::Bin {
         lhs: "k1".into(),
@@ -333,7 +333,7 @@ fn pp_is_exclusive() {
             extractor: Extractor::Suffix("ake".into()),
         }),
     };
-    let teq2 = PredicatePattern::TildeEq {
+    let test_eq2 = PredicatePattern::TildeEq {
         lhs: "k2".into(),
         assign: "k".into(),
         key: "k2".into(),
@@ -356,11 +356,11 @@ fn pp_is_exclusive() {
         }),
     };
     assert!(
-        !teq.is_exclusive_to(&teq2),
+        !teq.is_exclusive_to(&test_eq2),
         "~= is not exclusive on different keys"
     );
     assert!(
-        !teq2.is_exclusive_to(&teq),
+        !test_eq2.is_exclusive_to(&teq),
         "~= is not exclusive on different keys"
     );
     assert!(

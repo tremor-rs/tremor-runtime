@@ -94,11 +94,11 @@ mod tests {
         assert_eq!(0, buffer.start());
 
         assert_eq!(
-            BufferPart {
+            Some(BufferPart {
                 data: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                 start: 0,
-            },
-            buffer.read_current_block().unwrap()
+            }),
+            buffer.read_current_block()
         );
     }
 
@@ -111,27 +111,28 @@ mod tests {
     }
 
     #[test]
-    pub fn chunked_buffer_marking_as_done_removes_data() {
+    pub fn chunked_buffer_marking_as_done_removes_data() -> Result<()> {
         let mut buffer = ChunkedBuffer::new(10);
         buffer.write((1..=15).collect::<Vec<u8>>());
 
-        buffer.mark_done_until(5).unwrap();
+        buffer.mark_done_until(5)?;
 
         assert_eq!(
-            BufferPart {
+            Some(BufferPart {
                 data: (6..=15).collect::<Vec<u8>>(),
                 start: 5,
-            },
-            buffer.read_current_block().unwrap()
+            }),
+            buffer.read_current_block()
         );
+        Ok(())
     }
 
     #[test]
-    pub fn chunked_buffer_returns_all_the_data_in_the_final_block() {
+    pub fn chunked_buffer_returns_all_the_data_in_the_final_block() -> Result<()> {
         let mut buffer = ChunkedBuffer::new(10);
         buffer.write((1..=16).collect::<Vec<u8>>());
 
-        buffer.mark_done_until(5).unwrap();
+        buffer.mark_done_until(5)?;
         assert_eq!(
             BufferPart {
                 data: (6..=16).collect::<Vec<u8>>(),
@@ -139,5 +140,6 @@ mod tests {
             },
             buffer.reset()
         );
+        Ok(())
     }
 }

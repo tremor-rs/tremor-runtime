@@ -234,11 +234,7 @@ impl CbSource {
             let mut received = 0;
             for (stream, max_pull_id) in self.received_cbs.max() {
                 if let Some(last_sent_pull_id) = self.last_sent.get(&stream) {
-                    received += if *last_sent_pull_id == max_pull_id {
-                        1
-                    } else {
-                        0
-                    }
+                    received += usize::from(*last_sent_pull_id == max_pull_id);
                 }
             }
             received == self.last_sent.len()

@@ -95,7 +95,7 @@ mod tests {
         let codec = Csv {};
         let data = literal!(["a", "b", "c", 123]);
 
-        let result = codec.encode(&data).unwrap();
+        let result = codec.encode(&data).unwrap_or_default();
 
         assert_eq!(b"a,b,c,123".to_vec(), result);
     }

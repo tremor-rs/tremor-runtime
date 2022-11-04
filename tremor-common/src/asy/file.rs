@@ -84,6 +84,7 @@ pub use crate::file::extension;
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::unwrap_used)]
     use crate::errors::Error;
 
     #[async_std::test]

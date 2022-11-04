@@ -94,8 +94,8 @@ rmp-serde = "1.1"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.9"
-simd-json = { version = "0.6", features = ["known-key"] }
-simd-json-derive = "0.6"
+simd-json = { version = "0.7", features = ["known-key"] }
+simd-json-derive = "0.7"
 snap = "1"
 
 syslog_loose = "0.18"
@@ -105,7 +105,7 @@ tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
 url = "2.3"
-value-trait = "0.4"
+value-trait = "0.5"
 zstd = "0.11"
 
 # blaster / blackhole
