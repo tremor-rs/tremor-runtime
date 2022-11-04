@@ -536,13 +536,7 @@ where
             // if not we've to store it in a local shadow variable
             match expr.run(opts, env, event, state, meta, local)? {
                 Cow::Borrowed(p) => p,
-                Cow::Owned(o) => {
-                    debug_assert!(
-                        *var != 0,
-                        "We have an invalid local variable id in this ExprPath"
-                    );
-                    set_local_shadow(outer, local, *var, o)?
-                }
+                Cow::Owned(o) => set_local_shadow(outer, local, *var, o)?,
             }
         }
         Path::Reserved(ReservedPath::Args { .. }) => env.consts.args,
