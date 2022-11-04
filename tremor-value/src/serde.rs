@@ -27,6 +27,7 @@ pub use self::value::*;
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::unwrap_used)]
     use crate::Value;
     use simd_json::json;
     use simd_json::json_typed;

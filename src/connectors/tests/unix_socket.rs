@@ -84,7 +84,7 @@ async fn unix_socket() -> Result<()> {
 
     let socket1_meta = meta.get("unix_socket_server");
 
-    let socket1_id: u64 = socket1_meta.get_u64("peer").unwrap();
+    let socket1_id: u64 = socket1_meta.get_u64("peer").unwrap_or_default();
 
     // lets send an event and route it via metadata to socket 1
     let meta = literal!({

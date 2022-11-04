@@ -38,6 +38,7 @@ pub fn substr<I: SliceIndex<[u8], Output = [u8]>>(data: &[u8], r: I) -> Result<&
 }
 
 mod test {
+    #![allow(clippy::unwrap_used)]
 
     #[test]
     fn test_subslice() {

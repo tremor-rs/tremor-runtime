@@ -24,7 +24,7 @@ async fn file_connector() -> Result<()> {
 
     let input_path = Path::new(file!())
         .parent()
-        .unwrap()
+        .ok_or("bad path")?
         .join("../../..")
         .join("tests")
         .join("data")
@@ -50,7 +50,7 @@ async fn file_connector() -> Result<()> {
     let meta = event.data.suffix().meta();
 
     // value
-    assert_eq!("snot", value.as_str().unwrap());
+    assert_eq!(Some("snot"), value.as_str());
     // meta
     assert_eq!(
         literal!({
@@ -64,7 +64,7 @@ async fn file_connector() -> Result<()> {
     let event2 = out.get_event().await?;
     assert_eq!(1, event2.len());
     let data = event2.data.suffix().value();
-    assert_eq!("badger", data.as_str().unwrap());
+    assert_eq!(Some("badger"), data.as_str());
 
     let (out_events, err_events) = harness.stop().await?;
     assert!(

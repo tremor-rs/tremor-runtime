@@ -151,6 +151,7 @@ impl<'input> Deserialize<'input> for Value<'input> {
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use simd_json_derive::{Deserialize, Serialize};
     #[test]

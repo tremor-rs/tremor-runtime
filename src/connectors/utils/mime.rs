@@ -93,12 +93,10 @@ impl Default for MimeCodecMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::Result;
     #[test]
-    fn get_mime_type() -> Result<()> {
+    fn get_mime_type() {
         let map = MimeCodecMap::default();
-        let csv = Some(String::from("text/csv"));
+        let csv = Some("text/csv".to_string());
         assert_eq!(csv.as_ref(), map.get_mime_type("csv"));
-        Ok(())
     }
 }

@@ -53,6 +53,8 @@ pub use errors::*;
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use pretty_assertions::assert_eq;
     use simd_json::{json, BorrowedValue};
@@ -74,7 +76,7 @@ mod tests {
         })
         .into();
 
-        assert_eq!(e, j)
+        assert_eq!(e, j);
     }
 
     #[test]
@@ -120,7 +122,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -138,7 +140,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -165,7 +167,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_u64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -196,7 +198,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -211,7 +213,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -228,7 +230,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
     #[test]
     fn parse_true_value() {
@@ -292,7 +294,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -309,7 +311,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
     #[test]
     fn parse_escape03() {
@@ -325,7 +327,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -342,7 +344,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
     #[test]
     fn parse_escape05() {
@@ -358,7 +360,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -375,7 +377,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -409,7 +411,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_202_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -427,7 +429,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_203_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 
     #[test]
@@ -445,7 +447,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_204_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
     #[test]
     fn parse_escape11() {
@@ -463,7 +465,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_205_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
     #[test]
     fn parse_escape12() {
@@ -479,6 +481,6 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_206_i64,
         })
         .into();
-        assert_eq!(Ok(Some(r)), decode(s, 0))
+        assert_eq!(Ok(Some(r)), decode(s, 0));
     }
 }

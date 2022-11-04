@@ -272,7 +272,7 @@ where
     let search = |c| p(c) || c == '\\';
 
     #[allow(clippy::option_if_let_else)] // cannot use map_or_else because borrow-checker
-    if let Some((idx, data, rest)) = split_once(input, &search) {
+    if let Some((idx, data, rest)) = split_once(input, search) {
         input = rest;
         if let Some(rest) = input.strip_prefix('\\') {
             input = rest;
@@ -309,7 +309,7 @@ where
 {
     let search = |c| p(c) || c == '\\';
     loop {
-        if let Some((idx, data, rest)) = split_once(input, &search) {
+        if let Some((idx, data, rest)) = split_once(input, search) {
             input = rest;
             offset += idx;
             if let Some(rest) = input.strip_prefix('\\') {

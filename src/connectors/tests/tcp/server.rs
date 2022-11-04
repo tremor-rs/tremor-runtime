@@ -55,15 +55,15 @@ async fn server_event_routing() -> Result<()> {
     let tcp_server_meta = meta.get("tcp_server");
     assert_eq!(Some(false), tcp_server_meta.get_bool("tls"));
 
-    let peer_obj = tcp_server_meta.get_object("peer").unwrap();
-    assert!(peer_obj.contains_key("host"));
-    assert!(peer_obj.contains_key("port"));
+    let peer = tcp_server_meta.get("peer");
+    assert!(peer.contains_key("host"));
+    assert!(peer.contains_key("port"));
     // lets send an event and route it via metadata to socket 1
     let meta = literal!({
         "tcp_server": {
             "peer": {
-                "host": peer_obj.get("host").unwrap().clone_static(),
-                "port": peer_obj.get("port").unwrap().clone_static()
+                "host": peer.get("host").map(Value::clone_static),
+                "port": peer.get("port").map(Value::clone_static)
             }
         }
     });
@@ -99,9 +99,7 @@ async fn server_event_routing() -> Result<()> {
     let bytes_read = socket2
         .read(&mut buf)
         .timeout(Duration::from_secs(5))
-        .await
-        .unwrap()
-        .unwrap();
+        .await??;
     let data = &buf[0..bytes_read];
     assert_eq!("fleek", &String::from_utf8_lossy(data));
     debug!("Received event 2 via socket1");

@@ -112,13 +112,15 @@ mod tests {
     }
 
     #[test]
-    fn from_config_invalid_separator() -> Result<()> {
+    fn from_config_invalid_separator() {
         let config = Some(literal!({
             "separator": "abc"
         }));
-        let res = Separate::from_config(&config).err().unwrap();
+        let res = Separate::from_config(&config)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
 
-        assert_eq!("Invalid Configuration for separate postprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res.to_string().as_str());
-        Ok(())
+        assert_eq!("Invalid Configuration for separate postprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res);
     }
 }

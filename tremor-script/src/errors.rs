@@ -1360,6 +1360,6 @@ mod test {
         assert_matches!(
             r,
             ErrorKind::TypeError(ValueType::Object, ValueType::String)
-        )
+        );
     }
 }

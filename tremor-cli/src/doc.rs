@@ -186,7 +186,7 @@ fn gen_doc(
 
     let mut dest_file = PathBuf::new();
     dest_file.push(dest_path);
-    dest_file.push(&rel_path);
+    dest_file.push(rel_path);
     let mut src_path = path.to_path_buf();
     src_path.set_extension("");
     if src_path.exists() && src_path.is_dir() {

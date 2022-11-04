@@ -110,7 +110,7 @@ async fn connector_elastic() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event_not_batched, IN).await?;
-    let err_events = err.get_events()?;
+    let err_events = err.get_events();
     assert!(err_events.is_empty(), "Received err msgs: {:?}", err_events);
     let event = out.get_event().await?;
     assert_eq!(
@@ -176,7 +176,7 @@ async fn connector_elastic() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event_not_batched, IN).await?;
-    let err_events = err.get_events()?;
+    let err_events = err.get_events();
     assert!(err_events.is_empty(), "Received err msgs: {:?}", err_events);
     let event = out.get_event().await?;
     assert_eq!(

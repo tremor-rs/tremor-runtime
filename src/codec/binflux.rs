@@ -193,13 +193,19 @@ mod test {
         let mut o = Value::object();
         let c = BInflux::default();
         assert_eq!(
-            c.encode(&o).err().unwrap().to_string(),
+            c.encode(&o)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
             "Invalid BInflux Line Protocol data: measurement missing"
         );
 
         o.try_insert("measurement", "m");
         assert_eq!(
-            c.encode(&o).err().unwrap().to_string(),
+            c.encode(&o)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
             "Invalid BInflux Line Protocol data: timestamp missing"
         );
         o.try_insert("timestamp", 42);
@@ -208,7 +214,10 @@ mod test {
 
         o.try_insert("fields", fields);
         assert_eq!(
-            c.encode(&o).err().unwrap().to_string(),
+            c.encode(&o)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
             "Invalid BInflux Line Protocol data: Unknown type as influx line value: Array"
         );
     }

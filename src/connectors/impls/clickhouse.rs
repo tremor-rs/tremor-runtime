@@ -372,7 +372,10 @@ mod tests {
             };
         }
 
-        use DummySqlType::*;
+        use DummySqlType::{
+            Array, DateTime, DateTime64Micros, DateTime64Millis, DateTime64Nanos, DateTime64Secs,
+            Int16, Int32, Int64, Int8, Ipv4, Ipv6, String, UInt16, UInt32, UInt64, UInt8,
+        };
 
         test_display! {
             array :: Array(Box::new(UInt8)) => "Array(UInt8)",

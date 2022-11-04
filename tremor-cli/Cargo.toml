@@ -38,7 +38,7 @@ serde_derive = "1"
 serde_yaml = "0.9"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
-simd-json = { version = "0.6", features = ["known-key"] }
+simd-json = { version = "0.7", features = ["known-key"] }
 # We need to stay with 0.2 for now as there are reasons that can be named for the need to be able to
 # compile and run on operating systems that are a decade old. (insert apropriate ammount rage)
 snmalloc-rs = { version = "0.3.3" }

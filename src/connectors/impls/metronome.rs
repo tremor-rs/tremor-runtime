@@ -157,9 +157,8 @@ mod tests {
             builder
                 .build(&alias, &connector_config, &kill_switch)
                 .await
-                .err()
-                .unwrap(),
-            Error(ErrorKind::MissingConfiguration(_), _)
+                .err(),
+            Some(Error(ErrorKind::MissingConfiguration(_), _))
         ));
         Ok(())
     }

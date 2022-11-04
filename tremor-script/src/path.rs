@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn test_default_module_path() {
         let empty: Vec<String> = vec![];
-        assert_eq!(empty, load_("").mounts)
+        assert_eq!(empty, load_("").mounts);
     }
 
     #[test]
@@ -168,7 +168,7 @@ mod tests {
                 break;
             }
         }
-        let tremor_path = match path.unwrap().strip_prefix(d.clone()) {
+        let tremor_path = match path.ok_or("bad path")?.strip_prefix(d.clone()) {
             Ok(p) => format!("{}", p.display()),
             Err(e) => return Err(Error::from(format!("{}", e))),
         };

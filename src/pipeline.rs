@@ -283,16 +283,27 @@ mod report {
     }
 
     impl InputReport {
+        pub(crate) fn pipeline(alias: &str, port: &str) -> Self {
+            Self::Pipeline {
+                alias: alias.to_string(),
+                port: port.to_string(),
+            }
+        }
+        pub(crate) fn source(alias: &str, port: &str) -> Self {
+            Self::Source {
+                alias: alias.to_string(),
+                port: port.to_string(),
+            }
+        }
+
         pub(crate) fn new(endpoint: &DeployEndpoint, target: &InputTarget) -> Self {
             match target {
-                InputTarget::Pipeline(_addr) => InputReport::Pipeline {
-                    alias: endpoint.alias().to_string(),
-                    port: endpoint.port().to_string(),
-                },
-                InputTarget::Source(_addr) => InputReport::Source {
-                    alias: endpoint.alias().to_string(),
-                    port: endpoint.port().to_string(),
-                },
+                InputTarget::Pipeline(_addr) => {
+                    InputReport::pipeline(endpoint.alias(), endpoint.port())
+                }
+                InputTarget::Source(_addr) => {
+                    InputReport::source(endpoint.alias(), endpoint.port())
+                }
             }
         }
     }
@@ -303,17 +314,29 @@ mod report {
         Sink { alias: String, port: String },
     }
 
+    impl OutputReport {
+        pub(crate) fn pipeline(alias: &str, port: &str) -> Self {
+            Self::Pipeline {
+                alias: alias.to_string(),
+                port: port.to_string(),
+            }
+        }
+        pub(crate) fn sink(alias: &str, port: &str) -> Self {
+            Self::Sink {
+                alias: alias.to_string(),
+                port: port.to_string(),
+            }
+        }
+    }
     impl From<&(DeployEndpoint, OutputTarget)> for OutputReport {
         fn from(target: &(DeployEndpoint, OutputTarget)) -> Self {
             match target {
-                (endpoint, OutputTarget::Pipeline(_)) => OutputReport::Pipeline {
-                    alias: endpoint.alias().to_string(),
-                    port: endpoint.port().to_string(),
-                },
-                (endpoint, OutputTarget::Sink(_)) => OutputReport::Sink {
-                    alias: endpoint.alias().to_string(),
-                    port: endpoint.port().to_string(),
-                },
+                (endpoint, OutputTarget::Pipeline(_)) => {
+                    OutputReport::pipeline(endpoint.alias(), endpoint.port())
+                }
+                (endpoint, OutputTarget::Sink(_)) => {
+                    OutputReport::sink(endpoint.alias(), endpoint.port())
+                }
             }
         }
     }
@@ -658,7 +681,7 @@ pub(crate) async fn pipeline_task(
             }
             #[cfg(test)]
             AnyMsg::Mgmt(MgmtMsg::Inspect(tx)) => {
-                use report::*;
+                use report::{InputReport, OutputReport, StatusReport};
                 let inputs: Vec<InputReport> = inputs
                     .iter()
                     .map(|(k, v)| InputReport::new(k, &v.1))
@@ -796,50 +819,26 @@ mod tests {
             .expect("nothing at port `out`");
         assert!(report1.outputs.is_empty());
         assert_eq!(1, output1.len());
-        let output1 = output1.pop().unwrap();
-        assert_eq!(
-            output1,
-            OutputReport::Pipeline {
-                alias: "snot2".to_string(),
-                port: "in".to_string()
-            }
-        );
+        let output1 = output1.pop().ok_or("no data")?;
+        assert_eq!(output1, OutputReport::pipeline("snot2", "in"));
         addr2.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
         let mut report2 = rx.recv().await?;
         let input2 = report2.inputs.pop().expect("no input at port in");
-        assert_eq!(
-            input2,
-            InputReport::Pipeline {
-                alias: "snot".to_string(),
-                port: "out".to_string()
-            }
-        );
+        assert_eq!(input2, InputReport::pipeline("snot", "out"));
         let mut output2 = report2
             .outputs
             .remove("out")
             .expect("no outputs on out port");
         assert!(report2.outputs.is_empty());
         assert_eq!(1, output2.len());
-        let output2 = output2.pop().unwrap();
-        assert_eq!(
-            output2,
-            OutputReport::Pipeline {
-                alias: "snot3".to_string(),
-                port: "in".to_string()
-            }
-        );
+        let output2 = output2.pop().ok_or("no data")?;
+        assert_eq!(output2, OutputReport::pipeline("snot3", "in"));
 
         addr3.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
         let mut report3 = rx.recv().await?;
         assert!(report3.outputs.is_empty());
         let input3 = report3.inputs.pop().expect("no inputs");
-        assert_eq!(
-            input3,
-            InputReport::Pipeline {
-                alias: "snot2".to_string(),
-                port: "out".to_string()
-            }
-        );
+        assert_eq!(input3, InputReport::pipeline("snot2", "out"));
 
         addr.stop().await?;
         addr2.stop().await?;
@@ -893,10 +892,7 @@ mod tests {
         let report = rx.recv().await?;
         assert_eq!(1, report.inputs.len());
         assert_eq!(
-            report::InputReport::Source {
-                alias: "source_01".to_string(),
-                port: OUT.to_string()
-            },
+            report::InputReport::source("source_01", &OUT),
             report.inputs[0]
         );
 
@@ -919,10 +915,7 @@ mod tests {
         let report = rx.recv().await?;
         assert_eq!(1, report.outputs.len());
         assert_eq!(
-            Some(&vec![report::OutputReport::Sink {
-                alias: "sink_01".to_string(),
-                port: IN.to_string()
-            }]),
+            Some(&vec![report::OutputReport::sink("sink_01", &IN)]),
             report.outputs.get(&OUT.to_string())
         );
 
@@ -942,7 +935,7 @@ mod tests {
                 assert_eq!(Value::from(42_usize), event.data.suffix().value());
                 assert_eq!(Value::from(true), event.data.suffix().meta());
             }
-            other => assert!(false, "Expected Event, got: {:?}", other),
+            other => panic!("Expected Event, got: {:?}", other),
         }
 
         // send a signal
@@ -954,19 +947,19 @@ mod tests {
         let start = Instant::now();
         let mut sink_msg = sink_rx.recv().await?;
 
-        while match sink_msg {
-            SinkMsg::Signal {
+        while !matches!(sink_msg, SinkMsg::Signal {
                 signal:
                     Event {
                         kind: Some(SignalKind::Drain(id)),
                         ..
                     },
-            } if id.id() == 42 => false,
-            _ => true,
-        } {
-            if start.elapsed() > Duration::from_secs(4) {
-                assert!(false, "Timed out waiting for drain signal on the sink");
-            }
+            } if id.id() == 42)
+        {
+            assert!(
+                start.elapsed() < Duration::from_secs(4),
+                "Timed out waiting for drain signal on the sink"
+            );
+
             sink_msg = sink_rx.recv().await?;
         }
 
@@ -978,7 +971,7 @@ mod tests {
             assert_eq!(event_id, cb_id);
             assert_eq!(CbAction::Ack, cb_action);
         } else {
-            assert!(false, "Expected SourceMsg::Cb, got: {:?}", source_msg);
+            panic!("Expected SourceMsg::Cb, got: {:?}", source_msg);
         }
 
         // test pause and resume
@@ -1000,14 +993,16 @@ mod tests {
         addr.stop().await?;
         // verify we cannot send to the pipeline after it is stopped
         let start = Instant::now();
-        while !addr
+        while addr
             .send(Box::new(Msg::Signal(Event::signal_tick())))
             .await
-            .is_err()
+            .is_ok()
         {
-            if start.elapsed() > Duration::from_secs(5) {
-                assert!(false, "Pipeline didnt stop!");
-            }
+            assert!(
+                start.elapsed() > Duration::from_secs(5),
+                "Pipeline didnt stop!"
+            );
+
             task::sleep(Duration::from_millis(100)).await;
         }
         Ok(())

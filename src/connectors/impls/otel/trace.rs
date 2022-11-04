@@ -403,7 +403,7 @@ mod tests {
                 attributes: vec![],
                 dropped_attributes_count: 100,
                 trace_state: "snot:badger".into(),
-                parent_span_id: parent_span_id_pb.clone(),
+                parent_span_id: parent_span_id_pb,
                 span_id: span_id_pb.clone(),
                 trace_id: trace_id_pb,
                 kind: 0,
@@ -487,7 +487,7 @@ mod tests {
                         attributes: vec![],
                         dropped_attributes_count: 100,
                         trace_state: "snot:badger".into(),
-                        parent_span_id: parent_span_id_pb.clone(),
+                        parent_span_id: parent_span_id_pb,
                         span_id: span_id_pb.clone(),
                         trace_id: trace_id_pb,
                         kind: 0,
@@ -551,7 +551,7 @@ mod tests {
     }
 
     #[test]
-    fn minimal_resource_spans() -> Result<()> {
+    fn minimal_resource_spans() {
         let resource_spans = literal!({
             "trace": [
                 {
@@ -568,11 +568,10 @@ mod tests {
             }]),
             resource_spans_to_pb(Some(&resource_spans))
         );
-        Ok(())
     }
 
     #[test]
-    fn minimal_instrumentation_library_spans() -> Result<()> {
+    fn minimal_instrumentation_library_spans() {
         let ils = literal!([{
             "spans": [],
             "schema_url": "schema_url"
@@ -585,11 +584,11 @@ mod tests {
             }]),
             instrumentation_library_spans_to_pb(Some(&ils))
         );
-        Ok(())
     }
 
     #[test]
-    fn minimal_span() -> Result<()> {
+    #[allow(clippy::cast_possible_truncation)]
+    fn minimal_span() {
         let span = literal!({
             // hex encoded strings
             "trace_id": "61616161616161616161616161616161",
@@ -622,11 +621,10 @@ mod tests {
             }),
             span_to_pb(&span)
         );
-        Ok(())
     }
 
     #[test]
-    fn minimal_span_events() -> Result<()> {
+    fn minimal_span_events() {
         let span_events = literal!([{
             "time_unix_nano": 1,
             "name": "urknall"
@@ -640,6 +638,5 @@ mod tests {
             }]),
             span_events_to_pb(Some(&span_events))
         );
-        Ok(())
     }
 }

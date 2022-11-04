@@ -16,9 +16,9 @@ base64 = "0.13"
 beef = "0.5"
 halfbrown = { version = "0.1", features = ["fxhash"] }
 serde = "1.0"
-simd-json = "0.6"
-simd-json-derive = "0.6"
-value-trait = { version = "0.4", features = ["custom-types"] }
+simd-json = "0.7"
+simd-json-derive = "0.7"
+value-trait = { version = "0.5", features = ["custom-types"] }
 
 [dev-dependencies]
 float-cmp = "0.9"

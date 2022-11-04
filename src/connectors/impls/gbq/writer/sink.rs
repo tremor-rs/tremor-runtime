@@ -617,7 +617,7 @@ where
                         parent: table_id.to_string(),
                         write_stream: Some(WriteStream {
                             // The stream name here will be ignored and a generated value will be set in the response
-                            name: "".to_string(),
+                            name: String::new(),
                             r#type: i32::from(write_stream::Type::Committed),
                             create_time: None,
                             commit_time: None,
@@ -676,10 +676,12 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::connectors::google::tests::TestTokenProvider;
     use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
+    use crate::connectors::{
+        google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
+    };
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
@@ -695,6 +697,7 @@ mod test {
     use std::task::Poll;
     use tonic::body::BoxBody;
     use tonic::codegen::Service;
+    use tremor_common::ids::SinkId;
     use value_trait::StaticNode;
 
     struct HardcodedChannelFactory {
@@ -750,6 +753,7 @@ mod test {
             Poll::Ready(Ok(()))
         }
 
+        #[allow(clippy::unwrap_used, clippy::cast_possible_truncation)] // We don't control the return type here
         fn call(&mut self, _request: http::Request<BoxBody>) -> Self::Future {
             let buffer = self.responses.write().unwrap().pop_front().unwrap();
 
@@ -759,7 +763,7 @@ mod test {
 
                 let mut response_buffer = vec![0u8];
                 response_buffer.append(&mut len.to_vec());
-                response_buffer.append(&mut buffer.to_vec());
+                response_buffer.append(&mut buffer.clone());
 
                 tx.send_data(Bytes::from(response_buffer)).await.unwrap();
 
@@ -791,16 +795,16 @@ mod test {
                 r#type: -1,
                 mode: Mode::Required.into(),
                 fields: vec![],
-                description: "".to_string(),
+                description: String::new(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
             }],
             &SinkContext {
-                uid: Default::default(),
+                uid: SinkId::default(),
                 alias: Alias::new("flow", "connector"),
-                connector_type: Default::default(),
-                quiescence_beacon: Default::default(),
+                connector_type: ConnectorType::default(),
+                quiescence_beacon: QuiescenceBeacon::default(),
                 notifier: ConnectionLostNotifier::new(rx),
             },
         );
@@ -820,16 +824,16 @@ mod test {
                 r#type: TableType::Unspecified.into(),
                 mode: Mode::Required.into(),
                 fields: vec![],
-                description: "".to_string(),
+                description: String::new(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
             }],
             &SinkContext {
-                uid: Default::default(),
+                uid: SinkId::default(),
                 alias: Alias::new("flow", "connector"),
-                connector_type: Default::default(),
-                quiescence_beacon: Default::default(),
+                connector_type: ConnectorType::default(),
+                quiescence_beacon: QuiescenceBeacon::default(),
                 notifier: ConnectionLostNotifier::new(rx),
             },
         );
@@ -858,23 +862,23 @@ mod test {
                     r#type: item.0.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
                 }],
                 &SinkContext {
-                    uid: Default::default(),
+                    uid: SinkId::default(),
                     alias: Alias::new("flow", "connector"),
-                    connector_type: Default::default(),
-                    quiescence_beacon: Default::default(),
+                    connector_type: ConnectorType::default(),
+                    quiescence_beacon: QuiescenceBeacon::default(),
                     notifier: ConnectionLostNotifier::new(rx),
                 },
             );
 
             assert_eq!(result.1.len(), 1);
             assert_eq!(result.1["something"].table_type, item.0);
-            assert_eq!(result.0.field[0].r#type, Some(item.1.into()))
+            assert_eq!(result.0.field[0].r#type, Some(item.1.into()));
         }
     }
 
@@ -893,21 +897,21 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
                 }],
-                description: "".to_string(),
+                description: String::new(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
             }],
             &SinkContext {
-                uid: Default::default(),
+                uid: SinkId::default(),
                 alias: Alias::new("flow", "connector"),
-                connector_type: Default::default(),
-                quiescence_beacon: Default::default(),
+                connector_type: ConnectorType::default(),
+                quiescence_beacon: QuiescenceBeacon::default(),
                 notifier: ConnectionLostNotifier::new(rx),
             },
         );
@@ -922,7 +926,7 @@ mod test {
         assert_eq!(
             result.1["something"].subfields["subfield_a"].table_type,
             TableType::Int64
-        )
+        );
     }
 
     #[test]
@@ -933,7 +937,7 @@ mod test {
                 Field {
                     table_type: TableType::Int64,
                     tag: 1,
-                    subfields: Default::default(),
+                    subfields: HashMap::default(),
                 },
             ),
             (
@@ -941,7 +945,7 @@ mod test {
                 Field {
                     table_type: TableType::String,
                     tag: 2,
-                    subfields: Default::default(),
+                    subfields: HashMap::default(),
                 },
             ),
         ];
@@ -956,7 +960,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_can_encode_stringy_types() {
+    pub fn can_encode_stringy_types() {
         // NOTE: This test always passes the string "I" as the value to encode, this is not correct for some of the types (e.g. datetime),
         // but we still allow it, leaving the validation to BigQuery
         let data = [
@@ -978,7 +982,7 @@ mod test {
                     &Field {
                         table_type: item,
                         tag: 123,
-                        subfields: Default::default()
+                        subfields: HashMap::default()
                     },
                     &mut result
                 )
@@ -992,7 +996,7 @@ mod test {
     }
 
     #[test]
-    pub fn test_can_encode_a_struct() {
+    pub fn can_encode_a_struct() {
         let mut values = halfbrown::HashMap::new();
         values.insert("a".into(), Value::Static(StaticNode::I64(1)));
         values.insert("b".into(), Value::Static(StaticNode::I64(1024)));
@@ -1004,7 +1008,7 @@ mod test {
             Field {
                 table_type: TableType::Int64,
                 tag: 1,
-                subfields: Default::default(),
+                subfields: HashMap::default(),
             },
         );
         subfields.insert(
@@ -1012,7 +1016,7 @@ mod test {
             Field {
                 table_type: TableType::Int64,
                 tag: 2,
-                subfields: Default::default(),
+                subfields: HashMap::default(),
             },
         );
 
@@ -1025,7 +1029,7 @@ mod test {
         let mut result = Vec::new();
         assert!(encode_field(&input, &field, &mut result).is_ok());
 
-        assert_eq!([130u8, 64u8, 5u8, 8u8, 1u8, 16u8, 128u8, 8u8], result[..])
+        assert_eq!([130u8, 64u8, 5u8, 8u8, 1u8, 16u8, 128u8, 8u8], result[..]);
     }
 
     #[test]
@@ -1034,7 +1038,7 @@ mod test {
         let field = Field {
             table_type: TableType::Double,
             tag: 2,
-            subfields: Default::default(),
+            subfields: HashMap::default(),
         };
 
         let mut result = Vec::new();
@@ -1052,7 +1056,7 @@ mod test {
         let field = Field {
             table_type: TableType::Bool,
             tag: 43,
-            subfields: Default::default(),
+            subfields: HashMap::default(),
         };
 
         let mut result = Vec::new();
@@ -1067,7 +1071,7 @@ mod test {
         let field = Field {
             table_type: TableType::Bytes,
             tag: 1,
-            subfields: Default::default(),
+            subfields: HashMap::default(),
         };
 
         let mut result = Vec::new();
@@ -1082,7 +1086,7 @@ mod test {
         let field = Field {
             table_type: TableType::Json,
             tag: 1,
-            subfields: Default::default(),
+            subfields: HashMap::default(),
         };
 
         let mut result = Vec::new();
@@ -1098,7 +1102,7 @@ mod test {
         let field = Field {
             table_type: TableType::Interval,
             tag: 1,
-            subfields: Default::default(),
+            subfields: HashMap::default(),
         };
 
         let mut result = Vec::new();
@@ -1114,7 +1118,7 @@ mod test {
         let field = Field {
             table_type: TableType::Unspecified,
             tag: 1,
-            subfields: Default::default(),
+            subfields: HashMap::default(),
         };
 
         let mut result = Vec::new();
@@ -1129,10 +1133,10 @@ mod test {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: Default::default(),
-            quiescence_beacon: Default::default(),
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1142,7 +1146,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1152,7 +1156,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1164,24 +1168,24 @@ mod test {
         let descriptor = mapping.descriptor();
         assert_eq!(2, descriptor.field.len());
         assert_eq!(
-            field_descriptor_proto::Type::Int64 as i32,
-            descriptor.field[0].r#type.unwrap()
+            descriptor.field[0].r#type,
+            Some(field_descriptor_proto::Type::Int64 as i32),
         );
         assert_eq!(
-            field_descriptor_proto::Type::Int64 as i32,
-            descriptor.field[1].r#type.unwrap()
+            descriptor.field[1].r#type,
+            Some(field_descriptor_proto::Type::Int64 as i32),
         );
     }
 
     #[test]
-    pub fn can_map_json_to_protobuf() {
+    pub fn can_map_json_to_protobuf() -> Result<()> {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: Default::default(),
-            quiescence_beacon: Default::default(),
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1191,7 +1195,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1201,7 +1205,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1212,20 +1216,21 @@ mod test {
         let mut fields = halfbrown::HashMap::new();
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
         fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
-        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
+        let result = mapping.map(&Value::Object(Box::new(fields)))?;
 
         assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
+        Ok(())
     }
 
     #[test]
-    fn map_field_ignores_fields_that_are_not_in_definition() {
+    fn map_field_ignores_fields_that_are_not_in_definition() -> Result<()> {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: Default::default(),
-            quiescence_beacon: Default::default(),
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1235,7 +1240,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1245,7 +1250,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1257,20 +1262,21 @@ mod test {
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
         fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
         fields.insert("c".into(), Value::Static(StaticNode::I64(33)));
-        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
+        let result = mapping.map(&Value::Object(Box::new(fields)))?;
 
         assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
+        Ok(())
     }
 
     #[test]
-    fn map_field_ignores_struct_fields_that_are_not_in_definition() {
+    fn map_field_ignores_struct_fields_that_are_not_in_definition() -> Result<()> {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: Default::default(),
-            quiescence_beacon: Default::default(),
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1283,12 +1289,12 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
                 }],
-                description: "".to_string(),
+                description: String::new(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
@@ -1300,9 +1306,10 @@ mod test {
         inner_fields.insert("y".into(), Value::Static(StaticNode::I64(10)));
         let mut fields = halfbrown::HashMap::new();
         fields.insert("a".into(), Value::Object(Box::new(inner_fields)));
-        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
+        let result = mapping.map(&Value::Object(Box::new(fields)))?;
 
         assert_eq!([10u8, 2u8, 8u8, 10u8], result[..]);
+        Ok(())
     }
 
     #[test]
@@ -1310,10 +1317,10 @@ mod test {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: Default::default(),
-            quiescence_beacon: Default::default(),
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1322,7 +1329,7 @@ mod test {
                 r#type: TableType::Bytes.into(),
                 mode: Mode::Required.into(),
                 fields: vec![],
-                description: "".to_string(),
+                description: String::new(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
@@ -1336,7 +1343,7 @@ mod test {
         if let Err(Error(ErrorKind::BigQueryTypeMismatch("bytes", x), _)) = result {
             assert_eq!(x, ValueType::I64);
         } else {
-            assert!(false, "Bytes conversion did not fail on type mismatch");
+            panic!("Bytes conversion did not fail on type mismatch");
         }
     }
 
@@ -1345,10 +1352,10 @@ mod test {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: Default::default(),
-            quiescence_beacon: Default::default(),
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1357,7 +1364,7 @@ mod test {
                 r#type: TableType::Bytes.into(),
                 mode: Mode::Required.into(),
                 fields: vec![],
-                description: "".to_string(),
+                description: String::new(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
@@ -1369,7 +1376,7 @@ mod test {
         if let Err(Error(ErrorKind::BigQueryTypeMismatch("object", x), _)) = result {
             assert_eq!(x, ValueType::I64);
         } else {
-            assert!(false, "Mapping did not fail on non-object event");
+            panic!("Mapping did not fail on non-object event");
         }
     }
 
@@ -1393,10 +1400,9 @@ mod test {
         let (rx, _tx) = async_std::channel::unbounded();
         let config = Config::new(&literal!({
             "table_id": "doesnotmatter",
-            "connect_timeout": 1000000,
-            "request_timeout": 1000000
-        }))
-        .unwrap();
+            "connect_timeout": 1_000_000,
+            "request_timeout": 1_000_000
+        }))?;
 
         let mut sink =
             GbqSink::<TestTokenProvider, _, _>::new(config, Box::new(TonicChannelFactory));
@@ -1406,10 +1412,10 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext {
-                    uid: Default::default(),
+                    uid: SinkId::default(),
                     alias: Alias::new("flow", "connector"),
-                    connector_type: Default::default(),
-                    quiescence_beacon: Default::default(),
+                    connector_type: ConnectorType::default(),
+                    quiescence_beacon: QuiescenceBeacon::default(),
                     notifier: ConnectionLostNotifier::new(rx),
                 },
                 &mut EventSerializer::new(
@@ -1418,8 +1424,7 @@ mod test {
                     vec![],
                     &ConnectorType::from(""),
                     &Alias::new("flow", "connector"),
-                )
-                .unwrap(),
+                )?,
                 0,
             )
             .await;
@@ -1433,10 +1438,9 @@ mod test {
         let (rx, _tx) = async_std::channel::unbounded();
         let config = Config::new(&literal!({
             "table_id": "doesnotmatter",
-            "connect_timeout": 1000000,
-            "request_timeout": 1000000
-        }))
-        .unwrap();
+            "connect_timeout": 1_000_000,
+            "request_timeout": 1_000_000
+        }))?;
 
         let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             config,
@@ -1450,10 +1454,10 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext {
-                    uid: Default::default(),
+                    uid: SinkId::default(),
                     alias: Alias::new("flow", "connector"),
-                    connector_type: Default::default(),
-                    quiescence_beacon: Default::default(),
+                    connector_type: ConnectorType::default(),
+                    quiescence_beacon: QuiescenceBeacon::default(),
                     notifier: ConnectionLostNotifier::new(rx),
                 },
                 &mut EventSerializer::new(
@@ -1462,8 +1466,7 @@ mod test {
                     vec![],
                     &ConnectorType::from(""),
                     &Alias::new("flow", "connector"),
-                )
-                .unwrap(),
+                )?,
                 0,
             )
             .await;
@@ -1473,7 +1476,7 @@ mod test {
     }
 
     #[async_std::test]
-    pub async fn fails_on_error_response() {
+    pub async fn fails_on_error_response() -> Result<()> {
         let mut buffer_write_stream = vec![];
         let mut buffer_append_rows_response = vec![];
         WriteStream {
@@ -1484,7 +1487,7 @@ mod test {
             table_schema: Some(TableSchema { fields: vec![] }),
         }
         .encode(&mut buffer_write_stream)
-        .unwrap();
+        .map_err(|_| "encode failed")?;
 
         AppendRowsResponse {
             updated_schema: Some(TableSchema {
@@ -1506,11 +1509,11 @@ mod test {
             })),
         }
         .encode(&mut buffer_append_rows_response)
-        .unwrap();
+        .map_err(|_| "encode failed")?;
 
         let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
-                table_id: "".to_string(),
+                table_id: String::new(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
                 request_size_limit: 10 * 1024 * 1024,
@@ -1524,31 +1527,19 @@ mod test {
         );
 
         let sink_context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: Default::default(),
-            quiescence_beacon: Default::default(),
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
         };
 
-        sink.connect(&sink_context, &Attempt::default())
-            .await
-            .unwrap();
+        sink.connect(&sink_context, &Attempt::default()).await?;
 
         let result = sink
             .on_event(
                 "",
-                Event {
-                    id: Default::default(),
-                    data: Default::default(),
-                    ingest_ns: 0,
-                    origin_uri: None,
-                    kind: None,
-                    is_batch: false,
-                    cb: Default::default(),
-                    op_meta: Default::default(),
-                    transactional: false,
-                },
+                Event::default(),
                 &sink_context,
                 &mut EventSerializer::new(
                     None,
@@ -1556,19 +1547,18 @@ mod test {
                     vec![],
                     &ConnectorType::from(""),
                     &Alias::new("flow", "connector"),
-                )
-                .unwrap(),
+                )?,
                 0,
             )
-            .await
-            .unwrap();
+            .await?;
 
         assert_eq!(result.ack, SinkAck::Fail);
         assert_eq!(result.cb, CbAction::None);
+        Ok(())
     }
 
     #[async_std::test]
-    pub async fn splits_large_requests() {
+    pub async fn splits_large_requests() -> Result<()> {
         let mut buffer_write_stream = vec![];
         let mut buffer_append_rows_response = vec![];
         WriteStream {
@@ -1582,7 +1572,7 @@ mod test {
                     r#type: table_field_schema::Type::String as i32,
                     mode: table_field_schema::Mode::Nullable as i32,
                     fields: vec![],
-                    description: "".to_string(),
+                    description: String::new(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1590,7 +1580,7 @@ mod test {
             }),
         }
         .encode(&mut buffer_write_stream)
-        .unwrap();
+        .map_err(|_| "encode failed")?;
 
         AppendRowsResponse {
             updated_schema: None,
@@ -1599,7 +1589,7 @@ mod test {
             })),
         }
         .encode(&mut buffer_append_rows_response)
-        .unwrap();
+        .map_err(|_| "encode failed")?;
 
         let responses = Arc::new(RwLock::new(VecDeque::from([
             buffer_write_stream,
@@ -1608,7 +1598,7 @@ mod test {
         ])));
         let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
-                table_id: "".to_string(),
+                table_id: String::new(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
                 request_size_limit: 16 * 1024,
@@ -1619,16 +1609,14 @@ mod test {
         );
 
         let sink_context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: Default::default(),
-            quiescence_beacon: Default::default(),
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
         };
 
-        sink.connect(&sink_context, &Attempt::default())
-            .await
-            .unwrap();
+        sink.connect(&sink_context, &Attempt::default()).await?;
 
         let value = literal!([
             {
@@ -1655,15 +1643,9 @@ mod test {
             .on_event(
                 "",
                 Event {
-                    id: Default::default(),
                     data: payload,
-                    ingest_ns: 0,
-                    origin_uri: None,
-                    kind: None,
                     is_batch: true,
-                    cb: Default::default(),
-                    op_meta: Default::default(),
-                    transactional: false,
+                    ..Default::default()
                 },
                 &sink_context,
                 &mut EventSerializer::new(
@@ -1672,22 +1654,21 @@ mod test {
                     vec![],
                     &ConnectorType::from(""),
                     &Alias::new("flow", "connector"),
-                )
-                .unwrap(),
+                )?,
                 0,
             )
-            .await
-            .unwrap();
+            .await?;
 
         assert_eq!(result.ack, SinkAck::Ack);
-        assert_eq!(0, responses.read().unwrap().len());
+        assert_eq!(0, responses.read()?.len());
+        Ok(())
     }
 
     #[async_std::test]
     pub async fn does_not_auto_ack() {
         let sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
-                table_id: "".to_string(),
+                table_id: String::new(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
                 request_size_limit: 10 * 1024 * 1024,

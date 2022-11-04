@@ -281,35 +281,35 @@ mod test {
     fn trim_start() {
         let f = fun("string", "trim_start");
         let v = Value::from(" this is a test ");
-        assert_val!(f(&[&v]), "this is a test ")
+        assert_val!(f(&[&v]), "this is a test ");
     }
 
     #[test]
     fn trim_end() {
         let f = fun("string", "trim_end");
         let v = Value::from(" this is a test ");
-        assert_val!(f(&[&v]), " this is a test")
+        assert_val!(f(&[&v]), " this is a test");
     }
 
     #[test]
     fn lowercase() {
         let f = fun("string", "lowercase");
         let v = Value::from("THIS IS A TEST");
-        assert_val!(f(&[&v]), "this is a test")
+        assert_val!(f(&[&v]), "this is a test");
     }
 
     #[test]
     fn uppercase() {
         let f = fun("string", "uppercase");
         let v = Value::from("this is a test");
-        assert_val!(f(&[&v]), "THIS IS A TEST")
+        assert_val!(f(&[&v]), "THIS IS A TEST");
     }
 
     #[test]
     fn capitalize() {
         let f = fun("string", "capitalize");
         let v = Value::from("this is a test");
-        assert_val!(f(&[&v]), "This is a test")
+        assert_val!(f(&[&v]), "This is a test");
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod test {
         let f = fun("string", "split");
         let v1 = Value::from("this is a test");
         let v2 = Value::from(" ");
-        assert_val!(f(&[&v1, &v2]), Value::from(vec!["this", "is", "a", "test"]))
+        assert_val!(f(&[&v1, &v2]), Value::from(vec!["this", "is", "a", "test"]));
     }
 
     #[test]

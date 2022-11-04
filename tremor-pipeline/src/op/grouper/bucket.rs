@@ -229,7 +229,7 @@ mod test {
     use tremor_script::Value;
 
     #[test]
-    fn bucket() {
+    fn bucket() -> Result<()> {
         let operator_id = OperatorId::new(0);
         let mut op = Grouper {
             buckets: HashMap::new(),
@@ -247,7 +247,7 @@ mod test {
             .on_event(operator_id, "in", &mut state, event1.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().unwrap();
+        let (port, e) = r.events.pop().ok_or("no data")?;
         assert!(r.events.is_empty());
         assert_eq!(port, "err");
         assert_eq!(e, event1);
@@ -264,7 +264,7 @@ mod test {
             .on_event(operator_id, "in", &mut state, event2.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().unwrap();
+        let (port, e) = r.events.pop().ok_or("no data")?;
         assert!(r.events.is_empty());
         assert_eq!(port, "out");
         assert_eq!(e, event2);
@@ -273,7 +273,7 @@ mod test {
             .on_event(operator_id, "in", &mut state, event2.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().unwrap();
+        let (port, e) = r.events.pop().ok_or("no data")?;
         assert!(r.events.is_empty());
         assert_eq!(port, "out");
         assert_eq!(e, event2);
@@ -282,7 +282,7 @@ mod test {
             .on_event(operator_id, "in", &mut state, event2.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().unwrap();
+        let (port, e) = r.events.pop().ok_or("no data")?;
         assert!(r.events.is_empty());
         assert_eq!(port, "overflow");
         assert_eq!(e, event2);
@@ -298,18 +298,19 @@ mod test {
             .on_event(operator_id, "in", &mut state, event3.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().unwrap();
+        let (port, e) = r.events.pop().ok_or("no data")?;
         assert!(r.events.is_empty());
         assert_eq!(port, "out");
         assert_eq!(e, event3);
 
-        let mut m = op.metrics(&HashMap::new(), 0).unwrap();
-        let overflow = m.pop().unwrap();
-        let pass = m.pop().unwrap();
+        let mut m = op.metrics(&HashMap::new(), 0)?;
+        let overflow = m.pop().ok_or("no data")?;
+        let pass = m.pop().ok_or("no data")?;
         assert!(m.is_empty());
         assert_eq!(overflow["tags"]["action"], "overflow");
         assert_eq!(overflow["fields"]["count"], 1);
         assert_eq!(pass["tags"]["action"], "pass");
         assert_eq!(pass["fields"]["count"], 3);
+        Ok(())
     }
 }

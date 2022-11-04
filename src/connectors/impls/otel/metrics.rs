@@ -1258,7 +1258,7 @@ mod tests {
     }
 
     #[test]
-    fn minimal_resource_metrics() -> Result<()> {
+    fn minimal_resource_metrics() {
         let rm = literal!({
             "metrics": [
                 {
@@ -1275,11 +1275,10 @@ mod tests {
             }]),
             resource_metrics_to_pb(Some(&rm))
         );
-        Ok(())
     }
 
     #[test]
-    fn minimal_instrumentation_library_metrics() -> Result<()> {
+    fn minimal_instrumentation_library_metrics() {
         let ilm = literal!([{
             "metrics": [],
             "schema_url": "snot"
@@ -1292,11 +1291,10 @@ mod tests {
             }]),
             instrumentation_library_metrics_to_pb(Some(&ilm))
         );
-        Ok(())
     }
 
     #[test]
-    fn minimal_metric() -> Result<()> {
+    fn minimal_metric() {
         let metric = literal!({
             "name": "badger",
             "description": "snot",
@@ -1312,6 +1310,5 @@ mod tests {
             }),
             metric_to_pb(&metric)
         );
-        Ok(())
     }
 }
