@@ -15,13 +15,13 @@
 
 use crate::errors::Error;
 use crate::source::prelude::*;
-use tremor_common::url::TremorUrl;
 use lapin::{
     options::{BasicAckOptions, BasicConsumeOptions, QueueBindOptions, QueueDeclareOptions},
     types::FieldTable,
     Connection, ConnectionProperties, Consumer,
 };
 use serde::Deserialize;
+use tremor_common::url::TremorUrl;
 use url::Url;
 
 /*enum QueueProperties {
@@ -162,7 +162,7 @@ impl Source for Int {
             scheme: self.amqp_url.scheme().to_string(),
             host: match self.amqp_url.host_str() {
                 Some(h) => h.to_string(),
-                None => "".to_string(),
+                None => String::new(),
             },
             port: self.amqp_url.port(),
             path: match self.amqp_url.path_segments() {

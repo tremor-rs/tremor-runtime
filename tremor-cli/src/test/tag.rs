@@ -171,8 +171,8 @@ mod test {
                 "tests/fixtures/resolve_tags/a/b",
                 "tests/fixtures/resolve_tags/a/b/c/d"
             )
-            .unwrap(),
-            tag_filter
+            .ok(),
+            Some(tag_filter)
         );
     }
 }

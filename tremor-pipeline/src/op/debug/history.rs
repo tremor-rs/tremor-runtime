@@ -132,7 +132,7 @@ mod test {
     use crate::EventId;
 
     #[test]
-    fn history_op_test() {
+    fn history_op_test() -> Result<()> {
         let mut op = History {
             config: Config {
                 op: "green".to_string(),
@@ -173,16 +173,12 @@ mod test {
         };
         let mut state = Value::null();
 
-        let _ = op.on_signal(operator_id, &mut state, &mut event);
-        let _ = op.on_signal(operator_id, &mut state, &mut event);
+        op.on_signal(operator_id, &mut state, &mut event)?;
+        op.on_signal(operator_id, &mut state, &mut event)?;
 
         let history = event.data.suffix().meta().get(op.config.name.as_str());
 
-        match history.as_array() {
-            Some(history) => {
-                assert_eq!(2, history.len());
-            }
-            _ => unreachable!(),
-        }
+        assert_eq!(history.as_array().map(Vec::len), Some(2));
+        Ok(())
     }
 }

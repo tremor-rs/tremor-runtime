@@ -591,7 +591,7 @@ impl Query {
         let dot = petgraph::dot::Dot::with_attr_getters(
             &pipe_graph,
             &[],
-            &|_g, _r| "".to_string(),
+            &|_g, _r| String::new(),
             &node_to_dot,
         );
 
@@ -728,7 +728,7 @@ fn node_to_dot(_g: &Graph<NodeConfig, Connection>, (_, c): (NodeIndex, &NodeConf
         NodeConfig {
             kind: NodeKind::Operator,
             ..
-        } => "".to_string(),
+        } => String::new(),
     }
 }
 
@@ -827,39 +827,40 @@ pub(crate) fn supported_operators(
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use crate::Result;
     use tremor_common::ids::Id;
 
-    use super::*;
     #[test]
-    fn query() {
+    fn query() -> Result<()> {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in into out;";
-        let query =
-            Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
+        let query = Query::parse(src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
         assert!(query.id().is_none());
 
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
-        let query =
-            Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
-        assert_eq!(query.id().unwrap(), "test");
+        let query = Query::parse(src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
+        assert_eq!(query.id(), Some("test"));
+        Ok(())
     }
 
     #[test]
-    fn custom_port() {
+    fn custom_port() -> Result<()> {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in/test_in into out/test_out;";
-        let q = Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
+        let q = Query::parse(src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
 
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();
-        let g = q.to_executable_graph(&mut idgen).unwrap();
+        let g = q.to_executable_graph(&mut idgen)?;
         assert!(g.inputs.contains_key("in/test_in"));
         assert_eq!(idgen.next_id().id(), first.id() + g.graph.len() as u64 + 1);
-        let out = g.graph.get(4).unwrap();
+        let out = g.graph.get(4).ok_or("no data")?;
         assert_eq!(out.id, "out/test_out");
         assert_eq!(out.kind, NodeKind::Output("test_out".into()));
+        Ok(())
     }
 }

@@ -643,8 +643,8 @@ mod test {
         assert_eq!(o2, o1);
         let o1: Value = literal!({"k": (), "v":()});
         let o2: Value = literal!({"k": (),  "":()});
-        assert!(!(o1 == o2));
-        assert!(!(o2 == o1));
+        assert!(o1 != o2);
+        assert!(o2 != o1);
 
         let v1: Value = literal!({"\u{a2}": (), "\u{a1}": (), "": (), "\u{0}": ()});
         let v2: Value = literal!({"\u{a6}": (), "\u{a5}": (), "\u{a3}": (), "\u{a4}": ()});
@@ -1232,7 +1232,7 @@ mod test {
 
     #[test]
     fn default() {
-        assert_eq!(Value::default(), Value::null())
+        assert_eq!(Value::default(), Value::null());
     }
 
     #[test]
@@ -1342,15 +1342,11 @@ mod test {
     proptest! {
         #[test]
         fn prop_cmq(v1 in arb_tremor_value(), v2 in arb_tremor_value()) {
-            if v1 > v2 {
-               prop_assert!(v2 < v1);
-            } else if v1 < v2 {
-               prop_assert!(v2 > v1);
-            } else if v1 == v2 {
-                prop_assert!(v2 == v1);
-            } else {
-                prop_assert!(false)
-            };
+            match v1.cmp(&v2) {
+                Ordering::Less => assert!(v1 < v2),
+                Ordering::Equal => prop_assert!(v2 == v1),
+                Ordering::Greater => assert!(v1 > v2),
+            }
         }
 
         #[test]
@@ -1372,15 +1368,15 @@ mod test {
         #[test]
         fn prop_serialize_deserialize(borrowed in arb_value()) {
             let mut string = borrowed.encode();
-            let mut bytes = unsafe{ string.as_bytes_mut()};
-            let decoded = parse_to_value(&mut bytes).expect("Failed to decode");
-            prop_assert_eq!(borrowed, decoded)
+            let bytes = unsafe{ string.as_bytes_mut()};
+            let decoded = parse_to_value(bytes).expect("Failed to decode");
+            prop_assert_eq!(borrowed, decoded);
         }
         #[test]
         #[allow(clippy::float_cmp)]
         fn prop_f64_cmp(f in proptest::num::f64::NORMAL) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
 
         }
 
@@ -1388,56 +1384,56 @@ mod test {
         #[allow(clippy::float_cmp)]
         fn prop_f32_cmp(f in proptest::num::f32::NORMAL) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
 
         }
         #[test]
         fn prop_i64_cmp(f in proptest::num::i64::ANY) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
         }
         #[test]
         fn prop_i32_cmp(f in proptest::num::i32::ANY) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
         }
         #[test]
         fn prop_i16_cmp(f in proptest::num::i16::ANY) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
         }
         #[test]
         fn prop_i8_cmp(f in proptest::num::i8::ANY) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
         }
         #[test]
         fn prop_u64_cmp(f in proptest::num::u64::ANY) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
         }
 
         #[test]
         #[allow(clippy::cast_possible_truncation)]
         fn prop_usize_cmp(f in proptest::num::usize::ANY) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
         }
          #[test]
         fn prop_u32_cmp(f in proptest::num::u32::ANY) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
         }
         #[test]
         fn prop_u16_cmp(f in proptest::num::u16::ANY) {
             let v: Value = f.into();
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
         }
         #[test]
         fn prop_u8_cmp(f in proptest::num::u8::ANY) {
             let v: Value = f.into();
             assert_eq!(v, &f);
-            prop_assert_eq!(v, f)
+            prop_assert_eq!(v, f);
         }
         #[test]
         fn prop_string_cmp(f in ".*") {
@@ -1450,7 +1446,7 @@ mod test {
     #[test]
     fn test_union_cmp() {
         let v: Value = ().into();
-        assert_eq!(v, ())
+        assert_eq!(v, ());
     }
     #[test]
     fn test_bool_cmp() {

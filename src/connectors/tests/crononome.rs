@@ -41,9 +41,8 @@ async fn connector_crononome_routing() -> Result<()> {
 
     let event = out_pipeline.get_event().await?;
     let (data, _meta) = event.data.parts();
-    let trigger = data.get("trigger").unwrap();
-    let name = trigger.get_str("name");
-    assert_eq!(Some("test"), name);
+
+    assert_eq!(Some("test"), data.get("trigger").get_str("name"));
 
     //cleanup
     let (_out, err) = harness.stop().await?;

@@ -771,7 +771,7 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
 
 #[cfg(test)]
 mod test {
-    // use std::ffi::VaList;
+    #![allow(clippy::float_cmp)]
     use super::*;
     use crate::registry::FResult as Result;
     use float_cmp::approx_eq;
@@ -1146,10 +1146,10 @@ mod test {
             a.merge(&b).map_err(|fe| Error::from(format!("{:?}", fe)))?;
 
             let value = a.emit().map_err(|fe| Error::from(format!("{:?}", fe)))?;
-            let count = value.get_u64("count").unwrap();
-            let sum = value.get_f64("sum").unwrap();
-            let min = value.get_f64("min").unwrap();
-            let max = value.get_f64("max").unwrap();
+            let count = value.get_u64("count").unwrap_or_default();
+            let sum = value.get_f64("sum").unwrap_or_default();
+            let min = value.get_f64("min").unwrap_or_default();
+            let max = value.get_f64("max").unwrap_or_default();
 
             // validate min, max, sum, count against the input
             let input: Vec<f64> = vec1.iter().chain(vec2.iter()).copied().collect::<Vec<_>>();
@@ -1183,9 +1183,9 @@ mod test {
             }
             a.merge(&b).map_err(|fe| Error::from(format!("{:?}", fe)))?;
             let value = a.emit().map_err(|fe| Error::from(format!("{:?}", fe)))?;
-            let count = value.get_u64("count").unwrap();
-            let min = value.get_u64("min").unwrap();
-            let max = value.get_u64("max").unwrap();
+            let count = value.get_u64("count").unwrap_or_default();
+            let min = value.get_u64("min").unwrap_or_default();
+            let max = value.get_u64("max").unwrap_or_default();
 
             let input: Vec<u64> = vec1.iter().chain(vec2.iter()).copied().collect();
             prop_assert_eq!(input.len() as u64, count);

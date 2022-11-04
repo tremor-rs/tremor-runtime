@@ -297,7 +297,7 @@ mod tests {
             .map(StaticValue::into_value);
         while body.is_err() || !body.get_bool("all_running").unwrap_or_default() {
             if start.elapsed() > Duration::from_secs(2) {
-                assert!(false, "Timeout waiting for all flows to run: {body:?}");
+                panic!("Timeout waiting for all flows to run: {body:?}");
             } else {
                 body = client
                     .get("/v1/status")
@@ -378,7 +378,7 @@ mod tests {
             })?
             .await?;
         assert_eq!(StatusCode::BadRequest, res.status());
-        let _ = res.body_bytes().await?; // consume the body
+        res.body_bytes().await?; // consume the body
 
         // resume
         let body = client
@@ -432,7 +432,7 @@ mod tests {
             .get("/v1/flows/api_test/connectors/i_do_not_exist")
             .await?;
         assert_eq!(StatusCode::NotFound, res.status());
-        let _ = res.body_bytes().await?; //consume body
+        res.body_bytes().await?; //consume body
 
         let body = client
             .get("/v1/flows/api_test/connectors/my_null")
@@ -505,7 +505,7 @@ mod tests {
             })?
             .await?;
         assert_eq!(StatusCode::BadRequest, res.status());
-        let _ = res.body_bytes().await?; // consume the body
+        res.body_bytes().await?; // consume the body
 
         // resume
         let body = client

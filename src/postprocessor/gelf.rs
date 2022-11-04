@@ -80,7 +80,7 @@ impl Postprocessor for Gelf {
 
 #[cfg(test)]
 mod test {
-    use crate::errors::*;
+    use crate::errors::Result;
     use crate::postprocessor::{self, Postprocessor};
     use crate::preprocessor::{self, Preprocessor};
 

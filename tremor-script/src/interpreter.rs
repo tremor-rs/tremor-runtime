@@ -701,20 +701,11 @@ where
     ))
 }
 
-fn merge_values<'event, Outer, Inner>(
-    outer: &Outer,
-    inner: &Inner,
-    value: &mut Value<'event>,
-    replacement: &Value<'event>,
-) -> Result<()>
-where
-    Outer: BaseExpr,
-    Inner: BaseExpr,
-{
+fn merge_values<'event>(value: &mut Value<'event>, replacement: &Value<'event>) -> Result<()> {
     if let Some((rep, map)) = replacement.as_object().zip(value.as_object_mut()) {
         for (k, v) in rep {
             if let Some(k) = map.get_mut(k) {
-                stry!(merge_values(outer, inner, k, v));
+                stry!(merge_values(k, v));
             } else {
                 //NOTE: We got to clone here since we're duplicating values
                 map.insert(k.clone(), v.clone());
@@ -929,7 +920,7 @@ fn patch_value<'run, 'event>(
                 cow, mvalue, mid, ..
             } => match obj.get_mut(&cow) {
                 Some(value) if value.is_object() && mvalue.is_object() => {
-                    stry!(merge_values(patch_expr, expr, value, &mvalue));
+                    stry!(merge_values(value, &mvalue));
                 }
                 Some(other) => {
                     let key = cow.to_string();
@@ -937,13 +928,13 @@ fn patch_value<'run, 'event>(
                 }
                 None => {
                     let mut new_value = Value::object();
-                    stry!(merge_values(patch_expr, expr, &mut new_value, &mvalue));
+                    stry!(merge_values(&mut new_value, &mvalue));
                     obj.insert(cow, new_value);
                 }
             },
             MergeRecord { mvalue, mid, .. } => {
                 if mvalue.is_object() {
-                    stry!(merge_values(patch_expr, expr, target, &mvalue));
+                    stry!(merge_values(target, &mvalue));
                 } else {
                     return error_patch_merge_type_conflict(
                         patch_expr,

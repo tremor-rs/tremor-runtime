@@ -319,7 +319,7 @@ mod tests {
             =>
             clickhouse_array_value(
                 SqlType::String,
-                [clickhouse_string_value("foo")]
+                &[clickhouse_string_value("foo")]
             )
         }
     }
@@ -331,7 +331,7 @@ mod tests {
             =>
             clickhouse_array_value(
                 SqlType::String,
-                [clickhouse_string_value("foo"), clickhouse_string_value("bar"), clickhouse_string_value("baz")]
+                &[clickhouse_string_value("foo"), clickhouse_string_value("bar"), clickhouse_string_value("baz")]
             )
         }
     }
@@ -427,9 +427,9 @@ mod tests {
         }
     }
 
-    const TIMESTAMP_32: u32 = 1652790383;
-    const TIMESTAMP_U64: u64 = 1652790383;
-    const TIMESTAMP_I64: i64 = 1652790383;
+    const TIMESTAMP_32: u32 = 1_652_790_383;
+    const TIMESTAMP_U64: u64 = 1_652_790_383;
+    const TIMESTAMP_I64: i64 = 1_652_790_383;
 
     test_value_conversion! {
         datetime32 {
@@ -465,7 +465,7 @@ mod tests {
         CValue::String(Arc::new(input.to_string().into_bytes()))
     }
 
-    fn clickhouse_array_value<const N: usize>(ty: SqlType, values: [CValue; N]) -> CValue {
+    fn clickhouse_array_value(ty: SqlType, values: &[CValue]) -> CValue {
         CValue::Array(ty.into(), Arc::new(values.to_vec()))
     }
 }

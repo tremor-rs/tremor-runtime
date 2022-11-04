@@ -61,7 +61,7 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
         let mut config = ClientConfig::new();
 
         let cafile = Path::new("./tests/localhost.cert");
-        let file = std::fs::File::open(cafile).unwrap();
+        let file = std::fs::File::open(cafile)?;
         let mut pem = std::io::BufReader::new(file);
         let (certs, _) = config
             .root_store
@@ -89,20 +89,18 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
     }
 
     async fn expect(&mut self) -> Result<ExpectMessage> {
-        loop {
-            match self.client.next().await {
-                Some(Ok(Message::Text(data))) => return Ok(ExpectMessage::Text(data)),
-                Some(Ok(Message::Binary(data))) => return Ok(ExpectMessage::Binary(data)),
-                Some(Ok(other)) => return Ok(ExpectMessage::Unexpected(other)),
-                Some(Err(e)) => return Err(e.into()),
-                None => return Err("EOF".into()), // stream end
-            }
+        match self.client.next().await {
+            Some(Ok(Message::Text(data))) => Ok(ExpectMessage::Text(data)),
+            Some(Ok(Message::Binary(data))) => Ok(ExpectMessage::Binary(data)),
+            Some(Ok(other)) => Ok(ExpectMessage::Unexpected(other)),
+            Some(Err(e)) => Err(e.into()),
+            None => Err("EOF".into()), // stream end
         }
     }
 
     async fn close(&mut self) -> Result<()> {
         info!("Closing Test client...");
-        let _ = self.client.flush().await; // ignore errors
+        self.client.flush().await?; // ignore errors
         self.client
             .close(Some(CloseFrame {
                 code: CloseCode::Normal,
@@ -161,7 +159,7 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
         }
     }
 
-    async fn close(&mut self) -> Result<()> {
+    fn close(&mut self) -> Result<()> {
         info!("Closing WS test client...");
         self.client.close(Some(CloseFrame {
             code: CloseCode::Normal,
@@ -208,7 +206,7 @@ impl TestServer {
                 Some(Ok(message)) => message,
                 Some(Err(_)) | None => break,
             };
-            if let Err(_) = sender.send(msg).await {
+            if sender.send(msg).await.is_err() {
                 break;
             }
         }
@@ -238,13 +236,12 @@ impl TestServer {
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<()> {
+    fn stop(&mut self) {
         self.stopped.store(true, Ordering::Release);
         info!("Stopping test server...");
-        Ok(())
     }
 
-    async fn expect(&mut self) -> Result<ExpectMessage> {
+    fn expect(&mut self) -> Result<ExpectMessage> {
         loop {
             match self.rx.try_recv() {
                 Ok(Message::Text(data)) => return Ok(ExpectMessage::Text(data)),
@@ -329,7 +326,7 @@ async fn ws_server_text_routing() -> Result<()> {
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
     let ws_server_meta = meta.get("ws_server");
-    let peer_obj = ws_server_meta.get_object("peer").unwrap();
+    let peer_obj = ws_server_meta.get("peer");
 
     //
     // Send from ws server to client and check received event
@@ -337,7 +334,7 @@ async fn ws_server_text_routing() -> Result<()> {
     let meta = literal!({
         "ws_server": {
             "peer": {
-                "host": peer_obj.get("host").unwrap().clone_static(),
+                "host": peer_obj.get("host").map(Value::clone_static),
                 "port": c1.port()?,
             }
         }
@@ -353,7 +350,7 @@ async fn ws_server_text_routing() -> Result<()> {
     //cleanup
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
-    c1.close().await?;
+    c1.close()?;
     Ok(())
 }
 
@@ -402,10 +399,10 @@ async fn ws_client_binary_routing() -> Result<()> {
     };
     harness.send_to_sink(echo_back, IN).await?;
 
-    let data: Vec<u8> = "\"badger\"".to_string().into_bytes();
-    assert_eq!(ExpectMessage::Binary(data), ts.expect().await?);
+    let data: Vec<u8> = br#""badger""#.to_vec();
+    assert_eq!(ExpectMessage::Binary(data), ts.expect()?);
 
-    ts.stop()?;
+    ts.stop();
     drop(ts);
 
     let (_out, err) = harness.stop().await?;
@@ -458,12 +455,9 @@ async fn ws_client_text_routing() -> Result<()> {
     };
     harness.send_to_sink(echo_back, IN).await?;
 
-    assert_eq!(
-        ExpectMessage::Text("\"badger\"".to_string()),
-        ts.expect().await?
-    );
+    assert_eq!(ExpectMessage::Text(r#""badger""#.to_string()), ts.expect()?);
 
-    ts.stop()?;
+    ts.stop();
     drop(ts);
 
     let (_out, err) = harness.stop().await?;
@@ -532,7 +526,7 @@ async fn wss_server_text_routing() -> Result<()> {
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
     let ws_server_meta = meta.get("ws_server");
-    let peer_obj = ws_server_meta.get_object("peer").unwrap();
+    let peer_obj = ws_server_meta.get("peer");
 
     //
     // Send from ws server to client and check received event
@@ -540,7 +534,7 @@ async fn wss_server_text_routing() -> Result<()> {
     let meta = literal!({
         "ws_server": {
             "peer": {
-                "host": peer_obj.get("host").unwrap().clone_static(),
+                "host": peer_obj.get("host").map(Value::clone_static),
                 "port": c1.port()?,
             }
         }
@@ -552,7 +546,7 @@ async fn wss_server_text_routing() -> Result<()> {
     };
     harness.send_to_sink(echo_back, IN).await?;
     assert_eq!(
-        ExpectMessage::Text("\"badger\"".to_string()),
+        ExpectMessage::Text(r#""badger""#.to_string()),
         c1.expect().await?
     );
 
@@ -625,7 +619,7 @@ async fn wss_server_binary_routing() -> Result<()> {
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
     let ws_server_meta = meta.get("ws_server");
-    let peer_obj = ws_server_meta.get_object("peer").unwrap();
+    let peer_obj = ws_server_meta.get("peer");
 
     //
     // Send from ws server to client and check received event
@@ -634,7 +628,7 @@ async fn wss_server_binary_routing() -> Result<()> {
             "binary": true,
             "ws_server": {
             "peer": {
-                "host": peer_obj.get("host").unwrap().clone_static(),
+                "host": peer_obj.get("host").map(Value::clone_static),
                 "port": c1.port()?,
             }
         }
@@ -645,7 +639,7 @@ async fn wss_server_binary_routing() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(echo_back, IN).await?;
-    let data = "\"badger\"".to_string().into_bytes();
+    let data = br#""badger""#.to_vec();
     assert_eq!(ExpectMessage::Binary(data), c1.expect().await?);
 
     //cleanup

@@ -407,11 +407,14 @@ pub(crate) mod tests {
     use super::*;
     use crate::{
         config::{Codec as CodecConfig, Reconnect},
-        connectors::{impls::gcs::streamer::Mode, reconnect::ConnectionLostNotifier},
+        connectors::{
+            impls::gcs::streamer::Mode, reconnect::ConnectionLostNotifier,
+            utils::quiescence::QuiescenceBeacon,
+        },
     };
     use async_std::channel::bounded;
     use halfbrown::HashMap;
-    use tremor_common::ids::ConnectorIdGen;
+    use tremor_common::ids::{ConnectorIdGen, SinkId};
     use tremor_pipeline::EventId;
     use tremor_value::literal;
 
@@ -547,10 +550,10 @@ pub(crate) mod tests {
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
 
         let config = Config {
-            url: Default::default(),
+            url: Url::default(),
             bucket: Some("bucket".to_string()),
             mode: Mode::Yolo,
-            connect_timeout: 1000000000,
+            connect_timeout: 1_000_000_000,
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
@@ -568,10 +571,10 @@ pub(crate) mod tests {
 
         let alias = Alias::new("a", "b");
         let context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: alias.clone(),
             connector_type: "gcs_streamer".into(),
-            quiescence_beacon: Default::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
         let mut serializer = EventSerializer::new(
@@ -580,8 +583,7 @@ pub(crate) mod tests {
             vec![],
             &"gcs_streamer".into(),
             &alias,
-        )
-        .unwrap();
+        )?;
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
@@ -612,15 +614,15 @@ pub(crate) mod tests {
         assert_eq!(1, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, mut buffers) = uploads.pop().unwrap();
+        let (file_id, mut buffers) = uploads.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("yolo", "happy.txt"), file_id);
         assert_eq!(2, buffers.len());
-        let buffer = buffers.pop().unwrap();
+        let buffer = buffers.pop().ok_or("no data")?;
         assert_eq!(10, buffer.start);
         assert_eq!(10, buffer.len());
         assert_eq!("badg\",\"er\"".as_bytes(), &buffer.data);
 
-        let buffer = buffers.pop().unwrap();
+        let buffer = buffers.pop().ok_or("no data")?;
         assert_eq!(0, buffer.start);
         assert_eq!(10, buffer.len());
         assert_eq!("{\"snot\":[\"".as_bytes(), &buffer.data);
@@ -683,30 +685,30 @@ pub(crate) mod tests {
         assert_eq!(2, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, mut buffers) = uploads.pop().unwrap();
+        let (file_id, mut buffers) = uploads.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("yolo", "sad.txt"), file_id);
         assert_eq!(2, buffers.len());
 
-        let buffer = buffers.pop().unwrap();
+        let buffer = buffers.pop().ok_or("no data")?;
         assert_eq!(10, buffer.start);
         assert_eq!(10, buffer.len());
         assert_eq!("e,false,nu".as_bytes(), &buffer.data);
 
-        let buffer = buffers.pop().unwrap();
+        let buffer = buffers.pop().ok_or("no data")?;
         assert_eq!(0, buffer.start);
         assert_eq!(10, buffer.len());
         assert_eq!("[1,2,3,tru".as_bytes(), &buffer.data);
 
         let mut finished = upload_client(&mut sink).finished_uploads();
         assert_eq!(1, finished.len());
-        let (file_id, mut buffers) = finished.pop().unwrap();
+        let (file_id, mut buffers) = finished.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("yolo", "happy.txt"), file_id);
         assert_eq!(4, buffers.len());
-        let buffer = buffers.pop().unwrap();
+        let buffer = buffers.pop().ok_or("no data")?;
         assert_eq!(30, buffer.start);
         assert_eq!("adger\"".as_bytes(), &buffer.data);
 
-        let buffer = buffers.pop().unwrap();
+        let buffer = buffers.pop().ok_or("no data")?;
         assert_eq!(20, buffer.start);
         assert_eq!("]}\"snot\"\"b".as_bytes(), &buffer.data);
 
@@ -717,10 +719,10 @@ pub(crate) mod tests {
         // we finish outstanding upload upon stop
         let mut finished = upload_client(&mut sink).finished_uploads();
         assert_eq!(2, finished.len());
-        let (file_id, mut buffers) = finished.pop().unwrap();
+        let (file_id, mut buffers) = finished.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("yolo", "sad.txt"), file_id);
         assert_eq!(3, buffers.len());
-        let last = buffers.pop().unwrap();
+        let last = buffers.pop().ok_or("no data")?;
         assert_eq!(20, last.start);
         assert_eq!("ll]".as_bytes(), &last.data);
 
@@ -733,10 +735,10 @@ pub(crate) mod tests {
         _ = env_logger::try_init();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
-            url: Default::default(),
+            url: Url::default(),
             bucket: None,
             mode: Mode::Yolo,
-            connect_timeout: 1000000000,
+            connect_timeout: 1_000_000_000,
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
@@ -753,10 +755,10 @@ pub(crate) mod tests {
 
         let alias = Alias::new("a", "b");
         let context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: alias.clone(),
             connector_type: "gcs_streamer".into(),
-            quiescence_beacon: Default::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
         let mut serializer = EventSerializer::new(
@@ -765,8 +767,7 @@ pub(crate) mod tests {
             vec![],
             &"gcs_streamer".into(),
             &alias,
-        )
-        .unwrap();
+        )?;
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
@@ -824,7 +825,7 @@ pub(crate) mod tests {
         assert_eq!(1, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().unwrap();
+        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("failure", "test.txt"), file_id);
         assert!(buffers.is_empty());
         assert!(upload_client(&mut sink).finished_uploads().is_empty());
@@ -857,7 +858,7 @@ pub(crate) mod tests {
         assert_eq!(1, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().unwrap();
+        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("failure", "test.txt"), file_id);
         assert!(buffers.is_empty());
         assert!(upload_client(&mut sink).finished_uploads().is_empty());
@@ -886,7 +887,7 @@ pub(crate) mod tests {
         assert_eq!(1, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().unwrap();
+        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("failure", "test.txt"), file_id);
         assert!(buffers.is_empty());
         assert!(upload_client(&mut sink).finished_uploads().is_empty());
@@ -907,10 +908,10 @@ pub(crate) mod tests {
         _ = env_logger::try_init();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
-            url: Default::default(),
+            url: Url::default(),
             bucket: None,
             mode: Mode::Yolo,
-            connect_timeout: 1000000000,
+            connect_timeout: 1_000_000_000,
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
@@ -927,10 +928,10 @@ pub(crate) mod tests {
 
         let alias = Alias::new("a", "b");
         let context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: alias.clone(),
             connector_type: "gcs_streamer".into(),
-            quiescence_beacon: Default::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
         let mut serializer = EventSerializer::new(
@@ -939,8 +940,7 @@ pub(crate) mod tests {
             vec![],
             &"gcs_streamer".into(),
             &alias,
-        )
-        .unwrap();
+        )?;
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
@@ -1002,10 +1002,10 @@ pub(crate) mod tests {
             Ok(client)
         });
         let config = Config {
-            url: Default::default(),
+            url: Url::default(),
             bucket: Some("bucket".to_string()),
             mode: Mode::Yolo,
-            connect_timeout: 1000000000,
+            connect_timeout: 1_000_000_000,
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
@@ -1022,10 +1022,10 @@ pub(crate) mod tests {
 
         let alias = Alias::new("a", "b");
         let context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: alias.clone(),
             connector_type: "gcs_streamer".into(),
-            quiescence_beacon: Default::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
 
@@ -1054,10 +1054,10 @@ pub(crate) mod tests {
         let (reply_tx, reply_rx) = bounded(10);
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
-            url: Default::default(),
+            url: Url::default(),
             bucket: None,
             mode: Mode::Consistent,
-            connect_timeout: 1000000000,
+            connect_timeout: 1_000_000_000,
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
@@ -1075,10 +1075,10 @@ pub(crate) mod tests {
 
         let alias = Alias::new("a", "b");
         let context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: alias.clone(),
             connector_type: "gcs_streamer".into(),
-            quiescence_beacon: Default::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
         let mut serializer = EventSerializer::new(
@@ -1087,8 +1087,7 @@ pub(crate) mod tests {
             vec![],
             &"gcs_streamer".into(),
             &alias,
-        )
-        .unwrap();
+        )?;
 
         // simulate standard sink lifecycle
         sink.on_start(&context).await?;
@@ -1110,13 +1109,12 @@ pub(crate) mod tests {
             ..Event::default()
         };
         sink.on_event("", event.clone(), &context, &mut serializer, 1234)
-            .await
-            .unwrap();
+            .await?;
 
         // verify it started the upload upon first request
         let mut uploads = test_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().unwrap();
+        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("woah", "test.txt"), file_id);
         assert!(buffers.is_empty());
         assert_eq!(1, test_client(&mut sink).count());
@@ -1141,24 +1139,23 @@ pub(crate) mod tests {
             ..Event::default()
         };
         sink.on_event("", event.clone(), &context, &mut serializer, 1234)
-            .await
-            .unwrap();
+            .await?;
 
         // verify it did upload some parts
         let mut uploads = test_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, mut buffers) = uploads.pop().unwrap();
+        let (file_id, mut buffers) = uploads.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("woah", "test.txt"), file_id);
         assert_eq!(3, buffers.len());
-        let part = buffers.pop().unwrap();
+        let part = buffers.pop().ok_or("no data")?;
         assert_eq!(20, part.start);
         assert_eq!(10, part.len());
         assert_eq!("qrstuvwxyz".as_bytes(), &part.data);
-        let part = buffers.pop().unwrap();
+        let part = buffers.pop().ok_or("no data")?;
         assert_eq!(10, part.start);
         assert_eq!(10, part.len());
         assert_eq!("ghijklmnop".as_bytes(), &part.data);
-        let part = buffers.pop().unwrap();
+        let part = buffers.pop().ok_or("no data")?;
         assert_eq!(0, part.start);
         assert_eq!(10, part.len());
         assert_eq!("{}[\"abcdef".as_bytes(), &part.data);
@@ -1186,12 +1183,11 @@ pub(crate) mod tests {
             ..Event::default()
         };
         sink.on_event("", event.clone(), &context, &mut serializer, 1234)
-            .await
-            .unwrap();
+            .await?;
 
         let mut uploads = test_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().unwrap();
+        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("woah2", "test.txt"), file_id);
         assert!(buffers.is_empty());
 
@@ -1200,11 +1196,11 @@ pub(crate) mod tests {
         // 1 finished upload
         let mut finished = test_client(&mut sink).finished_uploads();
         assert_eq!(1, finished.len());
-        let (file_id, mut buffers) = finished.pop().unwrap();
+        let (file_id, mut buffers) = finished.pop().ok_or("no data")?;
 
         assert_eq!(ObjectId::new("woah", "test.txt"), file_id);
         assert_eq!(4, buffers.len());
-        let last = buffers.pop().unwrap();
+        let last = buffers.pop().ok_or("no data")?;
         assert_eq!(30, last.start);
         assert_eq!(2, last.len());
         assert_eq!("\"]".as_bytes(), &last.data);
@@ -1217,7 +1213,7 @@ pub(crate) mod tests {
             assert!(id.is_tracking(&id2));
             assert!(!id.is_tracking(&id3));
         } else {
-            assert!(false, "Expected an ack, got {res:?}");
+            panic!("Expected an ack, got {res:?}");
         }
 
         // finishes upload on filename change - name changes
@@ -1238,12 +1234,11 @@ pub(crate) mod tests {
             ..Event::default()
         };
         sink.on_event("", event.clone(), &context, &mut serializer, 1234)
-            .await
-            .unwrap();
+            .await?;
 
         let mut uploads = test_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().unwrap();
+        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
         assert_eq!(ObjectId::new("woah2", "test5.txt"), file_id);
         assert!(buffers.is_empty());
 
@@ -1252,11 +1247,11 @@ pub(crate) mod tests {
         // 2 finished uploads
         let mut finished = test_client(&mut sink).finished_uploads();
         assert_eq!(2, finished.len());
-        let (file_id, mut buffers) = finished.pop().unwrap();
+        let (file_id, mut buffers) = finished.pop().ok_or("no data")?;
 
         assert_eq!(ObjectId::new("woah2", "test.txt"), file_id);
         assert_eq!(1, buffers.len());
-        let last = buffers.pop().unwrap();
+        let last = buffers.pop().ok_or("no data")?;
         assert_eq!(0, last.start);
         assert_eq!(2, last.len());
         assert_eq!("42".as_bytes(), &last.data);
@@ -1268,13 +1263,11 @@ pub(crate) mod tests {
             assert!(id.is_tracking(&id3));
             assert!(!id.is_tracking(&id4));
         } else {
-            assert!(false, "Expected an ack, got {res:?}");
+            panic!("Expected an ack, got {res:?}");
         }
 
         // finishes upload on stop
-        sink.on_stop(&context)
-            .await
-            .expect("Expected on_stop to work, lol");
+        sink.on_stop(&context).await?;
         assert_eq!(3, test_client(&mut sink).finished_uploads().len());
 
         Ok(())
@@ -1286,10 +1279,10 @@ pub(crate) mod tests {
         let (reply_tx, reply_rx) = bounded(10);
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
-            url: Default::default(),
+            url: Url::default(),
             bucket: None,
             mode: Mode::Consistent,
-            connect_timeout: 1000000000,
+            connect_timeout: 1_000_000_000,
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
@@ -1307,10 +1300,10 @@ pub(crate) mod tests {
 
         let alias = Alias::new("a", "b");
         let context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: alias.clone(),
             connector_type: "gcs_streamer".into(),
-            quiescence_beacon: Default::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
         let mut serializer = EventSerializer::new(
@@ -1319,8 +1312,7 @@ pub(crate) mod tests {
             vec![],
             &"gcs_streamer".into(),
             &alias,
-        )
-        .unwrap();
+        )?;
 
         // simulate standard sink lifecycle
         sink.on_start(&context).await?;
@@ -1425,7 +1417,7 @@ pub(crate) mod tests {
             assert!(id.is_tracking(&id2));
             assert!(id.is_tracking(&id3));
         } else {
-            assert!(false, "Expected a fail, got {reply:?}");
+            panic!("Expected a fail, got {reply:?}");
         }
 
         sink.on_stop(&context).await?;

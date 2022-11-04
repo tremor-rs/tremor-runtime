@@ -237,7 +237,7 @@ mod tests {
                 &[l, h] => {
                     assert!(l < h); // strictly monotonically increasing
                 }
-                _ => assert!(false, "invalid window"),
+                _ => panic!("invalid window"),
             }
         }
     }

@@ -236,8 +236,8 @@ mod test {
 
         // Verify that we are broken on 0
         op.on_contraflow(uid, &mut insight);
-        assert_eq!(op.outputs[0].open, false);
-        assert_eq!(op.outputs[1].open, true);
+        assert!(!op.outputs[0].open);
+        assert!(op.outputs[1].open);
 
         // Output should now come out of 1
         let event2 = Event {
@@ -281,8 +281,8 @@ mod test {
 
         // Verify that we now on disabled outputs
         op.on_contraflow(uid, &mut insight);
-        assert_eq!(op.outputs[0].open, true);
-        assert_eq!(op.outputs[1].open, true);
+        assert!(op.outputs[0].open);
+        assert!(op.outputs[1].open);
 
         // The next event should go to the newly enabled output
         let event3 = Event {

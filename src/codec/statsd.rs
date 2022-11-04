@@ -166,6 +166,8 @@ fn invalid() -> Error {
 
 #[cfg(test)]
 mod test {
+    use std::convert::identity;
+
     use super::*;
     use tremor_value::literal;
 
@@ -239,8 +241,9 @@ mod test {
 
         let parsed = c
             .decode(data.as_mut_slice(), 0)
-            .expect("failed to decode")
-            .unwrap();
+            .ok()
+            .and_then(identity)
+            .unwrap_or_default();
         let expected = literal!({
             "type": "h",
             "metric": "horst",

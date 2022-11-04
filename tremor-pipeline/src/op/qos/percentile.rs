@@ -120,6 +120,7 @@ impl Operator for Percentile {
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::float_cmp)]
     use tremor_common::ids::Id;
 
     use super::*;

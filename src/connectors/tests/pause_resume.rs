@@ -70,8 +70,8 @@ async fn udp_pause_resume() -> Result<()> {
     // expect data being received
     for expected in data.split('\n').take(4) {
         let event = out_pipeline.get_event().await?;
-        let content = event.data.suffix().value().as_str().unwrap();
-        assert_eq!(expected, content);
+        let content = event.data.suffix().value().as_str();
+        assert_eq!(Some(expected), content);
     }
     // pause connector
     harness.pause().await?;
@@ -103,12 +103,14 @@ async fn udp_pause_resume() -> Result<()> {
     // receive the data sent during pause
     // first line, continueing the stuff from last send
     assert_eq!(
-        format!(
-            "{}{}",
-            data.split('\n').last().unwrap(),
-            data2.split('\n').next().unwrap()
-        )
-        .as_str(),
+        Some(
+            format!(
+                "{}{}",
+                data.split('\n').last().unwrap_or_default(),
+                data2.split('\n').next().unwrap_or_default()
+            )
+            .as_str()
+        ),
         out_pipeline
             .get_event()
             .await?
@@ -116,14 +118,13 @@ async fn udp_pause_resume() -> Result<()> {
             .suffix()
             .value()
             .as_str()
-            .unwrap()
     );
     for expected in data2[..data2.len() - 1].split('\n').skip(1) {
         debug!("expecting '{}'", expected);
         let event = out_pipeline.get_event().await?;
-        let content = event.data.suffix().value().as_str().unwrap();
-        debug!("got '{}'", content);
-        assert_eq!(expected, content);
+        let content = event.data.suffix().value().as_str();
+        debug!("got '{:?}'", content);
+        assert_eq!(Some(expected), content);
     }
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
@@ -168,9 +169,9 @@ async fn tcp_server_pause_resume() -> Result<()> {
     for expected in data.split('\n').take(4) {
         debug!("expecting: '{}'", expected);
         let event = out_pipeline.get_event().await?;
-        let content = event.data.suffix().value().as_str().unwrap();
-        debug!("received '{}'", content);
-        assert_eq!(expected, content);
+        let content = event.data.suffix().value().as_str();
+        debug!("received '{:?}'", content);
+        assert_eq!(Some(expected), content);
     }
     // pause connector
     harness.pause().await?;
@@ -201,12 +202,14 @@ async fn tcp_server_pause_resume() -> Result<()> {
 
     // receive the data sent during pause
     assert_eq!(
-        format!(
-            "{}{}",
-            data.split('\n').last().unwrap(),
-            data2.split('\n').next().unwrap()
-        )
-        .as_str(),
+        Some(
+            format!(
+                "{}{}",
+                data.split('\n').last().unwrap_or_default(),
+                data2.split('\n').next().unwrap_or_default()
+            )
+            .as_str()
+        ),
         out_pipeline
             .get_event()
             .await?
@@ -214,15 +217,14 @@ async fn tcp_server_pause_resume() -> Result<()> {
             .suffix()
             .value()
             .as_str()
-            .unwrap()
     );
     drop(socket); // closing the socket, ensuring the last bits are flushed from preprocessors etc
     for expected in data2[..data2.len() - 1].split('\n').skip(1) {
         debug!("expecting: '{}'", expected);
         let event = out_pipeline.get_event().await?;
-        let content = event.data.suffix().value().as_str().unwrap();
-        debug!("received '{}'", content);
-        assert_eq!(expected, content);
+        let content = event.data.suffix().value().as_str();
+        debug!("received '{:?}'", content);
+        assert_eq!(Some(expected), content);
     }
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());

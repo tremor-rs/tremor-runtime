@@ -468,7 +468,7 @@ mod tests {
         assert!(res.url.is_none());
         assert!(res.bucket.is_none());
         assert_eq!(Mode::Yolo, res.mode);
-        assert_eq!(5242980, res.buffer_size);
+        assert_eq!(5_242_980, res.buffer_size);
         Ok(())
     }
 }

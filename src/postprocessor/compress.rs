@@ -291,11 +291,9 @@ mod tests {
     }
 
     #[test]
-    fn test_test_lz4() -> Result<()> {
+    fn test_test_lz4() {
         let _algorithm = Lz4::with_config(-1);
         assert!(matches!(crate::errors::Error, _algorithm));
-
-        Ok(())
     }
 
     #[test]

@@ -116,7 +116,7 @@ impl HttpRequestBuilder {
             .and_then(|mime| codec_map.get_codec_name(mime.essence()))
             // only overwrite the codec if it is different from the configured one
             .filter(|codec| *codec != configured_codec)
-            .cloned();
+            .map(ToString::to_string);
         let codec_content_type = codec_overwrite
             .as_ref()
             .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
@@ -346,9 +346,19 @@ mod test {
         let mut b =
             HttpRequestBuilder::new(request_id, meta, &codec_map, &config, configured_codec)?;
 
-        let r = b.finalize(&mut s).await?.unwrap();
-        assert_eq!(r.header("pie").unwrap().iter().count(), 1);
-        assert_eq!(r.header("cake").unwrap().iter().count(), 2);
+        let r = b.finalize(&mut s).await?.ok_or("no data")?;
+        assert_eq!(
+            r.header("pie")
+                .map(|h| h.iter().count())
+                .unwrap_or_default(),
+            1
+        );
+        assert_eq!(
+            r.header("cake")
+                .map(|h| h.iter().count())
+                .unwrap_or_default(),
+            2
+        );
         Ok(())
     }
 }

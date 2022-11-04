@@ -29,7 +29,7 @@ use crate::{
 use async_std::prelude::FutureExt;
 use http_client::{h1::H1Client, Body, Config as HttpClientConfig, HttpClient};
 use http_types::{
-    headers::{self, HeaderValue},
+    headers::{self, HeaderValue, HeaderValues},
     mime::BYTE_STREAM,
     Method, StatusCode, Url,
 };
@@ -106,7 +106,7 @@ async fn http_server_test() -> Result<()> {
         |req_data| {
             let value = literal!({
                 "value": req_data.value().clone_static(),
-                "meta": req_data.meta().get("http_server").get("request").map(|v| v.clone_static())
+                "meta": req_data.meta().get("http_server").get("request").map(tremor_script::Value::clone_static)
             });
             let meta = literal!({
                 "http_server": {
@@ -134,7 +134,7 @@ async fn http_server_test() -> Result<()> {
             |req_data| {
                 let value = literal!({
                     "value": req_data.value().clone_static(),
-                    "meta": req_data.meta().get("http_server").get("request").map(|v| v.clone_static())
+                    "meta": req_data.meta().get("http_server").get("request").map(tremor_script::Value::clone_static)
                 });
                 let meta = literal!({
                     "http_server": {
@@ -158,8 +158,10 @@ async fn http_server_test() -> Result<()> {
     assert_eq!(StatusCode::Created, res.status());
     let body = res.body_json::<StaticValue>().await?.into_value();
     assert_eq!(
-        &HeaderValue::from_str("application/json; charset=UTF-8")?,
-        res.header("content-type").unwrap().last()
+        HeaderValue::from_str("application/json; charset=UTF-8")
+            .ok()
+            .as_ref(),
+        res.header("content-type").map(HeaderValues::last)
     );
     assert_eq!(
         literal!({
@@ -197,7 +199,7 @@ async fn http_server_test() -> Result<()> {
         |req_data| {
             let value = literal!({
                 "value": req_data.value().clone_static(),
-                "meta": req_data.meta().get("http_server").get("request").map(|v| v.clone_static())
+                "meta": req_data.meta().get("http_server").get("request").map(tremor_script::Value::clone_static)
             });
             let meta = literal!({
                 "http_server": {
@@ -218,12 +220,12 @@ async fn http_server_test() -> Result<()> {
     assert_eq!(StatusCode::BadRequest, res.status());
     let body = res.body_json::<StaticValue>().await?.into_value();
     assert_eq!(
-        &HeaderValue::from_str("application/json")?,
-        res.header("content-type").unwrap().last()
+        HeaderValue::from_str("application/json").ok().as_ref(),
+        res.header("content-type").map(HeaderValues::last)
     );
     assert_eq!(
-        "[\"foo\", \"bar\"]".to_string(),
-        res.header("some-other-header").unwrap().to_string()
+        Some("[\"foo\", \"bar\"]".to_string()),
+        res.header("some-other-header").map(ToString::to_string)
     );
     assert_eq!(
         literal!({
@@ -252,7 +254,7 @@ async fn http_server_test() -> Result<()> {
     // FIXME: test batched event with chunked encoding
     let req = surf::Request::builder(Method::Post, Url::parse(&url)?)
         .content_type(BYTE_STREAM)
-        .body_string(std::iter::repeat('A').take(1024).collect::<String>())
+        .body_string("A".repeat(1024))
         .build();
     let mut res = handle_req(
         req,
@@ -311,8 +313,9 @@ async fn http_server_test() -> Result<()> {
     assert_eq!(Some(BYTE_STREAM), res.content_type());
     assert_eq!(StatusCode::Ok, res.status());
     assert_eq!(
-        &HeaderValue::from_str("chunked")?,
-        res.header(headers::TRANSFER_ENCODING).unwrap().last()
+        HeaderValue::from_str("chunked").ok().as_ref(),
+        res.header(headers::TRANSFER_ENCODING)
+            .map(HeaderValues::last)
     );
     let body = res.body_string().await?;
     assert_eq!("chunk_01|chunk_02|chunk_03|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", body.as_str());
@@ -383,7 +386,7 @@ async fn https_server_test() -> Result<()> {
     let mut config = HttpClientConfig::new();
 
     let tls_config = tls_client_config(&TLSClientConfig {
-        cafile: Some(PathBuf::from_str(cert_file).unwrap()),
+        cafile: Some(PathBuf::from_str(cert_file).map_err(|_| "bad cert")?),
         domain: Some("localhost".to_string()),
         cert: None,
         key: None,
@@ -391,7 +394,7 @@ async fn https_server_test() -> Result<()> {
     .await?;
     config = config.set_tls_config(Some(Arc::new(tls_config)));
     config = config.set_timeout(Some(Duration::from_secs(20)));
-    let client = H1Client::try_from(config).unwrap();
+    let client = H1Client::try_from(config).map_err(|_| "bad config")?;
 
     let req = http_types::Request::new(Method::Delete, Url::parse(&url)?);
     let mut response = client.send(req.clone()).await;
@@ -433,8 +436,10 @@ value: null
     );
     assert_eq!(StatusCode::Ok, response.status());
     assert_eq!(
-        &HeaderValue::from_str("application/yaml; charset=UTF-8")?,
-        response.header("content-type").unwrap().last()
+        HeaderValue::from_str("application/yaml; charset=UTF-8")
+            .ok()
+            .as_ref(),
+        response.header("content-type").map(HeaderValues::last)
     );
     if let Some(res) = handle.cancel().await {
         res?;

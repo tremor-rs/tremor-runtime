@@ -287,29 +287,28 @@ mod test {
     }
     #[test]
     fn null() {
-        assert_eq!(Value::Static(StaticNode::Null).encode(), "null")
+        assert_eq!(Value::Static(StaticNode::Null).encode(), "null");
     }
     #[test]
     fn bool_true() {
-        assert_eq!(Value::Static(StaticNode::Bool(true)).encode(), "true")
+        assert_eq!(Value::Static(StaticNode::Bool(true)).encode(), "true");
     }
     #[test]
     fn bool_false() {
-        assert_eq!(Value::Static(StaticNode::Bool(false)).encode(), "false")
+        assert_eq!(Value::Static(StaticNode::Bool(false)).encode(), "false");
     }
 
     #[test]
-    fn obj() -> Result<(), Box<dyn std::error::Error>> {
+    fn obj() {
         let mut o = Value::object();
         assert_eq!(o.encode(), "{}");
         o.try_insert("snot", "badger");
         assert_eq!(o.encode(), r#"{"snot":"badger"}"#);
         o.try_insert("badger", "snot");
         assert_eq!(o.encode(), r#"{"snot":"badger","badger":"snot"}"#);
-        Ok(())
     }
     #[test]
-    fn obj_pp() -> Result<(), Box<dyn std::error::Error>> {
+    fn obj_pp() {
         let mut o = Value::object();
         assert_eq!(o.encode_pp(), "{}");
         o.try_insert("snot", "badger");
@@ -327,11 +326,10 @@ mod test {
   "badger": "snot"
 }"#
         );
-        Ok(())
     }
 
     fn assert_str(from: &str, to: &str) {
-        assert_eq!(Value::String(from.into()).encode(), to)
+        assert_eq!(Value::String(from.into()).encode(), to);
     }
     #[test]
     fn string() {

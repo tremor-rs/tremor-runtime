@@ -207,7 +207,7 @@ pub(crate) mod url {
         #[test_case("scheme://host:42/path?query=1&query=2#fragment", "scheme://host:42/path?query=1&query=2#fragment"; "all the url features")]
         fn serialize_deserialize(input: &str, expected: &str) -> Result<()> {
             let mut input = format!("\"{input}\""); // prepare for json compat
-            let url: Url = simd_json::from_str(&mut input)?;
+            let url: Url = unsafe { simd_json::from_str(&mut input)? };
 
             let serialized = url.to_string();
             assert_eq!(expected, &serialized);
@@ -271,11 +271,11 @@ mod tests {
         let mut env_helper = EnvHelper::new();
         env_helper.set_var("snot", "badger");
         env_helper.remove_var("HOME");
-        assert_eq!("badger", std::env::var("snot").unwrap());
+        assert_eq!(Some("badger".to_string()), std::env::var("snot").ok());
 
         env_helper.set_var("snot", "meh");
 
-        assert_eq!("meh", std::env::var("snot").unwrap());
+        assert_eq!(Some("meh".to_string()), std::env::var("snot").ok());
 
         assert!(std::env::var("HOME").is_err());
         drop(env_helper);

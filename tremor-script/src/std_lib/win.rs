@@ -249,14 +249,14 @@ mod test {
         a.accumulate(&[&two])?;
         a.accumulate(&[&three])?;
         let r = a.emit_and_init()?;
-        assert_eq!(r.get_idx(0).unwrap(), &1);
-        assert_eq!(r.get_idx(1).unwrap(), &2);
-        assert_eq!(r.get_idx(2).unwrap(), &3);
+        assert_eq!(r.get_idx(0).as_u64(), Some(1));
+        assert_eq!(r.get_idx(1).as_u64(), Some(2));
+        assert_eq!(r.get_idx(2).as_u64(), Some(3));
         a.accumulate(&[&four])?;
         a.accumulate(&[&three])?;
         let r = a.emit_and_init()?;
-        assert_eq!(r.get_idx(0).unwrap(), &4);
-        assert_eq!(r.get_idx(1).unwrap(), &3);
+        assert_eq!(r.get_idx(0).as_u64(), Some(4));
+        assert_eq!(r.get_idx(1).as_u64(), Some(3));
         Ok(())
     }
 
@@ -291,7 +291,7 @@ mod test {
 
         a.merge(&b)?;
 
-        assert_eq!(Value::from(1), a.emit().unwrap());
+        assert_eq!(Value::from(1), a.emit()?);
 
         Ok(())
     }
@@ -309,10 +309,10 @@ mod test {
 
         a.merge(&b)?;
 
-        let result = a.emit().unwrap();
-        assert_eq!(Value::from(1), result.get_idx(0).unwrap());
-        assert_eq!(Value::from(2), result.get_idx(1).unwrap());
-        assert_eq!(Value::from(3), result.get_idx(2).unwrap());
+        let result = a.emit()?;
+        assert_eq!(result.get_idx(0).as_u64(), Some(1));
+        assert_eq!(result.get_idx(1).as_u64(), Some(2));
+        assert_eq!(result.get_idx(2).as_u64(), Some(3));
 
         Ok(())
     }
@@ -330,7 +330,7 @@ mod test {
 
         a.merge(&b)?;
 
-        assert_eq!(Value::from(3), a.emit().unwrap());
+        assert_eq!(Value::from(3), a.emit()?);
 
         Ok(())
     }

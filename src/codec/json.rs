@@ -124,13 +124,13 @@ mod test {
         let expected = literal!({ "snot": "badger" });
 
         let mut data = br#"{ "snot": "badger" }"#.to_vec();
-        let output = codec.decode(&mut data, 42)?.unwrap();
+        let output = codec.decode(&mut data, 42)?.unwrap_or_default();
         assert_eq!(output, expected);
 
         let mut codec = codec.clone();
 
         let mut data = br#"{ "snot": "badger" }"#.to_vec();
-        let output = codec.decode(&mut data, 42)?.unwrap();
+        let output = codec.decode(&mut data, 42)?.unwrap_or_default();
         assert_eq!(output, expected);
 
         Ok(())
@@ -143,9 +143,7 @@ mod test {
         let mut codec = Json::<Unsorted>::default();
 
         let mut as_raw = codec.encode(&seed)?;
-        let as_json = codec.decode(as_raw.as_mut_slice(), 0);
-
-        let _ = dbg!(as_json);
+        assert!(codec.decode(as_raw.as_mut_slice(), 0)?.is_some());
 
         Ok(())
     }
@@ -156,9 +154,7 @@ mod test {
         let mut codec = Json::<Sorted>::default();
 
         let mut as_raw = codec.encode(&seed)?;
-        let as_json = codec.decode(as_raw.as_mut_slice(), 0);
-
-        let _ = dbg!(as_json);
+        assert!(codec.decode(as_raw.as_mut_slice(), 0)?.is_some());
 
         Ok(())
     }

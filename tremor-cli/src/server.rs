@@ -108,7 +108,7 @@ impl ServerRun {
         let (world, handle) = World::start(config).await?;
 
         // signal handling
-        let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
+        let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;
         let signal_handle = signals.handle();
         let signal_handler_task = async_std::task::spawn(handle_signals(signals, world.clone()));
 

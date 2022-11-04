@@ -119,10 +119,10 @@ mod tests {
     use super::*;
     use tremor_value::literal;
 
-    fn assert_grok_ok<I1, I2, V>(pattern: I1, raw: I2, json: V) -> bool
+    fn assert_grok_ok<I1, I2, V>(pattern: &I1, raw: &I2, json: V) -> bool
     where
-        I1: ToString,
-        I2: ToString,
+        I1: ToString + ?Sized,
+        I2: ToString + ?Sized,
         V: core::fmt::Debug,
         tremor_value::Value<'static>: PartialEq<V>,
     {
@@ -155,13 +155,9 @@ mod tests {
 
     #[test]
     fn no_match() {
-        let codec = Pattern::new(&"{}").expect("bad pattern");
+        let codec = Pattern::new("{}").expect("bad pattern");
         let decoded = codec.matches(b"cookie monster");
-        let decoded = decoded.err().expect("Expected no match");
-        assert_eq!(
-            "No match for log text: cookie monster",
-            decoded.description()
-        )
+        assert!(decoded.is_err());
     }
 
     #[test]
@@ -318,6 +314,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn decode_syslog_isilon() {
         let pattern = r#"^<invld>%{GREEDYDATA:syslog_error_prefix}>(%{TIMESTAMP_ISO8601:syslog_timestamp}(?: %{TIMESTAMP_ISO8601:syslog_ingest_timestamp})? )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{SYSLOGHOST:syslog_hostname} ?(%{SYSLOGPROG:syslog_program}:)?%{GREEDYDATA:syslog_message}"#;

@@ -389,7 +389,7 @@ mod tests {
     #[async_trait::async_trait]
     impl Connector for FakeConnector {
         async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-            self.answer.ok_or("Blergh!".into())
+            self.answer.ok_or_else(|| "Blergh!".into())
         }
 
         fn codec_requirements(&self) -> CodecReq {
@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn attempt() -> Result<()> {
+    fn attempt() {
         let mut attempt = Attempt::default();
         assert_eq!(0, attempt.since_last_success());
         assert_eq!(0, attempt.success());
@@ -410,12 +410,10 @@ mod tests {
         attempt.on_failure();
         assert_eq!(1, attempt.since_last_success());
         assert_eq!(1, attempt.success());
-
-        Ok(())
     }
 
     #[test]
-    fn failfast_strategy() -> Result<()> {
+    fn failfast_strategy() {
         let mut strategy = FailFast {};
         let mut attempt = Attempt::default();
         // the first one we let through
@@ -435,7 +433,6 @@ mod tests {
             strategy.should_reconnect(&attempt)
         );
         attempt.on_success();
-        Ok(())
     }
 
     #[async_std::test]

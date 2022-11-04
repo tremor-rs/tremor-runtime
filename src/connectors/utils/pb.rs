@@ -25,7 +25,7 @@ pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
     if let Some(s) = data.as_str() {
         Ok(s.to_string())
     } else if data.is_none() {
-        Ok("".to_string())
+        Ok(String::new())
     } else {
         Err("Expected an json string to convert to pb string".into())
     }
@@ -192,9 +192,8 @@ mod test {
     use tremor_value::literal;
 
     #[test]
-    fn error_checks() -> Result<()> {
+    fn error_checks() {
         assert!(maybe_double_to_pb(None).is_err());
-        Ok(())
     }
 
     // NOTE This is incomplete with respect to possible mappings of json values
@@ -273,6 +272,7 @@ mod test {
             prop_assert_eq!(arb_int, pb);
         }
 
+        #[allow(clippy::float_cmp)]
         #[test]
         fn prop_pb_f64(
             arb_int in prop::num::f64::POSITIVE | prop::num::f64::NEGATIVE,
@@ -310,7 +310,7 @@ mod test {
         assert!(maybe_string_to_pb(Some(&Value::from(false))).is_err());
 
         // NOTE We allow None for string and map to pb default of "" ( empty string )
-        assert_eq!(Ok("".to_string()), maybe_string_to_pb(None));
+        assert_eq!(Ok(String::new()), maybe_string_to_pb(None));
     }
 
     #[test]

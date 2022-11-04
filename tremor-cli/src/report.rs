@@ -82,6 +82,8 @@ pub(crate) enum KeywordKind {
     Predicate,
 }
 
+#[allow(clippy::manual_string_new)]
+/// for `env!` macro
 pub(crate) fn metadata() -> HashMap<String, String> {
     use std::env;
     let mut meta: HashMap<String, String> = HashMap::new();

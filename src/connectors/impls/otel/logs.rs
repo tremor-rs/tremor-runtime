@@ -348,7 +348,7 @@ mod tests {
                     logs: vec![LogRecord {
                         time_unix_nano: 0,
                         severity_number: 0,
-                        severity_text: "".into(),
+                        severity_text: String::new(),
                         name: "test".into(),
                         body: Some(AnyValue {
                             value: Some(any_value::Value::StringValue("snot".into())),
@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn minimal_logs() -> Result<()> {
+    fn minimal_logs() {
         let log = literal!({"logs": [
                 {
                     "instrumentation_library_logs": [
@@ -411,15 +411,14 @@ mod tests {
             Ok(vec![ResourceLogs {
                 instrumentation_library_logs: vec![],
                 resource: None,
-                schema_url: String::from("")
+                schema_url: String::new()
             }]),
             resource_logs_to_pb(&log)
         );
-        Ok(())
     }
 
     #[test]
-    fn minimal_instrumentation_library_logs() -> Result<()> {
+    fn minimal_instrumentation_library_logs() {
         let ill = literal!([
             {
                 "logs": [],
@@ -430,15 +429,14 @@ mod tests {
             Ok(vec![InstrumentationLibraryLogs {
                 instrumentation_library: None,
                 logs: vec![],
-                schema_url: String::from("")
+                schema_url: String::new()
             }]),
             maybe_instrumentation_library_logs_to_pb(Some(&ill))
         );
-        Ok(())
     }
 
     #[test]
-    fn minimal_log_record() -> Result<()> {
+    fn minimal_log_record() {
         let lr = literal!({});
         assert_eq!(
             Ok(LogRecord {
@@ -455,6 +453,5 @@ mod tests {
             }),
             log_record_to_pb(&lr)
         );
-        Ok(())
     }
 }

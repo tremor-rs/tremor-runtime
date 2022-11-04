@@ -204,7 +204,7 @@ mod test {
             is_transactional: false,
             event_id_gen: idgen,
         };
-        let event1 = Event {
+        let event_1 = Event {
             id: EventId::from_id(0, 0, 1),
             ingest_ns: 1,
             data: Value::from("snot").into(),
@@ -214,11 +214,11 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event1.clone())
+            .on_event(operator_id, "in", &mut state, event_1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
-        let event2 = Event {
+        let event_2 = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("badger").into(),
@@ -226,7 +226,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event2.clone())
+            .on_event(operator_id, "in", &mut state, event_2.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
         let (out, event) = r.events.pop().expect("no results");
@@ -234,7 +234,7 @@ mod test {
         let events: Vec<&Value> = event.value_iter().collect();
         assert_eq!(
             events,
-            vec![event1.data.suffix().value(), event2.data.suffix().value()]
+            vec![event_1.data.suffix().value(), event_2.data.suffix().value()]
         );
 
         let event = Event {
@@ -262,23 +262,23 @@ mod test {
         );
         let mut op = BatchFactory::new().node_to_operator(operator_id, &node_config)?;
 
-        let event1 = Event {
+        let event_1 = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
         };
 
-        println!("{}", event1.json_string().expect(""));
+        println!("{}", event_1.json_string().expect(""));
 
         let mut state = Value::null();
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event1.clone())
+            .on_event(operator_id, "in", &mut state, event_1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
-        let event2 = Event {
+        let event_2 = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 2_000_000,
             data: Value::from("badger").into(),
@@ -287,18 +287,18 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event2.clone())
+            .on_event(operator_id, "in", &mut state, event_2.clone())
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("empty results");
         assert_eq!("out", out);
-        assert_eq!(true, event.transactional);
+        assert!(event.transactional);
 
         let events: Vec<&Value> = event.value_iter().collect();
         assert_eq!(
             events,
-            vec![event1.data.suffix().value(), event2.data.suffix().value()]
+            vec![event_1.data.suffix().value(), event_2.data.suffix().value()]
         );
 
         let event = Event {
@@ -344,7 +344,7 @@ mod test {
             is_transactional: false,
             event_id_gen: idgen,
         };
-        let event1 = Event {
+        let event_1 = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
@@ -355,7 +355,7 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event1.clone())
+            .on_event(operator_id, "in", &mut state, event_1.clone())
             .expect("failed to run peipeline");
         assert_eq!(r.len(), 0);
 
@@ -373,10 +373,10 @@ mod test {
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("empty resultset");
         assert_eq!("out", out);
-        assert_eq!(true, event.transactional);
+        assert!(event.transactional);
 
         let events: Vec<&Value> = event.value_iter().collect();
-        assert_eq!(events, vec![event1.data.suffix().value()]);
+        assert_eq!(events, vec![event_1.data.suffix().value()]);
 
         let event = Event {
             id: (1, 1, 1).into(),
@@ -429,10 +429,7 @@ mod test {
             ..Event::default()
         };
 
-        let r = op
-            .on_signal(operator_id, &mut state, &mut signal)
-            .expect("failed to run pipeline")
-            .events;
+        let r = op.on_signal(operator_id, &mut state, &mut signal)?.events;
         assert_eq!(r.len(), 0);
 
         let event1 = Event {
@@ -441,25 +438,17 @@ mod test {
             data: Value::from("snot").into(),
             ..Event::default()
         };
-        let r = op
-            .on_event(operator_id, "in", &mut state, event1)
-            .expect("failed to run peipeline");
+        let r = op.on_event(operator_id, "in", &mut state, event1)?;
         assert_eq!(r.len(), 0);
 
         signal.ingest_ns = 3_000_000;
         signal.id = (1, 1, 2).into();
-        let r = op
-            .on_signal(operator_id, &mut state, &mut signal)
-            .expect("failed to run pipeline")
-            .events;
+        let r = op.on_signal(operator_id, &mut state, &mut signal)?.events;
         assert_eq!(r.len(), 1);
 
         signal.ingest_ns = 4_000_000;
         signal.id = (1, 1, 3).into();
-        let r = op
-            .on_signal(operator_id, &mut state, &mut signal)
-            .expect("failed to run pipeline")
-            .events;
+        let r = op.on_signal(operator_id, &mut state, &mut signal)?.events;
         assert_eq!(r.len(), 0);
 
         Ok(())

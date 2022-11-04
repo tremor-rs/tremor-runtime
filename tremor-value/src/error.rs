@@ -68,6 +68,6 @@ mod test {
 
     #[test]
     fn from_str() {
-        assert_eq!("snot", format!("{}", Error::from("snot")))
+        assert_eq!("snot", format!("{}", Error::from("snot")));
     }
 }
