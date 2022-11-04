@@ -55,7 +55,7 @@ strip-ansi-escapes = "0.1"
 termcolor = "1.1"
 tremor-common = { version = "0.13.0-rc.6", path = "../tremor-common" }
 tremor-influx = { version = "0.13.0-rc.6", path = "../tremor-influx" }
-tremor-kv = "0.4.0"
+tremor-kv = "0.5.0"
 tremor-value = { version = "0.13.0-rc.6", path = "../tremor-value" }
 unicode-xid = "0.2"
 url = "2"
