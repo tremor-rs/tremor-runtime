@@ -2,14 +2,19 @@
 
 ## Unreleased
 
+### New Features
+
+* implement script enhancement RFC (initial state and port based scripts)
+
+### Fixes
+
+* Fix bug in local variable resolving when using expression-paths
+
 ### Performance
 
 * Improve dogstatsd performance
 * Improve performance of `std::array::flatten` by roughly 30%
 
-### New Features
-
-* implement script enhancement RFC (initial state and port based scripts)
 
 ## [0.13.0-rc.6]
 ### Fixes

@@ -57,11 +57,12 @@ impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
 {
     fn visit_path(&mut self, path: &mut Path<'script>) -> Result<VisitRes> {
         if let Path::Reserved(ReservedPath::Args { segments, mid }) = path {
+            let var = self.helper.register_shadow_from_mid(&mid);
             let new = ExprPath {
                 expr: Box::new(self.args.clone()),
                 segments: segments.clone(),
                 mid: mid.clone(),
-                var: self.helper.reserve_shadow(),
+                var,
             };
             *path = Path::Expr(new);
             self.helper.end_shadow_var();

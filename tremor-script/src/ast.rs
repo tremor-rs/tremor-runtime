@@ -1566,9 +1566,6 @@ impl<'script> Pattern<'script> {
                 false
             }
     }
-    fn is_assign(&self) -> bool {
-        matches!(self, Pattern::Assign(_))
-    }
     fn is_exclusive_to(&self, other: &Self) -> bool {
         use Pattern::{Assign, Expr, Record, Tuple};
         match (self, other) {

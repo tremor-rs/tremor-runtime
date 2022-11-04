@@ -1,0 +1,5 @@
+# filter tags using a for-comprehension
+use std::string;
+for event of
+  case (index, value) when string::split(value, ":")[0] == "snot" => value
+end
