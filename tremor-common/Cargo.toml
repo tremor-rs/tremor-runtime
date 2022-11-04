@@ -13,5 +13,5 @@ async-std = { version = "1", features = ["attributes"] }
 rand = { version = "0.8", features = ["small_rng"] }
 beef = { version = "0.5", features = ["impl_serde"] }
 url = "2.3"
-simd-json = { version = "0.6", features = ["known-key"] }
+simd-json = { version = "0.7", features = ["known-key"] }
 simd-json-derive = "0.6"
