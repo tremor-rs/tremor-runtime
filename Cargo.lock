@@ -4766,7 +4766,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simdutf8",
- "value-trait",
+ "value-trait 0.4.0",
 ]
 
 [[package]]
@@ -4780,7 +4780,7 @@ dependencies = [
  "ryu",
  "simd-json",
  "simd-json-derive-int",
- "value-trait",
+ "value-trait 0.4.0",
 ]
 
 [[package]]
@@ -5707,7 +5707,7 @@ dependencies = [
  "pretty_assertions",
  "simd-json",
  "snmalloc-rs",
- "value-trait",
+ "value-trait 0.5.1",
 ]
 
 [[package]]
@@ -5763,7 +5763,7 @@ dependencies = [
  "tremor-script",
  "tremor-value",
  "url",
- "value-trait",
+ "value-trait 0.5.1",
  "window",
  "xz2",
 ]
@@ -5873,7 +5873,7 @@ dependencies = [
  "tungstenite",
  "url",
  "uuid 1.2.1",
- "value-trait",
+ "value-trait 0.5.1",
  "xz2",
  "zstd",
 ]
@@ -5926,7 +5926,7 @@ dependencies = [
  "tremor-value",
  "unicode-xid",
  "url",
- "value-trait",
+ "value-trait 0.5.1",
  "xz2",
 ]
 
@@ -5944,7 +5944,7 @@ dependencies = [
  "serde_json",
  "simd-json",
  "simd-json-derive",
- "value-trait",
+ "value-trait 0.5.1",
 ]
 
 [[package]]
@@ -6196,6 +6196,18 @@ name = "value-trait"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0a635407649b66e125e4d2ffd208153210179f8c7c8b71c030aa2ad3eeb4c8f"
+dependencies = [
+ "float-cmp",
+ "halfbrown",
+ "itoa 1.0.4",
+ "ryu",
+]
+
+[[package]]
+name = "value-trait"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "995de1aa349a0dc50f4aa40870dce12961a30229027230bad09acd2843edbe9e"
 dependencies = [
  "float-cmp",
  "halfbrown",
