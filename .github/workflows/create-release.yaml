@@ -38,7 +38,7 @@ jobs:
           # we produce this file for creating the release with gh later on
           release_notes_file: RELEASE_NOTES_v${{ env.RELEASE_VERSION }}.md
       - name: Create release
-        run: gh release create --title "Release v${{env.RELEASE_VERSION}}" --notes-file RELEASE_NOTES_v${{ env.RELEASE_VERSION }}.md
+        run: gh release create v${{ env.RELEASE_VERSION }} --title "Release v${{env.RELEASE_VERSION}}" --notes-file RELEASE_NOTES_v${{ env.RELEASE_VERSION }}.md
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       - name: Trigger publish crates workflow
