@@ -65,5 +65,5 @@ jobs:
           #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
           files: ./lcov.txt # optional
           flags: cli${{ matrix.kind }} # optional
-          fail_ci_if_error: true # optional (default = false)
+          fail_ci_if_error: ${{ github.event_name == 'pull_request' }} # only fail upon pull requests, where coverage is important
           verbose: true # optional (default = false)      
