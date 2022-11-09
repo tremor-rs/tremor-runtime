@@ -674,6 +674,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg(feature = "gcp-integration")]
 mod test {
     use super::*;
     use crate::connectors::impls::gbq;

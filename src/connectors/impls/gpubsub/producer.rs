@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::connectors::google::{AuthInterceptor, TokenProvider};
-
 use crate::connectors::prelude::{
     Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
     SinkManagerBuilder, SinkReply, Url,
@@ -55,11 +54,12 @@ impl ConfigImpl for Config {}
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
 
-#[cfg(not(test))]
-type GpubConnectorWithTokenProvider = GpubConnector<crate::connectors::google::GouthTokenProvider>;
-#[cfg(test)]
+#[cfg(all(test, feature = "gcp-integration"))]
 type GpubConnectorWithTokenProvider =
     GpubConnector<crate::connectors::google::tests::TestTokenProvider>;
+
+#[cfg(not(all(test, feature = "gcp-integration")))]
+type GpubConnectorWithTokenProvider = GpubConnector<crate::connectors::google::GouthTokenProvider>;
 
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
@@ -237,6 +237,7 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "gcp-integration")]
 mod tests {
     use super::*;
     use crate::connectors::google::tests::TestTokenProvider;

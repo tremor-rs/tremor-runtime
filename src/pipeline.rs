@@ -999,7 +999,7 @@ mod tests {
             .is_ok()
         {
             assert!(
-                start.elapsed() > Duration::from_secs(5),
+                start.elapsed() < Duration::from_secs(5),
                 "Pipeline didnt stop!"
             );
 

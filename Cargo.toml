@@ -265,7 +265,7 @@ num_cpus = "*"
 
 
 [features]
-default = ["integration-local"]
+default = []
 
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]

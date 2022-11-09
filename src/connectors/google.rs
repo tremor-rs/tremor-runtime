@@ -107,6 +107,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg(feature = "gcp-integration")]
 pub(crate) mod tests {
     use super::*;
     use crate::{
