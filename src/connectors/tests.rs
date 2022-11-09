@@ -266,6 +266,13 @@ impl ConnectorHarness {
     ///
     /// # Errors
     /// If we receive different bootup contraflow messages
+    #[cfg(any(
+        feature = "kafka-integration",
+        feature = "es-integration",
+        feature = "s3-integration",
+        feature = "net-integration",
+        feature = "gcp-integration"
+    ))]
     pub(crate) async fn consume_initial_sink_contraflow(&self) -> Result<()> {
         if let Some(in_pipe) = self.get_pipe(IN) {
             for cf in [
@@ -323,7 +330,8 @@ impl ConnectorHarness {
         feature = "es-integration",
         feature = "socket-integration",
         feature = "net-integration",
-        feature = "ws-integration"
+        feature = "ws-integration",
+        feature = "gcp-integration"
     ))]
     pub(crate) async fn send_to_sink(&self, event: Event, port: Cow<'static, str>) -> Result<()> {
         self.addr.send_sink(SinkMsg::Event { event, port }).await
@@ -344,7 +352,11 @@ impl ConnectorHarness {
             .await
     }
 
-    #[cfg(any(feature = "kafka-integration", feature = "wal-integration"))]
+    #[cfg(any(
+        feature = "kafka-integration",
+        feature = "wal-integration",
+        feature = "gcp-integration"
+    ))]
     pub(crate) async fn send_contraflow(&self, cb: CbAction, id: EventId) -> Result<()> {
         self.addr.send_source(SourceMsg::Cb(cb, id)).await
     }
@@ -415,6 +427,7 @@ impl TestPipeline {
         feature = "es-integration",
         feature = "s3-integration",
         feature = "net-integration",
+        feature = "gcp-integration"
     ))]
     pub(crate) async fn get_contraflow(&self) -> Result<Event> {
         match self.rx_cf.recv().timeout(Duration::from_secs(20)).await?? {
@@ -496,7 +509,8 @@ impl TestPipeline {
 #[cfg(any(
     feature = "http-integration",
     feature = "ws-integration",
-    feature = "s3-integration"
+    feature = "s3-integration",
+    feature = "gcp-integration"
 ))]
 pub(crate) mod free_port {
 
