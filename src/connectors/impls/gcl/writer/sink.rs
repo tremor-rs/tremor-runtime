@@ -247,6 +247,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg(feature = "gcp-integration")]
 mod test {
     #![allow(clippy::cast_possible_wrap)]
     use super::*;

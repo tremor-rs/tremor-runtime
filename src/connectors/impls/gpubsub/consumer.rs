@@ -63,10 +63,10 @@ fn default_ack_deadline() -> u64 {
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
-#[cfg(test)]
+#[cfg(all(test, feature = "gcp-integration"))]
 type GSubWithTokenProvider = GSub<crate::connectors::google::tests::TestTokenProvider>;
 
-#[cfg(not(test))]
+#[cfg(not(all(test, feature = "gcp-integration")))]
 type GSubWithTokenProvider = GSub<crate::connectors::google::GouthTokenProvider>;
 
 #[async_trait::async_trait]
