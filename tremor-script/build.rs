@@ -16,7 +16,7 @@ extern crate lalrpop;
 use chrono_tz::TZ_VARIANTS;
 use std::{io::Write, path::PathBuf};
 
-const TIMEZONE_DOCS: &'static str = r#"### Timezones extracted from TZ data
+const TIMEZONE_DOCS: &str = r#"### Timezones extracted from TZ data
 ### Never use the actual values, they are going to change.
 ###
 ### Usage:

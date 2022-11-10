@@ -35,20 +35,21 @@ macro_rules! with_datetime_input {
     ($input:ident, $output:ident, $to_function_err:ident, $code:block) => {
         if let Some(timestamp) = $input.as_u64() {
             let timezone = chrono_tz::UTC;
-            let $output = nanos_to_datetime(timezone, timestamp).map_err($to_function_err)?;
+            let $output = nanos_to_datetime(&timezone, timestamp).map_err($to_function_err)?;
             $code
         } else if let Some(map) = $input.as_object() {
             if let Some(timestamp) = map.get(&TIMESTAMP).and_then(|v| v.as_u64()) {
                 if let Some(timezone_value) = map.get(&TIMEZONE) {
                     with_timezone!(timezone_value, tz, $to_function_err, {
-                        let $output = nanos_to_datetime(tz, timestamp).map_err($to_function_err)?;
+                        let $output =
+                            nanos_to_datetime(&tz, timestamp).map_err($to_function_err)?;
                         $code
                     })
                 } else {
                     // timezone is optional
                     let timezone = chrono_tz::UTC;
                     let $output =
-                        nanos_to_datetime(timezone, timestamp).map_err($to_function_err)?;
+                        nanos_to_datetime(&timezone, timestamp).map_err($to_function_err)?;
                     $code
                 }
             } else {
@@ -65,7 +66,7 @@ macro_rules! with_datetime_input {
     };
 }
 
-const INVALID_OFFSET_MSG: &'static str = "Invalid timezone offset";
+const INVALID_OFFSET_MSG: &str = "Invalid timezone offset";
 /// parse a fixed offset string into number of seconds
 ///
 /// Supports the following formats:
@@ -112,7 +113,7 @@ fn parse_fixed_offset(offset: &str) -> Result<i32> {
     Ok(if negative { -seconds } else { seconds })
 }
 
-/// Parses the given `timezone_value` and executes the `code` with the successfully parsed timezone as `tz_ident.
+/// Parses the given `timezone_value` and executes the `code` with the successfully parsed timezone as `tz_ident`.
 ///
 /// requirements:
 /// - must be used within a function that returns a `FunctionResult`
@@ -197,7 +198,7 @@ pub fn load(registry: &mut Registry) {
                 // this macro ensures we have a valid timezone
                 with_timezone!(_timezone, _tz, to_runtime_error, {
                     // ALLOW: the check above makes this safe
-                    let ts = _timestamp.as_u64().unwrap();
+                    let ts = _timestamp.as_u64().expect("unreachable");
                     let mut new_object = Value::object_with_capacity(2);
                     new_object.try_insert(TIMESTAMP, Value::from(ts));
                     new_object.try_insert(TIMEZONE, (*_timezone).clone());
@@ -221,7 +222,7 @@ pub fn load(registry: &mut Registry) {
 }
 
 /// proven way to convert nanos to a datetime with the given timezone
-fn nanos_to_datetime<TZ: TimeZone>(tz: TZ, nanos: u64) -> Result<DateTime<TZ>> {
+fn nanos_to_datetime<TZ: TimeZone>(tz: &TZ, nanos: u64) -> Result<DateTime<TZ>> {
     let (secs, nanos) = (nanos / 1_000_000_000, nanos % 1_000_000_000);
     tz.timestamp_opt(secs as i64, nanos as u32)
         .single()
@@ -296,12 +297,7 @@ mod tests {
             |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
 
         for input in 0_usize..chrono_tz::TZ_VARIANTS.len() {
-            let res = (|| {
-                with_timezone!(Value::from(input), tz, fnork, {
-                    assert!(true, "We made it for TZ: {}", tz);
-                    Ok(())
-                })
-            })();
+            let res = (|| with_timezone!(Value::from(input), tz, fnork, { Ok(()) }))();
             assert!(
                 res.is_ok(),
                 "{}: Expected Ok(()), got: {res:?}",
