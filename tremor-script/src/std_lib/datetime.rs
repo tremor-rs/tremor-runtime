@@ -165,7 +165,7 @@ pub fn load(registry: &mut Registry) {
              let res = _parse(_input, _input_fmt, has_tz(_input_fmt));
              match res {
                  Ok(x) => Ok(Value::from(x)),
-                 Err(e)=> Err(FunctionError::RuntimeError { mfa: mfa( "datetime",  "parse", 1), error: format!("Cannot Parse {e} to valid timestamp") })
+                 Err(e)=> Err(FunctionError::RuntimeError { mfa: mfa( "datetime",  "parse", 1), error: e.to_string() })
         }}))
         .insert(tremor_const_fn!(datetime|format(_context, _datetime, _format) {
             let format = _format.as_str().ok_or_else(||FunctionError::BadType {mfa: this_mfa()})?;
