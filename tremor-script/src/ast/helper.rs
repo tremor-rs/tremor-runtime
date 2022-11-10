@@ -61,7 +61,7 @@ impl Warning {
 #[derive(Default, Debug, Clone, Serialize, PartialEq)]
 pub struct Scope<'script> {
     /// Module of the scope
-    pub(crate) modules: std::collections::HashMap<String, module::Index>,
+    pub(crate) modules: std::collections::BTreeMap<String, module::Index>,
     /// Content of the scope
     pub content: Content<'script>,
     pub(crate) parent: Option<Box<Scope<'script>>>,
