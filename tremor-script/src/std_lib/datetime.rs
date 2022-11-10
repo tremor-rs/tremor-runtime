@@ -20,12 +20,12 @@
 
 use crate::datetime::{_parse, has_tz};
 use crate::errors::{Error, Result};
-use crate::registry::Registry;
 use crate::prelude::*;
+use crate::registry::Registry;
 use crate::tremor_const_fn;
-use chrono::{DateTime, Datelike, TimeZone, Timelike};
-use chrono::FixedOffset;
 use beef::Cow;
+use chrono::FixedOffset;
+use chrono::{DateTime, Datelike, TimeZone, Timelike};
 
 const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 const TIMEZONE: Cow<'static, str> = Cow::const_str("tz");
@@ -47,24 +47,29 @@ macro_rules! with_datetime_input {
                 } else {
                     // timezone is optional
                     let timezone = chrono_tz::UTC;
-                    let $output = nanos_to_datetime(timezone, timestamp).map_err($to_function_err)?;
+                    let $output =
+                        nanos_to_datetime(timezone, timestamp).map_err($to_function_err)?;
                     $code
                 }
             } else {
-                return Err($to_function_err(Error::from("Missing or invalid \"timestamp\" field")));
+                return Err($to_function_err(Error::from(
+                    "Missing or invalid \"timestamp\" field",
+                )));
             }
         } else {
-            return Err($to_function_err(Error::from(format!("Invalid datetime input of type {}", $input.value_type()))));
+            return Err($to_function_err(Error::from(format!(
+                "Invalid datetime input of type {}",
+                $input.value_type()
+            ))));
         }
-
     };
 }
 
 const INVALID_OFFSET_MSG: &'static str = "Invalid timezone offset";
 /// parse a fixed offset string into number of seconds
-/// 
+///
 /// Supports the following formats:
-/// 
+///
 /// - `+09:00`
 /// - `-12:00`
 /// - `08:30`
@@ -79,25 +84,29 @@ fn parse_fixed_offset(offset: &str) -> Result<i32> {
         Some(byte @ (&b'-' | &b'+')) => {
             idx += 1;
             byte == &b'-'
-        },
+        }
         Some(b) if u8::is_ascii_digit(b) => false,
-        Some(_) | None => return Err(Error::from(INVALID_OFFSET_MSG))
+        Some(_) | None => return Err(Error::from(INVALID_OFFSET_MSG)),
     };
     if bytes.len() < 2 {
         return Err(Error::from(INVALID_OFFSET_MSG));
     }
     let hours = match (bytes.get(idx), bytes.get(idx + 1)) {
-        (Some(h1 @ b'0'..=b'9'), Some(h2 @ b'0'..=b'9')) => i32::from((h1 - b'0') * 10 + (h2 - b'0')),
-        _ => return Err(Error::from(INVALID_OFFSET_MSG))
+        (Some(h1 @ b'0'..=b'9'), Some(h2 @ b'0'..=b'9')) => {
+            i32::from((h1 - b'0') * 10 + (h2 - b'0'))
+        }
+        _ => return Err(Error::from(INVALID_OFFSET_MSG)),
     };
     idx += 2;
     if let Some(&b':') = bytes.get(idx) {
         idx += 1;
     }
     let minutes = match (bytes.get(idx), bytes.get(idx + 1)) {
-        (Some(m1 @ b'0'..=b'5'), Some(m2 @ b'0'..=b'9')) => i32::from((m1 - b'0') * 10 + (m2 - b'0')),
+        (Some(m1 @ b'0'..=b'5'), Some(m2 @ b'0'..=b'9')) => {
+            i32::from((m1 - b'0') * 10 + (m2 - b'0'))
+        }
         (None, None) => 0,
-        _ => return Err(Error::from(INVALID_OFFSET_MSG))
+        _ => return Err(Error::from(INVALID_OFFSET_MSG)),
     };
     let seconds = hours * 3600 + minutes * 60;
     Ok(if negative { -seconds } else { seconds })
@@ -110,7 +119,14 @@ fn parse_fixed_offset(offset: &str) -> Result<i32> {
 macro_rules! with_timezone {
     ($timezone_value:expr, $tz_ident:ident, $to_function_err:ident, $code:block) => {{
         if let Some(timezone_id) = $timezone_value.as_usize() {
-            let $tz_ident = chrono_tz::TZ_VARIANTS.get(timezone_id).ok_or_else(|| $to_function_err(Error::from(format!("Invalid timezone identifier {timezone_id}"))))?.clone();
+            let $tz_ident = chrono_tz::TZ_VARIANTS
+                .get(timezone_id)
+                .ok_or_else(|| {
+                    $to_function_err(Error::from(format!(
+                        "Invalid timezone identifier {timezone_id}"
+                    )))
+                })?
+                .clone();
             $code
         } else if let Some(timezone_str) = $timezone_value.as_str() {
             match timezone_str.parse::<chrono_tz::Tz>() {
@@ -149,7 +165,6 @@ pub fn load(registry: &mut Registry) {
              match res {
                  Ok(x) => Ok(Value::from(x)),
                  Err(e)=> Err(FunctionError::RuntimeError { mfa: mfa( "datetime",  "parse", 1), error: format!("Cannot Parse {e} to valid timestamp") })
-                
         }}))
         .insert(tremor_const_fn!(datetime|format(_context, _datetime, _format) {
             let format = _format.as_str().ok_or_else(||FunctionError::BadType {mfa: this_mfa()})?;
@@ -203,9 +218,7 @@ pub fn load(registry: &mut Registry) {
         .insert(datetime_fn!(subsecond_millis, datetime, datetime.timestamp_subsec_millis()))
         .insert(datetime_fn!(subsecond_micros, datetime, datetime.timestamp_subsec_micros()))
         .insert(datetime_fn!(subsecond_nanos, datetime, datetime.timestamp_subsec_nanos()));
-    }
-
-
+}
 
 /// proven way to convert nanos to a datetime with the given timezone
 fn nanos_to_datetime<TZ: TimeZone>(tz: TZ, nanos: u64) -> Result<DateTime<TZ>> {
@@ -217,10 +230,10 @@ fn nanos_to_datetime<TZ: TimeZone>(tz: TZ, nanos: u64) -> Result<DateTime<TZ>> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{NaiveDate, Offset, TimeZone};
-    use crate::registry::Mfa;
-    use test_case::test_case;
     use super::*;
+    use crate::registry::Mfa;
+    use chrono::{NaiveDate, Offset, TimeZone};
+    use test_case::test_case;
 
     #[test]
     pub fn parse_at_timestamp() {
@@ -248,7 +261,6 @@ mod tests {
         assert_eq!(output, 1_560_777_212_000_000_000);
     }
 
-
     #[test_case("Europe/Berlin", 3600; "berlin")]
     #[test_case("Europe/London", 3600; "london")]
     #[test_case("UTC", 0 ; "utc")]
@@ -262,11 +274,15 @@ mod tests {
     #[test_case("+02:30", 9000; "positive with colon")]
     fn with_timezone_str(input: &str, offset_secs: i32) {
         use crate::registry::to_runtime_error;
-        let fnork = |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
-        let res = (||{
+        let fnork =
+            |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
+        let res = (|| {
             with_timezone!(Value::from(input), tz, fnork, {
                 let naive = NaiveDate::from_ymd(1970, 1, 1);
-                assert_eq!(offset_secs, tz.offset_from_utc_date(&naive).fix().local_minus_utc());
+                assert_eq!(
+                    offset_secs,
+                    tz.offset_from_utc_date(&naive).fix().local_minus_utc()
+                );
                 Ok(())
             })
         })();
@@ -276,16 +292,21 @@ mod tests {
     #[test]
     fn with_timezone_index() {
         use crate::registry::to_runtime_error;
-        let fnork = |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
+        let fnork =
+            |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
 
         for input in 0_usize..chrono_tz::TZ_VARIANTS.len() {
-            let res = (||{
+            let res = (|| {
                 with_timezone!(Value::from(input), tz, fnork, {
                     assert!(true, "We made it for TZ: {}", tz);
                     Ok(())
                 })
             })();
-            assert!(res.is_ok(), "{}: Expected Ok(()), got: {res:?}", chrono_tz::TZ_VARIANTS[input].name());
+            assert!(
+                res.is_ok(),
+                "{}: Expected Ok(()), got: {res:?}",
+                chrono_tz::TZ_VARIANTS[input].name()
+            );
         }
     }
 
@@ -316,8 +337,14 @@ mod tests {
             let dt = tz.timestamp(0, 0);
             let tz_str1 = dt.format("%z").to_string();
             let tz_str3 = dt.format("%:z").to_string();
-            assert!(parse_fixed_offset(tz_str1.as_str()).is_ok(), "Failed parsing offset {tz_str1}");
-            assert!(parse_fixed_offset(tz_str3.as_str()).is_ok(), "Failed parsing offset {tz_str3}");
+            assert!(
+                parse_fixed_offset(tz_str1.as_str()).is_ok(),
+                "Failed parsing offset {tz_str1}"
+            );
+            assert!(
+                parse_fixed_offset(tz_str3.as_str()).is_ok(),
+                "Failed parsing offset {tz_str3}"
+            );
         }
     }
 }
