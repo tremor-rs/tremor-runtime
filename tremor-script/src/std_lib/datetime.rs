@@ -297,7 +297,7 @@ mod tests {
             |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
 
         for input in 0_usize..chrono_tz::TZ_VARIANTS.len() {
-            let res = (|| with_timezone!(Value::from(input), tz, fnork, { Ok(()) }))();
+            let res = (|| with_timezone!(Value::from(input), _tz, fnork, { Ok(()) }))();
             assert!(
                 res.is_ok(),
                 "{}: Expected Ok(()), got: {res:?}",
