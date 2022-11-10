@@ -23,6 +23,7 @@ use std::datetime::formats;
 ## > ```tremor
 ## > use std::datetime;
 ## > datetime::rfc3339(1667997961)
+## > ```
 intrinsic fn rfc3339(datetime) as datetime::rfc3339;
 
 ## Formats the given datetime according to [RFC 2822](https://www.rfc-editor.org/rfc/rfc2822#section-3.3)
