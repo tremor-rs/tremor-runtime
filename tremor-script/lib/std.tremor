@@ -3,6 +3,7 @@
 ### * [array](array.md) - functions to deal with arrays (`[]`)
 ### * [base64](base64.md) - functions for base64 en and decoding
 ### * [binary](base64.md) - functions to deal with binary data (`<< 1, 2, 3 >>`)
+### * [datetime](datetime.md) - functions and constants to deal with timestamp and datetimes
 ### * [float](float.md) - functions to deal with floating point numbers
 ### * [integer](integer/index.md) - functions to deal with integer numbers
 ### * [json](json.md) - functions to deal with JSON
@@ -22,6 +23,7 @@
 use std::array;
 use std::base64;
 use std::binary;
+use std::datetime;
 use std::float;
 use std::integer;
 use std::json;
