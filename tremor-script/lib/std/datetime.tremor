@@ -1,7 +1,7 @@
 ### Support for parsing date strings to nanosecond timestamps and formatting nanosecond timestamps into strings and more.
 ### 
-### The submodule [timezones](datetime/timezones.md) contains constants for each existing timezone in the IANA timezone database.
-### The submodule [formats](datetime/formats.md) contains constants commonly used formats.
+### The submodule [timezones](timezones.md) contains constants for each existing timezone in the IANA timezone database.
+### The submodule [formats](formats.md) contains constants commonly used formats.
 ###
 ### In this module we introduce a type called `datetime`.
 ###
@@ -9,7 +9,7 @@
 ###  * a simple integer timestamp which is interpreted as *UTC nanosecond precision timestamp since epoch* or
 ###  * a record with the following fields:
 ###    * `timestamp`: a *UTC nanosecond precision timestamp since epoch*
-###    * `tz`: a timezone identifier from the [`std::datetime::timezones`](datetime/timezones.md) module or a string with a timezone name or a fixed offset
+###    * `tz`: a timezone identifier from the [`std::datetime::timezones`](timezones.md) module or a string with a timezone name or a fixed offset
 ###
 ### It can be conveniently created and adapted with the [`with_timezone`](#with_timezoneutc_nanos-timezone) function.
 ###
