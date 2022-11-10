@@ -35,8 +35,8 @@ use crate::{
 };
 use beef::Cow;
 use sha2::Digest;
-use std::collections::hash_map::Entry;
-use std::{collections::HashMap, fmt::Debug};
+use std::collections::btree_map::Entry;
+use std::{collections::BTreeMap, fmt::Debug};
 
 use std::sync::RwLock;
 lazy_static::lazy_static! {
@@ -96,7 +96,7 @@ impl_expr!(ModuleRaw);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Id(Vec<u8>);
 
-type NamedEnteties<T> = HashMap<String, T>;
+type NamedEnteties<T> = BTreeMap<String, T>;
 
 /// Content of a module
 #[derive(Default, Clone, Serialize, PartialEq)]
@@ -221,7 +221,7 @@ pub struct Module {
     /// module contents
     pub content: Content<'static>,
     /// additionally loaded modules
-    pub modules: HashMap<String, Index>,
+    pub modules: BTreeMap<String, Index>,
 }
 
 impl From<&[u8]> for Id {
