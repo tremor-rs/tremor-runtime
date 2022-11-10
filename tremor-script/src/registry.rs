@@ -310,6 +310,11 @@ pub struct TremorFnWrapper {
 }
 
 impl TremorFnWrapper {
+    /// name of the function (without module)
+    #[must_use]
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
     /// Creates a new wrapper
     #[must_use]
     pub fn new(module: String, name: String, fun: Box<dyn TremorFn>) -> Self {

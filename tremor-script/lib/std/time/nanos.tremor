@@ -154,3 +154,103 @@ end;
 fn to_micros(nanos) with
   nanos / NANOS_PER_MICROSECOND
 end;
+
+
+## Truncate down to the next microsecond.
+##
+## This function does not take leap-seconds or any other datetime fanciness into account. This is plain timestamp math.
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::truncate_micros(9999) 
+## > # result: 9000
+## > ```
+fn truncate_micros(nanos) with
+  match nanos < 0 of
+    case true => (nanos - NANOS_PER_MICROSECOND) - (nanos % NANOS_PER_MICROSECOND)
+    default => nanos - (nanos % NANOS_PER_MICROSECOND)
+  end
+end;
+
+## Truncate down to the next millisecond
+##
+## This function does not take leap-seconds or any other datetime fanciness into account. This is plain timestamp math.
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::truncate_millis(9_999_999) 
+## > # result: 9_000_000
+## > ```
+fn truncate_millis(nanos) with
+  match nanos < 0 of
+    case true => (nanos - NANOS_PER_MILLISECOND) - (nanos % NANOS_PER_MILLISECOND)
+    default => nanos - (nanos % NANOS_PER_MILLISECOND)
+  end
+end;
+
+## Truncate down to the next second
+##
+## This function does not take leap-seconds or any other datetime fanciness into account. This is plain timestamp math.
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::truncate_seconds(9_999_999_999) 
+## > # result: 9_000_000_000
+## > ```
+fn truncate_seconds(nanos) with
+  match nanos < 0 of
+    case true => (nanos - NANOS_PER_SECOND) - (nanos % NANOS_PER_SECOND)
+    default => nanos - (nanos % NANOS_PER_SECOND)
+  end
+end;
+
+## Truncate down to the next minute
+##
+## This function does not take leap-seconds or any other datetime fanciness into account. This is plain timestamp math.
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::truncate_minutes(69_999_999_999) 
+## > # result: 60_000_000_000
+## > ```
+fn truncate_minutes(nanos) with
+  match nanos < 0 of
+    case true => (nanos - NANOS_PER_MINUTE) - (nanos % NANOS_PER_MINUTE)
+    default => nanos - (nanos % NANOS_PER_MINUTE)
+  end
+end;
+
+## Truncate down to the next hour
+##
+## This function does not take leap-seconds or any other datetime fanciness into account. This is plain timestamp math.
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::truncate_hours(3_699_999_999_999) 
+## > # result: 3_600_000_000_000
+## > ```
+fn truncate_hours(nanos) with
+  match nanos < 0 of
+    case true => (nanos - NANOS_PER_HOUR) - (nanos % NANOS_PER_HOUR)
+    default => nanos - (nanos % NANOS_PER_HOUR)
+  end
+end;
+
+## Truncate down to the next day
+##
+## This function does not take leap-seconds or any other datetime fanciness into account. This is plain timestamp math.
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::truncate_days(86_499_999_999_999) 
+## > # result: 86_400_000_000_000
+## > ```
+fn truncate_days(nanos) with
+  match nanos < 0 of
+    case true => (nanos - NANOS_PER_DAY) - (nanos % NANOS_PER_DAY)
+    default => nanos - (nanos % NANOS_PER_DAY)
+  end
+end;
+
+# We don't know when a full week started so we cannot easily truncate down to a week
+# So we skipped the `truncate_weeks` function

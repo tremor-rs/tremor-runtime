@@ -19,22 +19,124 @@
 )]
 
 use crate::datetime::{_parse, has_tz};
-use crate::prelude::*;
+use crate::errors::{Error, Result};
 use crate::registry::Registry;
-use crate::{tremor_const_fn, tremor_fn};
-use chrono::{offset::Utc, DateTime, Datelike, NaiveDateTime, SubsecRound, Timelike};
+use crate::prelude::*;
+use crate::tremor_const_fn;
+use chrono::{DateTime, Datelike, TimeZone, Timelike};
+use chrono::FixedOffset;
+use beef::Cow;
 
-macro_rules! time_fn {
-    ($name:ident, $fn:ident) => {
-        tremor_const_fn! (datetime|$name(_context, _value) {
-            _value.as_u64().map($fn).map(Value::from).ok_or_else(||FunctionError::BadType{ mfa: this_mfa() })
-        })
+const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
+const TIMEZONE: Cow<'static, str> = Cow::const_str("tz");
+
+/// code should return `FunctionResult`
+macro_rules! with_datetime_input {
+    ($input:ident, $output:ident, $to_function_err:ident, $code:block) => {
+        if let Some(timestamp) = $input.as_u64() {
+            let timezone = chrono_tz::UTC;
+            let $output = nanos_to_datetime(timezone, timestamp).map_err($to_function_err)?;
+            $code
+        } else if let Some(map) = $input.as_object() {
+            if let Some(timestamp) = map.get(&TIMESTAMP).and_then(|v| v.as_u64()) {
+                if let Some(timezone_value) = map.get(&TIMEZONE) {
+                    with_timezone!(timezone_value, tz, $to_function_err, {
+                        let $output = nanos_to_datetime(tz, timestamp).map_err($to_function_err)?;
+                        $code
+                    })
+                } else {
+                    // timezone is optional
+                    let timezone = chrono_tz::UTC;
+                    let $output = nanos_to_datetime(timezone, timestamp).map_err($to_function_err)?;
+                    $code
+                }
+            } else {
+                return Err($to_function_err(Error::from("Missing or invalid \"timestamp\" field")));
+            }
+        } else {
+            return Err($to_function_err(Error::from(format!("Invalid datetime input of type {}", $input.value_type()))));
+        }
+
     };
 }
-macro_rules! time_fn_32 {
-    ($name:ident, $fn:ident) => {
+
+const INVALID_OFFSET_MSG: &'static str = "Invalid timezone offset";
+/// parse a fixed offset string into number of seconds
+/// 
+/// Supports the following formats:
+/// 
+/// - `+09:00`
+/// - `-12:00`
+/// - `08:30`
+/// - `02`
+/// - `+02`
+/// - `0912`
+/// - `-0912`
+fn parse_fixed_offset(offset: &str) -> Result<i32> {
+    let bytes = offset.as_bytes();
+    let mut idx = 0_usize;
+    let negative = match bytes.get(idx) {
+        Some(byte @ (&b'-' | &b'+')) => {
+            idx += 1;
+            byte == &b'-'
+        },
+        Some(b) if u8::is_ascii_digit(b) => false,
+        Some(_) | None => return Err(Error::from(INVALID_OFFSET_MSG))
+    };
+    if bytes.len() < 2 {
+        return Err(Error::from(INVALID_OFFSET_MSG));
+    }
+    let hours = match (bytes.get(idx), bytes.get(idx + 1)) {
+        (Some(h1 @ b'0'..=b'9'), Some(h2 @ b'0'..=b'9')) => i32::from((h1 - b'0') * 10 + (h2 - b'0')),
+        _ => return Err(Error::from(INVALID_OFFSET_MSG))
+    };
+    idx += 2;
+    if let Some(&b':') = bytes.get(idx) {
+        idx += 1;
+    }
+    let minutes = match (bytes.get(idx), bytes.get(idx + 1)) {
+        (Some(m1 @ b'0'..=b'5'), Some(m2 @ b'0'..=b'9')) => i32::from((m1 - b'0') * 10 + (m2 - b'0')),
+        (None, None) => 0,
+        _ => return Err(Error::from(INVALID_OFFSET_MSG))
+    };
+    let seconds = hours * 3600 + minutes * 60;
+    Ok(if negative { -seconds } else { seconds })
+}
+
+/// Parses the given `timezone_value` and executes the `code` with the successfully parsed timezone as `tz_ident.
+///
+/// requirements:
+/// - must be used within a function that returns a `FunctionResult`
+macro_rules! with_timezone {
+    ($timezone_value:expr, $tz_ident:ident, $to_function_err:ident, $code:block) => {{
+        if let Some(timezone_id) = $timezone_value.as_usize() {
+            let $tz_ident = chrono_tz::TZ_VARIANTS.get(timezone_id).ok_or_else(|| $to_function_err(Error::from(format!("Invalid timezone identifier {timezone_id}"))))?.clone();
+            $code
+        } else if let Some(timezone_str) = $timezone_value.as_str() {
+            match timezone_str.parse::<chrono_tz::Tz>() {
+                Ok(tz) => {
+                    let $tz_ident = tz;
+                    $code
+                }
+                Err(_e) => {
+                    let offset_secs = parse_fixed_offset(timezone_str).map_err($to_function_err)?;
+                    let $tz_ident = FixedOffset::east(offset_secs);
+                    $code
+                }
+            }
+        } else {
+            return Err($to_function_err(Error::from(format!(
+                "Invalid timezone type {}",
+                $timezone_value.value_type()
+            ))));
+        }
+    }};
+}
+
+macro_rules! datetime_fn {
+    ($name:ident, $datetime_ident:ident, $code:expr) => {
         tremor_const_fn! (datetime|$name(_context, _value) {
-            _value.as_u32().map($fn).map(Value::from).ok_or_else(||FunctionError::BadType{ mfa: this_mfa() })
+            with_datetime_input!(_value, $datetime_ident, to_runtime_error, { Ok(Value::from($code)) })
         })
     };
 }
@@ -46,212 +148,78 @@ pub fn load(registry: &mut Registry) {
              let res = _parse(_input, _input_fmt, has_tz(_input_fmt));
              match res {
                  Ok(x) => Ok(Value::from(x)),
-                 Err(e)=> Err(FunctionError::RuntimeError { mfa: mfa( "datetime",  "parse", 1), error:  format!("Cannot Parse {} to valid timestamp", e), 
-})
-}}))
-
-        .insert(time_fn!(iso8601, _iso8601))
-        .insert(tremor_const_fn!(datetime|format(_context, _datetime, _fmt) {
-            if let (Some(datetime), Some(fmt)) = (_datetime.as_u64(), _fmt.as_str()) {
-                Ok(Value::from(_format(datetime, fmt, has_tz(fmt))))
+                 Err(e)=> Err(FunctionError::RuntimeError { mfa: mfa( "datetime",  "parse", 1), error: format!("Cannot Parse {e} to valid timestamp") })
+                
+        }}))
+        .insert(tremor_const_fn!(datetime|format(_context, _datetime, _format) {
+            let format = _format.as_str().ok_or_else(||FunctionError::BadType {mfa: this_mfa()})?;
+            with_datetime_input!(_datetime, datetime, to_runtime_error, {
+                // timestamp and timezone are in scope
+                Ok(Value::from(datetime.format(format).to_string()))
+            })
+        }))
+        .insert(tremor_const_fn!(datetime|rfc3339(_context, _datetime) {
+            with_datetime_input!(_datetime, datetime, to_runtime_error, {
+                Ok(Value::from(datetime.to_rfc3339()))
+            })
+        }))
+        .insert(tremor_const_fn!(datetime|rfc2822(_context, _datetime) {
+            with_datetime_input!(_datetime, datetime, to_runtime_error, {
+                Ok(Value::from(datetime.to_rfc2822()))
+            })
+        }))
+        .insert(tremor_const_fn!(datetime|with_timezone(_context, _timestamp, _timezone) {
+            if _timestamp.is_object() {
+                // this macro ensures we have a valid timezone
+                with_timezone!(_timezone, _tz, to_runtime_error, {
+                    let ts = _timestamp.get_u64(&TIMESTAMP).ok_or_else(|| FunctionError::RuntimeError { mfa: this_mfa(), error: "Invalid datetime input: Missing or invalid \"timestamp\" field.".to_string() })?;
+                    let mut new_object = Value::object_with_capacity(2);
+                    new_object.try_insert(TIMESTAMP, Value::from(ts));
+                    new_object.try_insert(TIMEZONE, (*_timezone).clone());
+                    Ok(new_object)
+                })
+            } else if _timestamp.is_u64() {
+                // this macro ensures we have a valid timezone
+                with_timezone!(_timezone, _tz, to_runtime_error, {
+                    // ALLOW: the check above makes this safe
+                    let ts = _timestamp.as_u64().unwrap();
+                    let mut new_object = Value::object_with_capacity(2);
+                    new_object.try_insert(TIMESTAMP, Value::from(ts));
+                    new_object.try_insert(TIMEZONE, (*_timezone).clone());
+                    Ok(new_object)
+                })
             } else {
-                Err(FunctionError::BadType{ mfa: this_mfa() })
+                Err(FunctionError::BadType { mfa: this_mfa() })
             }
         }))
-        .insert(time_fn!(year, _year))
-        .insert(time_fn!(month, _month))
-        .insert(time_fn!(day, _day))
-        .insert(time_fn!(hour, _hour))
-        .insert(time_fn!(minute, _minute))
-        .insert(time_fn!(second, _second))
-        .insert(time_fn!(millisecond, _millisecond))
-        .insert(time_fn!(microsecond, _microsecond))
-        .insert(time_fn!(nanosecond, _nanosecond))
-        .insert(tremor_fn!(datetime|today(_context) {
-            Ok(Value::from(_today()))
-        }))
-        .insert(time_fn!(subsecond, _subsecond))
-        .insert(time_fn!(to_nearest_millisecond, _to_nearest_millisecond))
-        .insert(time_fn!(to_nearest_microsecond, _to_nearest_microsecond))
-        .insert(time_fn!(to_nearest_second, _to_nearest_second))
-        .insert(tremor_const_fn!(datetime|from_human_format(_context, _value: String) {
-            match _from_human_format(_value) {
-                Some(x) => Ok(Value::from(x)),
-                None => Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("The human format {} is invalid", _value)})
-            }
-        }))
-        .insert(time_fn_32!(with_nanoseconds, _with_nanoseconds))
-        .insert(time_fn_32!(with_microseconds, _with_microseconds))
-        .insert(time_fn_32!(with_milliseconds, _with_milliseconds))
-        .insert(time_fn_32!(with_seconds, _with_seconds))
-        .insert(time_fn_32!(with_minutes, _with_minutes))
-        .insert(time_fn_32!(with_hours, _with_hours))
-        .insert(time_fn_32!(with_days, _with_days))
-        .insert(time_fn_32!(with_weeks, _with_weeks))
-        .insert(time_fn_32!(with_years, _with_years))
-        .insert(time_fn!(without_subseconds, _without_subseconds));
-}
-
-pub fn _iso8601(datetime: u64) -> String {
-    _format(datetime, "%Y-%m-%dT%H:%M:%S%.9f+00:00", false)
-}
-
-pub fn _format(value: u64, fmt: &str, has_timezone: bool) -> String {
-    if has_timezone {
-        format!(
-            "{}",
-            DateTime::<Utc>::from_utc(to_naive_datetime(value), Utc).format(fmt)
-        )
-    } else {
-        format!("{}", to_naive_datetime(value).format(fmt))
+        .insert(datetime_fn!(year, datetime, datetime.year()))
+        .insert(datetime_fn!(month, datetime, datetime.month()))
+        .insert(datetime_fn!(iso_week, datetime, datetime.iso_week().week()))
+        .insert(datetime_fn!(day_of_month, datetime, datetime.day()))
+        .insert(datetime_fn!(day_of_year, datetime, datetime.ordinal()))
+        .insert(datetime_fn!(hour, datetime, datetime.hour()))
+        .insert(datetime_fn!(minute, datetime, datetime.minute()))
+        .insert(datetime_fn!(second, datetime, datetime.second()))
+        .insert(datetime_fn!(subsecond_millis, datetime, datetime.timestamp_subsec_millis()))
+        .insert(datetime_fn!(subsecond_micros, datetime, datetime.timestamp_subsec_micros()))
+        .insert(datetime_fn!(subsecond_nanos, datetime, datetime.timestamp_subsec_nanos()));
     }
-}
-pub fn _second(value: u64) -> u8 {
-    to_naive_datetime(value).second() as u8
-}
 
-pub fn _minute(value: u64) -> u8 {
-    to_naive_datetime(value).minute() as u8
-}
 
-pub fn _hour(value: u64) -> u8 {
-    to_naive_datetime(value).hour() as u8
-}
 
-pub fn _day(value: u64) -> u8 {
-    to_naive_datetime(value).day() as u8
-}
-
-pub fn _month(value: u64) -> u8 {
-    to_naive_datetime(value).month() as u8
-}
-
-pub fn _year(value: u64) -> u32 {
-    to_naive_datetime(value).year() as u32
-}
-
-pub fn _millisecond(value: u64) -> u32 {
-    to_naive_datetime(value).nanosecond() / 1_000_000
-}
-
-pub fn _microsecond(value: u64) -> u32 {
-    to_naive_datetime(value).nanosecond() / 1_000 % 1_000
-}
-
-pub fn _nanosecond(value: u64) -> u32 {
-    to_naive_datetime(value).nanosecond() % 1000
-}
-
-pub fn _subsecond(value: u64) -> u32 {
-    to_naive_datetime(value).nanosecond()
-}
-
-fn to_naive_datetime(value: u64) -> NaiveDateTime {
-    NaiveDateTime::from_timestamp(
-        (value / 1_000_000_000) as i64,
-        (value % 1_000_000_000) as u32,
-    )
-}
-
-pub fn _to_nearest_millisecond(value: u64) -> u64 {
-    let ndt = to_naive_datetime(value);
-    let ns = ndt.round_subsecs(3).nanosecond();
-    value / 1_000_000_000 * 1_000_000_000 + u64::from(ns)
-}
-
-pub fn _to_nearest_microsecond(value: u64) -> u64 {
-    let ns = to_naive_datetime(value).round_subsecs(6).nanosecond();
-    value / 1_000_000_000 * 1_000_000_000 + u64::from(ns)
-}
-
-pub fn _to_nearest_second(value: u64) -> u64 {
-    let ms = _subsecond(value);
-    if ms < 500_000_000 {
-        value - u64::from(ms)
-    } else {
-        value - u64::from(ms) + 1_000_000_000
-    }
-}
-
-pub fn _without_subseconds(value: u64) -> u64 {
-    value / 1_000_000_000
-}
-
-pub fn _today() -> u64 {
-    Utc::today().and_hms(0, 0, 0).timestamp_nanos() as u64
-}
-
-pub fn _from_human_format(human: &str) -> Option<u64> {
-    let tokens = human.split(' ').collect::<Vec<&str>>();
-
-    let res = tokens
-        .chunks(2)
-        .filter_map(|sl| Some((sl.first()?.parse::<u32>().ok(), sl.get(1)?)))
-        .fold(0, |acc, sl| match sl {
-            (Some(n), &"years") => acc + _with_years(n),
-            (Some(n), &"weeks") => acc + _with_weeks(n),
-            (Some(n), &"days") => acc + _with_days(n),
-            (Some(n), &"minutes") => acc + _with_minutes(n),
-            (Some(n), &"seconds") => acc + _with_seconds(n),
-            (Some(n), &"milliseconds") => acc + _with_milliseconds(n),
-            (Some(n), &"microseconds") => acc + _with_microseconds(n),
-            (Some(n), &"nanoseconds") => acc + _with_nanoseconds(n),
-            (Some(1), &"year") => acc + _with_years(1),
-            (Some(1), &"week") => acc + _with_weeks(1),
-            (Some(1), &"day") => acc + _with_days(1),
-            (Some(1), &"minute") => acc + _with_minutes(1),
-            (Some(1), &"second") => acc + _with_seconds(1),
-            (Some(1), &"millisecond") => acc + _with_milliseconds(1),
-            (Some(1), &"microsecond") => acc + _with_microseconds(1),
-            (Some(1), &"nanosecond") => acc + _with_nanoseconds(1),
-            _ => acc,
-        });
-
-    if res > 0 {
-        Some(res)
-    } else {
-        None
-    }
-}
-
-pub const fn _with_nanoseconds(n: u32) -> u64 {
-    n as u64
-}
-
-pub const fn _with_microseconds(n: u32) -> u64 {
-    n as u64 * 1_000
-}
-
-pub const fn _with_milliseconds(n: u32) -> u64 {
-    n as u64 * 1_000_000
-}
-
-pub const fn _with_seconds(n: u32) -> u64 {
-    n as u64 * 1_000_000_000
-}
-
-pub const fn _with_minutes(n: u32) -> u64 {
-    _with_seconds(n * 60)
-}
-
-pub const fn _with_hours(n: u32) -> u64 {
-    _with_minutes(n * 60)
-}
-
-pub const fn _with_days(n: u32) -> u64 {
-    _with_hours(n * 24)
-}
-
-pub const fn _with_weeks(n: u32) -> u64 {
-    _with_days(n * 7)
-}
-
-pub const fn _with_years(n: u32) -> u64 {
-    _with_days(n * 365) + _with_days(n / 4)
+/// proven way to convert nanos to a datetime with the given timezone
+fn nanos_to_datetime<TZ: TimeZone>(tz: TZ, nanos: u64) -> Result<DateTime<TZ>> {
+    let (secs, nanos) = (nanos / 1_000_000_000, nanos % 1_000_000_000);
+    tz.timestamp_opt(secs as i64, nanos as u32)
+        .single()
+        .ok_or_else(|| Error::from("invalid nanos timestamp"))
 }
 
 #[cfg(test)]
 mod tests {
+    use chrono::{NaiveDate, Offset, TimeZone};
+    use crate::registry::Mfa;
+    use test_case::test_case;
     use super::*;
 
     #[test]
@@ -280,148 +248,76 @@ mod tests {
         assert_eq!(output, 1_560_777_212_000_000_000);
     }
 
-    #[test]
-    pub fn format_timestamp() {
-        let val = 419_083_754_274_000_000;
-        let output = _format(val, "%Y %b %d %H:%M:%S%.3f", false);
-        assert_eq!("1983 Apr 13 12:09:14.274", output);
+
+    #[test_case("Europe/Berlin", 3600; "berlin")]
+    #[test_case("Europe/London", 3600; "london")]
+    #[test_case("UTC", 0 ; "utc")]
+    #[test_case("NZ", 43200; "nz")]
+    #[test_case("Pacific/Pitcairn", -30600; "pitcairn")]
+    #[test_case("Zulu", 0; "zulu")]
+    #[test_case("02", 7200; "only hours")]
+    #[test_case("-02", -7200; "negative hours")]
+    #[test_case("-0230", -9000; "negative without colon")]
+    #[test_case("-02:30", -9000; "negative with colon")]
+    #[test_case("+02:30", 9000; "positive with colon")]
+    fn with_timezone_str(input: &str, offset_secs: i32) {
+        use crate::registry::to_runtime_error;
+        let fnork = |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
+        let res = (||{
+            with_timezone!(Value::from(input), tz, fnork, {
+                let naive = NaiveDate::from_ymd(1970, 1, 1);
+                assert_eq!(offset_secs, tz.offset_from_utc_date(&naive).fix().local_minus_utc());
+                Ok(())
+            })
+        })();
+        assert!(res.is_ok(), "Expected Ok(()), got: {res:?}");
     }
 
     #[test]
-    pub fn format_timestamp_tz() {
-        let val = 419_083_754_274_000_000;
-        let output = _format(val, "%Y %b %d %H:%M:%S%.3f %:z", true);
-        assert_eq!("1983 Apr 13 12:09:14.274 +00:00", output);
+    fn with_timezone_index() {
+        use crate::registry::to_runtime_error;
+        let fnork = |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
+
+        for input in 0_usize..chrono_tz::TZ_VARIANTS.len() {
+            let res = (||{
+                with_timezone!(Value::from(input), tz, fnork, {
+                    assert!(true, "We made it for TZ: {}", tz);
+                    Ok(())
+                })
+            })();
+            assert!(res.is_ok(), "{}: Expected Ok(()), got: {res:?}", chrono_tz::TZ_VARIANTS[input].name());
+        }
     }
 
     #[test]
-    #[should_panic]
-    pub fn format_timestamp_tz_panic() {
-        let val = 419_083_754_274_000_000;
-        let output = _format(val, "%Y %b %d %H:%M:%S%.3f %:z", false);
-        assert_eq!("1983 Apr 13 12:09:14.274 +00:00", output);
+    fn parse_fixed_offset_err() {
+        assert!(parse_fixed_offset("").is_err());
+        assert!(parse_fixed_offset("-").is_err());
+        assert!(parse_fixed_offset("+1").is_err());
+        assert!(parse_fixed_offset("@01:00").is_err());
+        assert!(parse_fixed_offset("01ABC").is_err());
+        assert!(parse_fixed_offset("+01:79").is_err());
     }
 
     #[test]
-    pub fn hms_returns_the_corresponding_components() {
-        let input = 1_559_655_782_123_456_789_u64;
-        let output = _hour(input);
-        assert_eq!(output, 13);
-        assert_eq!(_minute(input), 43);
-        assert_eq!(_second(input), 2);
-        assert_eq!(_millisecond(input), 123);
-        assert_eq!(_microsecond(input), 456);
-        assert_eq!(_nanosecond(input), 789);
+    fn parse_fixed_offset_ok() {
+        assert_eq!(parse_fixed_offset("-00"), Ok(0));
+        assert_eq!(parse_fixed_offset("0049"), Ok(49 * 60));
+        assert_eq!(parse_fixed_offset("+02:30"), Ok(9000));
+        assert_eq!(parse_fixed_offset("02:30"), Ok(9000));
+        assert_eq!(parse_fixed_offset("0230"), Ok(9000));
+        assert_eq!(parse_fixed_offset("-02:30"), Ok(-9000));
+        assert_eq!(parse_fixed_offset("-0230"), Ok(-9000));
     }
 
     #[test]
-    pub fn millisecond_returns_the_ms() {
-        let input = 1_559_655_782_987_654_321_u64;
-        let output = _millisecond(input);
-        assert_eq!(output, 987_u32);
-    }
-
-    #[test]
-    pub fn to_next_millisecond_rounds_it() {
-        let input = 1_559_655_782_123_456_789_u64;
-        let output = _to_nearest_millisecond(input);
-        assert_eq!(output, 1_559_655_782_123_000_000_u64);
-        assert_eq!(_to_nearest_millisecond(123_789_654_u64), 124_000_000);
-    }
-
-    #[test]
-    pub fn to_nearest_microsecond_rounds_it() {
-        assert_eq!(
-            _to_nearest_microsecond(1_559_655_782_123_456_789_u64),
-            1_559_655_782_123_457_000
-        );
-        assert_eq!(_to_nearest_microsecond(123_456_123_u64), 123_456_000);
-    }
-
-    #[test]
-    pub fn to_next_second_rounds_it() {
-        let input = 1_559_655_782_123_456_789_u64;
-        let output = _to_nearest_second(input);
-        assert_eq!(output, 1_559_655_782_000_000_000);
-    }
-
-    #[test]
-    pub fn day_month_and_year_works() {
-        let input = 1_555_767_782_123_456_789_u64;
-        assert_eq!(_day(input), 20);
-        assert_eq!(_month(input), 4);
-        assert_eq!(_year(input), 2019);
-    }
-
-    #[test]
-    pub fn test_human_format() {
-        assert_eq!(_from_human_format("3 days"), Some(259_200_000_000_000));
-        assert_eq!(_from_human_format("59 seconds"), Some(59_000_000_000));
-        assert_eq!(
-            _from_human_format("21 days 3 minutes 5 seconds"),
-            Some(1_814_585_000_000_000)
-        );
-        assert_eq!(_from_human_format("3"), None);
-        assert_eq!(_from_human_format("1 nanosecond"), Some(1));
-    }
-
-    #[test]
-    pub fn iso8601_format() {
-        let input = 1_559_655_782_123_456_789_u64;
-        let output = _iso8601(input);
-        assert_eq!(output, "2019-06-04T13:43:02.123456789+00:00".to_string());
-    }
-
-    #[test]
-    pub fn test_format() {
-        assert_eq!(
-            _format(1_559_655_782_123_567_892_u64, "%Y-%m-%d", false),
-            "2019-06-04".to_owned()
-        );
-        assert_eq!(
-            _format(123_567_892_u64, "%Y-%m-%d", false),
-            "1970-01-01".to_owned()
-        );
-    }
-
-    #[test]
-    pub fn without_subseconds() {
-        let input = 1_559_655_782_123_456_789_u64;
-        assert_eq!(_without_subseconds(input), 1_559_655_782_u64);
-    }
-    #[test]
-    pub fn test_with_microseconds() {
-        assert_eq!(_with_microseconds(1), 1_000);
-    }
-
-    #[test]
-    pub fn test_with_milliseconds() {
-        assert_eq!(_with_milliseconds(1), 1_000_000);
-    }
-    #[test]
-    pub fn test_with_seconds() {
-        assert_eq!(_with_seconds(1), 1_000_000_000);
-    }
-
-    #[test]
-    pub fn test_with_minutes() {
-        assert_eq!(_with_minutes(1), 60_000_000_000);
-    }
-    #[test]
-    pub fn test_with_hours() {
-        assert_eq!(_with_hours(1), 3_600_000_000_000);
-    }
-
-    #[test]
-    pub fn test_with_days() {
-        assert_eq!(_with_days(1), 86_400_000_000_000);
-    }
-    #[test]
-    pub fn test_with_weeks() {
-        assert_eq!(_with_weeks(1), 604_800_000_000_000);
-    }
-    #[test]
-    pub fn test_with_years() {
-        assert_eq!(_with_years(1), 31_536_000_000_000_000);
+    fn parse_fixed_offset_all_timezones() {
+        for tz in chrono_tz::TZ_VARIANTS {
+            let dt = tz.timestamp(0, 0);
+            let tz_str1 = dt.format("%z").to_string();
+            let tz_str3 = dt.format("%:z").to_string();
+            assert!(parse_fixed_offset(tz_str1.as_str()).is_ok(), "Failed parsing offset {tz_str1}");
+            assert!(parse_fixed_offset(tz_str3.as_str()).is_ok(), "Failed parsing offset {tz_str3}");
+        }
     }
 }

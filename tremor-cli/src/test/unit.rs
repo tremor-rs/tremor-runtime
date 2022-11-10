@@ -93,8 +93,16 @@ fn eval_suite_tests(
 
     let ll = suite_spec.exprs.len();
     for (idx, item) in suite_spec.exprs.iter().enumerate() {
-        if let ImutExpr::Invoke1(Invoke { node_id, args, .. }) = item {
-            if node_id.module() != ["test"] || node_id.id() != "test" {
+        if let ImutExpr::Invoke1(Invoke {
+            node_id,
+            args,
+            invocable,
+            ..
+        }) = item
+        {
+            if (node_id.module() != ["test"] || node_id.id() != "test")
+                && invocable.name() == "test"
+            {
                 continue;
             }
             let spec = args
@@ -239,7 +247,9 @@ pub(crate) fn run_suite(
 
                 let Invoke { node_id, args, .. } = expr;
 
-                if node_id.module() == ["test"] || node_id.id() == "test" {
+                if (node_id.module() == ["test"] || node_id.id() == "test")
+                    && expr.invocable.name() == "suite"
+                {
                     // A Test suite
                     let spec = args
                         .first()

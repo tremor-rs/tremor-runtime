@@ -10,7 +10,7 @@
 ## > assert("one equals one", 1, 2); # errors
 ## > ```
 ##
-## Returns an `bool`.
+## Returns a `bool`.
 intrinsic fn assert(name, expected, got) as test::assert;
 
 ## The `suite` function is an entrypoint into tremor's
