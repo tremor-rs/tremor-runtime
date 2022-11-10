@@ -806,7 +806,7 @@ test::suite({
     }),
     test::test({
       "name": "parse",
-      "test": test::assert("datetime::parse", datetime::parse("2022-11-09 14:46:11.499274824+01:00", datetime::formats::RFC3339), 1668001571499274824)
+      "test": test::assert("datetime::parse", datetime::parse("2022-11-09T14:46:11.499274824+01:00", datetime::formats::RFC3339), 1668001571499274824)
     }),
     test::test({
       "name": "year",
