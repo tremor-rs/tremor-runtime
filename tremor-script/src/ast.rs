@@ -923,6 +923,13 @@ pub enum Invocable<'script> {
 }
 
 impl<'script> Invocable<'script> {
+    /// name of the invocable (without module)
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Intrinsic(wrapper) => wrapper.name(),
+            Self::Tremor(custom) => custom.name.as_str(),
+        }
+    }
     fn inline(self, args: ImutExprs<'script>, mid: Box<NodeMeta>) -> Result<ImutExpr<'script>> {
         match self {
             Invocable::Intrinsic(_f) => Err("can't inline intrinsic".into()),

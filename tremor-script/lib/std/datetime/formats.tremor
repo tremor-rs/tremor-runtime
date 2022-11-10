@@ -1,0 +1,18 @@
+### Common formats for formatting datetimes
+###
+### To be used with `std::datetime::format` or `std::datetime::parse`
+
+## Format for [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339#section-5.6)
+##
+## This format is also ISO8601 compatible.
+const RFC3339 = "%Y-%m-%dT%H:%M:%S%.f%:z";
+
+## Format for [RFC 2822](https://www.rfc-editor.org/rfc/rfc2822#section-3.3)
+##
+## Same as [RFC5322](#rfc5322)
+const RFC2822 = "%a, %d %b %Y %H:%M:%S %z";
+
+## Format for [RFC 5322](https://www.rfc-editor.org/rfc/rfc5322#section-3.3)
+##
+## Same as [RFC2822](#rfc2822)
+const RFC5322 = RFC2822;
