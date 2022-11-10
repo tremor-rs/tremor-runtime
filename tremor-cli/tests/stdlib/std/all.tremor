@@ -778,7 +778,7 @@ test::suite({
     }),
     test::test({
       "name": "rfc3339 Z",
-      "test": test::assert("datetime::rfc3339 Z", datetime::rfc3339(1_559_655_782_000_000_000), "2019-06-04T13:43:02Z")
+      "test": test::assert("datetime::rfc3339 Z", datetime::rfc3339(1_559_655_782_000_000_000), "2019-06-04T13:43:02+00:00")
     }),
     test::test({
       "name": "format timestamp",
@@ -822,11 +822,11 @@ test::suite({
     }),
     test::test({
       "name": "day_of_month",
-      "test": test::assert("datetime::day_of_month", datetime::day_of_month(nanos::from_days(40)), 9)
+      "test": test::assert("datetime::day_of_month", datetime::day_of_month(nanos::from_days(40)), 10)
     }),
     test::test({
       "name": "day_of_year",
-      "test": test::assert("datetime::day_of_year", datetime::day_of_year(nanos::from_days(40)), 40)
+      "test": test::assert("datetime::day_of_year", datetime::day_of_year(nanos::from_days(40)), 41)
     }),
     test::test({
       "name": "hour",
@@ -842,15 +842,15 @@ test::suite({
     }),
     test::test({
       "name": "subsecond_millis",
-      "test": test::assert("datetime::subsecond_millis", datetime::subsecond_millis(1668001571499274824), 0)
+      "test": test::assert("datetime::subsecond_millis", datetime::subsecond_millis(1668001571499274824), 499)
     }),
     test::test({
       "name": "subsecond_micros",
-      "test": test::assert("datetime::subsecond_micros", datetime::subsecond_micros(1668001571499274824), 0)
+      "test": test::assert("datetime::subsecond_micros", datetime::subsecond_micros(1668001571499274824), 499274)
     }),
     test::test({
       "name": "subsecond_nanos",
-      "test": test::assert("datetime::subsecond_nanos", datetime::subsecond_nanos(1668001571499274824), 0)
+      "test": test::assert("datetime::subsecond_nanos", datetime::subsecond_nanos(1668001571499274824), 499274824)
     }),
   ]
 });
