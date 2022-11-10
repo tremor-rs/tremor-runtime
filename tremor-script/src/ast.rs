@@ -924,7 +924,8 @@ pub enum Invocable<'script> {
 
 impl<'script> Invocable<'script> {
     /// name of the invocable (without module)
-    #[must_use] pub fn name(&self) -> &str {
+    #[must_use]
+    pub fn name(&self) -> &str {
         match self {
             Self::Intrinsic(wrapper) => wrapper.name(),
             Self::Tremor(custom) => custom.name.as_str(),
