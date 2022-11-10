@@ -21,7 +21,7 @@
 use crate::datetime::{_parse, has_tz};
 use crate::errors::{Error, Result};
 use crate::prelude::*;
-use crate::registry::Registry;
+use crate::registry::{FResult, FunctionError, Mfa, Registry};
 use crate::tremor_const_fn;
 use beef::Cow;
 use chrono::FixedOffset;
@@ -29,6 +29,7 @@ use chrono::{DateTime, Datelike, TimeZone, Timelike};
 
 const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 const TIMEZONE: Cow<'static, str> = Cow::const_str("tz");
+const INVALID_OFFSET_MSG: &str = "Invalid timezone offset";
 
 /// code should return `FunctionResult`
 macro_rules! with_datetime_input {
@@ -66,7 +67,6 @@ macro_rules! with_datetime_input {
     };
 }
 
-const INVALID_OFFSET_MSG: &str = "Invalid timezone offset";
 /// parse a fixed offset string into number of seconds
 ///
 /// Supports the following formats:
@@ -185,28 +185,10 @@ pub fn load(registry: &mut Registry) {
             })
         }))
         .insert(tremor_const_fn!(datetime|with_timezone(_context, _timestamp, _timezone) {
-            if _timestamp.is_object() {
-                // this macro ensures we have a valid timezone
-                with_timezone!(_timezone, _tz, to_runtime_error, {
-                    let ts = _timestamp.get_u64(&TIMESTAMP).ok_or_else(|| FunctionError::RuntimeError { mfa: this_mfa(), error: "Invalid datetime input: Missing or invalid \"timestamp\" field.".to_string() })?;
-                    let mut new_object = Value::object_with_capacity(2);
-                    new_object.try_insert(TIMESTAMP, Value::from(ts));
-                    new_object.try_insert(TIMEZONE, (*_timezone).clone());
-                    Ok(new_object)
-                })
-            } else if _timestamp.is_u64() {
-                // this macro ensures we have a valid timezone
-                with_timezone!(_timezone, _tz, to_runtime_error, {
-                    // ALLOW: the check above makes this safe
-                    let ts = _timestamp.as_u64().expect("unreachable");
-                    let mut new_object = Value::object_with_capacity(2);
-                    new_object.try_insert(TIMESTAMP, Value::from(ts));
-                    new_object.try_insert(TIMEZONE, (*_timezone).clone());
-                    Ok(new_object)
-                })
-            } else {
-                Err(FunctionError::BadType { mfa: this_mfa() })
-            }
+            // this macro ensures we have a valid timezone
+            with_timezone!(_timezone, _tz, to_runtime_error, {
+                to_timezone_object(*_timestamp, *_timezone, this_mfa)
+            })
         }))
         .insert(datetime_fn!(year, datetime, datetime.year()))
         .insert(datetime_fn!(month, datetime, datetime.month()))
@@ -219,6 +201,33 @@ pub fn load(registry: &mut Registry) {
         .insert(datetime_fn!(subsecond_millis, datetime, datetime.timestamp_subsec_millis()))
         .insert(datetime_fn!(subsecond_micros, datetime, datetime.timestamp_subsec_micros()))
         .insert(datetime_fn!(subsecond_nanos, datetime, datetime.timestamp_subsec_nanos()));
+}
+
+fn to_timezone_object<'event>(
+    ts: &Value<'event>,
+    timezone: &Value<'event>,
+    mfa_fn: impl Fn() -> Mfa,
+) -> FResult<Value<'event>> {
+    if let Some(ts) = ts.as_u64() {
+        let mut new_object = Value::object_with_capacity(2);
+        new_object.try_insert(TIMESTAMP, Value::from(ts));
+        new_object.try_insert(TIMEZONE, (*timezone).clone());
+        Ok(new_object)
+    } else if ts.is_object() {
+        let ts = ts
+            .get_u64(&TIMESTAMP)
+            .ok_or_else(|| FunctionError::RuntimeError {
+                mfa: mfa_fn(),
+                error: "Invalid datetime input: Missing or invalid \"timestamp\" field."
+                    .to_string(),
+            })?;
+        let mut new_object = Value::object_with_capacity(2);
+        new_object.try_insert(TIMESTAMP, Value::from(ts));
+        new_object.try_insert(TIMEZONE, (*timezone).clone());
+        Ok(new_object)
+    } else {
+        Err(FunctionError::BadType { mfa: mfa_fn() })
+    }
 }
 
 /// proven way to convert nanos to a datetime with the given timezone
@@ -262,6 +271,10 @@ mod tests {
         assert_eq!(output, 1_560_777_212_000_000_000);
     }
 
+    fn to_ferr(e: crate::errors::Error) -> crate::registry::FunctionError {
+        crate::registry::to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e)
+    }
+
     #[test_case("Europe/Berlin", 3600; "berlin")]
     #[test_case("Europe/London", 3600; "london")]
     #[test_case("UTC", 0 ; "utc")]
@@ -274,11 +287,8 @@ mod tests {
     #[test_case("-02:30", -9000; "negative with colon")]
     #[test_case("+02:30", 9000; "positive with colon")]
     fn with_timezone_str(input: &str, offset_secs: i32) {
-        use crate::registry::to_runtime_error;
-        let fnork =
-            |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
         let res = (|| {
-            with_timezone!(Value::from(input), tz, fnork, {
+            with_timezone!(Value::from(input), tz, to_ferr, {
                 let naive = NaiveDate::from_ymd(1970, 1, 1);
                 assert_eq!(
                     offset_secs,
@@ -292,12 +302,8 @@ mod tests {
 
     #[test]
     fn with_timezone_index() {
-        use crate::registry::to_runtime_error;
-        let fnork =
-            |e: crate::errors::Error| to_runtime_error(Mfa::new("datetime", "with_timezone", 2), e);
-
         for input in 0_usize..chrono_tz::TZ_VARIANTS.len() {
-            let res = (|| with_timezone!(Value::from(input), _tz, fnork, { Ok(()) }))();
+            let res = (|| with_timezone!(Value::from(input), _tz, to_ferr, { Ok(()) }))();
             assert!(
                 res.is_ok(),
                 "{}: Expected Ok(()), got: {res:?}",
@@ -342,5 +348,62 @@ mod tests {
                 "Failed parsing offset {tz_str3}"
             );
         }
+    }
+
+    #[test]
+    fn nanos_to_datetime_coverage() -> Result<()> {
+        let input = 0_u64;
+        let dt = nanos_to_datetime(&chrono_tz::UTC, input)?;
+        assert_eq!(input as i64, dt.timestamp_nanos());
+        Ok(())
+    }
+
+    #[test]
+    fn to_timezone_object_err() {
+        let res = to_timezone_object(&literal!(null), &literal!("Europe/Berlin"), || {
+            Mfa::new("datetime", "with_timezone", 2)
+        });
+        assert!(res.is_err(), "Expected Err, got {res:?}");
+        let res = to_timezone_object(&literal!([]), &literal!("Europe/Berlin"), || {
+            Mfa::new("datetime", "with_timezone", 2)
+        });
+        assert!(res.is_err(), "Expected Err, got {res:?}");
+        let res = to_timezone_object(&literal!({}), &literal!("Europe/Berlin"), || {
+            Mfa::new("datetime", "with_timezone", 2)
+        });
+        assert!(res.is_err(), "Expected Err, got {res:?}");
+        let res = to_timezone_object(
+            &literal!({"timestamp": "string"}),
+            &literal!("Europe/Berlin"),
+            || Mfa::new("datetime", "with_timezone", 2),
+        );
+        assert!(res.is_err(), "Expected Err, got {res:?}");
+    }
+
+    #[test]
+    fn to_timezone_object_success() {
+        let res = to_timezone_object(&literal!(1_000_000_000), &literal!("Europe/Berlin"), || {
+            Mfa::new("datetime", "with_timezone", 2)
+        });
+        assert_eq!(
+            Ok(literal!({
+                "timestamp": 1_000_000_000,
+                "tz": "Europe/Berlin"
+            })),
+            res
+        );
+
+        let res = to_timezone_object(
+            &literal!(1_000_000_000),
+            &literal!(chrono_tz::TZ_VARIANTS.len() - 1),
+            || Mfa::new("datetime", "with_timezone", 2),
+        );
+        assert_eq!(
+            Ok(literal!({
+                "timestamp": 1_000_000_000,
+                "tz": chrono_tz::TZ_VARIANTS.len() - 1
+            })),
+            res
+        );
     }
 }
