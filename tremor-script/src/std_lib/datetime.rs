@@ -187,7 +187,7 @@ pub fn load(registry: &mut Registry) {
         .insert(tremor_const_fn!(datetime|with_timezone(_context, _timestamp, _timezone) {
             // this macro ensures we have a valid timezone
             with_timezone!(_timezone, _tz, to_runtime_error, {
-                to_timezone_object(*_timestamp, *_timezone, this_mfa)
+                to_timezone_object(_timestamp, _timezone, this_mfa)
             })
         }))
         .insert(datetime_fn!(year, datetime, datetime.year()))
