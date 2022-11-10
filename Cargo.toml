@@ -51,6 +51,8 @@ bimap = { version = "0.6", features = ["serde"] }
 byteorder = "1"
 bytes = "1.2"
 chrono = "0.4"
+# we have a dep on chrono-tz 0.8 in tremor-script
+# clickhouse-rs needs an upgrade to its chrono-tz dependency...
 clickhouse-chrono-tz = { version = "0.6", package = "chrono-tz" }
 
 # Once a new version of clickhouse-rs is released, we can stop using a git
