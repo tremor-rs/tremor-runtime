@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+
+* Added `std::datetime` library for parsing, formatting and working with datetimes
+
 ## [0.13.0-rc.7]
 
 ### New Features
