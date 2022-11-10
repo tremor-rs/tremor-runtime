@@ -13,7 +13,7 @@
 // limitations under the License.
 #![allow(clippy::unwrap_used)]
 use super::*;
-use crate::{CustomFn, NodeMeta};
+use crate::{registry, CustomFn, NodeMeta};
 use matches::assert_matches;
 
 fn v(s: &'static str) -> ImutExpr<'static> {
@@ -87,6 +87,14 @@ fn as_invoke() {
         is_const: false,
         inline: false,
     });
+    assert_eq!("f", invocable.name());
+    let invocable2 = Invocable::Intrinsic(
+        registry()
+            .find("array", "reverse")
+            .expect("Expected array::reverse to exist")
+            .clone(),
+    );
+    assert_eq!("reverse", invocable2.name());
     let i = Invoke {
         mid: NodeMeta::dummy(),
         node_id: NodeId {
@@ -104,6 +112,25 @@ fn as_invoke() {
     let e = ImutExpr::Invoke2(i.clone());
     assert!(Expr::Imut(e).as_invoke().is_some());
     let e = ImutExpr::Invoke3(i.clone());
+    assert!(Expr::Imut(e).as_invoke().is_some());
+
+    let i2 = Invoke {
+        mid: NodeMeta::dummy(),
+        node_id: NodeId {
+            module: Vec::new(),
+            id: "fun".to_string(),
+        },
+        invocable: invocable2,
+        args: Vec::new(),
+    };
+    assert!(Expr::Imut(v("snut")).as_invoke().is_none());
+    let e = ImutExpr::Invoke(i2.clone());
+    assert!(Expr::Imut(e).as_invoke().is_some());
+    let e = ImutExpr::Invoke1(i2.clone());
+    assert!(Expr::Imut(e).as_invoke().is_some());
+    let e = ImutExpr::Invoke2(i2.clone());
+    assert!(Expr::Imut(e).as_invoke().is_some());
+    let e = ImutExpr::Invoke3(i2.clone());
     assert!(Expr::Imut(e).as_invoke().is_some());
 }
 
