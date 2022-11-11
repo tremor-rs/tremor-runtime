@@ -1,0 +1,1199 @@
+### Timezones extracted from TZ data
+### Never use the actual values, they are going to change.
+###
+### Usage:
+###
+### ```tremor
+### use std::datetime;
+### let date_str = datetime::format(datetime::with_timezone(0, datetime::timezones::EUROPE_BERLIN), datetime::formats::RFC3339);
+### ```
+## Timezone name constant for Africa/Abidjan
+const AFRICA_ABIDJAN = 0;
+## Timezone name constant for Africa/Accra
+const AFRICA_ACCRA = 1;
+## Timezone name constant for Africa/Addis_Ababa
+const AFRICA_ADDIS_ABABA = 2;
+## Timezone name constant for Africa/Algiers
+const AFRICA_ALGIERS = 3;
+## Timezone name constant for Africa/Asmara
+const AFRICA_ASMARA = 4;
+## Timezone name constant for Africa/Asmera
+const AFRICA_ASMERA = 5;
+## Timezone name constant for Africa/Bamako
+const AFRICA_BAMAKO = 6;
+## Timezone name constant for Africa/Bangui
+const AFRICA_BANGUI = 7;
+## Timezone name constant for Africa/Banjul
+const AFRICA_BANJUL = 8;
+## Timezone name constant for Africa/Bissau
+const AFRICA_BISSAU = 9;
+## Timezone name constant for Africa/Blantyre
+const AFRICA_BLANTYRE = 10;
+## Timezone name constant for Africa/Brazzaville
+const AFRICA_BRAZZAVILLE = 11;
+## Timezone name constant for Africa/Bujumbura
+const AFRICA_BUJUMBURA = 12;
+## Timezone name constant for Africa/Cairo
+const AFRICA_CAIRO = 13;
+## Timezone name constant for Africa/Casablanca
+const AFRICA_CASABLANCA = 14;
+## Timezone name constant for Africa/Ceuta
+const AFRICA_CEUTA = 15;
+## Timezone name constant for Africa/Conakry
+const AFRICA_CONAKRY = 16;
+## Timezone name constant for Africa/Dakar
+const AFRICA_DAKAR = 17;
+## Timezone name constant for Africa/Dar_es_Salaam
+const AFRICA_DAR_ES_SALAAM = 18;
+## Timezone name constant for Africa/Djibouti
+const AFRICA_DJIBOUTI = 19;
+## Timezone name constant for Africa/Douala
+const AFRICA_DOUALA = 20;
+## Timezone name constant for Africa/El_Aaiun
+const AFRICA_EL_AAIUN = 21;
+## Timezone name constant for Africa/Freetown
+const AFRICA_FREETOWN = 22;
+## Timezone name constant for Africa/Gaborone
+const AFRICA_GABORONE = 23;
+## Timezone name constant for Africa/Harare
+const AFRICA_HARARE = 24;
+## Timezone name constant for Africa/Johannesburg
+const AFRICA_JOHANNESBURG = 25;
+## Timezone name constant for Africa/Juba
+const AFRICA_JUBA = 26;
+## Timezone name constant for Africa/Kampala
+const AFRICA_KAMPALA = 27;
+## Timezone name constant for Africa/Khartoum
+const AFRICA_KHARTOUM = 28;
+## Timezone name constant for Africa/Kigali
+const AFRICA_KIGALI = 29;
+## Timezone name constant for Africa/Kinshasa
+const AFRICA_KINSHASA = 30;
+## Timezone name constant for Africa/Lagos
+const AFRICA_LAGOS = 31;
+## Timezone name constant for Africa/Libreville
+const AFRICA_LIBREVILLE = 32;
+## Timezone name constant for Africa/Lome
+const AFRICA_LOME = 33;
+## Timezone name constant for Africa/Luanda
+const AFRICA_LUANDA = 34;
+## Timezone name constant for Africa/Lubumbashi
+const AFRICA_LUBUMBASHI = 35;
+## Timezone name constant for Africa/Lusaka
+const AFRICA_LUSAKA = 36;
+## Timezone name constant for Africa/Malabo
+const AFRICA_MALABO = 37;
+## Timezone name constant for Africa/Maputo
+const AFRICA_MAPUTO = 38;
+## Timezone name constant for Africa/Maseru
+const AFRICA_MASERU = 39;
+## Timezone name constant for Africa/Mbabane
+const AFRICA_MBABANE = 40;
+## Timezone name constant for Africa/Mogadishu
+const AFRICA_MOGADISHU = 41;
+## Timezone name constant for Africa/Monrovia
+const AFRICA_MONROVIA = 42;
+## Timezone name constant for Africa/Nairobi
+const AFRICA_NAIROBI = 43;
+## Timezone name constant for Africa/Ndjamena
+const AFRICA_NDJAMENA = 44;
+## Timezone name constant for Africa/Niamey
+const AFRICA_NIAMEY = 45;
+## Timezone name constant for Africa/Nouakchott
+const AFRICA_NOUAKCHOTT = 46;
+## Timezone name constant for Africa/Ouagadougou
+const AFRICA_OUAGADOUGOU = 47;
+## Timezone name constant for Africa/Porto-Novo
+const AFRICA_PORTO_NOVO = 48;
+## Timezone name constant for Africa/Sao_Tome
+const AFRICA_SAO_TOME = 49;
+## Timezone name constant for Africa/Timbuktu
+const AFRICA_TIMBUKTU = 50;
+## Timezone name constant for Africa/Tripoli
+const AFRICA_TRIPOLI = 51;
+## Timezone name constant for Africa/Tunis
+const AFRICA_TUNIS = 52;
+## Timezone name constant for Africa/Windhoek
+const AFRICA_WINDHOEK = 53;
+## Timezone name constant for America/Adak
+const AMERICA_ADAK = 54;
+## Timezone name constant for America/Anchorage
+const AMERICA_ANCHORAGE = 55;
+## Timezone name constant for America/Anguilla
+const AMERICA_ANGUILLA = 56;
+## Timezone name constant for America/Antigua
+const AMERICA_ANTIGUA = 57;
+## Timezone name constant for America/Araguaina
+const AMERICA_ARAGUAINA = 58;
+## Timezone name constant for America/Argentina/Buenos_Aires
+const AMERICA_ARGENTINA_BUENOS_AIRES = 59;
+## Timezone name constant for America/Argentina/Catamarca
+const AMERICA_ARGENTINA_CATAMARCA = 60;
+## Timezone name constant for America/Argentina/ComodRivadavia
+const AMERICA_ARGENTINA_COMODRIVADAVIA = 61;
+## Timezone name constant for America/Argentina/Cordoba
+const AMERICA_ARGENTINA_CORDOBA = 62;
+## Timezone name constant for America/Argentina/Jujuy
+const AMERICA_ARGENTINA_JUJUY = 63;
+## Timezone name constant for America/Argentina/La_Rioja
+const AMERICA_ARGENTINA_LA_RIOJA = 64;
+## Timezone name constant for America/Argentina/Mendoza
+const AMERICA_ARGENTINA_MENDOZA = 65;
+## Timezone name constant for America/Argentina/Rio_Gallegos
+const AMERICA_ARGENTINA_RIO_GALLEGOS = 66;
+## Timezone name constant for America/Argentina/Salta
+const AMERICA_ARGENTINA_SALTA = 67;
+## Timezone name constant for America/Argentina/San_Juan
+const AMERICA_ARGENTINA_SAN_JUAN = 68;
+## Timezone name constant for America/Argentina/San_Luis
+const AMERICA_ARGENTINA_SAN_LUIS = 69;
+## Timezone name constant for America/Argentina/Tucuman
+const AMERICA_ARGENTINA_TUCUMAN = 70;
+## Timezone name constant for America/Argentina/Ushuaia
+const AMERICA_ARGENTINA_USHUAIA = 71;
+## Timezone name constant for America/Aruba
+const AMERICA_ARUBA = 72;
+## Timezone name constant for America/Asuncion
+const AMERICA_ASUNCION = 73;
+## Timezone name constant for America/Atikokan
+const AMERICA_ATIKOKAN = 74;
+## Timezone name constant for America/Atka
+const AMERICA_ATKA = 75;
+## Timezone name constant for America/Bahia
+const AMERICA_BAHIA = 76;
+## Timezone name constant for America/Bahia_Banderas
+const AMERICA_BAHIA_BANDERAS = 77;
+## Timezone name constant for America/Barbados
+const AMERICA_BARBADOS = 78;
+## Timezone name constant for America/Belem
+const AMERICA_BELEM = 79;
+## Timezone name constant for America/Belize
+const AMERICA_BELIZE = 80;
+## Timezone name constant for America/Blanc-Sablon
+const AMERICA_BLANC_SABLON = 81;
+## Timezone name constant for America/Boa_Vista
+const AMERICA_BOA_VISTA = 82;
+## Timezone name constant for America/Bogota
+const AMERICA_BOGOTA = 83;
+## Timezone name constant for America/Boise
+const AMERICA_BOISE = 84;
+## Timezone name constant for America/Buenos_Aires
+const AMERICA_BUENOS_AIRES = 85;
+## Timezone name constant for America/Cambridge_Bay
+const AMERICA_CAMBRIDGE_BAY = 86;
+## Timezone name constant for America/Campo_Grande
+const AMERICA_CAMPO_GRANDE = 87;
+## Timezone name constant for America/Cancun
+const AMERICA_CANCUN = 88;
+## Timezone name constant for America/Caracas
+const AMERICA_CARACAS = 89;
+## Timezone name constant for America/Catamarca
+const AMERICA_CATAMARCA = 90;
+## Timezone name constant for America/Cayenne
+const AMERICA_CAYENNE = 91;
+## Timezone name constant for America/Cayman
+const AMERICA_CAYMAN = 92;
+## Timezone name constant for America/Chicago
+const AMERICA_CHICAGO = 93;
+## Timezone name constant for America/Chihuahua
+const AMERICA_CHIHUAHUA = 94;
+## Timezone name constant for America/Coral_Harbour
+const AMERICA_CORAL_HARBOUR = 95;
+## Timezone name constant for America/Cordoba
+const AMERICA_CORDOBA = 96;
+## Timezone name constant for America/Costa_Rica
+const AMERICA_COSTA_RICA = 97;
+## Timezone name constant for America/Creston
+const AMERICA_CRESTON = 98;
+## Timezone name constant for America/Cuiaba
+const AMERICA_CUIABA = 99;
+## Timezone name constant for America/Curacao
+const AMERICA_CURACAO = 100;
+## Timezone name constant for America/Danmarkshavn
+const AMERICA_DANMARKSHAVN = 101;
+## Timezone name constant for America/Dawson
+const AMERICA_DAWSON = 102;
+## Timezone name constant for America/Dawson_Creek
+const AMERICA_DAWSON_CREEK = 103;
+## Timezone name constant for America/Denver
+const AMERICA_DENVER = 104;
+## Timezone name constant for America/Detroit
+const AMERICA_DETROIT = 105;
+## Timezone name constant for America/Dominica
+const AMERICA_DOMINICA = 106;
+## Timezone name constant for America/Edmonton
+const AMERICA_EDMONTON = 107;
+## Timezone name constant for America/Eirunepe
+const AMERICA_EIRUNEPE = 108;
+## Timezone name constant for America/El_Salvador
+const AMERICA_EL_SALVADOR = 109;
+## Timezone name constant for America/Ensenada
+const AMERICA_ENSENADA = 110;
+## Timezone name constant for America/Fort_Nelson
+const AMERICA_FORT_NELSON = 111;
+## Timezone name constant for America/Fort_Wayne
+const AMERICA_FORT_WAYNE = 112;
+## Timezone name constant for America/Fortaleza
+const AMERICA_FORTALEZA = 113;
+## Timezone name constant for America/Glace_Bay
+const AMERICA_GLACE_BAY = 114;
+## Timezone name constant for America/Godthab
+const AMERICA_GODTHAB = 115;
+## Timezone name constant for America/Goose_Bay
+const AMERICA_GOOSE_BAY = 116;
+## Timezone name constant for America/Grand_Turk
+const AMERICA_GRAND_TURK = 117;
+## Timezone name constant for America/Grenada
+const AMERICA_GRENADA = 118;
+## Timezone name constant for America/Guadeloupe
+const AMERICA_GUADELOUPE = 119;
+## Timezone name constant for America/Guatemala
+const AMERICA_GUATEMALA = 120;
+## Timezone name constant for America/Guayaquil
+const AMERICA_GUAYAQUIL = 121;
+## Timezone name constant for America/Guyana
+const AMERICA_GUYANA = 122;
+## Timezone name constant for America/Halifax
+const AMERICA_HALIFAX = 123;
+## Timezone name constant for America/Havana
+const AMERICA_HAVANA = 124;
+## Timezone name constant for America/Hermosillo
+const AMERICA_HERMOSILLO = 125;
+## Timezone name constant for America/Indiana/Indianapolis
+const AMERICA_INDIANA_INDIANAPOLIS = 126;
+## Timezone name constant for America/Indiana/Knox
+const AMERICA_INDIANA_KNOX = 127;
+## Timezone name constant for America/Indiana/Marengo
+const AMERICA_INDIANA_MARENGO = 128;
+## Timezone name constant for America/Indiana/Petersburg
+const AMERICA_INDIANA_PETERSBURG = 129;
+## Timezone name constant for America/Indiana/Tell_City
+const AMERICA_INDIANA_TELL_CITY = 130;
+## Timezone name constant for America/Indiana/Vevay
+const AMERICA_INDIANA_VEVAY = 131;
+## Timezone name constant for America/Indiana/Vincennes
+const AMERICA_INDIANA_VINCENNES = 132;
+## Timezone name constant for America/Indiana/Winamac
+const AMERICA_INDIANA_WINAMAC = 133;
+## Timezone name constant for America/Indianapolis
+const AMERICA_INDIANAPOLIS = 134;
+## Timezone name constant for America/Inuvik
+const AMERICA_INUVIK = 135;
+## Timezone name constant for America/Iqaluit
+const AMERICA_IQALUIT = 136;
+## Timezone name constant for America/Jamaica
+const AMERICA_JAMAICA = 137;
+## Timezone name constant for America/Jujuy
+const AMERICA_JUJUY = 138;
+## Timezone name constant for America/Juneau
+const AMERICA_JUNEAU = 139;
+## Timezone name constant for America/Kentucky/Louisville
+const AMERICA_KENTUCKY_LOUISVILLE = 140;
+## Timezone name constant for America/Kentucky/Monticello
+const AMERICA_KENTUCKY_MONTICELLO = 141;
+## Timezone name constant for America/Knox_IN
+const AMERICA_KNOX_IN = 142;
+## Timezone name constant for America/Kralendijk
+const AMERICA_KRALENDIJK = 143;
+## Timezone name constant for America/La_Paz
+const AMERICA_LA_PAZ = 144;
+## Timezone name constant for America/Lima
+const AMERICA_LIMA = 145;
+## Timezone name constant for America/Los_Angeles
+const AMERICA_LOS_ANGELES = 146;
+## Timezone name constant for America/Louisville
+const AMERICA_LOUISVILLE = 147;
+## Timezone name constant for America/Lower_Princes
+const AMERICA_LOWER_PRINCES = 148;
+## Timezone name constant for America/Maceio
+const AMERICA_MACEIO = 149;
+## Timezone name constant for America/Managua
+const AMERICA_MANAGUA = 150;
+## Timezone name constant for America/Manaus
+const AMERICA_MANAUS = 151;
+## Timezone name constant for America/Marigot
+const AMERICA_MARIGOT = 152;
+## Timezone name constant for America/Martinique
+const AMERICA_MARTINIQUE = 153;
+## Timezone name constant for America/Matamoros
+const AMERICA_MATAMOROS = 154;
+## Timezone name constant for America/Mazatlan
+const AMERICA_MAZATLAN = 155;
+## Timezone name constant for America/Mendoza
+const AMERICA_MENDOZA = 156;
+## Timezone name constant for America/Menominee
+const AMERICA_MENOMINEE = 157;
+## Timezone name constant for America/Merida
+const AMERICA_MERIDA = 158;
+## Timezone name constant for America/Metlakatla
+const AMERICA_METLAKATLA = 159;
+## Timezone name constant for America/Mexico_City
+const AMERICA_MEXICO_CITY = 160;
+## Timezone name constant for America/Miquelon
+const AMERICA_MIQUELON = 161;
+## Timezone name constant for America/Moncton
+const AMERICA_MONCTON = 162;
+## Timezone name constant for America/Monterrey
+const AMERICA_MONTERREY = 163;
+## Timezone name constant for America/Montevideo
+const AMERICA_MONTEVIDEO = 164;
+## Timezone name constant for America/Montreal
+const AMERICA_MONTREAL = 165;
+## Timezone name constant for America/Montserrat
+const AMERICA_MONTSERRAT = 166;
+## Timezone name constant for America/Nassau
+const AMERICA_NASSAU = 167;
+## Timezone name constant for America/New_York
+const AMERICA_NEW_YORK = 168;
+## Timezone name constant for America/Nipigon
+const AMERICA_NIPIGON = 169;
+## Timezone name constant for America/Nome
+const AMERICA_NOME = 170;
+## Timezone name constant for America/Noronha
+const AMERICA_NORONHA = 171;
+## Timezone name constant for America/North_Dakota/Beulah
+const AMERICA_NORTH_DAKOTA_BEULAH = 172;
+## Timezone name constant for America/North_Dakota/Center
+const AMERICA_NORTH_DAKOTA_CENTER = 173;
+## Timezone name constant for America/North_Dakota/New_Salem
+const AMERICA_NORTH_DAKOTA_NEW_SALEM = 174;
+## Timezone name constant for America/Nuuk
+const AMERICA_NUUK = 175;
+## Timezone name constant for America/Ojinaga
+const AMERICA_OJINAGA = 176;
+## Timezone name constant for America/Panama
+const AMERICA_PANAMA = 177;
+## Timezone name constant for America/Pangnirtung
+const AMERICA_PANGNIRTUNG = 178;
+## Timezone name constant for America/Paramaribo
+const AMERICA_PARAMARIBO = 179;
+## Timezone name constant for America/Phoenix
+const AMERICA_PHOENIX = 180;
+## Timezone name constant for America/Port-au-Prince
+const AMERICA_PORT_AU_PRINCE = 181;
+## Timezone name constant for America/Port_of_Spain
+const AMERICA_PORT_OF_SPAIN = 182;
+## Timezone name constant for America/Porto_Acre
+const AMERICA_PORTO_ACRE = 183;
+## Timezone name constant for America/Porto_Velho
+const AMERICA_PORTO_VELHO = 184;
+## Timezone name constant for America/Puerto_Rico
+const AMERICA_PUERTO_RICO = 185;
+## Timezone name constant for America/Punta_Arenas
+const AMERICA_PUNTA_ARENAS = 186;
+## Timezone name constant for America/Rainy_River
+const AMERICA_RAINY_RIVER = 187;
+## Timezone name constant for America/Rankin_Inlet
+const AMERICA_RANKIN_INLET = 188;
+## Timezone name constant for America/Recife
+const AMERICA_RECIFE = 189;
+## Timezone name constant for America/Regina
+const AMERICA_REGINA = 190;
+## Timezone name constant for America/Resolute
+const AMERICA_RESOLUTE = 191;
+## Timezone name constant for America/Rio_Branco
+const AMERICA_RIO_BRANCO = 192;
+## Timezone name constant for America/Rosario
+const AMERICA_ROSARIO = 193;
+## Timezone name constant for America/Santa_Isabel
+const AMERICA_SANTA_ISABEL = 194;
+## Timezone name constant for America/Santarem
+const AMERICA_SANTAREM = 195;
+## Timezone name constant for America/Santiago
+const AMERICA_SANTIAGO = 196;
+## Timezone name constant for America/Santo_Domingo
+const AMERICA_SANTO_DOMINGO = 197;
+## Timezone name constant for America/Sao_Paulo
+const AMERICA_SAO_PAULO = 198;
+## Timezone name constant for America/Scoresbysund
+const AMERICA_SCORESBYSUND = 199;
+## Timezone name constant for America/Shiprock
+const AMERICA_SHIPROCK = 200;
+## Timezone name constant for America/Sitka
+const AMERICA_SITKA = 201;
+## Timezone name constant for America/St_Barthelemy
+const AMERICA_ST_BARTHELEMY = 202;
+## Timezone name constant for America/St_Johns
+const AMERICA_ST_JOHNS = 203;
+## Timezone name constant for America/St_Kitts
+const AMERICA_ST_KITTS = 204;
+## Timezone name constant for America/St_Lucia
+const AMERICA_ST_LUCIA = 205;
+## Timezone name constant for America/St_Thomas
+const AMERICA_ST_THOMAS = 206;
+## Timezone name constant for America/St_Vincent
+const AMERICA_ST_VINCENT = 207;
+## Timezone name constant for America/Swift_Current
+const AMERICA_SWIFT_CURRENT = 208;
+## Timezone name constant for America/Tegucigalpa
+const AMERICA_TEGUCIGALPA = 209;
+## Timezone name constant for America/Thule
+const AMERICA_THULE = 210;
+## Timezone name constant for America/Thunder_Bay
+const AMERICA_THUNDER_BAY = 211;
+## Timezone name constant for America/Tijuana
+const AMERICA_TIJUANA = 212;
+## Timezone name constant for America/Toronto
+const AMERICA_TORONTO = 213;
+## Timezone name constant for America/Tortola
+const AMERICA_TORTOLA = 214;
+## Timezone name constant for America/Vancouver
+const AMERICA_VANCOUVER = 215;
+## Timezone name constant for America/Virgin
+const AMERICA_VIRGIN = 216;
+## Timezone name constant for America/Whitehorse
+const AMERICA_WHITEHORSE = 217;
+## Timezone name constant for America/Winnipeg
+const AMERICA_WINNIPEG = 218;
+## Timezone name constant for America/Yakutat
+const AMERICA_YAKUTAT = 219;
+## Timezone name constant for America/Yellowknife
+const AMERICA_YELLOWKNIFE = 220;
+## Timezone name constant for Antarctica/Casey
+const ANTARCTICA_CASEY = 221;
+## Timezone name constant for Antarctica/Davis
+const ANTARCTICA_DAVIS = 222;
+## Timezone name constant for Antarctica/DumontDUrville
+const ANTARCTICA_DUMONTDURVILLE = 223;
+## Timezone name constant for Antarctica/Macquarie
+const ANTARCTICA_MACQUARIE = 224;
+## Timezone name constant for Antarctica/Mawson
+const ANTARCTICA_MAWSON = 225;
+## Timezone name constant for Antarctica/McMurdo
+const ANTARCTICA_MCMURDO = 226;
+## Timezone name constant for Antarctica/Palmer
+const ANTARCTICA_PALMER = 227;
+## Timezone name constant for Antarctica/Rothera
+const ANTARCTICA_ROTHERA = 228;
+## Timezone name constant for Antarctica/South_Pole
+const ANTARCTICA_SOUTH_POLE = 229;
+## Timezone name constant for Antarctica/Syowa
+const ANTARCTICA_SYOWA = 230;
+## Timezone name constant for Antarctica/Troll
+const ANTARCTICA_TROLL = 231;
+## Timezone name constant for Antarctica/Vostok
+const ANTARCTICA_VOSTOK = 232;
+## Timezone name constant for Arctic/Longyearbyen
+const ARCTIC_LONGYEARBYEN = 233;
+## Timezone name constant for Asia/Aden
+const ASIA_ADEN = 234;
+## Timezone name constant for Asia/Almaty
+const ASIA_ALMATY = 235;
+## Timezone name constant for Asia/Amman
+const ASIA_AMMAN = 236;
+## Timezone name constant for Asia/Anadyr
+const ASIA_ANADYR = 237;
+## Timezone name constant for Asia/Aqtau
+const ASIA_AQTAU = 238;
+## Timezone name constant for Asia/Aqtobe
+const ASIA_AQTOBE = 239;
+## Timezone name constant for Asia/Ashgabat
+const ASIA_ASHGABAT = 240;
+## Timezone name constant for Asia/Ashkhabad
+const ASIA_ASHKHABAD = 241;
+## Timezone name constant for Asia/Atyrau
+const ASIA_ATYRAU = 242;
+## Timezone name constant for Asia/Baghdad
+const ASIA_BAGHDAD = 243;
+## Timezone name constant for Asia/Bahrain
+const ASIA_BAHRAIN = 244;
+## Timezone name constant for Asia/Baku
+const ASIA_BAKU = 245;
+## Timezone name constant for Asia/Bangkok
+const ASIA_BANGKOK = 246;
+## Timezone name constant for Asia/Barnaul
+const ASIA_BARNAUL = 247;
+## Timezone name constant for Asia/Beirut
+const ASIA_BEIRUT = 248;
+## Timezone name constant for Asia/Bishkek
+const ASIA_BISHKEK = 249;
+## Timezone name constant for Asia/Brunei
+const ASIA_BRUNEI = 250;
+## Timezone name constant for Asia/Calcutta
+const ASIA_CALCUTTA = 251;
+## Timezone name constant for Asia/Chita
+const ASIA_CHITA = 252;
+## Timezone name constant for Asia/Choibalsan
+const ASIA_CHOIBALSAN = 253;
+## Timezone name constant for Asia/Chongqing
+const ASIA_CHONGQING = 254;
+## Timezone name constant for Asia/Chungking
+const ASIA_CHUNGKING = 255;
+## Timezone name constant for Asia/Colombo
+const ASIA_COLOMBO = 256;
+## Timezone name constant for Asia/Dacca
+const ASIA_DACCA = 257;
+## Timezone name constant for Asia/Damascus
+const ASIA_DAMASCUS = 258;
+## Timezone name constant for Asia/Dhaka
+const ASIA_DHAKA = 259;
+## Timezone name constant for Asia/Dili
+const ASIA_DILI = 260;
+## Timezone name constant for Asia/Dubai
+const ASIA_DUBAI = 261;
+## Timezone name constant for Asia/Dushanbe
+const ASIA_DUSHANBE = 262;
+## Timezone name constant for Asia/Famagusta
+const ASIA_FAMAGUSTA = 263;
+## Timezone name constant for Asia/Gaza
+const ASIA_GAZA = 264;
+## Timezone name constant for Asia/Harbin
+const ASIA_HARBIN = 265;
+## Timezone name constant for Asia/Hebron
+const ASIA_HEBRON = 266;
+## Timezone name constant for Asia/Ho_Chi_Minh
+const ASIA_HO_CHI_MINH = 267;
+## Timezone name constant for Asia/Hong_Kong
+const ASIA_HONG_KONG = 268;
+## Timezone name constant for Asia/Hovd
+const ASIA_HOVD = 269;
+## Timezone name constant for Asia/Irkutsk
+const ASIA_IRKUTSK = 270;
+## Timezone name constant for Asia/Istanbul
+const ASIA_ISTANBUL = 271;
+## Timezone name constant for Asia/Jakarta
+const ASIA_JAKARTA = 272;
+## Timezone name constant for Asia/Jayapura
+const ASIA_JAYAPURA = 273;
+## Timezone name constant for Asia/Jerusalem
+const ASIA_JERUSALEM = 274;
+## Timezone name constant for Asia/Kabul
+const ASIA_KABUL = 275;
+## Timezone name constant for Asia/Kamchatka
+const ASIA_KAMCHATKA = 276;
+## Timezone name constant for Asia/Karachi
+const ASIA_KARACHI = 277;
+## Timezone name constant for Asia/Kashgar
+const ASIA_KASHGAR = 278;
+## Timezone name constant for Asia/Kathmandu
+const ASIA_KATHMANDU = 279;
+## Timezone name constant for Asia/Katmandu
+const ASIA_KATMANDU = 280;
+## Timezone name constant for Asia/Khandyga
+const ASIA_KHANDYGA = 281;
+## Timezone name constant for Asia/Kolkata
+const ASIA_KOLKATA = 282;
+## Timezone name constant for Asia/Krasnoyarsk
+const ASIA_KRASNOYARSK = 283;
+## Timezone name constant for Asia/Kuala_Lumpur
+const ASIA_KUALA_LUMPUR = 284;
+## Timezone name constant for Asia/Kuching
+const ASIA_KUCHING = 285;
+## Timezone name constant for Asia/Kuwait
+const ASIA_KUWAIT = 286;
+## Timezone name constant for Asia/Macao
+const ASIA_MACAO = 287;
+## Timezone name constant for Asia/Macau
+const ASIA_MACAU = 288;
+## Timezone name constant for Asia/Magadan
+const ASIA_MAGADAN = 289;
+## Timezone name constant for Asia/Makassar
+const ASIA_MAKASSAR = 290;
+## Timezone name constant for Asia/Manila
+const ASIA_MANILA = 291;
+## Timezone name constant for Asia/Muscat
+const ASIA_MUSCAT = 292;
+## Timezone name constant for Asia/Nicosia
+const ASIA_NICOSIA = 293;
+## Timezone name constant for Asia/Novokuznetsk
+const ASIA_NOVOKUZNETSK = 294;
+## Timezone name constant for Asia/Novosibirsk
+const ASIA_NOVOSIBIRSK = 295;
+## Timezone name constant for Asia/Omsk
+const ASIA_OMSK = 296;
+## Timezone name constant for Asia/Oral
+const ASIA_ORAL = 297;
+## Timezone name constant for Asia/Phnom_Penh
+const ASIA_PHNOM_PENH = 298;
+## Timezone name constant for Asia/Pontianak
+const ASIA_PONTIANAK = 299;
+## Timezone name constant for Asia/Pyongyang
+const ASIA_PYONGYANG = 300;
+## Timezone name constant for Asia/Qatar
+const ASIA_QATAR = 301;
+## Timezone name constant for Asia/Qostanay
+const ASIA_QOSTANAY = 302;
+## Timezone name constant for Asia/Qyzylorda
+const ASIA_QYZYLORDA = 303;
+## Timezone name constant for Asia/Rangoon
+const ASIA_RANGOON = 304;
+## Timezone name constant for Asia/Riyadh
+const ASIA_RIYADH = 305;
+## Timezone name constant for Asia/Saigon
+const ASIA_SAIGON = 306;
+## Timezone name constant for Asia/Sakhalin
+const ASIA_SAKHALIN = 307;
+## Timezone name constant for Asia/Samarkand
+const ASIA_SAMARKAND = 308;
+## Timezone name constant for Asia/Seoul
+const ASIA_SEOUL = 309;
+## Timezone name constant for Asia/Shanghai
+const ASIA_SHANGHAI = 310;
+## Timezone name constant for Asia/Singapore
+const ASIA_SINGAPORE = 311;
+## Timezone name constant for Asia/Srednekolymsk
+const ASIA_SREDNEKOLYMSK = 312;
+## Timezone name constant for Asia/Taipei
+const ASIA_TAIPEI = 313;
+## Timezone name constant for Asia/Tashkent
+const ASIA_TASHKENT = 314;
+## Timezone name constant for Asia/Tbilisi
+const ASIA_TBILISI = 315;
+## Timezone name constant for Asia/Tehran
+const ASIA_TEHRAN = 316;
+## Timezone name constant for Asia/Tel_Aviv
+const ASIA_TEL_AVIV = 317;
+## Timezone name constant for Asia/Thimbu
+const ASIA_THIMBU = 318;
+## Timezone name constant for Asia/Thimphu
+const ASIA_THIMPHU = 319;
+## Timezone name constant for Asia/Tokyo
+const ASIA_TOKYO = 320;
+## Timezone name constant for Asia/Tomsk
+const ASIA_TOMSK = 321;
+## Timezone name constant for Asia/Ujung_Pandang
+const ASIA_UJUNG_PANDANG = 322;
+## Timezone name constant for Asia/Ulaanbaatar
+const ASIA_ULAANBAATAR = 323;
+## Timezone name constant for Asia/Ulan_Bator
+const ASIA_ULAN_BATOR = 324;
+## Timezone name constant for Asia/Urumqi
+const ASIA_URUMQI = 325;
+## Timezone name constant for Asia/Ust-Nera
+const ASIA_UST_NERA = 326;
+## Timezone name constant for Asia/Vientiane
+const ASIA_VIENTIANE = 327;
+## Timezone name constant for Asia/Vladivostok
+const ASIA_VLADIVOSTOK = 328;
+## Timezone name constant for Asia/Yakutsk
+const ASIA_YAKUTSK = 329;
+## Timezone name constant for Asia/Yangon
+const ASIA_YANGON = 330;
+## Timezone name constant for Asia/Yekaterinburg
+const ASIA_YEKATERINBURG = 331;
+## Timezone name constant for Asia/Yerevan
+const ASIA_YEREVAN = 332;
+## Timezone name constant for Atlantic/Azores
+const ATLANTIC_AZORES = 333;
+## Timezone name constant for Atlantic/Bermuda
+const ATLANTIC_BERMUDA = 334;
+## Timezone name constant for Atlantic/Canary
+const ATLANTIC_CANARY = 335;
+## Timezone name constant for Atlantic/Cape_Verde
+const ATLANTIC_CAPE_VERDE = 336;
+## Timezone name constant for Atlantic/Faeroe
+const ATLANTIC_FAEROE = 337;
+## Timezone name constant for Atlantic/Faroe
+const ATLANTIC_FAROE = 338;
+## Timezone name constant for Atlantic/Jan_Mayen
+const ATLANTIC_JAN_MAYEN = 339;
+## Timezone name constant for Atlantic/Madeira
+const ATLANTIC_MADEIRA = 340;
+## Timezone name constant for Atlantic/Reykjavik
+const ATLANTIC_REYKJAVIK = 341;
+## Timezone name constant for Atlantic/South_Georgia
+const ATLANTIC_SOUTH_GEORGIA = 342;
+## Timezone name constant for Atlantic/St_Helena
+const ATLANTIC_ST_HELENA = 343;
+## Timezone name constant for Atlantic/Stanley
+const ATLANTIC_STANLEY = 344;
+## Timezone name constant for Australia/ACT
+const AUSTRALIA_ACT = 345;
+## Timezone name constant for Australia/Adelaide
+const AUSTRALIA_ADELAIDE = 346;
+## Timezone name constant for Australia/Brisbane
+const AUSTRALIA_BRISBANE = 347;
+## Timezone name constant for Australia/Broken_Hill
+const AUSTRALIA_BROKEN_HILL = 348;
+## Timezone name constant for Australia/Canberra
+const AUSTRALIA_CANBERRA = 349;
+## Timezone name constant for Australia/Currie
+const AUSTRALIA_CURRIE = 350;
+## Timezone name constant for Australia/Darwin
+const AUSTRALIA_DARWIN = 351;
+## Timezone name constant for Australia/Eucla
+const AUSTRALIA_EUCLA = 352;
+## Timezone name constant for Australia/Hobart
+const AUSTRALIA_HOBART = 353;
+## Timezone name constant for Australia/LHI
+const AUSTRALIA_LHI = 354;
+## Timezone name constant for Australia/Lindeman
+const AUSTRALIA_LINDEMAN = 355;
+## Timezone name constant for Australia/Lord_Howe
+const AUSTRALIA_LORD_HOWE = 356;
+## Timezone name constant for Australia/Melbourne
+const AUSTRALIA_MELBOURNE = 357;
+## Timezone name constant for Australia/NSW
+const AUSTRALIA_NSW = 358;
+## Timezone name constant for Australia/North
+const AUSTRALIA_NORTH = 359;
+## Timezone name constant for Australia/Perth
+const AUSTRALIA_PERTH = 360;
+## Timezone name constant for Australia/Queensland
+const AUSTRALIA_QUEENSLAND = 361;
+## Timezone name constant for Australia/South
+const AUSTRALIA_SOUTH = 362;
+## Timezone name constant for Australia/Sydney
+const AUSTRALIA_SYDNEY = 363;
+## Timezone name constant for Australia/Tasmania
+const AUSTRALIA_TASMANIA = 364;
+## Timezone name constant for Australia/Victoria
+const AUSTRALIA_VICTORIA = 365;
+## Timezone name constant for Australia/West
+const AUSTRALIA_WEST = 366;
+## Timezone name constant for Australia/Yancowinna
+const AUSTRALIA_YANCOWINNA = 367;
+## Timezone name constant for Brazil/Acre
+const BRAZIL_ACRE = 368;
+## Timezone name constant for Brazil/DeNoronha
+const BRAZIL_DENORONHA = 369;
+## Timezone name constant for Brazil/East
+const BRAZIL_EAST = 370;
+## Timezone name constant for Brazil/West
+const BRAZIL_WEST = 371;
+## Timezone name constant for CET
+const CET = 372;
+## Timezone name constant for CST6CDT
+const CST6CDT = 373;
+## Timezone name constant for Canada/Atlantic
+const CANADA_ATLANTIC = 374;
+## Timezone name constant for Canada/Central
+const CANADA_CENTRAL = 375;
+## Timezone name constant for Canada/Eastern
+const CANADA_EASTERN = 376;
+## Timezone name constant for Canada/Mountain
+const CANADA_MOUNTAIN = 377;
+## Timezone name constant for Canada/Newfoundland
+const CANADA_NEWFOUNDLAND = 378;
+## Timezone name constant for Canada/Pacific
+const CANADA_PACIFIC = 379;
+## Timezone name constant for Canada/Saskatchewan
+const CANADA_SASKATCHEWAN = 380;
+## Timezone name constant for Canada/Yukon
+const CANADA_YUKON = 381;
+## Timezone name constant for Chile/Continental
+const CHILE_CONTINENTAL = 382;
+## Timezone name constant for Chile/EasterIsland
+const CHILE_EASTERISLAND = 383;
+## Timezone name constant for Cuba
+const CUBA = 384;
+## Timezone name constant for EET
+const EET = 385;
+## Timezone name constant for EST
+const EST = 386;
+## Timezone name constant for EST5EDT
+const EST5EDT = 387;
+## Timezone name constant for Egypt
+const EGYPT = 388;
+## Timezone name constant for Eire
+const EIRE = 389;
+## Timezone name constant for Etc/GMT
+const ETC_GMT = 390;
+## Timezone name constant for Etc/GMT+0
+const ETC_GMT_PLUS_0 = 391;
+## Timezone name constant for Etc/GMT+1
+const ETC_GMT_PLUS_1 = 392;
+## Timezone name constant for Etc/GMT+10
+const ETC_GMT_PLUS_10 = 393;
+## Timezone name constant for Etc/GMT+11
+const ETC_GMT_PLUS_11 = 394;
+## Timezone name constant for Etc/GMT+12
+const ETC_GMT_PLUS_12 = 395;
+## Timezone name constant for Etc/GMT+2
+const ETC_GMT_PLUS_2 = 396;
+## Timezone name constant for Etc/GMT+3
+const ETC_GMT_PLUS_3 = 397;
+## Timezone name constant for Etc/GMT+4
+const ETC_GMT_PLUS_4 = 398;
+## Timezone name constant for Etc/GMT+5
+const ETC_GMT_PLUS_5 = 399;
+## Timezone name constant for Etc/GMT+6
+const ETC_GMT_PLUS_6 = 400;
+## Timezone name constant for Etc/GMT+7
+const ETC_GMT_PLUS_7 = 401;
+## Timezone name constant for Etc/GMT+8
+const ETC_GMT_PLUS_8 = 402;
+## Timezone name constant for Etc/GMT+9
+const ETC_GMT_PLUS_9 = 403;
+## Timezone name constant for Etc/GMT-0
+const ETC_GMT_MINUS_0 = 404;
+## Timezone name constant for Etc/GMT-1
+const ETC_GMT_MINUS_1 = 405;
+## Timezone name constant for Etc/GMT-10
+const ETC_GMT_MINUS_10 = 406;
+## Timezone name constant for Etc/GMT-11
+const ETC_GMT_MINUS_11 = 407;
+## Timezone name constant for Etc/GMT-12
+const ETC_GMT_MINUS_12 = 408;
+## Timezone name constant for Etc/GMT-13
+const ETC_GMT_MINUS_13 = 409;
+## Timezone name constant for Etc/GMT-14
+const ETC_GMT_MINUS_14 = 410;
+## Timezone name constant for Etc/GMT-2
+const ETC_GMT_MINUS_2 = 411;
+## Timezone name constant for Etc/GMT-3
+const ETC_GMT_MINUS_3 = 412;
+## Timezone name constant for Etc/GMT-4
+const ETC_GMT_MINUS_4 = 413;
+## Timezone name constant for Etc/GMT-5
+const ETC_GMT_MINUS_5 = 414;
+## Timezone name constant for Etc/GMT-6
+const ETC_GMT_MINUS_6 = 415;
+## Timezone name constant for Etc/GMT-7
+const ETC_GMT_MINUS_7 = 416;
+## Timezone name constant for Etc/GMT-8
+const ETC_GMT_MINUS_8 = 417;
+## Timezone name constant for Etc/GMT-9
+const ETC_GMT_MINUS_9 = 418;
+## Timezone name constant for Etc/GMT0
+const ETC_GMT0 = 419;
+## Timezone name constant for Etc/Greenwich
+const ETC_GREENWICH = 420;
+## Timezone name constant for Etc/UCT
+const ETC_UCT = 421;
+## Timezone name constant for Etc/UTC
+const ETC_UTC = 422;
+## Timezone name constant for Etc/Universal
+const ETC_UNIVERSAL = 423;
+## Timezone name constant for Etc/Zulu
+const ETC_ZULU = 424;
+## Timezone name constant for Europe/Amsterdam
+const EUROPE_AMSTERDAM = 425;
+## Timezone name constant for Europe/Andorra
+const EUROPE_ANDORRA = 426;
+## Timezone name constant for Europe/Astrakhan
+const EUROPE_ASTRAKHAN = 427;
+## Timezone name constant for Europe/Athens
+const EUROPE_ATHENS = 428;
+## Timezone name constant for Europe/Belfast
+const EUROPE_BELFAST = 429;
+## Timezone name constant for Europe/Belgrade
+const EUROPE_BELGRADE = 430;
+## Timezone name constant for Europe/Berlin
+const EUROPE_BERLIN = 431;
+## Timezone name constant for Europe/Bratislava
+const EUROPE_BRATISLAVA = 432;
+## Timezone name constant for Europe/Brussels
+const EUROPE_BRUSSELS = 433;
+## Timezone name constant for Europe/Bucharest
+const EUROPE_BUCHAREST = 434;
+## Timezone name constant for Europe/Budapest
+const EUROPE_BUDAPEST = 435;
+## Timezone name constant for Europe/Busingen
+const EUROPE_BUSINGEN = 436;
+## Timezone name constant for Europe/Chisinau
+const EUROPE_CHISINAU = 437;
+## Timezone name constant for Europe/Copenhagen
+const EUROPE_COPENHAGEN = 438;
+## Timezone name constant for Europe/Dublin
+const EUROPE_DUBLIN = 439;
+## Timezone name constant for Europe/Gibraltar
+const EUROPE_GIBRALTAR = 440;
+## Timezone name constant for Europe/Guernsey
+const EUROPE_GUERNSEY = 441;
+## Timezone name constant for Europe/Helsinki
+const EUROPE_HELSINKI = 442;
+## Timezone name constant for Europe/Isle_of_Man
+const EUROPE_ISLE_OF_MAN = 443;
+## Timezone name constant for Europe/Istanbul
+const EUROPE_ISTANBUL = 444;
+## Timezone name constant for Europe/Jersey
+const EUROPE_JERSEY = 445;
+## Timezone name constant for Europe/Kaliningrad
+const EUROPE_KALININGRAD = 446;
+## Timezone name constant for Europe/Kiev
+const EUROPE_KIEV = 447;
+## Timezone name constant for Europe/Kirov
+const EUROPE_KIROV = 448;
+## Timezone name constant for Europe/Kyiv
+const EUROPE_KYIV = 449;
+## Timezone name constant for Europe/Lisbon
+const EUROPE_LISBON = 450;
+## Timezone name constant for Europe/Ljubljana
+const EUROPE_LJUBLJANA = 451;
+## Timezone name constant for Europe/London
+const EUROPE_LONDON = 452;
+## Timezone name constant for Europe/Luxembourg
+const EUROPE_LUXEMBOURG = 453;
+## Timezone name constant for Europe/Madrid
+const EUROPE_MADRID = 454;
+## Timezone name constant for Europe/Malta
+const EUROPE_MALTA = 455;
+## Timezone name constant for Europe/Mariehamn
+const EUROPE_MARIEHAMN = 456;
+## Timezone name constant for Europe/Minsk
+const EUROPE_MINSK = 457;
+## Timezone name constant for Europe/Monaco
+const EUROPE_MONACO = 458;
+## Timezone name constant for Europe/Moscow
+const EUROPE_MOSCOW = 459;
+## Timezone name constant for Europe/Nicosia
+const EUROPE_NICOSIA = 460;
+## Timezone name constant for Europe/Oslo
+const EUROPE_OSLO = 461;
+## Timezone name constant for Europe/Paris
+const EUROPE_PARIS = 462;
+## Timezone name constant for Europe/Podgorica
+const EUROPE_PODGORICA = 463;
+## Timezone name constant for Europe/Prague
+const EUROPE_PRAGUE = 464;
+## Timezone name constant for Europe/Riga
+const EUROPE_RIGA = 465;
+## Timezone name constant for Europe/Rome
+const EUROPE_ROME = 466;
+## Timezone name constant for Europe/Samara
+const EUROPE_SAMARA = 467;
+## Timezone name constant for Europe/San_Marino
+const EUROPE_SAN_MARINO = 468;
+## Timezone name constant for Europe/Sarajevo
+const EUROPE_SARAJEVO = 469;
+## Timezone name constant for Europe/Saratov
+const EUROPE_SARATOV = 470;
+## Timezone name constant for Europe/Simferopol
+const EUROPE_SIMFEROPOL = 471;
+## Timezone name constant for Europe/Skopje
+const EUROPE_SKOPJE = 472;
+## Timezone name constant for Europe/Sofia
+const EUROPE_SOFIA = 473;
+## Timezone name constant for Europe/Stockholm
+const EUROPE_STOCKHOLM = 474;
+## Timezone name constant for Europe/Tallinn
+const EUROPE_TALLINN = 475;
+## Timezone name constant for Europe/Tirane
+const EUROPE_TIRANE = 476;
+## Timezone name constant for Europe/Tiraspol
+const EUROPE_TIRASPOL = 477;
+## Timezone name constant for Europe/Ulyanovsk
+const EUROPE_ULYANOVSK = 478;
+## Timezone name constant for Europe/Uzhgorod
+const EUROPE_UZHGOROD = 479;
+## Timezone name constant for Europe/Vaduz
+const EUROPE_VADUZ = 480;
+## Timezone name constant for Europe/Vatican
+const EUROPE_VATICAN = 481;
+## Timezone name constant for Europe/Vienna
+const EUROPE_VIENNA = 482;
+## Timezone name constant for Europe/Vilnius
+const EUROPE_VILNIUS = 483;
+## Timezone name constant for Europe/Volgograd
+const EUROPE_VOLGOGRAD = 484;
+## Timezone name constant for Europe/Warsaw
+const EUROPE_WARSAW = 485;
+## Timezone name constant for Europe/Zagreb
+const EUROPE_ZAGREB = 486;
+## Timezone name constant for Europe/Zaporozhye
+const EUROPE_ZAPOROZHYE = 487;
+## Timezone name constant for Europe/Zurich
+const EUROPE_ZURICH = 488;
+## Timezone name constant for GB
+const GB = 489;
+## Timezone name constant for GB-Eire
+const GB_EIRE = 490;
+## Timezone name constant for GMT
+const GMT = 491;
+## Timezone name constant for GMT+0
+const GMT_PLUS_0 = 492;
+## Timezone name constant for GMT-0
+const GMT_MINUS_0 = 493;
+## Timezone name constant for GMT0
+const GMT0 = 494;
+## Timezone name constant for Greenwich
+const GREENWICH = 495;
+## Timezone name constant for HST
+const HST = 496;
+## Timezone name constant for Hongkong
+const HONGKONG = 497;
+## Timezone name constant for Iceland
+const ICELAND = 498;
+## Timezone name constant for Indian/Antananarivo
+const INDIAN_ANTANANARIVO = 499;
+## Timezone name constant for Indian/Chagos
+const INDIAN_CHAGOS = 500;
+## Timezone name constant for Indian/Christmas
+const INDIAN_CHRISTMAS = 501;
+## Timezone name constant for Indian/Cocos
+const INDIAN_COCOS = 502;
+## Timezone name constant for Indian/Comoro
+const INDIAN_COMORO = 503;
+## Timezone name constant for Indian/Kerguelen
+const INDIAN_KERGUELEN = 504;
+## Timezone name constant for Indian/Mahe
+const INDIAN_MAHE = 505;
+## Timezone name constant for Indian/Maldives
+const INDIAN_MALDIVES = 506;
+## Timezone name constant for Indian/Mauritius
+const INDIAN_MAURITIUS = 507;
+## Timezone name constant for Indian/Mayotte
+const INDIAN_MAYOTTE = 508;
+## Timezone name constant for Indian/Reunion
+const INDIAN_REUNION = 509;
+## Timezone name constant for Iran
+const IRAN = 510;
+## Timezone name constant for Israel
+const ISRAEL = 511;
+## Timezone name constant for Jamaica
+const JAMAICA = 512;
+## Timezone name constant for Japan
+const JAPAN = 513;
+## Timezone name constant for Kwajalein
+const KWAJALEIN = 514;
+## Timezone name constant for Libya
+const LIBYA = 515;
+## Timezone name constant for MET
+const MET = 516;
+## Timezone name constant for MST
+const MST = 517;
+## Timezone name constant for MST7MDT
+const MST7MDT = 518;
+## Timezone name constant for Mexico/BajaNorte
+const MEXICO_BAJANORTE = 519;
+## Timezone name constant for Mexico/BajaSur
+const MEXICO_BAJASUR = 520;
+## Timezone name constant for Mexico/General
+const MEXICO_GENERAL = 521;
+## Timezone name constant for NZ
+const NZ = 522;
+## Timezone name constant for NZ-CHAT
+const NZ_CHAT = 523;
+## Timezone name constant for Navajo
+const NAVAJO = 524;
+## Timezone name constant for PRC
+const PRC = 525;
+## Timezone name constant for PST8PDT
+const PST8PDT = 526;
+## Timezone name constant for Pacific/Apia
+const PACIFIC_APIA = 527;
+## Timezone name constant for Pacific/Auckland
+const PACIFIC_AUCKLAND = 528;
+## Timezone name constant for Pacific/Bougainville
+const PACIFIC_BOUGAINVILLE = 529;
+## Timezone name constant for Pacific/Chatham
+const PACIFIC_CHATHAM = 530;
+## Timezone name constant for Pacific/Chuuk
+const PACIFIC_CHUUK = 531;
+## Timezone name constant for Pacific/Easter
+const PACIFIC_EASTER = 532;
+## Timezone name constant for Pacific/Efate
+const PACIFIC_EFATE = 533;
+## Timezone name constant for Pacific/Enderbury
+const PACIFIC_ENDERBURY = 534;
+## Timezone name constant for Pacific/Fakaofo
+const PACIFIC_FAKAOFO = 535;
+## Timezone name constant for Pacific/Fiji
+const PACIFIC_FIJI = 536;
+## Timezone name constant for Pacific/Funafuti
+const PACIFIC_FUNAFUTI = 537;
+## Timezone name constant for Pacific/Galapagos
+const PACIFIC_GALAPAGOS = 538;
+## Timezone name constant for Pacific/Gambier
+const PACIFIC_GAMBIER = 539;
+## Timezone name constant for Pacific/Guadalcanal
+const PACIFIC_GUADALCANAL = 540;
+## Timezone name constant for Pacific/Guam
+const PACIFIC_GUAM = 541;
+## Timezone name constant for Pacific/Honolulu
+const PACIFIC_HONOLULU = 542;
+## Timezone name constant for Pacific/Johnston
+const PACIFIC_JOHNSTON = 543;
+## Timezone name constant for Pacific/Kanton
+const PACIFIC_KANTON = 544;
+## Timezone name constant for Pacific/Kiritimati
+const PACIFIC_KIRITIMATI = 545;
+## Timezone name constant for Pacific/Kosrae
+const PACIFIC_KOSRAE = 546;
+## Timezone name constant for Pacific/Kwajalein
+const PACIFIC_KWAJALEIN = 547;
+## Timezone name constant for Pacific/Majuro
+const PACIFIC_MAJURO = 548;
+## Timezone name constant for Pacific/Marquesas
+const PACIFIC_MARQUESAS = 549;
+## Timezone name constant for Pacific/Midway
+const PACIFIC_MIDWAY = 550;
+## Timezone name constant for Pacific/Nauru
+const PACIFIC_NAURU = 551;
+## Timezone name constant for Pacific/Niue
+const PACIFIC_NIUE = 552;
+## Timezone name constant for Pacific/Norfolk
+const PACIFIC_NORFOLK = 553;
+## Timezone name constant for Pacific/Noumea
+const PACIFIC_NOUMEA = 554;
+## Timezone name constant for Pacific/Pago_Pago
+const PACIFIC_PAGO_PAGO = 555;
+## Timezone name constant for Pacific/Palau
+const PACIFIC_PALAU = 556;
+## Timezone name constant for Pacific/Pitcairn
+const PACIFIC_PITCAIRN = 557;
+## Timezone name constant for Pacific/Pohnpei
+const PACIFIC_POHNPEI = 558;
+## Timezone name constant for Pacific/Ponape
+const PACIFIC_PONAPE = 559;
+## Timezone name constant for Pacific/Port_Moresby
+const PACIFIC_PORT_MORESBY = 560;
+## Timezone name constant for Pacific/Rarotonga
+const PACIFIC_RAROTONGA = 561;
+## Timezone name constant for Pacific/Saipan
+const PACIFIC_SAIPAN = 562;
+## Timezone name constant for Pacific/Samoa
+const PACIFIC_SAMOA = 563;
+## Timezone name constant for Pacific/Tahiti
+const PACIFIC_TAHITI = 564;
+## Timezone name constant for Pacific/Tarawa
+const PACIFIC_TARAWA = 565;
+## Timezone name constant for Pacific/Tongatapu
+const PACIFIC_TONGATAPU = 566;
+## Timezone name constant for Pacific/Truk
+const PACIFIC_TRUK = 567;
+## Timezone name constant for Pacific/Wake
+const PACIFIC_WAKE = 568;
+## Timezone name constant for Pacific/Wallis
+const PACIFIC_WALLIS = 569;
+## Timezone name constant for Pacific/Yap
+const PACIFIC_YAP = 570;
+## Timezone name constant for Poland
+const POLAND = 571;
+## Timezone name constant for Portugal
+const PORTUGAL = 572;
+## Timezone name constant for ROC
+const ROC = 573;
+## Timezone name constant for ROK
+const ROK = 574;
+## Timezone name constant for Singapore
+const SINGAPORE = 575;
+## Timezone name constant for Turkey
+const TURKEY = 576;
+## Timezone name constant for UCT
+const UCT = 577;
+## Timezone name constant for US/Alaska
+const US_ALASKA = 578;
+## Timezone name constant for US/Aleutian
+const US_ALEUTIAN = 579;
+## Timezone name constant for US/Arizona
+const US_ARIZONA = 580;
+## Timezone name constant for US/Central
+const US_CENTRAL = 581;
+## Timezone name constant for US/East-Indiana
+const US_EAST_INDIANA = 582;
+## Timezone name constant for US/Eastern
+const US_EASTERN = 583;
+## Timezone name constant for US/Hawaii
+const US_HAWAII = 584;
+## Timezone name constant for US/Indiana-Starke
+const US_INDIANA_STARKE = 585;
+## Timezone name constant for US/Michigan
+const US_MICHIGAN = 586;
+## Timezone name constant for US/Mountain
+const US_MOUNTAIN = 587;
+## Timezone name constant for US/Pacific
+const US_PACIFIC = 588;
+## Timezone name constant for US/Samoa
+const US_SAMOA = 589;
+## Timezone name constant for UTC
+const UTC = 590;
+## Timezone name constant for Universal
+const UNIVERSAL = 591;
+## Timezone name constant for W-SU
+const W_SU = 592;
+## Timezone name constant for WET
+const WET = 593;
+## Timezone name constant for Zulu
+const ZULU = 594;
