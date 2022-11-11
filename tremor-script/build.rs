@@ -27,13 +27,8 @@ const TIMEZONE_DOCS: &str = r#"### Timezones extracted from TZ data
 ### ```
 "#;
 
-fn create_timezones_tremor() {
-    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    dir.push("lib");
-    dir.push("std");
-    dir.push("datetime");
-    dir.push("timezones.tremor");
-    let mut file = std::fs::File::create(&dir).expect("Unable to create file timezones.tremor");
+fn create_timezones_tremor(file: &mut impl Write) {
+    //let mut file = std::fs::File::create(&path).expect("Unable to create file timezones.tremor");
     file.write_all(TIMEZONE_DOCS.as_bytes()).unwrap();
 
     for (index, tz) in TZ_VARIANTS.iter().enumerate() {
@@ -64,5 +59,21 @@ fn main() {
     println!("cargo:rustc-cfg=can_join_spans");
     println!("cargo:rustc-cfg=can_show_location_of_runtime_parse_error");
 
-    create_timezones_tremor();
+    let mut generated_file = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    generated_file.push("timezones.tremor");
+    let mut generated = Vec::new();
+    create_timezones_tremor(&mut generated);
+    let mut stdlib_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    stdlib_file.push("lib");
+    stdlib_file.push("std");
+    stdlib_file.push("datetime");
+    stdlib_file.push("timezones.tremor");
+
+    let stdlib =
+        std::fs::read(&stdlib_file).expect("Expected timezones.tremor to exist in the stdlib");
+    if stdlib != generated {
+        // only write if the contents differ
+        std::fs::write(&stdlib_file, &generated)
+            .expect("Expected to be able to write to timezones.tremor")
+    }
 }
