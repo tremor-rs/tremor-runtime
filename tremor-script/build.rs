@@ -59,8 +59,14 @@ fn main() {
     println!("cargo:rustc-cfg=can_join_spans");
     println!("cargo:rustc-cfg=can_show_location_of_runtime_parse_error");
 
-    let mut generated_file = PathBuf::from(std::env::var("OUT_DIR").unwrap());
-    generated_file.push("timezones.tremor");
+    // we generate the timezones file into a buffer and compare it against the current one
+    // we only change it if those two differ
+    // if so, we overwrite the old one.
+    //
+    // The reasoning behing this is that a buidl script shouldn't modify anything outside of `$OUT_DIR`.
+    // If we do nonetheless, cargo (righfully) complains during publishing the crate.
+    // With this logic it only writes when either chrono_tz or this build script got updated.
+    // We are going to catch this and do a clean commit, to avoid it happenign during publish.
     let mut generated = Vec::new();
     create_timezones_tremor(&mut generated);
     let mut stdlib_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
