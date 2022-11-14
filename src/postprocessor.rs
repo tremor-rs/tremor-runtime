@@ -60,7 +60,7 @@ pub trait Postprocessor: Send + Sync {
 
 pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
-        "chunk" | "chonk" => Ok(Box::new(chunk::Chunk::from_config(config.config.as_ref())?)),
+        "chunk" => Ok(Box::new(chunk::Chunk::from_config(config.config.as_ref())?)),
         "compress" => Ok(Box::new(Compress::from_config(config.config.as_ref())?)),
         "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
         "base64" => Ok(Box::new(Base64::default())),
