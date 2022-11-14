@@ -118,6 +118,30 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
     use proptest::{collection, num, option};
+    use tremor_script::literal;
+
+    #[test]
+    fn from_config() {
+        let res = Chunk::from_config(Some(&literal!({
+            "max_bytes": 0
+        })));
+        assert!(res.is_err());
+        let res = Chunk::from_config(Some(&literal!([])));
+        assert!(res.is_err());
+        let res = Chunk::from_config(Some(&literal!({
+            "max_bytes": 100,
+            "another_field": [true]
+        })));
+        assert!(res.is_err());
+        assert!(Chunk::from_config(None).is_err());
+        let res = Chunk::from_config(Some(&literal!({
+            "max_bytes": 1432
+        })));
+        assert!(res.is_ok());
+        let chunk = res.expect("unreachable");
+        assert_eq!("chunk", chunk.name());
+        assert_eq!(1432, chunk.max_bytes);
+    }
 
     proptest! {
 
