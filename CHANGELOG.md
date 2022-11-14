@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+
+* Added the `chunk` postprocessor for creating payloads as close to a configurable `max_bytes` as possible
+
 ## [0.13.0-rc.9]
 
 ### New Features
