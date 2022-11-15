@@ -36,16 +36,25 @@ impl Postprocessor for Chunk {
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        let new_len = self.chunk.len() + data.len();
         if data.len() > self.max_bytes {
+            // ignore incoming data
             self.warn(data.len());
             Ok(vec![])
-        } else if (self.chunk.len() + data.len()) > self.max_bytes {
+        } else if new_len > self.max_bytes {
+            // append the new data to the buffer we do keep and send the current buffer along
             let mut output = Vec::with_capacity(self.max_bytes);
-            // append the new data to the buffer we do keep
             output.extend_from_slice(data);
             std::mem::swap(&mut output, &mut self.chunk);
             Ok(vec![output])
+        } else if new_len == self.max_bytes {
+            // append the new data to the buffer and send both along
+            let mut output = Vec::with_capacity(self.max_bytes);
+            std::mem::swap(&mut output, &mut self.chunk);
+            output.extend_from_slice(data);
+            Ok(vec![output])
         } else {
+            // not close to max_bytes yet, not emitting anything
             self.chunk.extend_from_slice(data);
             Ok(vec![])
         }
@@ -151,6 +160,26 @@ mod tests {
         let chunk = res.expect("unreachable");
         assert_eq!("chunk", chunk.name());
         assert_eq!(1432, chunk.max_bytes);
+    }
+
+    #[test]
+    fn emit_on_exact_max_bytes() {
+        let mut pp = Chunk::new(100);
+        let data = [0_u8; 100];
+        let res = pp.process(0, 0, &data).expect("chunk.process should work");
+        assert_eq!(vec![data.to_vec()], res);
+    }
+
+    #[test]
+    fn discard_too_big() {
+        let mut pp = Chunk::new(100);
+        let data = [0_u8; 101];
+        let res = pp.process(0, 0, &data).expect("chunk.process should work");
+        assert!(res.is_empty());
+        assert!(pp
+            .finish(None)
+            .expect("chunk.finish should work")
+            .is_empty()); // nothing left
     }
 
     proptest! {
