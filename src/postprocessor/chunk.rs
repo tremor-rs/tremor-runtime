@@ -36,17 +36,15 @@ impl Postprocessor for Chunk {
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        if (self.chunk.len() + data.len()) > self.max_bytes {
-            if data.len() > self.max_bytes {
-                self.warn(data.len());
-                Ok(vec![])
-            } else {
-                let mut output = Vec::with_capacity(self.max_bytes);
-                // append the new data to the buffer we do keep
-                output.extend_from_slice(data);
-                std::mem::swap(&mut output, &mut self.chunk);
-                Ok(vec![output])
-            }
+        if data.len() > self.max_bytes {
+            self.warn(data.len());
+            Ok(vec![])
+        } else if (self.chunk.len() + data.len()) > self.max_bytes {
+            let mut output = Vec::with_capacity(self.max_bytes);
+            // append the new data to the buffer we do keep
+            output.extend_from_slice(data);
+            std::mem::swap(&mut output, &mut self.chunk);
+            Ok(vec![output])
         } else {
             self.chunk.extend_from_slice(data);
             Ok(vec![])
