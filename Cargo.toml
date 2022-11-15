@@ -99,7 +99,7 @@ serde_yaml = "0.9"
 simd-json = { version = "0.7", features = ["known-key"] }
 simd-json-derive = "0.7"
 snap = "1"
-
+socket2 = "0.4"
 syslog_loose = "0.18"
 tremor-common = { path = "tremor-common" }
 tremor-influx = { path = "tremor-influx" }

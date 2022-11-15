@@ -15,7 +15,10 @@
 
 //! UDP Client
 
-use crate::connectors::prelude::*;
+use crate::connectors::{
+    prelude::*,
+    utils::socket::{udp_socket, UdpSocketOptions},
+};
 use async_std::net::UdpSocket;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -25,6 +28,8 @@ pub(crate) struct Config {
     url: Url<super::UdpDefaults>,
     /// Optional ip/port to bind to
     bind: Option<Url<super::UdpDefaults>>,
+    #[serde(default)]
+    socket_options: Option<UdpSocketOptions>,
 }
 
 impl ConfigImpl for Config {}
@@ -101,12 +106,8 @@ impl UdpClientSink {
 #[async_trait::async_trait()]
 impl Sink for UdpClientSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let bind = self
-            .config
-            .bind
-            .as_ref()
-            .map_or(("0.0.0.0", 0), |b| (b.host_or_local(), b.port_or_dflt()));
-        let socket = UdpSocket::bind(bind).await?;
+        let bind = self.config.bind.as_ref().unwrap_or_default();
+        let socket = udp_socket(bind, self.config.socket_options.as_ref()).await?;
 
         socket
             .connect((
