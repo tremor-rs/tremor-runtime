@@ -1,0 +1,5 @@
+name: udp reuseport
+status: 0
+asserts:
+  - source: ./before/out.log
+    equals_file: expected.txt

@@ -4,6 +4,7 @@
 
 ### New Features
 
+* Added new config `socket_options` to `udp_client` and `udp_server` connectors to enable use of socket option `SO_REUSEPORT`
 * Added the `chunk` postprocessor for creating payloads as close to a configurable `max_bytes` as possible
 * Arithmetic expressions now error on overflows
 

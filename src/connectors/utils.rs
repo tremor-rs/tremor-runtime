@@ -33,6 +33,9 @@ pub(crate) mod mime;
 /// Protocol Buffer utilities
 pub(crate) mod pb;
 
+/// Socket utilities
+pub(crate) mod socket;
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub(crate) struct ConnectionMeta {
     pub(crate) host: String,
