@@ -1,4 +1,4 @@
-// Copyright 2020-2021, The Tremor Team
+// Copyright 2020-2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +13,10 @@
 // limitations under the License.
 
 ///! The UDP server will close the udp spcket on stop
-use crate::connectors::prelude::*;
+use crate::connectors::{
+    prelude::*,
+    utils::socket::{udp_socket, UdpSocketOptions},
+};
 use async_std::net::UdpSocket;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -21,9 +24,15 @@ use async_std::net::UdpSocket;
 pub(crate) struct Config {
     /// The port to listen on.
     pub(crate) url: Url<super::UdpDefaults>,
-    // UDP: receive buffer size
+    /// UDP: receive buffer size
     #[serde(default = "default_buf_size")]
     buf_size: usize,
+
+    /// whether to set the SO_REUSEPORT option
+    /// to allow multiple servers binding to the same address
+    /// so the incoming load can be shared scross multiple connectors
+    #[serde(default)]
+    socket_options: Option<UdpSocketOptions>,
 }
 
 impl ConfigImpl for Config {}
@@ -96,11 +105,7 @@ impl UdpServerSource {
 #[async_trait::async_trait]
 impl Source for UdpServerSource {
     async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let listener = UdpSocket::bind((
-            self.config.url.host_or_local(),
-            self.config.url.port_or_dflt(),
-        ))
-        .await?;
+        let listener = udp_socket(&self.config.url, self.config.socket_options.as_ref()).await?;
         self.listener = Some(listener);
         Ok(true)
     }

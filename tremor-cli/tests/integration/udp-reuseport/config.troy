@@ -1,0 +1,32 @@
+# this is just the client that is sending packets to the two server instances in before/config.troy listening on the same port
+define flow reuseport_client
+flow
+  use integration;
+
+  define connector client from udp_client
+  with
+    codec = "json-sorted",
+    config = {
+      "url": "127.0.0.1:22222"
+    },
+    reconnect = {
+      "retry": {
+        "interval_ms": 100,
+        "max_retries": 10,
+        "growth_rate": 2.0
+      }
+    }
+  end;
+  create connector client;
+
+  create connector input from integration::read_file;
+  create connector exit from integration::exit;
+  create pipeline out_or_exit from integration::out_or_exit;
+
+  connect /connector/input to /pipeline/out_or_exit;
+  connect /pipeline/out_or_exit/out to /connector/client;
+  connect /pipeline/out_or_exit/exit to /connector/exit;
+  
+end;
+
+deploy flow reuseport_client;

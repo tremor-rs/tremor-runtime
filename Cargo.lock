@@ -5987,6 +5987,7 @@ dependencies = [
  "sled",
  "smol",
  "snap",
+ "socket2",
  "surf",
  "syslog_loose",
  "tempfile",
