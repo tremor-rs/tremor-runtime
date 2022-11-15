@@ -1,0 +1,3 @@
+Error: 
+    5 | deploy flow without_arg with arg = "snot" end;
+      |                              ^^^ Unknown argument: arg
