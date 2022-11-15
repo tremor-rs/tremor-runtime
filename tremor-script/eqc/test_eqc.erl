@@ -280,15 +280,8 @@ prop_simple_expr_with_state() ->
     ?FORALL(Cmds, commands(?MODULE),
         begin
             {History, State, Result} = run_commands(Cmds, []),
-            Success =
-                case Result of
-                    ok ->
-                        true;
-                    _ ->
-                        io:format("[~p] Res1: ~p~n", [?LINE, Result]),
-                        false
-               end,
-            pretty_commands(?MODULE, Cmds, {History, State, Result}, Success)
+            pretty_commands(?MODULE, Cmds, {History, State, Result},
+                            ?WHENFAIL(io:format("[~p] Res1: ~p~n", [?LINE, Result]), Result == ok))
         end
     ).
 
