@@ -54,19 +54,33 @@ impl Postprocessor for Chunk {
     fn finish(&mut self, data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
         let mut output = vec![];
         std::mem::swap(&mut output, &mut self.chunk);
+        let data = data.unwrap_or_default();
 
-        let res = if let Some(data) = data {
-            if data.len() > self.max_bytes {
-                self.warn(data.len());
+        let res = match (output.len(), data.len()) {
+            // both empty
+            (0, 0) => vec![],
+            // chunk empty, data is too big -> discard
+            (0, dl) if dl > self.max_bytes => {
+                self.warn(dl);
+                vec![]
+            }
+            // chunk empty -> only data
+            (0, _) => vec![data.to_vec()],
+            // ignore data if empty or too big
+            (_, 0) => vec![output],
+            (_, dl) if dl > self.max_bytes => {
+                self.warn(dl);
                 vec![output]
-            } else if data.len() + output.len() > self.max_bytes {
+            }
+            // return two chunks if both together would be too big
+            (ol, dl) if (ol + dl) > self.max_bytes => {
                 vec![output, data.to_vec()]
-            } else {
+            }
+            // all within bounds, concatenate
+            (_, _) => {
                 output.extend_from_slice(data);
                 vec![output]
             }
-        } else {
-            vec![output]
         };
         Ok(res)
     }
@@ -142,16 +156,24 @@ mod tests {
     proptest! {
 
         #[test]
-        fn test_chunk(input in collection::vec(collection::vec(num::u8::ANY, 1usize..1000), 1usize..100), last in option::of(collection::vec(num::u8::ANY, 1usize..1000))) {
+        fn test_chunk(
+            input in collection::vec(collection::vec(num::u8::ANY, 0usize..1000), 0usize..100),
+            last in option::of(collection::vec(num::u8::ANY, 0usize..1000))
+        ) {
             let max_bytes = 100;
             let mut pp = Chunk::new(max_bytes);
             let mut acc_size: usize = 0;
             for (len, chunk) in input.into_iter().map(|v| (v.len(), v)) {
                 let res = pp.process(0, 0, &chunk).expect("chunk.process shouldn't fail");
+
+                assert!(!res.iter().any(Vec::is_empty), "we have some empty chunks in {res:?}");
+                assert!(!res.iter().any(|v| v.len() > max_bytes), "we have some chunks exceeding max_bytes");
+
                 if len > max_bytes {
                     assert!(res.is_empty());
                 } else if acc_size + len > max_bytes {
                     assert_eq!(1, res.len());
+                    assert!(!res[0].is_empty());
                     assert!(res[0].len() <= max_bytes, "a chunk exceeded max_bytes={max_bytes}");
                     acc_size = len;
                 } else {
@@ -162,27 +184,14 @@ mod tests {
             let last_len = last.as_ref().map(Vec::len).unwrap_or_default();
             let o_slice: Option<&[u8]> = last.as_ref().map(Vec::as_ref);
             let res = pp.finish(o_slice).expect("chunk.finish shouldn;t fail");
+            assert!(!res.iter().any(Vec::is_empty), "we have some empty chunks in {res:?}");
+            assert!(!res.iter().any(|v| v.len() > max_bytes), "we have some chunks exceeding max_bytes");
             if acc_size > 0 {
-                if last_len > max_bytes {
-                    assert_eq!(1, res.len());
-                    assert!(res[0].len() == acc_size);
-                    assert!(res[0].len() <= max_bytes);
-                } else if acc_size + last_len > max_bytes {
-                    assert_eq!(2, res.len());
-                    assert!(res[0].len() == acc_size);
-                    assert!(res[0].len() <= max_bytes);
-                    assert!(res[1].len() <= max_bytes);
-                } else {
-                    assert_eq!(1, res.len());
-                    assert!(res[0].len() == acc_size + last_len);
-                    assert!(res[0].len() <= max_bytes);
-                }
-
-            } else {
-                assert_eq!(1, res.len());
-                assert!(res[0].len() <= max_bytes, "the last chunk exceeded max_bytes={max_bytes}");
+                assert!(!res.is_empty());
             }
-
+            if last_len > 0 && last_len <= max_bytes {
+                assert!(!res.is_empty());
+            }
         }
     }
 }
