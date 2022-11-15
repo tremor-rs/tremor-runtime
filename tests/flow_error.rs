@@ -75,4 +75,7 @@ test_cases!(
     connector_bad_with_param,
     connector_bad_with,
     flow_not_found,
+    unknown_argument,
+    unknown_argument_no_args,
+    missing_required_argument,
 );

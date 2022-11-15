@@ -1,0 +1,5 @@
+define flow without_arg
+flow
+  use std;
+end;
+deploy flow without_arg with arg = "snot" end;
