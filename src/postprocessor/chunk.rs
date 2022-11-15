@@ -56,13 +56,11 @@ impl Postprocessor for Chunk {
         std::mem::swap(&mut output, &mut self.chunk);
 
         let res = if let Some(data) = data {
-            if data.len() + output.len() > self.max_bytes {
-                if data.len() > self.max_bytes {
-                    self.warn(data.len());
-                    vec![output]
-                } else {
-                    vec![output, data.to_vec()]
-                }
+            if data.len() > self.max_bytes {
+                self.warn(data.len());
+                vec![output]
+            } else if data.len() + output.len() > self.max_bytes {
+                vec![output, data.to_vec()]
             } else {
                 output.extend_from_slice(data);
                 vec![output]
