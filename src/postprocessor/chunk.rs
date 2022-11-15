@@ -199,12 +199,17 @@ mod tests {
                 assert!(!res.iter().any(|v| v.len() > max_bytes), "we have some chunks exceeding max_bytes");
 
                 if len > max_bytes {
+                    // ignored
                     assert!(res.is_empty());
-                } else if acc_size + len > max_bytes {
+                } else if (acc_size + len) > max_bytes {
                     assert_eq!(1, res.len());
                     assert!(!res[0].is_empty());
                     assert!(res[0].len() <= max_bytes, "a chunk exceeded max_bytes={max_bytes}");
                     acc_size = len;
+                } else if (acc_size + len) == max_bytes {
+                    assert_eq!(1, res.len());
+                    assert_eq!(max_bytes, res[0].len());
+                    acc_size = 0;
                 } else {
                     assert!(res.is_empty());
                     acc_size += len;
