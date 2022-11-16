@@ -1,0 +1,3 @@
+Error: 
+    2 | unsigned::max * 2;
+      | ^^^^^^^^^^^^^^^^^ The binary operation `*` caused an overflow
