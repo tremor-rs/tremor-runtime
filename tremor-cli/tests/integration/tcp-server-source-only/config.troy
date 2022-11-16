@@ -54,7 +54,9 @@ flow
     postprocessors = ["length-prefixed"],
     config = {
       "url": "localhost:65535",
-      "no_delay": true,
+      "socket_options": {
+        "TCP_NODELAY": true
+      },
       "tls": false
     } 
   end;
