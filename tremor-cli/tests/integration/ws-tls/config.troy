@@ -9,7 +9,9 @@ flow
     codec = "json",
     config = {
       "url": "wss://0.0.0.0:65535",
-      "no_delay": false,
+      "socket_options": {
+        "TCP_NODELAY": false
+      },
       "tls": {
         "cafile": "./before/localhost.cert",
         "domain": "localhost",
