@@ -381,6 +381,10 @@ impl Sink for Blackhole {
 
 impl Blackhole {
     fn finish(&mut self, ctx: &SinkContext) -> Result<()> {
+        // avoid printing twice
+        if self.finished {
+            return Ok(());
+        }
         self.finished = true;
         if self.structured {
             let v = self.to_value(2);
