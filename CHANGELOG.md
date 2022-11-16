@@ -5,6 +5,7 @@
 ### New Features
 
 * Added the `chunk` postprocessor for creating payloads as close to a configurable `max_bytes` as possible
+* Arithmetic expressions now error on overflows
 
 ## [0.13.0-rc.9]
 
