@@ -825,7 +825,7 @@ error_chain! {
         }
         Overflow(expr: Span, inner: Span, op: ast::BinOpKind) {
             description("Arithmetic overflow")
-                display("The binary operation `{}` caused an overflow", op)
+                display("The binary operation `{}` caused an over- or underflow", op)
         }
         InvalidBinaryBoolean(expr: Span, inner: Span, op: ast::BooleanBinOpKind, left: ValueType, right: Option<ValueType>) {
             description("Invalid binary operation")
