@@ -69,7 +69,9 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
         "postprocessors": ["separate"],
         "config": {
             "url": server_addr,
-            "no_delay": true,
+            "socket_options": {
+                "TCP_NODELAY": true
+            },
             "buf_size": 1024,
             "tls": tls_config
         }
