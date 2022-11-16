@@ -1,0 +1,20 @@
+define flow main
+flow
+  use bench;
+  create connector bench from bench::bench
+  with
+    codec = "json",
+    file = "numbers.json.xz"
+  end;
+  
+  define pipeline main
+  pipeline
+    select event - event from in into out;
+  end;
+
+  create pipeline main;
+
+  connect /connector/bench to /pipeline/main;
+  connect /pipeline/main to /connector/bench;
+end;
+deploy flow main;
