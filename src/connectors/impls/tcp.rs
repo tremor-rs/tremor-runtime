@@ -32,6 +32,16 @@ impl Defaults for TcpDefaults {
     const PORT: u16 = 4242;
 }
 
+/// Default TCP backlog size
+///
+/// Value taken from the Rust std library
+const DEFAULT_BACKLOG: i32 = 128;
+
+/// Default TCP backlog size
+fn default_backlog() -> i32 {
+    DEFAULT_BACKLOG
+}
+
 struct TcpReader<S>
 where
     S: futures::io::AsyncRead + std::marker::Unpin + std::marker::Sync + std::marker::Send,

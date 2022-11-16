@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::connectors::prelude::*;
 use crate::connectors::utils::url::{Defaults, Url};
-use crate::errors::Result;
-use async_std::net::{ToSocketAddrs, UdpSocket};
+use crate::errors::{Error, Result};
+use async_std::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields, rename_all = "UPPERCASE")]
 pub(crate) struct UdpSocketOptions {
-    #[serde(default)]
+    #[serde(default = "default_false")]
     so_reuseport: bool,
     // TODO: add more options
 }
@@ -35,16 +36,13 @@ impl UdpSocketOptions {
 
 pub(crate) async fn udp_socket<D: Defaults>(
     url: &Url<D>,
-    options: Option<&UdpSocketOptions>,
+    options: &UdpSocketOptions,
 ) -> Result<UdpSocket> {
     let host_port = (url.host_or_local(), url.port_or_dflt());
-    let addr = host_port
-        .to_socket_addrs()
-        .await?
-        .next()
-        .ok_or_else(|| format!("Invalid address {}:{}", host_port.0, host_port.1))?;
-    {
+    let mut last_err = None;
+    for addr in host_port.to_socket_addrs().await? {
         let sock_addr = SockAddr::from(addr);
+        // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
         let socket_addr = sock_addr
             .as_socket()
             .ok_or_else(|| format!("Invalid address {}:{}", host_port.0, host_port.1))?;
@@ -53,12 +51,123 @@ pub(crate) async fn udp_socket<D: Defaults>(
             Type::DGRAM,
             Some(Protocol::UDP),
         )?;
-        // apply reuseport socket action
-        if let Some(options) = options {
-            options.apply_to(&sock);
+
+        // apply socket options
+        options.apply_to(&sock)?;
+
+        match sock.bind(&sock_addr) {
+            Ok(()) => {
+                let socket: std::net::UdpSocket = sock.into();
+                return Ok(UdpSocket::from(socket)); // here the socket is set to non-blocking
+            }
+            Err(e) => {
+                last_err = Some(e);
+            }
         }
-        sock.bind(&sock_addr)?; // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
-        let socket: std::net::UdpSocket = sock.into();
-        Ok(UdpSocket::from(socket)) // here the socket is set to non-blocking
     }
+    Err(last_err.map_or_else(
+        || Error::from("could not resolve to any addresses"),
+        Error::from,
+    ))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "UPPERCASE")]
+pub(crate) struct TcpSocketOptions {
+    #[serde(default)]
+    so_reuseport: bool,
+    #[serde(default = "default_true")]
+    tcp_nodelay: bool,
+    // TODO: add more options
+}
+
+impl Default for TcpSocketOptions {
+    fn default() -> Self {
+        Self {
+            so_reuseport: false,
+            tcp_nodelay: true,
+        }
+    }
+}
+
+impl TcpSocketOptions {
+    fn apply_to(&self, sock: &Socket) -> Result<()> {
+        sock.set_reuse_port(self.so_reuseport)?;
+        sock.set_nodelay(self.tcp_nodelay)?;
+        Ok(())
+    }
+}
+
+pub(crate) async fn tcp_server_socket<D: Defaults>(
+    url: &Url<D>,
+    backlog: i32,
+    options: &TcpSocketOptions,
+) -> Result<TcpListener> {
+    let host_port = (url.host_or_local(), url.port_or_dflt());
+    let mut last_err = None;
+    for addr in host_port.to_socket_addrs().await? {
+        let sock_addr = SockAddr::from(addr);
+        // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
+        let socket_addr = sock_addr
+            .as_socket()
+            .ok_or_else(|| format!("Invalid address {}:{}", host_port.0, host_port.1))?;
+        let sock = Socket::new(
+            Domain::for_address(socket_addr),
+            Type::STREAM,
+            Some(Protocol::TCP),
+        )?;
+        // apply socket options
+        options.apply_to(&sock)?;
+
+        match sock.bind(&sock_addr) {
+            Ok(()) => {
+                sock.listen(backlog)?;
+                let socket: std::net::TcpListener = sock.into();
+                return Ok(TcpListener::from(socket)); // here the socket is set to non-blocking
+            }
+            Err(e) => {
+                last_err = Some(e);
+            }
+        }
+    }
+    Err(last_err.map_or_else(
+        || Error::from("could not resolve to any addresses"),
+        Error::from,
+    ))
+}
+
+pub(crate) async fn tcp_client_socket<D: Defaults>(
+    url: &Url<D>,
+    options: &TcpSocketOptions,
+) -> Result<TcpStream> {
+    let host_port = (url.host_or_local(), url.port_or_dflt());
+    let mut last_err = None;
+    for addr in host_port.to_socket_addrs().await? {
+        let sock_addr = SockAddr::from(addr);
+        // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
+        let socket_addr = sock_addr
+            .as_socket()
+            .ok_or_else(|| format!("Invalid address {}:{}", host_port.0, host_port.1))?;
+        let sock = Socket::new(
+            Domain::for_address(socket_addr),
+            Type::STREAM,
+            Some(Protocol::TCP),
+        )?;
+        // apply socket options
+        options.apply_to(&sock)?;
+
+        match sock.connect(&sock_addr) {
+            Ok(()) => {
+                let socket: std::net::TcpStream = sock.into();
+                return Ok(TcpStream::from(socket)); // here the socket is set to non-blocking
+            }
+            Err(e) => {
+                last_err = Some(e);
+            }
+        }
+    }
+    Err(last_err.map_or_else(
+        || Error::from("could not resolve to any addresses"),
+        Error::from,
+    ))
 }

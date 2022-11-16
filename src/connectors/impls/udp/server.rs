@@ -32,7 +32,7 @@ pub(crate) struct Config {
     /// to allow multiple servers binding to the same address
     /// so the incoming load can be shared scross multiple connectors
     #[serde(default)]
-    socket_options: Option<UdpSocketOptions>,
+    socket_options: UdpSocketOptions,
 }
 
 impl ConfigImpl for Config {}
@@ -105,7 +105,7 @@ impl UdpServerSource {
 #[async_trait::async_trait]
 impl Source for UdpServerSource {
     async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let listener = udp_socket(&self.config.url, self.config.socket_options.as_ref()).await?;
+        let listener = udp_socket(&self.config.url, &self.config.socket_options).await?;
         self.listener = Some(listener);
         Ok(true)
     }

@@ -11,10 +11,13 @@
       "./config.troy"
     ],
     "env": {
-      "RUST_LOG": "debug",
+      "RUST_LOG": "info",
       "TREMOR_PATH": "../../../lib:../../../../../tremor-script/lib"
     },
     "await": {
+      "port-open": [
+        22224
+      ],
       "wait-for-ms": [
         "2000"
       ]

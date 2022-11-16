@@ -116,3 +116,21 @@ async fn udp_bind() -> Result<()> {
     assert!(err.is_empty());
     Ok(())
 }
+
+#[async_std::test]
+async fn bind_connect_ipv4_ipv6() -> Result<()> {
+    let _ = env_logger::try_init();
+
+    let config = literal!({
+        "codec": "string",
+        "config": {
+            "bind": "[::1]:12345",
+            "url": "127.0.0.1:12345"
+        }
+    });
+    let client_harness =
+        ConnectorHarness::new("udp_client", &udp::client::Builder::default(), &config).await?;
+    let res = client_harness.start().await;
+    assert!(res.is_err(), "Not an error: {res:?}");
+    Ok(())
+}
