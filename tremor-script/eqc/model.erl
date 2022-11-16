@@ -19,9 +19,6 @@
 
 -export([eval/1, eval/2]).
 
-resolve(#state{locals = L}, {local, _} = K) ->
-    maps:get(K, L).
-
 combine_values(Key, null, Acc) -> maps:remove(Key, Acc);
 combine_values(Key, SpecVal = #{}, Acc) ->
     case maps:get(Key, Acc) of
@@ -212,7 +209,8 @@ ast_eval(S, false) -> {S, false};
 ast_eval(S, null) -> {S, null};
 ast_eval(S, N) when is_number(N) -> {S, N};
 ast_eval(S, B) when is_binary(B) -> {S, B};
-ast_eval(S, {local, _} = L) -> {S, resolve(S, L)};
+ast_eval(#vars{locals = Ls} = S, {local, _} = K) ->
+    {S, maps:get(K, Ls)};
 ast_eval(#vars{} = S, {emit, A}) ->
     {S1, R} = ast_eval(S, A), {S1, {emit, R}};
 ast_eval(#vars{} = S, drop) -> {S, drop}.
