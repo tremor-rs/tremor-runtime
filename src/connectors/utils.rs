@@ -186,7 +186,18 @@ pub(crate) mod url {
             self.url.port().unwrap_or(D::PORT)
         }
         pub(crate) fn host_or_local(&self) -> &str {
-            self.url.host_str().unwrap_or(D::HOST)
+            if let Some(host) = self.url.host_str() {
+                // the url lib is shit in that it prints ipv6 addresses with the brackets (e.g. [::1])
+                // but e.g. the socket handling libs want those addresses without, so we strip them here
+                // See: https://github.com/servo/rust-url/issues/770
+                if host.starts_with('[') {
+                    host.get(1..host.len() - 1).unwrap_or(D::HOST)
+                } else {
+                    host
+                }
+            } else {
+                D::HOST
+            }
         }
 
         pub(crate) fn url(&self) -> &url::Url {
@@ -215,6 +226,19 @@ pub(crate) mod url {
             let serialized = url.to_string();
             assert_eq!(expected, &serialized);
             Ok(())
+        }
+
+        #[test]
+        fn host_or_local_ipv6() {
+            let url: Url<HttpDefaults> = Url::parse("[::1]:123").expect("valid url");
+            assert_eq!(url.host_or_local(), "::1");
+            let url: Url<HttpDefaults> = Url::parse("[::]:123").expect("valid url");
+            assert_eq!(url.host_or_local(), "::");
+        }
+
+        #[test]
+        fn invalid_host() {
+            assert!(Url::<HttpDefaults>::parse("[").is_err());
         }
     }
 }
