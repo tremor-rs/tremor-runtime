@@ -24,4 +24,4 @@ impl Defaults for UdpDefaults {
 }
 
 const UDP_IPV4_UNSPECIFIED: &str = "0.0.0.0:0";
-const UDP_IPV6_UNSPECIFIED: &str = "[..]:0";
+const UDP_IPV6_UNSPECIFIED: &str = "[::]:0";
