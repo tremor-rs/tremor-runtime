@@ -87,3 +87,7 @@ allow-non-simd = ["simd-json/allow-non-simd"]
 [[bench]]
 name = "array_flatten"
 harness = false
+
+[[bench]]
+name = "arithmetics"
+harness = false
