@@ -12,13 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use simd_json::ValueAccess;
+
 use crate::registry::Registry;
 use crate::tremor_const_fn;
 
 pub fn load(registry: &mut Registry) {
-    registry.insert(tremor_const_fn! (float|parse(_context, _input: String) {
-        _input.parse::<f64>().map_err(to_runtime_error).map(Value::from)
-    }));
+    registry
+        .insert(tremor_const_fn! (float|parse(_context, _input: String) {
+            _input.parse::<f64>().map_err(to_runtime_error).map(Value::from)
+        }))
+        .insert(tremor_const_fn!(float|is_finite(_context, _input) {
+            _input.try_cast_f64().map(f64::is_finite).map(Value::from).map_err(to_runtime_error)
+        }))
+        .insert(tremor_const_fn!(float|is_nan(_context, _input) {
+            _input.try_cast_f64().map(f64::is_nan).map(Value::from).map_err(to_runtime_error)
+        }))
+        .insert(tremor_const_fn!(float|is_infinite(_context, _input) {
+            _input.try_cast_f64().map(f64::is_infinite).map(Value::from).map_err(to_runtime_error)
+        }));
 }
 
 #[cfg(test)]
@@ -31,5 +43,42 @@ mod test {
         let f = fun("float", "parse");
         let v = Value::from("42.314");
         assert_val!(f(&[&v]), 42.314);
+    }
+
+    #[test]
+    fn is_finite() {
+        let f = fun("float", "is_finite");
+        let v = Value::from(f64::NAN);
+        assert_val!(f(&[&v]), false);
+        let v = Value::from(f64::INFINITY);
+        assert_val!(f(&[&v]), false);
+        let v = Value::from(7);
+        assert_val!(f(&[&v]), true);
+        let v = Value::from(4.2);
+        assert_val!(f(&[&v]), true);
+    }
+    #[test]
+    fn is_nan() {
+        let f = fun("float", "is_nan");
+        let v = Value::from(f64::NAN);
+        assert_val!(f(&[&v]), true);
+        let v = Value::from(f64::INFINITY);
+        assert_val!(f(&[&v]), false);
+        let v = Value::from(7);
+        assert_val!(f(&[&v]), false);
+        let v = Value::from(4.2);
+        assert_val!(f(&[&v]), false);
+    }
+    #[test]
+    fn is_infinite() {
+        let f = fun("float", "is_infinite");
+        let v = Value::from(f64::NAN);
+        assert_val!(f(&[&v]), false);
+        let v = Value::from(f64::INFINITY);
+        assert_val!(f(&[&v]), true);
+        let v = Value::from(7);
+        assert_val!(f(&[&v]), false);
+        let v = Value::from(4.2);
+        assert_val!(f(&[&v]), false);
     }
 }

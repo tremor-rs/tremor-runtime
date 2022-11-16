@@ -4,3 +4,27 @@
 ##
 ## Returns an `float`.
 intrinsic fn parse(string) as float::parse;
+
+## Tests if a number is finite. Returns false for `NaN` and `Infinity`.
+## Always retrusn true for non float numerics.
+##
+## Returns an `bool`.
+##
+## Errors on non numeric types
+intrinsic fn is_finite(number) as float::is_finite;
+
+## Tests if a number is `NaN`.
+## Always retrusn false for non float numerics.
+##
+## Returns an `bool`.
+##
+## Errors on non numeric types
+intrinsic fn is_nan(number) as float::is_nan;
+
+## Tests if a number is `Infinity`.
+## Always retrusn false for non float numerics.
+##
+## Returns an `bool`.
+##
+## Errors on non numeric types
+intrinsic fn is_infinite(number) as float::is_infinite;

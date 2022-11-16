@@ -2102,9 +2102,9 @@ pub enum BinOpKind {
     /// we're forced to make this pub because of lalrpop
     Lt,
 
-    /// we're forced to make this pub because of lalrpop
+    /// shifts the bits keeping singness
     RBitShiftSigned,
-    /// we're forced to make this pub because of lalrpop
+    /// shifts the bit natively ignoring signness
     RBitShiftUnsigned,
     /// we're forced to make this pub because of lalrpop
     LBitShift,
