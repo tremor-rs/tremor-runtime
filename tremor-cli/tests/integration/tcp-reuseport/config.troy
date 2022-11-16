@@ -3,13 +3,17 @@ define flow reuseport_client
 flow
   use integration;
 
-  define connector client from udp_client
+  define connector client from tcp_client
   with
     codec = "json-sorted",
+    postprocessors = [
+      "separate"
+    ],
     config = {
-      "url": "127.0.0.1:22222",
+      "url": "127.0.0.1:22224",
       "socket_options": {
-        "SO_REUSEPORT": true
+        "SO_REUSEPORT": true,
+        "TCP_NODELAY": true
       }
     },
     reconnect = {

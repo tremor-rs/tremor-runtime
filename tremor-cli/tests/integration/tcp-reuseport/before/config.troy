@@ -3,11 +3,14 @@ flow
   use integration;
   use tremor::pipelines;
 
-  define connector server from udp_server
+  define connector server from tcp_server
   with
     codec = "json-sorted",
+    preprocessors = [
+      "separate"
+    ],
     config = {
-      "url": "127.0.0.1:22222",
+      "url": "127.0.0.1:22224",
       "socket_options": {
         "SO_REUSEPORT": true
       }

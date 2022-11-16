@@ -12,6 +12,7 @@ flow
     config = {
       "url": "0.0.0.0:65535",
       "buf_size": 1024,
+      "socket_options": {} # forcing the defaults
     }
   end;
 
@@ -50,7 +51,9 @@ flow
     codec = "json",
     config = {
       "url": "127.0.0.1:65535",
-      "no_delay": false,
+      "socket_option": {
+        "TCP_NODELAY": false
+      },
       "buf_size": 1024,
     },
     reconnect = {
