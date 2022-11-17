@@ -22,10 +22,10 @@
 
 -define(SHRINKEXPR(OpGen, Gen1),
         ?LET([Op, V1], [OpGen, Gen1],
-             ?SHRINK({Op, V1}, [V1]))).
+             ?SHRINK({Op, V1}, [V1] ++ model_eval({Op, V1})))).
 -define(SHRINKEXPR(OpGen, Gen1, Gen2),
         ?LET([Op, V1, V2], [OpGen, Gen1, Gen2],
-             ?SHRINK({Op, V1, V2}, [V1, V2]))).
+             ?SHRINK({Op, V1, V2}, [V1, V2] ++ model_eval({Op, V1, V2})))).
 -define(SHRINKEXPR(OpGen, Gen1, Gen2, Gen3),
         ?LET([Op, V1, V2, V3], [OpGen, Gen1, Gen2, Gen3],
              ?SHRINK({Op, V1, V2, V3}, [V1, V2, V3]))).
@@ -40,7 +40,7 @@ id() ->
 
 float() -> real().
 
-gen(#state{} = S) -> ?SIZED(N, (gen(S, N div 4))).
+gen(#state{} = S) -> ?SIZED(N, (gen(S, N div 6))).
 
 gen(#state{} = S, N) ->
     frequency([{10, {emit, spec_inner(S, N)}}, {1, drop},
@@ -126,31 +126,26 @@ small_int() -> choose(1, 100).
 int_or_int_local(#state{locals = Ls}) ->
     %% io:format("Choosing from ~p\n", [maps:to_list(Ls)]),
     IVs = [{1, {local, K}} || {K, int} <- maps:to_list(Ls)],
-    frequency([{1, small_int()} | IVs]).
+    frequency([{3, small_int()} | IVs]).
 
 float_or_float_local(#state{locals = Ls}) ->
-    IVs = [{1, {local, K}}
-	   || {K, float} <- maps:to_list(Ls)],
-    frequency([{max(length(IVs), 1), float()} | IVs]).
+    IVs = [{1, {local, K}} || {K, float} <- maps:to_list(Ls)],
+    frequency([{3, float()} | IVs]).
 
 bool_or_bool_local(#state{locals = Ls}) ->
-    IVs = [{1, {local, K}}
-	   || {K, bool} <- maps:to_list(Ls)],
-    frequency([{max(length(IVs), 1), bool()} | IVs]).
+    IVs = [{1, {local, K}} || {K, bool} <- maps:to_list(Ls)],
+    frequency([{3, bool()} | IVs]).
 
 string_or_string_local(#state{locals = Ls}) ->
-    IVs = [{1, {local, K}}
-	   || {K, string} <- maps:to_list(Ls)],
-    frequency([{max(length(IVs), 1), string()} | IVs]).
+    IVs = [{1, {local, K}} || {K, string} <- maps:to_list(Ls)],
+    frequency([{3, string()} | IVs]).
 
 array_or_array_local(#state{locals = Ls}) ->
-    IVs = [{1, {local, K}}
-	   || {K, array} <- maps:to_list(Ls)],
-    frequency([{max(length(IVs), 1), {array, []}} | IVs]).
+    IVs = [{1, {local, K}}|| {K, array} <- maps:to_list(Ls)],
+    frequency([{5, {array, []}} | IVs]).
 
 record_or_record_local(#state{locals = Ls} = S) ->
-    IVs = [{1, {local, K}}
-	   || {K, record} <- maps:to_list(Ls)],
+    IVs = [{1, {local, K}} || {K, record} <- maps:to_list(Ls)],
     frequency([{max(length(IVs), 1),
 		{record,
 		 map(string(),
@@ -257,3 +252,55 @@ spec_bop_record(S, N) when N =< 1 ->
 spec_bop_record(S, N) ->
     ?SHRINKEXPR(oneof([merge]),
                  spec_inner_record(S, N - 1), spec_inner_record(S, N - 1)).
+
+%% try evaluating and return either [Value] or [].
+model_eval(Expr) ->
+    try [model_eval_inner(Expr)]
+    catch _:_ ->
+            []
+    end.
+
+model_eval_inner({Op, V1, V2}) ->
+    case apply_op(Op, model_eval_inner(V1), model_eval_inner(V2)) of
+        X when is_integer(X), X < 0 ->
+            %% [ io:format("overflow ~p ~p ~p = ~p\n", [V1, Op, V2, X]) || X > 16#ffff ],
+            {'-', -X};
+        Other ->
+            Other
+    end;
+model_eval_inner({Op, V1}) ->
+    case {Op, model_eval_inner(V1)} of
+        {'-', {'-', X}} -> X;
+        {'+', X} -> X;
+        X -> X
+    end;
+model_eval_inner({Op, V1, V2, V3}) ->
+    {Op, model_eval_inner(V1), model_eval_inner(V2), model_eval_inner(V3)};
+model_eval_inner(X) ->
+    X.
+
+apply_op('+', V1, V2) ->
+    V1 + V2;
+apply_op('-', V1, V2) ->
+    V1 - V2;
+apply_op('*', V1, V2) ->
+    V1 * V2;
+apply_op('/', V1, V2) ->
+    V1 / V2;
+apply_op('band', V1, V2) ->
+    V1 band V2;
+apply_op('bxor', V1, V2) ->
+    V1 bxor V2;
+apply_op('>=', V1, V2) ->
+    V1 >= V2;
+apply_op('>', V1, V2) ->
+    V1 > V2;
+apply_op('<', V1, V2) ->
+    V1 < V2;
+apply_op('<=', V1, V2) ->
+    V1 =< V2;
+apply_op('!=', V1, V2) ->
+    V1 =/= V2;
+apply_op('==', V1, V2) ->
+    V1 == V2.
+
