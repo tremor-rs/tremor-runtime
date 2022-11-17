@@ -17,7 +17,7 @@
 
 -include_lib("pbt.hrl").
 
--export([gen/1]).
+-export([pp/1]).
 
 gen_({'+', A, B}) ->
     ["(", gen_(A), " + ", gen_(B), ")"];
@@ -54,7 +54,7 @@ gen_({'+', A}) -> ["(+ ", gen_(A), ")"];
 gen_({'-', A}) -> ["(- ", gen_(A), ")"];
 gen_({'#', String1, String2, Sub}) ->
     ["(", string:trim(gen_(String1), trailing, "\""), "#{",
-     gen(Sub), "}",
+     gen_(Sub), "}",
      string:trim(gen_(String2), leading, "\""), ")"];
 gen_({array, Exprs}) ->
     ["[", [[gen_(Ele), ","] || Ele <- Exprs], "]"];
@@ -83,7 +83,7 @@ gen_(null) -> "null";
 gen_(X) when is_number(X) -> io_lib:format("~p", [X]);
 gen_(X) when is_binary(X) -> jsx:encode(X).
 
-gen(Expr) -> iolist_to_binary(gen_(Expr)).
+pp(Expr) -> iolist_to_binary(gen_(Expr)).
 
 patch_operation({merge, Value}) ->
     ["merge ", " => ", gen_(Value)];
