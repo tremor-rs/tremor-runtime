@@ -33,14 +33,19 @@ initial_state() ->
      script = []
   }.
 
+%% We build a script in the state by adding 1 command at a time.
+%% The command is either a let binding for a new variable with a value
+%% or an expression that potentially uses those variables.
+%%
+%% In case the script results in an overflow, we do not add the last
+%% operation to the script. So we do test that overflows result in
+%% an error on the Rust side, but we don't work with script that have
+%% an overflow somewhere before the final operation.
 
-%% Ensure that we only execute AST's that are
-
-command_precondition_common(_S, _Ast) ->
-    true.
-
-precondition_common(_State, _Call) ->
-    true.
+%% Define what tests to skip due to unfinished modeling of semantics
+%% Remove element from the list to notice what is missing.
+skip(Script) ->
+    skip([badkey, negative, float_arith], Script).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -58,8 +63,12 @@ expr_pre(_S, [_Script, {emit, _}]) ->
     false;
 expr_pre(_S, [_Script, drop]) ->
     false;
-expr_pre(S, [Script, _Expr]) ->
-    S#state.script == Script. %% for better shrinking
+expr_pre(S, [Script, Expr]) ->
+    S#state.script == Script  %% for better shrinking
+      andalso not skip([Expr | Script]).
+
+expr_adapt(S, [_Script, Expr]) ->
+    [S#state.script, Expr].
 
 expr(Script, Ast) ->
     remote_eval(tremor_script_eval, [Script, Ast]).
@@ -94,8 +103,9 @@ let_local_args(#state{} = S) ->
                                        %{string, spec:gen_string(S)}
                                       ])].
 
-let_local_pre(S, [Script, _, {_Type, _Expr}]) ->
-    S#state.script == Script.
+let_local_pre(S, [Script, _, {_Type, Expr}]) ->
+    S#state.script == Script
+        andalso not skip([Expr | Script]).
 
 let_local_adapt(S, [_Script, Id, TypedExpr]) ->
     [S#state.script, Id, TypedExpr].
@@ -123,7 +133,12 @@ let_local_post(#state{}, [Script, Id, {_Type, Expr}], RustResult) ->
 expected(Script, RustResult) ->
     ModelResult = model_eval(Script),
     ValidExit =
-        is_exit(RustResult) andalso is_exit(ModelResult),
+        case ModelResult of
+            {'EXIT', float_arith} ->
+                io:format("Model exit with float arithmatic\n"), true;
+            _ ->
+                is_exit(RustResult)
+        end,
     case ValidExit orelse ModelResult =:= RustResult of
         true -> true;
         false ->
@@ -166,29 +181,45 @@ is_exit({'EXIT', _}) ->
 is_exit(_) ->
     false.
 
+skip(Issues, Script) ->
+    OnlyPositive = lists:member(negative, Issues),
+    case model_eval(Script) of
+        {'EXIT', _} when OnlyPositive ->
+            true;
+        {'EXIT', {badkey, _}} ->
+            lists:member(badkey, Issues);
+        {'EXIT', float_arith} ->
+            lists:member(float_arith, Issues);
+        _ ->
+            false
+    end.
+
 -spec prop_simple_expr() -> eqc:property().
 prop_simple_expr() ->
-    ?FORALL(Params, spec:gen(initial_state()),
-            begin
-                RustResult = remote_eval(tremor_script_eval, [Params]),
-                ModelResult = model_eval([Params]),
-                ?WHENFAIL(
-                   io:format("SIMPLE EXPR MODEL FAILED!\n AST: ~p\n Script: ~s\n Expected Result: ~p\n Actual Result: ~p\n",
-                             [Params, gen_script:pp(Params), ModelResult, RustResult]),
-                             %% The real ( rust ) and model simulation ( erlang ) results should be equivalent
-                             (is_exit(RustResult) andalso is_exit(ModelResult)) orelse ModelResult =:= RustResult
-                  )
-            end).
+    in_parallel(
+      ?FORALL(Params, ?SUCHTHAT(Ast, spec:gen(initial_state()), not skip([Ast])),
+              begin
+                  RustResult = remote_eval(tremor_script_eval, [Params]),
+                  ModelResult = model_eval([Params]),
+                  ?WHENFAIL(
+                     io:format("SIMPLE EXPR MODEL FAILED!\n AST: ~p\n Script: ~s\n Expected Result: ~p\n Actual Result: ~p\n",
+                               [Params, gen_script:pp(Params), ModelResult, RustResult]),
+                     %% The real ( rust ) and model simulation ( erlang ) results should be equivalent
+                     (is_exit(RustResult) andalso is_exit(ModelResult)) orelse ModelResult =:= RustResult
+                    )
+              end)).
 
 -spec prop_simple_expr_with_state() -> eqc:property().
 prop_simple_expr_with_state() ->
-    ?FORALL(Cmds, commands(?MODULE),
-        begin
-            {History, State, Result} = run_commands(Cmds, []),
-            pretty_commands(?MODULE, Cmds, {History, State, Result},
-                            ?WHENFAIL(io:format("[~p] Res1: ~p~n", [?LINE, Result]), Result == ok))
-        end
-    ).
+    in_parallel(
+      ?FORALL(Cmds, commands(?MODULE),
+              begin
+                  {History, State, Result} = run_commands(Cmds, []),
+                  measure(length, commands_length(Cmds),
+                          aggregate(call_features(History),
+                                    pretty_commands(?MODULE, Cmds, {History, State, Result}, Result == ok)))
+              end
+             )).
 
 
 %%====================================================================
