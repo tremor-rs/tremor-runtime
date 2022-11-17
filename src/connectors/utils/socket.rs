@@ -77,6 +77,8 @@ pub(crate) struct TcpSocketOptions {
     #[serde(default)]
     so_reuseport: bool,
     #[serde(default = "default_true")]
+    so_reuseaddr: bool,
+    #[serde(default = "default_true")]
     tcp_nodelay: bool,
     // TODO: add more options
 }
@@ -85,6 +87,7 @@ impl Default for TcpSocketOptions {
     fn default() -> Self {
         Self {
             so_reuseport: false,
+            so_reuseaddr: true,
             tcp_nodelay: true,
         }
     }
@@ -93,6 +96,7 @@ impl Default for TcpSocketOptions {
 impl TcpSocketOptions {
     fn apply_to(&self, sock: &Socket) -> Result<()> {
         sock.set_reuse_port(self.so_reuseport)?;
+        sock.set_reuse_address(self.so_reuseaddr)?;
         sock.set_nodelay(self.tcp_nodelay)?;
         Ok(())
     }
@@ -144,7 +148,6 @@ pub(crate) async fn tcp_client_socket<D: Defaults>(
     let mut last_err = None;
     for addr in host_port.to_socket_addrs().await? {
         let sock_addr = SockAddr::from(addr);
-        // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
         let socket_addr = sock_addr
             .as_socket()
             .ok_or_else(|| format!("Invalid address {}:{}", host_port.0, host_port.1))?;
