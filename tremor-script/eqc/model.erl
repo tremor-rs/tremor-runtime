@@ -145,7 +145,15 @@ ast_eval(#vars{} = S, {'-', A, B}) ->
 ast_eval(#vars{} = S, {'/', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
-    {S2, A1 / B1};
+    case is_float(A1) orelse is_float(B1) of
+        true ->
+            %% may be fine to divide by zero
+            {S2, try A1 / B1
+                 catch _:badarith -> exit(float_arith)
+                 end};
+        false ->
+            {S2, A1 / B1}
+    end;
 ast_eval(#vars{} = S, {'*', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
