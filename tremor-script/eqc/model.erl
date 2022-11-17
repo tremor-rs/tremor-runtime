@@ -179,13 +179,22 @@ ast_eval(#vars{} = S, {'<=', A, B}) ->
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 =< B1};
 ast_eval(#vars{} = S, {'and', A, B}) ->
+    %% lazy!
     {S1, A1} = ast_eval(S, A),
-    {S2, B1} = ast_eval(S1, B),
-    {S2, A1 andalso B1};
+    case A1 of
+        true ->
+            ast_eval(S1, B);
+        false ->
+            {S1, A1}
+    end;
 ast_eval(#vars{} = S, {'or', A, B}) ->
+    %% lazy!
     {S1, A1} = ast_eval(S, A),
-    {S2, B1} = ast_eval(S1, B),
-    {S2, A1 orelse B1};
+    case A1 of
+        false -> ast_eval(S1, B);
+        true ->
+            {S1, A1}
+    end;
 ast_eval(#vars{} = S, {'not', A}) ->
     {S1, A1} = ast_eval(S, A), {S1, not A1};
 ast_eval(#vars{} = S, {'band', A, B}) ->
