@@ -18,18 +18,30 @@ use crate::errors::{Error, Result};
 use async_std::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "UPPERCASE")]
 pub(crate) struct UdpSocketOptions {
     #[serde(default = "default_false")]
     so_reuseport: bool,
+    #[serde(default = "default_true")]
+    so_reuseaddr: bool,
     // TODO: add more options
+}
+
+impl Default for UdpSocketOptions {
+    fn default() -> Self {
+        Self {
+            so_reuseport: false,
+            so_reuseaddr: true,
+        }
+    }
 }
 
 impl UdpSocketOptions {
     /// apply the given config to `sock`
     fn apply_to(&self, sock: &Socket) -> Result<()> {
         sock.set_reuse_port(self.so_reuseport)?;
+        sock.set_reuse_address(self.so_reuseaddr)?;
         Ok(())
     }
 }
