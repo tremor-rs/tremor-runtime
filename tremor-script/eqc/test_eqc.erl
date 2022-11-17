@@ -20,6 +20,7 @@
 -module(test_eqc).
 
 -include_lib("pbt.hrl").
+-include_lib("eqc/include/eqc_statem.hrl").
 -compile([export_all]).
 
 
