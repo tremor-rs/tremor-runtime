@@ -18,7 +18,7 @@
 -include_lib("pbt.hrl").
 
 -export([gen/1, gen_array/1, gen_bool/1, gen_float/1,
-	 gen_int/1, gen_record/1, gen_string/1, id/0, valid/1]).
+	 gen_int/1, gen_record/1, gen_string/1, id/0]).
 
 -define(SHRINKEXPR(OpGen, Gen1),
         ?LET([Op, V1], [OpGen, Gen1],
@@ -29,20 +29,6 @@
 -define(SHRINKEXPR(OpGen, Gen1, Gen2, Gen3),
         ?LET([Op, V1, V2, V3], [OpGen, Gen1, Gen2, Gen3],
              ?SHRINK({Op, V1, V2, V3}, [V1, V2, V3]))).
-
-valid(Script) ->
-    try lists:foldr(fun (AAst, {S, _}) ->
-			    model:eval(S, AAst)
-		    end,
-		    {#vars{}, null}, Script),
-	true
-    catch
-      %  for testing, A, B are errors and C is stack trace
-      %   A:B:C ->
-      %   io:format("Invalid: ~p\n~p:~p\n~p", [Script, A, B, C]),
-      %   false
-      _:_ -> false
-    end.
 
 id() ->
     ?LET(Path,
