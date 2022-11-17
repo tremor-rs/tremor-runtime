@@ -248,7 +248,7 @@ let_local_string_next(#state{} = S, _Eval, [Script, Id, Expr]) ->
 
 asts_to_script(Script) ->
     lists:foldr(fun(Ast, Result) ->
-                        Line = gen_script:gen(Ast),
+                        Line = gen_script:pp(Ast),
                         <<Result/binary, Line/binary, ";\n">>
                 end, <<>>, Script).
 
@@ -269,7 +269,7 @@ prop_simple_expr() ->
                 { _, ModelResult } = model:eval(Params),
                 ?WHENFAIL(
                    io:format("SIMPLE EXPR MODEL FAILED!\n AST: ~p\n Script: ~s\n Expected Result: ~p\n Actual Result: ~p\n",
-                             [Params, gen_script:gen(Params), ModelResult, RustResult]),
+                             [Params, gen_script:pp(Params), ModelResult, RustResult]),
                              %% The real ( rust ) and model simulation ( erlang ) results should be equivalent
                              ModelResult =:= RustResult
                   )
