@@ -40,39 +40,40 @@ id() ->
 
 float() -> real().
 
-gen(#state{} = S) -> resize(3, ?SIZED(N, (gen(S, N)))).
+gen(#state{} = S) -> ?SIZED(N, (gen(S, N div 4))).
 
 gen(#state{} = S, N) ->
     frequency([{10, {emit, spec_inner(S, N)}}, {1, drop},
 	       {80, spec_inner(S, N)}]).
 
 gen_int(#state{} = S) ->
-    resize(3, ?SIZED(N, (spec_inner_int(S, N)))).
+    ?LET(Expr, ?SIZED(N, (spec_inner_int(S, N div 4))),
+         ?SHRINK(Expr, [model_eval(Expr)])).
 
 gen_float(#state{} = S) ->
-    resize(3, ?SIZED(N, (spec_inner_float(S, N)))).
+    ?SIZED(N, (spec_inner_float(S, N div 4))).
 
 gen_string(#state{} = S) ->
-    resize(3, ?SIZED(N, (spec_inner_string(S, N)))).
+    ?SIZED(N, (spec_inner_string(S, N div 4))).
 
 gen_bool(#state{} = S) ->
-    resize(3, ?SIZED(N, (spec_inner_bool(S, N)))).
+    ?SIZED(N, (spec_inner_bool(S, N div 4))).
 
 gen_array(#state{} = S) ->
-    resize(3, ?SIZED(N, (spec_inner_array(S, N)))).
+    ?SIZED(N, (spec_inner_array(S, N div 4))).
 
 gen_record(#state{} = S) ->
-    resize(3, ?SIZED(N, (spec_inner_record(S, N)))).
+    ?SIZED(N, (spec_inner_record(S, N div 4))).
 
 spec_inner(#state{} = S, N) ->
-    ?LAZY((frequency([{10, spec_inner_float(S, N)},
-		      {10, spec_inner_int(S, N)},
-		      {10, spec_inner_string(S, N)},
-		      {10, spec_inner_bool(S, N)},
-		      {10, spec_inner_array(S, N)},
-		      {10, spec_inner_record(S, N)}]))).
+    ?LAZY(frequency([{10, spec_inner_float(S, N)},
+                     {10, spec_inner_int(S, N)},
+                     {10, spec_inner_string(S, N)},
+                     {10, spec_inner_bool(S, N)},
+                     {10, spec_inner_array(S, N)},
+                     {10, spec_inner_record(S, N)}])).
 
-% FIX ME!! this is simple fix to avoid wrong float comparision in nested structures.
+%% FIX ME!! this is simple fix to avoid wrong float comparision in nested structures.
 spec_inner_no_float(#state{} = S, N) ->
     ?LAZY((frequency([{10, spec_inner_int(S, N)},
 		      {10, spec_inner_string(S, N)},
@@ -81,20 +82,24 @@ spec_inner_no_float(#state{} = S, N) ->
 		      {10, spec_inner_record(S, N)}]))).
 
 spec_inner_int(#state{} = S, N) ->
-    ?LAZY((frequency([{10, spec_bop_int(S, N)},
-		      {5, spec_uop_int(S, N)}]))).
+    ?LAZY(frequency([{10, spec_bop_int(S, N)},
+                     {5, spec_uop_int(S, N)},
+                     {10, int_or_int_local(S)}])).
 
 spec_inner_float(#state{} = S, N) ->
-    ?LAZY((frequency([{10, spec_bop_float(S, N)},
-		      {5, spec_uop_float(S, N)}]))).
+    ?LAZY(frequency([{10, spec_bop_float(S, N)},
+                     {5, spec_uop_float(S, N)},
+                     {1, float_or_float_local(S)}])).
 
 spec_inner_string(#state{} = S, N) ->
-    ?LAZY((frequency([{5, spec_bop_string(S, N)},
-		      {5, spec_string_interpolation(S, N)}]))).
+    ?LAZY(frequency([{5, spec_bop_string(S, N)},
+                     {5, spec_string_interpolation(S, N)},
+                     {1, string_or_string_local(S)}])).
 
 spec_inner_bool(#state{} = S, N) ->
-    ?LAZY((frequency([{10, spec_bop_bool(S, N)},
-		      {1, spec_uop_bool(S, N)}]))).
+    ?LAZY(frequency([{10, spec_bop_bool(S, N)},
+                     {1, spec_uop_bool(S, N)},
+                     {1, bool_or_bool_local(S)}])).
 
 spec_inner_array(S, N) when N =< 1 ->
     array_or_array_local(S);
@@ -109,8 +114,9 @@ literal_record(S, N) ->
 spec_inner_record(#state{} = S, N) when N =< 1 ->
     literal_record(S, N);
 spec_inner_record(#state{} = S, N) ->
-    ?LAZY((frequency([{5, spec_bop_record(S, N - 1)},
-		      {10, spec_uop_record(S, N - 1)}]))).
+    ?LAZY(frequency([{5, spec_bop_record(S, N - 1)},
+                     {10, spec_uop_record(S, N - 1)},
+                     {1, literal_record(S, N)}])).
 
 string() ->
     base64:encode(crypto:strong_rand_bytes(rand:uniform(10))).
@@ -118,8 +124,9 @@ string() ->
 small_int() -> choose(1, 100).
 
 int_or_int_local(#state{locals = Ls}) ->
+    %% io:format("Choosing from ~p\n", [maps:to_list(Ls)]),
     IVs = [{1, {local, K}} || {K, int} <- maps:to_list(Ls)],
-    frequency([{max(length(IVs), 1), small_int()} | IVs]).
+    frequency([{1, small_int()} | IVs]).
 
 float_or_float_local(#state{locals = Ls}) ->
     IVs = [{1, {local, K}}
@@ -227,29 +234,22 @@ spec_bop_float(S, N) when N =< 1 ->
                        float_or_float_local(S), int_or_int_local(S)),
 	   ?SHRINKEXPR(oneof(['+', '-', '*', '/']),
                         int_or_int_local(S), float_or_float_local(S)),
+           %% given two integers, only division may result in a float... but need not!
 	   ?SHRINKEXPR(oneof(['/']),
                        int_or_int_local(S), int_or_int_local(S))]);
 spec_bop_float(S, N) ->
     N1 = N div 2,
-    N2 = N - N1,
-    oneof([?SHRINKEXPR(oneof(['+', '-', '*', '/']),
-                        spec_bop_float(S, N1), spec_bop_float(S, N2)),
-	   ?SHRINKEXPR(oneof(['+', '-', '*', '/']),
-                        spec_bop_float(S, N1), spec_bop_int(S, N2)),
-	   ?SHRINKEXPR(oneof(['+', '-', '*', '/']),
-                        spec_bop_int(S, N1), spec_bop_float(S, N2)),
-	   ?SHRINKEXPR(oneof(['/']),
-                        spec_bop_int(S, N1), spec_bop_int(S, N2))]).
+    ?SHRINKEXPR(oneof(['+', '-', '*', '/']),
+                oneof([spec_inner_int(S, N1), spec_inner_float(S, N1)]),
+                oneof([spec_inner_int(S, N1), spec_inner_float(S, N1)])).
 
 spec_bop_int(S, N) when N =< 1 ->
     ?SHRINKEXPR(oneof(['+', '-', '*', 'band', 'bxor']),
                  int_or_int_local(S), int_or_int_local(S));
 spec_bop_int(S, N) ->
     N1 = N div 2,
-    N2 = N - N1,
-    % FIX ME!! LHS should be spec_inner_int
     ?SHRINKEXPR(oneof(['+', '-', '*', 'band', 'bxor']),
-                 spec_bop_int(S, N1), spec_bop_int(S, N2)).
+                 spec_inner_int(S, N1), spec_inner_int(S, N1)).
 
 spec_bop_record(S, N) when N =< 1 ->
     ?SHRINKEXPR(oneof([merge]),
