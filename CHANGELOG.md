@@ -4,9 +4,17 @@
 
 ### New Features
 
-* Added new config `socket_options` to `udp_client` and `udp_server` connectors to enable use of socket option `SO_REUSEPORT`
+* Added new config `socket_options` to UDP, TCP and Websocket connectors to enable use of socket option `SO_REUSEPORT`
 * Added the `chunk` postprocessor for creating payloads as close to a configurable `max_bytes` as possible
 * Arithmetic expressions now error on overflows
+
+### Fixes
+
+* Fix `udp_client` connector connecting to IPv6 hosts.
+
+### Breaking Changes
+
+* Move `no_delay` config of `tcp_server` and `ws_server` to `socket_options.TCP_NODELAY`.
 
 ## [0.13.0-rc.9]
 

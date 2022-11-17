@@ -13,18 +13,24 @@
 // limitations under the License.
 
 use super::{WsReader, WsWriter};
-use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
-use crate::connectors::{prelude::*, utils::ConnectionMeta};
-use async_std::task::JoinHandle;
-use async_std::{net::TcpListener, prelude::FutureExt};
+use crate::connectors::{
+    prelude::*,
+    utils::{
+        socket::{tcp_server_socket, TcpSocketOptions},
+        tls::{load_server_config, TLSServerConfig},
+        ConnectionMeta,
+    },
+};
+use async_std::{prelude::FutureExt, task::JoinHandle};
 use async_tls::TlsAcceptor;
 use async_tungstenite::accept_async;
 use futures::StreamExt;
 use rustls::ServerConfig;
 use simd_json::ValueAccess;
-use std::net::SocketAddr;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::{
+    net::SocketAddr,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 const URL_SCHEME: &str = "tremor-ws-server";
 
@@ -33,6 +39,11 @@ const URL_SCHEME: &str = "tremor-ws-server";
 pub(crate) struct Config {
     // kept as a str, so it is re-resolved upon each connect
     url: Url<super::WsDefaults>,
+    #[serde(default)]
+    socket_options: TcpSocketOptions,
+    /// it is an `i32` because the underlying api also accepts an i32
+    #[serde(default = "default_backlog")]
+    backlog: i32,
     tls: Option<TLSServerConfig>,
 }
 
@@ -172,17 +183,21 @@ impl Connector for WsServer {
         }
 
         // TODO: allow for other sockets
-        let host = self.config.url.host_or_local();
-        let port = self
-            .config
-            .url
-            .port()
-            .unwrap_or(if self.config.url.scheme() == "wss" {
-                443
-            } else {
-                80
-            });
-        let listener = TcpListener::bind((host, port)).await?;
+        if self.config.url.port().is_none() {
+            self.config
+                .url
+                .set_port(Some(if self.config.url.scheme() == "wss" {
+                    443
+                } else {
+                    80
+                }))?;
+        }
+        let listener = tcp_server_socket(
+            &self.config.url,
+            self.config.backlog,
+            &self.config.socket_options,
+        )
+        .await?;
 
         let ctx = ctx.clone();
         let tls_server_config = self.tls_server_config.clone();

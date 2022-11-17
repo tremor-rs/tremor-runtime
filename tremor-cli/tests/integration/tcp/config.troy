@@ -51,7 +51,7 @@ flow
     codec = "json",
     config = {
       "url": "127.0.0.1:65535",
-      "socket_option": {
+      "socket_options": {
         "TCP_NODELAY": false
       },
       "buf_size": 1024,
