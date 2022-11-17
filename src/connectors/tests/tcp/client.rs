@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use async_std::net::ToSocketAddrs;
 use std::time::Duration;
 
 use crate::{
@@ -97,13 +98,20 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
     };
     connector.send_to_sink(event, IN).await?;
     let response = out.get_event().await?;
+    let localhost_ip = ("localhost", 0)
+        .to_socket_addrs()
+        .await?
+        .next()
+        .expect("Expected an ip")
+        .ip()
+        .to_string();
     assert_eq!(Some("snot badger"), response.data.suffix().value().as_str());
     assert_eq!(
         &literal!({
             "tcp_client": {
                 "tls": use_tls,
                 "peer": {
-                    "host": "localhost",
+                    "host": localhost_ip,
                     "port": free_port
                 }
             }

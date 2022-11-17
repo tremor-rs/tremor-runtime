@@ -280,11 +280,17 @@ async fn ws_server_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
     let free_port = find_free_tcp_port().await?;
-    let url = format!("ws://0.0.0.0:{free_port}");
+    let url = format!("ws://localhost:{free_port}");
+    info!("url: {url}");
     let defn = literal!({
       "codec": "json",
       "config": {
-        "url": url.clone()
+        "url": url.clone(),
+        "backlog": 64,
+        "socket_options": {
+            "TCP_NODELAY": true,
+            "SO_REUSEPORT": false
+        }
       }
     });
 
@@ -300,7 +306,7 @@ async fn ws_server_text_routing() -> Result<()> {
     let start = Instant::now();
     let timeout = Duration::from_secs(30);
     let mut c1 = loop {
-        match TestClient::new(url.as_str()) {
+        match TestClient::new(&format!("localhost:{free_port}")) {
             Err(e) => {
                 if start.elapsed() > timeout {
                     return Err(format!(
@@ -366,6 +372,7 @@ async fn ws_client_binary_routing() -> Result<()> {
       "codec": "json",
       "config": {
           "url": format!("ws://127.0.0.1:{}", free_port),
+          "socket_options": {} // enforcing defaults during serialization
       }
     });
 
