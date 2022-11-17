@@ -53,7 +53,7 @@ impl From<SocketAddr> for ConnectionMeta {
 
 pub(crate) mod url {
 
-    use crate::errors::Result;
+    use crate::errors::{Error, Result};
     use regex::Regex;
     use serde::{Deserialize, Serialize};
     use std::marker::PhantomData;
@@ -202,6 +202,12 @@ pub(crate) mod url {
 
         pub(crate) fn url(&self) -> &url::Url {
             &self.url
+        }
+
+        pub(crate) fn set_port(&mut self, port: Option<u16>) -> Result<()> {
+            self.url
+                .set_port(port)
+                .map_err(|_| Error::from("Invalid port"))
         }
     }
 

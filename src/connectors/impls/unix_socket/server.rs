@@ -216,7 +216,10 @@ impl Source for UnixSocketSource {
                                 }
                             }
                         */
-                        let meta = ctx.meta(literal!({ "peer": stream_id }));
+                        let meta = ctx.meta(literal!({
+                            "path": path.display().to_string(),
+                            "peer": stream_id
+                        }));
 
                         // only register a writer, if any pipeline is connected to the sink
                         // otherwise we have a dead sink not consuming from channels and possibly dead-locking the source or other tasks
