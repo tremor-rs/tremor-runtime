@@ -33,7 +33,7 @@ use tremor_script::{
     AggrRegistry, FN_REGISTRY,
 };
 
-fn sm_r_err<E: Error + 'static>(e: E) -> StorageError<NodeId> {
+fn sm_r_err<E: Error + 'static>(e: E) -> StorageError {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Read,
@@ -41,7 +41,7 @@ fn sm_r_err<E: Error + 'static>(e: E) -> StorageError<NodeId> {
     )
     .into()
 }
-fn sm_w_err<E: Error + 'static>(e: E) -> StorageError<NodeId> {
+fn sm_w_err<E: Error + 'static>(e: E) -> StorageError {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Write,
@@ -49,7 +49,7 @@ fn sm_w_err<E: Error + 'static>(e: E) -> StorageError<NodeId> {
     )
     .into()
 }
-fn sm_d_err<E: Error + 'static>(e: E) -> StorageError<NodeId> {
+fn sm_d_err<E: Error + 'static>(e: E) -> StorageError {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Delete,
@@ -62,8 +62,7 @@ fn sm_d_err<E: Error + 'static>(e: E) -> StorageError<NodeId> {
 pub struct SerializableTremorStateMachine {
     pub last_applied_log: Option<LogId>,
 
-    pub last_membership: EffectiveMembership,
-
+    //pub last_membership: EffectiveMembership,
     /// Application data, for the k/v store
     pub data: BTreeMap<String, String>,
 
@@ -81,7 +80,7 @@ impl SerializableTremorStateMachine {
 }
 
 impl TryFrom<&TremorStateMachine> for SerializableTremorStateMachine {
-    type Error = StorageError<NodeId>;
+    type Error = StorageError;
 
     fn try_from(state: &TremorStateMachine) -> Result<Self, Self::Error> {
         let data = state
@@ -120,7 +119,6 @@ impl TryFrom<&TremorStateMachine> for SerializableTremorStateMachine {
             .collect();
         Ok(Self {
             last_applied_log: state.get_last_applied_log()?,
-            last_membership: state.get_last_membership()?,
             data,
             archives: apps,
             instances,
@@ -272,23 +270,16 @@ impl TremorStateMachine {
         Ok(r)
     }
 
-    pub(crate) fn get_last_membership(
-        &self,
-    ) -> StorageResult<EffectiveMembership<NodeId, TremorNode>> {
+    pub(crate) fn get_last_membership(&self) -> StorageResult<Option<EffectiveMembership>> {
         self.db
             .get_cf(self.cf_state_machine()?, Store::LAST_MEMBERSHIP)
             .map_err(sm_r_err)
-            .and_then(|value| {
-                value.map_or_else(
-                    || Ok(EffectiveMembership::default()),
-                    |v| serde_json::from_slice(&v).map_err(sm_r_err),
-                )
-            })
+            .and_then(|value| value.map(|v| serde_json::from_slice(&v).map_err(sm_r_err)))
     }
 
     pub(crate) fn set_last_membership(
         &self,
-        membership: &EffectiveMembership<NodeId, TremorNode>,
+        membership: &EffectiveMembership,
     ) -> StorageResult<()> {
         self.db
             .put_cf(
@@ -299,7 +290,7 @@ impl TremorStateMachine {
             .map_err(sm_w_err)
     }
 
-    pub(crate) fn get_last_applied_log(&self) -> StorageResult<Option<LogId<NodeId>>> {
+    pub(crate) fn get_last_applied_log(&self) -> StorageResult<Option<LogId>> {
         self.db
             .get_cf(self.cf_state_machine()?, Store::LAST_APPLIED_LOG)
             .map_err(sm_r_err)
@@ -310,7 +301,7 @@ impl TremorStateMachine {
             })
     }
 
-    pub(crate) fn set_last_applied_log(&self, log_id: LogId<NodeId>) -> StorageResult<()> {
+    pub(crate) fn set_last_applied_log(&self, log_id: LogId) -> StorageResult<()> {
         self.db
             .put_cf(
                 self.cf_state_machine()?,
@@ -461,7 +452,7 @@ impl TremorStateMachine {
 
     pub(crate) async fn handle_request(
         &mut self,
-        log_id: LogId<NodeId>,
+        log_id: LogId,
         req: &TremorRequest,
     ) -> StorageResult<TremorResponse> {
         match req {
