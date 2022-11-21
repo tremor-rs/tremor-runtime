@@ -1,37 +1,33 @@
+use super::{wrapp, APIRequest, APIResult};
 use crate::{
     instance::IntendedState,
     raft::{
-        app,
         archive::{get_app, TremorAppDef},
-        client,
         store::{
             AppId, FlowId, FlowInstance, InstanceId, Instances, StateApp, TremorInstanceState,
-            TremorRequest, TremorSet, TremorStart,
+            TremorRequest, TremorResponse, TremorSet, TremorStart,
         },
-        Server, TremorNode,
+        Server,
     },
 };
-use openraft::{
-    error::{ClientReadError, ClientWriteError, ForwardToLeader},
-    AnyError,
-};
-use std::{collections::HashMap, fmt::Display, sync::Arc};
-use tide::{Body, Request, Response, StatusCode};
+use openraft::{error::ClientWriteError, AnyError};
+use std::{collections::HashMap, fmt::Display};
 
 pub fn install_rest_endpoints(app: &mut Server) {
     let mut api_endpoint = app.at("/api");
-    api_endpoint.at("/apps").post(install).get(list);
-    api_endpoint.at("/apps/:app").delete(uninstall_app);
-    api_endpoint.at("/apps/:app/flows/:flow").post(start);
+    api_endpoint.at("/apps").post(install).get(wrapp(list));
+    api_endpoint.at("/apps/:app").delete(wrapp(uninstall_app));
+    api_endpoint.at("/apps/:app/flows/:flow").post(wrapp(start));
     api_endpoint
         .at("/apps/:app/instances/:instance")
-        .post(manage_instance)
-        .delete(stop_instance);
-
+        .post(wrapp(manage_instance))
+        .delete(wrapp(stop_instance));
     // test k/v store
-    api_endpoint.at("/write").post(write);
-    api_endpoint.at("/read").post(read);
-    api_endpoint.at("/consistent_read").post(consistent_read);
+    api_endpoint.at("/write").post(wrapp(write));
+    api_endpoint.at("/read").post(wrapp(read));
+    api_endpoint
+        .at("/consistent_read")
+        .post(wrapp(consistent_read));
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -40,53 +36,20 @@ pub enum InstallError {
     ClientWriteError(ClientWriteError),
 }
 
-async fn install(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
+async fn install(mut req: APIRequest) -> APIResult<TremorResponse> {
     let file: Vec<u8> = req.body_json().await?;
     let app = get_app(&file).map_err(|e| AnyError::new(&e))?;
     {
         let sm = req.state().store.state_machine.read().await;
         if sm.apps.get(&app.name).is_some() {
-            return Ok(Response::builder(StatusCode::Conflict)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    InstallError::AlreadyInstalled(app.name),
-                ))?)
-                .build());
+            return Err(InstallError::AlreadyInstalled(app.name).install());
         }
     }
     let request = TremorRequest::InstallApp {
         app,
         file: file.clone(),
     };
-    match req.state().raft.client_write(request.clone()).await {
-        Ok(result) => Ok(Response::builder(StatusCode::Ok)
-            .body(Body::from_json(&Result::<_, ()>::Ok(result))?)
-            .build()),
-        Err(e) => match e {
-            ClientWriteError::ForwardToLeader(ForwardToLeader {
-                leader_node: Some(TremorNode { api_addr, .. }),
-                leader_id: Some(leader_id),
-            }) => {
-                debug!("Forward to leader: {api_addr}");
-                let mut client = client::Tremor::new(leader_id, api_addr.clone());
-                let response = client.install(&file).await?;
-                Ok(Response::builder(StatusCode::Ok)
-                    .body(Body::from_json(&response)?)
-                    .build())
-            }
-            ClientWriteError::ForwardToLeader(_) | ClientWriteError::ChangeMembershipError(_) => {
-                Ok(Response::builder(StatusCode::ServiceUnavailable)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        InstallError::ClientWriteError(e),
-                    ))?)
-                    .build())
-            }
-            ClientWriteError::Fatal(_) => Ok(Response::builder(StatusCode::InternalServerError)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    InstallError::ClientWriteError(e),
-                ))?)
-                .build()),
-        },
-    }
+    Ok(req.state().raft.client_write(request.clone()).await?)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -144,16 +107,14 @@ impl Display for AppState {
     }
 }
 
-async fn list(req: Request<Arc<app::Tremor>>) -> tide::Result {
+async fn list(req: APIRequest) -> APIResult<TremorResponse> {
     let state_machine = req.state().store.state_machine.read().await;
     let apps: HashMap<_, _> = state_machine
         .apps
         .iter()
         .map(|(k, v)| (k, AppState::from(v)))
         .collect();
-    Ok(Response::builder(StatusCode::Ok)
-        .body(Body::from_json(&apps)?)
-        .build())
+    Ok(apps)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -165,7 +126,7 @@ pub enum StateChangeErr {
     ConfigErrors(AppId, FlowId, InstanceId, Vec<ConfigError>),
     ClientWriteError(ClientWriteError),
 }
-async fn start(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
+async fn start(mut req: APIRequest) -> APIResult<TremorResponse> {
     let body: TremorStart = req.body_json().await?;
 
     let app_name = AppId(req.param("app")?.to_string());
@@ -175,38 +136,23 @@ async fn start(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
         let sm = req.state().store.state_machine.read().await;
         if let Some(app) = sm.apps.get(&app_name) {
             if app.instances.contains_key(&body.instance) {
-                return Ok(Response::builder(StatusCode::Conflict)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        StateChangeErr::InstanceExists(app_name, body.instance),
-                    ))?)
-                    .build());
+                return Err(StateChangeErr::InstanceExists(app_name, body.instance).into());
             }
             if let Some(flow) = app.app.flows.get(&flow_name) {
                 if let Some(errors) = config_errors(&flow.args, &body.config) {
-                    return Ok(Response::builder(StatusCode::BadRequest)
-                        .body(Body::from_json(&Result::<(), _>::Err(
-                            StateChangeErr::ConfigErrors(
-                                app_name,
-                                flow_name,
-                                body.instance,
-                                errors,
-                            ),
-                        ))?)
-                        .build());
+                    return Err(StateChangeErr::ConfigErrors(
+                        app_name,
+                        flow_name,
+                        body.instance,
+                        errors,
+                    ))
+                    .into();
                 }
             } else {
-                return Ok(Response::builder(StatusCode::NotFound)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        StateChangeErr::FlowNotFound(app_name, flow_name),
-                    ))?)
-                    .build());
+                return Err(StateChangeErr::FlowNotFound(app_name, flow_name).into());
             }
         } else {
-            return Ok(Response::builder(StatusCode::NotFound)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    StateChangeErr::AppNotFound(app_name),
-                ))?)
-                .build());
+            return Err(StateChangeErr::AppNotFound(app_name).into());
         }
     }
     let request = TremorRequest::Deploy {
@@ -217,47 +163,10 @@ async fn start(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
         // FIXME: make this a parameter
         state: body.state(),
     };
-    match req.state().raft.client_write(request).await {
-        Ok(result) => Ok(Response::builder(StatusCode::Ok)
-            .body(Body::from_json(&Result::<_, ()>::Ok(result))?)
-            .build()),
-        Err(e) => match e {
-            ClientWriteError::ForwardToLeader(ForwardToLeader {
-                leader_node: Some(TremorNode { api_addr, .. }),
-                leader_id: Some(leader_id),
-            }) => {
-                debug!("Forward to leader: {api_addr}");
-                let mut client = client::Tremor::new(leader_id, api_addr.clone());
-                let response = client
-                    .start(
-                        &app_name,
-                        &flow_name,
-                        &body.instance,
-                        body.config,
-                        body.running,
-                    )
-                    .await?;
-                Ok(Response::builder(StatusCode::Ok)
-                    .body(Body::from_json(&response)?)
-                    .build())
-            }
-            ClientWriteError::ForwardToLeader(_) | ClientWriteError::ChangeMembershipError(_) => {
-                Ok(Response::builder(StatusCode::ServiceUnavailable)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        StateChangeErr::ClientWriteError(e),
-                    ))?)
-                    .build())
-            }
-            ClientWriteError::Fatal(_) => Ok(Response::builder(StatusCode::InternalServerError)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    StateChangeErr::ClientWriteError(e),
-                ))?)
-                .build()),
-        },
-    }
+    Ok(req.state().raft.client_write(request).await?)
 }
 
-async fn manage_instance(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
+async fn manage_instance(mut req: APIRequest) -> APIResult<TremorResponse> {
     let body: TremorInstanceState = req.body_json().await?;
 
     let app_id = AppId(req.param("app")?.to_string());
@@ -290,18 +199,10 @@ async fn manage_instance(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
         let sm = req.state().store.state_machine.read().await;
         if let Some(app) = sm.apps.get(&app_id) {
             if !app.instances.contains_key(&instance_id) {
-                return Ok(Response::builder(StatusCode::NotFound)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        StateChangeErr::InstanceNotFound(app_id, instance_id),
-                    ))?)
-                    .build());
+                return Err(StateChangeErr::InstanceNotFound(app_id, instance_id).into());
             }
         } else {
-            return Ok(Response::builder(StatusCode::NotFound)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    StateChangeErr::AppNotFound(app_id),
-                ))?)
-                .build());
+            return Err(StateChangeErr::AppNotFound(app_id).into());
         }
     }
     let request = match body {
@@ -316,155 +217,46 @@ async fn manage_instance(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
             state: IntendedState::Running,
         },
     };
-    match req.state().raft.client_write(request).await {
-        Ok(result) => Ok(Response::builder(StatusCode::Ok)
-            .body(Body::from_json(&Result::<_, ()>::Ok(result))?)
-            .build()),
-        Err(e) => match e {
-            ClientWriteError::ForwardToLeader(ForwardToLeader {
-                leader_node: Some(TremorNode { api_addr, .. }),
-                leader_id: Some(leader_id),
-            }) => {
-                debug!("Forward to leader: {api_addr}");
-                let mut client = client::Tremor::new(leader_id, api_addr.clone());
-
-                let response = client
-                    .change_instance_state(&app_id, &instance_id, body)
-                    .await?;
-                Ok(Response::builder(StatusCode::Ok)
-                    .body(Body::from_json(&response)?)
-                    .build())
-            }
-            ClientWriteError::ForwardToLeader(_) | ClientWriteError::ChangeMembershipError(_) => {
-                Ok(Response::builder(StatusCode::ServiceUnavailable)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        StateChangeErr::ClientWriteError(e),
-                    ))?)
-                    .build())
-            }
-            ClientWriteError::Fatal(_) => Ok(Response::builder(StatusCode::InternalServerError)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    StateChangeErr::ClientWriteError(e),
-                ))?)
-                .build()),
-        },
-    }
+    Ok(req.state().raft.client_write(request).await?)
 }
 
-async fn stop_instance(req: Request<Arc<app::Tremor>>) -> tide::Result {
+async fn stop_instance(req: APIRequest) -> APIResult<TremorResponse> {
     let app_id = AppId(req.param("app")?.to_string());
     let instance_id = InstanceId(req.param("instance")?.to_string());
     {
         let sm = req.state().store.state_machine.read().await;
         if let Some(app) = sm.apps.get(&app_id) {
             if !app.instances.contains_key(&instance_id) {
-                return Ok(Response::builder(StatusCode::NotFound)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        StateChangeErr::InstanceNotFound(app_id, instance_id),
-                    ))?)
-                    .build());
+                return Err(StateChangeErr::InstanceNotFound(app_id, instance_id).into());
             }
         } else {
-            return Ok(Response::builder(StatusCode::NotFound)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    StateChangeErr::AppNotFound(app_id),
-                ))?)
-                .build());
+            return Err(StateChangeErr::AppNotFound(app_id).into());
         }
     }
     let request = TremorRequest::Undeploy {
         app: app_id.clone(),
         instance: instance_id.clone(),
     };
-    match req.state().raft.client_write(request).await {
-        Ok(result) => Ok(Response::builder(StatusCode::Ok)
-            .body(Body::from_json(&Result::<_, ()>::Ok(result))?)
-            .build()),
-        Err(e) => match e {
-            ClientWriteError::ForwardToLeader(ForwardToLeader {
-                leader_node: Some(TremorNode { api_addr, .. }),
-                leader_id: Some(leader_id),
-            }) => {
-                debug!("Forward to leader: {api_addr}");
-                let mut client = client::Tremor::new(leader_id, api_addr.clone());
-
-                let response = client.stop_instance(&app_id, &instance_id).await?;
-                Ok(Response::builder(StatusCode::Ok)
-                    .body(Body::from_json(&response)?)
-                    .build())
-            }
-            ClientWriteError::ForwardToLeader(_) | ClientWriteError::ChangeMembershipError(_) => {
-                Ok(Response::builder(StatusCode::ServiceUnavailable)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        StateChangeErr::ClientWriteError(e),
-                    ))?)
-                    .build())
-            }
-            ClientWriteError::Fatal(_) => Ok(Response::builder(StatusCode::InternalServerError)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    StateChangeErr::ClientWriteError(e),
-                ))?)
-                .build()),
-        },
-    }
+    Ok(req.state().raft.client_write(request).await?)
 }
 
-async fn uninstall_app(req: Request<Arc<app::Tremor>>) -> tide::Result {
+async fn uninstall_app(req: APIRequest) -> APIResult<TremorResponse> {
     let app_id = AppId(req.param("app")?.to_string());
-
     {
         let sm = req.state().store.state_machine.read().await;
         if let Some(app) = sm.apps.get(&app_id) {
             if let Some(instance) = app.instances.keys().next() {
-                return Ok(Response::builder(StatusCode::Conflict)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        StateChangeErr::InstanceExists(app_id, instance.clone()),
-                    ))?)
-                    .build());
+                return Err(StateChangeErr::InstanceExists(app_id, instance.clone()).into());
             }
         } else {
-            return Ok(Response::builder(StatusCode::NotFound)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    StateChangeErr::AppNotFound(app_id),
-                ))?)
-                .build());
+            return Err(StateChangeErr::AppNotFound(app_id).into());
         }
     }
     let request = TremorRequest::UninstallApp {
         app: app_id.clone(),
         force: false,
     };
-    match req.state().raft.client_write(request).await {
-        Ok(result) => Ok(Response::builder(StatusCode::Ok)
-            .body(Body::from_json(&Result::<_, ()>::Ok(result))?)
-            .build()),
-        Err(e) => match e {
-            ClientWriteError::ForwardToLeader(ForwardToLeader {
-                leader_node: Some(TremorNode { api_addr, .. }),
-                leader_id: Some(leader_id),
-            }) => {
-                debug!("Forward to leader: {api_addr}");
-                let mut client = client::Tremor::new(leader_id, api_addr.clone());
-
-                let response = client.uninstall_app(&app_id).await?;
-                Ok(Response::builder(StatusCode::Ok)
-                    .body(Body::from_json(&response)?)
-                    .build())
-            }
-            ClientWriteError::ForwardToLeader(_) | ClientWriteError::ChangeMembershipError(_) => {
-                Ok(Response::builder(StatusCode::ServiceUnavailable)
-                    .body(Body::from_json(&Result::<(), _>::Err(
-                        StateChangeErr::ClientWriteError(e),
-                    ))?)
-                    .build())
-            }
-            ClientWriteError::Fatal(_) => Ok(Response::builder(StatusCode::InternalServerError)
-                .body(Body::from_json(&Result::<(), _>::Err(
-                    StateChangeErr::ClientWriteError(e),
-                ))?)
-                .build()),
-        },
-    }
+    Ok(req.state().raft.client_write(request).await?)
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum ConfigError {
@@ -502,108 +294,20 @@ fn config_errors(
  *  - `POST - /write` saves a value in a key and sync the nodes.
  *  - `POST - /read` attempt to find a value from a given key.
  */
-async fn write(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
+async fn write(mut req: APIRequest) -> APIResult<TremorResponse> {
     let body: TremorSet = req.body_json().await?;
     let request = body.clone().into();
-    match req.state().raft.client_write(request).await {
-        Ok(result) => Ok(Response::builder(StatusCode::Ok)
-            .body(Body::from_json(&result)?)
-            .build()),
-        Err(e) => {
-            debug!("Write Error: {e}");
-            match e {
-                ClientWriteError::ForwardToLeader(ForwardToLeader {
-                    leader_node: Some(TremorNode { api_addr, .. }),
-                    leader_id: Some(leader_id),
-                }) => {
-                    debug!("Forward to leader: {api_addr}");
-                    let mut client = client::Tremor::new(leader_id, api_addr.clone());
-                    let response = client.write(&body).await?;
-                    Ok(Response::builder(StatusCode::Ok)
-                        .body(Body::from_json(&response)?)
-                        .build())
-                }
-                ClientWriteError::ForwardToLeader(e) => {
-                    Ok(Response::builder(StatusCode::ServiceUnavailable)
-                        .body(Body::from_json(&e)?)
-                        .build())
-                }
-                ClientWriteError::ChangeMembershipError(e) => {
-                    Ok(Response::builder(StatusCode::ServiceUnavailable)
-                        .body(Body::from_json(&e)?)
-                        .build())
-                }
-                ClientWriteError::Fatal(e) => {
-                    Ok(Response::builder(StatusCode::InternalServerError)
-                        .body(Body::from_json(&e)?)
-                        .build())
-                }
-            }
-        }
-    }
+    Ok(req.state().raft.client_write(request).await)?
 }
 
-async fn read(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
+async fn read(mut req: APIRequest) -> APIResult<TremorResponse> {
     let key: String = req.body_json().await?;
     let state_machine = req.state().store.state_machine.read().await;
-    let value = state_machine.get(&key)?;
-
-    Ok(Response::builder(StatusCode::Ok)
-        .body(Body::from_json(&value)?)
-        .build())
+    Ok(state_machine.get(&key)?)
 }
 
-enum TremorRpcError {}
-fn make_error<E>(error: E, error_code: StatusCode) -> tide::Result
-where
-    TremorRpcError: From<E>,
-{
-    let error: TremorRpcError = error.into();
-    Ok(Response::builder(error_code)
-        .body(Body::from_json(&Err(error))?)
-        .build())
-}
-
-async fn consistent_read(mut req: Request<Arc<app::Tremor>>) -> tide::Result {
+async fn consistent_read(mut req: APIRequest) -> APIResult<TremorResponse> {
     let key: String = req.body_json().await?;
     let result = req.state().raft.is_leader().await; // this sends around appendentries requests to all current nodes
-    match req.state().raft.client_read().await {
-        Ok(_) => {
-            let state_machine = req.state().store.state_machine.read().await;
-            let value = state_machine.get(&key)?;
-
-            Ok(Response::builder(StatusCode::Ok)
-                .body(Body::from_json(&value)?)
-                .build())
-        }
-        Err(e) => {
-            debug!("Read Error {e}");
-            match e {
-                ClientReadError::ForwardToLeader(ForwardToLeader {
-                    leader_node: Some(TremorNode { api_addr, .. }),
-                    leader_id: Some(leader_id),
-                }) => {
-                    debug!("Forward to leader: {api_addr}");
-                    let mut client = client::Tremor::new(leader_id, api_addr.clone());
-                    let value = client.consistent_read(&key).await?;
-                    Ok(Response::builder(StatusCode::Ok)
-                        .body(Body::from_json(&value)?)
-                        .build())
-                }
-                ClientReadError::ForwardToLeader(e) => {
-                    Ok(Response::builder(StatusCode::ServiceUnavailable)
-                        .body(Body::from_json(&e)?)
-                        .build())
-                }
-                ClientReadError::QuorumNotEnough(e) => {
-                    Ok(Response::builder(StatusCode::ServiceUnavailable)
-                        .body(Body::from_json(&e)?)
-                        .build())
-                }
-                ClientReadError::Fatal(e) => Ok(Response::builder(StatusCode::InternalServerError)
-                    .body(Body::from_json(&e)?)
-                    .build()),
-            }
-        }
-    }
+    Ok(req.state().raft.client_read().await?)
 }

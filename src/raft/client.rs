@@ -1,15 +1,12 @@
 use super::{
-    network::{
-        api::{AppState, InstallError, StateChangeErr},
-        management::AddLearner,
-    },
+    network::{api::AppState, management::AddLearner, APIError, APIResult},
     store::{
         AppId, FlowId, InstanceId, TremorInstanceState, TremorResponse, TremorSet, TremorStart,
     },
     NodeId, TremorNode,
 };
 use openraft::{
-    error::{AddLearnerError, ClientWriteError, ForwardToLeader, InitializeError},
+    error::ForwardToLeader,
     raft::{AddLearnerResponse, ClientWriteResponse},
     RaftMetrics,
 };
@@ -21,10 +18,7 @@ use std::{
     fmt::Display,
 };
 
-pub type RPCWriteError = ClientWriteError;
-pub type WriteResponse = ClientWriteResponse<TremorResponse>;
-pub type WriteResult = Result<WriteResponse, RPCWriteError>;
-pub type WriteResultResult<T> = Result<Result<T, StateChangeErr>, RPCWriteError>;
+type WriteResponse = ClientWriteResponse<TremorResponse>;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 enum Method {
@@ -70,16 +64,15 @@ impl<const RETRIES: usize> Tremor<RETRIES> {
     /// It sends out a POST request if `req` is Some. Otherwise a GET request.
     /// The remote endpoint must respond a reply in form of `Result<T, E>`.
     /// An `Err` happened on remote will be wrapped in an [`RPCError::RemoteError`].
-    async fn api_req<Req, Resp, Err>(
+    async fn api_req<Req, Resp>(
         &self,
         uri: &str,
         method: Method,
         req: Option<&Req>,
-    ) -> Result<Resp, Err>
+    ) -> APIResult<Resp>
     where
         Req: Serialize + 'static,
         Resp: Serialize + DeserializeOwned,
-        Err: std::error::Error + Serialize + DeserializeOwned,
     {
         let (_leader_id, target_url) = {
             let t = &self.leader;
@@ -119,50 +112,43 @@ impl<const RETRIES: usize> Tremor<RETRIES> {
     ///
     /// If the target node is not a leader, a `ForwardToLeader` error will be
     /// returned and this client will retry at most 3 times to contact the updated leader.
-    async fn api_send_to_leader<Req, Resp, Err>(
+    async fn api_send_to_leader<Req, Resp>(
         &mut self,
         uri: &str,
         method: Method,
         req: Option<&Req>,
-    ) -> Result<Resp, Err>
+    ) -> APIResult<Resp>
     where
         Req: Serialize + 'static,
         Resp: Serialize + DeserializeOwned,
-        Err: std::error::Error + Serialize + DeserializeOwned + TryInto<ForwardToLeader> + Clone,
     {
         // Retry a few times, default to 3
         let mut n_retry = RETRIES;
 
         loop {
-            let result: Result<Resp, Err> = self.api_req(uri, method, req).await;
+            let result: APIResult<Resp> = self.api_req(uri, method, req).await;
 
             let rpc_err = match result {
                 Ok(x) => return Ok(x),
-                Err(rpc_err) => rpc_err,
+                Err(APIError::ForwardToLeader(ForwardToLeader {
+                    leader_id: Some(leader_id),
+                    leader_node: Some(leader_node),
+                    ..
+                })) => {
+                    // Update target to the new leader.
+                    {
+                        let t = &mut self.leader;
+                        let api_addr = leader_node.api_addr.clone();
+                        *t = (leader_id, api_addr);
+                    }
+
+                    n_retry -= 1;
+                    if n_retry > 0 {
+                        continue;
+                    }
+                }
+                Err(e) => return Err(e),
             };
-
-            let forward_err_res = <Err as TryInto<ForwardToLeader>>::try_into(rpc_err.clone());
-
-            if let Ok(ForwardToLeader {
-                leader_id: Some(leader_id),
-                leader_node: Some(leader_node),
-                ..
-            }) = forward_err_res
-            {
-                // Update target to the new leader.
-                {
-                    let t = &mut self.leader;
-                    let api_addr = leader_node.api_addr.clone();
-                    *t = (leader_id, api_addr);
-                }
-
-                n_retry -= 1;
-                if n_retry > 0 {
-                    continue;
-                }
-            }
-
-            return Err(rpc_err);
         }
     }
 }
@@ -178,7 +164,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn write(&mut self, req: &TremorSet) -> WriteResult {
+    pub async fn write(&mut self, req: &TremorSet) -> APIResult<WriteResponse> {
         self.api_send_to_leader("api/write", Method::Post, Some(req))
             .await
     }
@@ -188,7 +174,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn read(&mut self, req: &String) -> Result<Option<String>, anyhow::Error> {
+    pub async fn read(&mut self, req: &String) -> APIResult<Option<String>> {
         self.api_req("api/read", Method::Post, Some(req)).await
     }
 
@@ -198,7 +184,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn consistent_read(&mut self, req: &String) -> Result<Option<String>, anyhow::Error> {
+    pub async fn consistent_read(&mut self, req: &String) -> APIResult<Option<String>> {
         self.api_send_to_leader("api/consistent_read", Method::Post, Some(req))
             .await
     }
@@ -215,10 +201,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn install(
-        &mut self,
-        req: &Vec<u8>,
-    ) -> Result<Result<WriteResponse, InstallError>, RPCWriteError> {
+    pub async fn install(&mut self, req: &Vec<u8>) -> APIResult<WriteResponse> {
         self.api_send_to_leader("api/apps", Method::Post, Some(req))
             .await
     }
@@ -239,7 +222,7 @@ impl Tremor {
         instance: &InstanceId,
         config: HashMap<String, OwnedValue>,
         running: bool,
-    ) -> WriteResultResult<WriteResponse> {
+    ) -> APIResult<WriteResponse> {
         let req = TremorStart {
             instance: instance.clone(),
             config,
@@ -267,7 +250,7 @@ impl Tremor {
         app: &AppId,
         instance: &InstanceId,
         state: TremorInstanceState,
-    ) -> WriteResultResult<WriteResponse> {
+    ) -> APIResult<WriteResponse> {
         self.api_send_to_leader(
             &format!("api/apps/{app}/instances/{instance}"),
             Method::Post,
@@ -289,7 +272,7 @@ impl Tremor {
         &mut self,
         app: &AppId,
         instance: &InstanceId,
-    ) -> WriteResultResult<WriteResponse> {
+    ) -> APIResult<WriteResponse> {
         self.api_send_to_leader(
             &format!("api/apps/{app}/instances/{instance}"),
             Method::Delete,
@@ -307,7 +290,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn uninstall_app(&mut self, app: &AppId) -> WriteResultResult<WriteResponse> {
+    pub async fn uninstall_app(&mut self, app: &AppId) -> APIResult<WriteResponse> {
         self.api_send_to_leader(&format!("api/apps/{app}"), Method::Delete, None::<&()>)
             .await
     }
@@ -320,7 +303,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn list(&mut self) -> Result<HashMap<String, AppState>, TremorInfailableError> {
+    pub async fn list(&mut self) -> APIResult<HashMap<String, AppState>> {
         self.api_req("api/apps", Method::Get, None::<&()>).await
     }
 }
@@ -337,9 +320,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn init(
-        &mut self,
-    ) -> Result<(), TremorRpcError<InitializeError<NodeId, TremorNode>>> {
+    pub async fn init(&mut self) -> APIResult<()> {
         self.api_req("cluster/init", Method::Post, None::<&()>)
             .await
     }
@@ -355,8 +336,7 @@ impl Tremor {
         id: NodeId,
         rpc: String,
         api: String,
-    ) -> Result<AddLearnerResponse<NodeId>, TremorRpcError<AddLearnerError<NodeId, TremorNode>>>
-    {
+    ) -> APIResult<AddLearnerResponse<NodeId>> {
         self.api_send_to_leader(
             "cluster/learners",
             Method::Post,
@@ -371,11 +351,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn remove_learner(
-        &mut self,
-        id: NodeId,
-    ) -> Result<AddLearnerResponse<NodeId>, TremorRpcError<AddLearnerError<NodeId, TremorNode>>>
-    {
+    pub async fn remove_learner(&mut self, id: NodeId) -> APIResult<AddLearnerResponse<NodeId>> {
         self.api_send_to_leader("cluster/learners", Method::Post, Some(&id))
             .await
     }
@@ -387,7 +363,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn change_membership(&mut self, req: &BTreeSet<NodeId>) -> WriteResult {
+    pub async fn change_membership(&mut self, req: &BTreeSet<NodeId>) -> APIResult<WriteResponse> {
         self.api_send_to_leader("cluster/change-membership", Method::Post, Some(req))
             .await
     }
@@ -400,9 +376,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn metrics(
-        &mut self,
-    ) -> Result<RaftMetrics<NodeId, TremorNode>, TremorInfailableError> {
+    pub async fn metrics(&mut self) -> APIResult<RaftMetrics<NodeId, TremorNode>> {
         self.api_req("cluster/metrics", Method::Get, None::<&()>)
             .await
     }

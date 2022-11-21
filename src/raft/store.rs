@@ -6,7 +6,7 @@ use self::statemachine::{SerializableTremorStateMachine, TremorStateMachine};
 use crate::{
     errors::Error as RuntimeError,
     instance::IntendedState,
-    raft::{archive::TremorAppDef, ClusterError, NodeId, TremorNode},
+    raft::{archive::TremorAppDef, ClusterError, NodeId},
     system::Runtime,
 };
 use async_std::{net::ToSocketAddrs, sync::RwLock};
