@@ -121,23 +121,27 @@ impl TestHttpServer {
 // Convenience template for a round trip HTTP request/response interaction
 async fn rtt(
     scheme: &'static str,
-    target: String,
+    target: &str,
     codec: &'static str,
     auth: Option<Value<'static>>,
     event: Event,
 ) -> Result<ValueAndMeta<'static>> {
     let _ = env_logger::try_init();
-    let url = format!("{}://{}", scheme, target);
+    let url = format!("{scheme}://{target}");
     let mut config = literal!({
         "url": url.clone(),
         "method": "get",
+        "mime_mapping": {
+            "application/json": "json",
+            "application/yaml": "yaml",
+            "*/*": codec,
+        },
     });
     if let Some(auth) = auth {
         config.try_insert("auth", auth.clone_static());
     }
     let defn = literal!({
       "config": config,
-      "codec": codec.to_string(),
     });
 
     let mut fake = TestHttpServer::new(url.clone()).await?;
@@ -233,7 +237,7 @@ async fn http_client_request_with_defaults() -> Result<()> {
         transactional: true,
         ..Default::default()
     };
-    let res = rtt("http", target.clone(), "string", None, event).await?;
+    let res = rtt("http", &target, "string", None, event).await?;
     assert_eq!(&Value::from("null"), res.value());
     Ok(())
 }
@@ -255,7 +259,7 @@ async fn http_client_request_override_method() -> Result<()> {
             .into(),
         ..Default::default()
     };
-    let res = rtt("http", target.clone(), "string", None, event).await?;
+    let res = rtt("http", &target, "string", None, event).await?;
     // empty response body
     assert_eq!(&Value::from(""), res.value());
     assert_with_request_meta!(res, meta, {
@@ -282,7 +286,7 @@ async fn http_client_request_override_endpoint() -> Result<()> {
             .into(),
         ..Default::default()
     };
-    let res = rtt("http", target.clone(), "string", None, event).await?;
+    let res = rtt("http", &target, "string", None, event).await?;
 
     let overriden_url: &str = &format!("http://{}/snot/badger?flork=mork", target);
     assert_with_request_meta!(res, meta, {
@@ -314,7 +318,7 @@ async fn http_client_request_override_codec() -> Result<()> {
             .into(),
         ..Default::default()
     };
-    let res = rtt("http", target.clone(), "json", None, event).await?;
+    let res = rtt("http", &target, "json", None, event).await?;
 
     let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
@@ -350,7 +354,7 @@ async fn http_client_request_override_headers() -> Result<()> {
             .into(),
         ..Default::default()
     };
-    let res = rtt("http", target.clone(), "string", None, event).await?;
+    let res = rtt("http", &target, "string", None, event).await?;
 
     let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
@@ -394,7 +398,7 @@ async fn http_client_request_override_content_type() -> Result<()> {
         transactional: true,
         ..Default::default()
     };
-    let res = rtt("http", target.clone(), "string", None, event).await?;
+    let res = rtt("http", &target, "string", None, event).await?;
 
     let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
@@ -449,14 +453,7 @@ async fn http_client_request_auth_none() -> Result<()> {
         transactional: true,
         ..Default::default()
     };
-    let res = rtt(
-        "http",
-        target.clone(),
-        "string",
-        Some(literal!("none")),
-        event,
-    )
-    .await?;
+    let res = rtt("http", &target, "string", Some(literal!("none")), event).await?;
 
     let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
@@ -513,7 +510,7 @@ async fn http_client_request_auth_basic() -> Result<()> {
     };
     let res = rtt(
         "http",
-        target.clone(),
+        &target,
         "string",
         Some(literal!({
             "basic": {
@@ -600,7 +597,7 @@ async fn chunked() -> Result<()> {
         is_batch: true,
         ..Default::default()
     };
-    let res = rtt("http", target.clone(), "string", None, event).await?;
+    let res = rtt("http", &target, "string", None, event).await?;
     assert_with_request_headers!(res, meta, {
         assert_eq!(
             Some(&literal!(["chunked"])),

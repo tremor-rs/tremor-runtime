@@ -33,8 +33,6 @@ use crate::connectors::utils::tls::{tls_client_config, TLSClientConfig};
 use crate::{connectors::prelude::*, errors::err_connector_def};
 
 const CONNECTOR_TYPE: &str = "http_client";
-const DEFAULT_CODEC: &str = "json";
-
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
@@ -61,7 +59,7 @@ pub(crate) struct Config {
     tls: Option<Either<TLSClientConfig, bool>>,
     /// MIME mapping to/from tremor codecs
     #[serde(default)]
-    custom_codecs: HashMap<String, String>,
+    mime_mapping: Option<HashMap<String, String>>,
 }
 
 const DEFAULT_CONCURRENCY: usize = 4;
@@ -89,7 +87,7 @@ impl ConnectorBuilder for Builder {
     async fn build_cfg(
         &self,
         id: &Alias,
-        connector_config: &ConnectorConfig,
+        _connector_config: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
@@ -110,19 +108,18 @@ impl ConnectorBuilder for Builder {
                 ));
         }
         let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-        let mime_codec_map = Arc::new(MimeCodecMap::with_overwrites(&config.custom_codecs));
+        let mime_codec_map = Arc::new(if let Some(codec_map) = config.mime_mapping.clone() {
+            MimeCodecMap::from_custom(codec_map)
+        } else {
+            MimeCodecMap::new()
+        });
 
-        let configured_codec = connector_config
-            .codec
-            .as_ref()
-            .map_or_else(|| DEFAULT_CODEC.to_string(), |c| c.name.clone());
         Ok(Box::new(Client {
             response_tx,
             response_rx,
             config,
             tls_client_config,
             mime_codec_map,
-            configured_codec,
             source_is_connected: Arc::default(),
         }))
     }
@@ -136,14 +133,13 @@ pub(crate) struct Client {
     tls_client_config: Option<rustls::ClientConfig>,
     // this is basically an immutable map, we use arc to share it across tasks (e.g. for each request sending)
     mime_codec_map: Arc<MimeCodecMap>,
-    configured_codec: String,
     source_is_connected: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait]
 impl Connector for Client {
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional(DEFAULT_CODEC)
+        CodecReq::Structured
     }
 
     async fn create_source(
@@ -169,7 +165,6 @@ impl Connector for Client {
             self.config.clone(),
             self.tls_client_config.clone(),
             self.mime_codec_map.clone(),
-            self.configured_codec.clone(),
             self.source_is_connected.clone(),
         );
         builder.spawn(sink, sink_context).map(Some)
@@ -215,7 +210,6 @@ struct HttpRequestSink {
     concurrency_cap: ConcurrencyCap,
     origin_uri: EventOriginUri,
     codec_map: Arc<MimeCodecMap>,
-    configured_codec: String,
     // we should only send responses down the channel when we know there is a source consuming them
     // otherwise the channel would fill up and we'd be stuck
     // TODO: find/implement a channel that just throws away the oldest message when it is full, like a ring-buffer
@@ -229,7 +223,6 @@ impl HttpRequestSink {
         config: Config,
         tls_client_config: Option<rustls::ClientConfig>,
         codec_map: Arc<MimeCodecMap>,
-        configured_codec: String,
         source_is_connected: Arc<AtomicBool>,
     ) -> Self {
         let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
@@ -248,7 +241,6 @@ impl HttpRequestSink {
                 path: vec![],
             },
             codec_map,
-            configured_codec,
             source_is_connected,
         }
     }
@@ -310,16 +302,9 @@ impl Sink for HttpRequestSink {
 
             let http_meta = event_meta.and_then(|meta| ctx.extract_meta(meta));
             let mut builder = ctx.bail_err(
-                HttpRequestBuilder::new(
-                    request_id,
-                    http_meta,
-                    &self.codec_map,
-                    &self.config,
-                    &self.configured_codec,
-                ),
+                HttpRequestBuilder::new(request_id, http_meta, &self.codec_map, &self.config),
                 "Error turning event into an HTTP Request",
             )?;
-            let configured_codec = self.configured_codec.clone();
             let codec_map = self.codec_map.clone();
             let mut request = builder.get_chunked_request();
             let request_is_chunked = request.is_some();
@@ -375,9 +360,7 @@ impl Sink for HttpRequestSink {
                             } else {
                                 None
                             };
-                            let codec_overwrite = codec_name
-                                .filter(|codec| *codec != &configured_codec)
-                                .cloned();
+                            let codec_overwrite = codec_name.cloned();
                             let reply = SourceReply::Data {
                                 origin_uri,
                                 data,
