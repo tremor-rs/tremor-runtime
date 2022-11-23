@@ -5,7 +5,7 @@ on: [push]
 jobs:
   api:
     if: github.repository_owner == 'tremor-rs' && github.actor!= 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Verify valid EQC_LICENSE
         run: test -n "${{secrets.EQC_LICENSE}}"
@@ -33,7 +33,7 @@ jobs:
         run: ./.github/checks/eqc.sh
   tremor-script:
     if: github.repository_owner == 'tremor-rs' && github.actor!= 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Verify valid EQC_LICENSE
         run: test -n "${{secrets.EQC_LICENSE}}"
