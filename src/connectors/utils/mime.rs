@@ -14,12 +14,13 @@
 
 use halfbrown::HashMap;
 
-const MIME_TYPES: [(&str, &str); 9] = [
+const MIME_TYPES: [(&str, &str); 10] = [
     ("application/json", "json"),
     ("application/yaml", "yaml"),
     ("text/csv", "csv"),
     ("text/plain", "string"),
     ("text/html", "string"),
+    ("text/syslog", "syslog"),
     ("application/msgpack", "msgpack"),
     ("application/x-msgpack", "msgpack"),
     ("application/vnd.msgpack", "msgpack"),
@@ -50,7 +51,7 @@ pub(crate) struct MimeCodecMap {
 }
 
 impl MimeCodecMap {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let by_mime = MIME_TYPES
             .into_iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -63,17 +64,35 @@ impl MimeCodecMap {
     }
 
     /// constructs this map while overriding the mapping from mime-type to codec by `custom_codecs`
-    pub fn with_overwrites(custom_codecs: &HashMap<String, String>) -> Self {
-        let mut base = Self::new();
-        for (mime, codec_name) in custom_codecs {
-            base.by_mime.insert(mime.clone(), codec_name.clone());
+    pub(crate) fn from_custom(custom_codecs: HashMap<String, String>) -> Self {
+        // We use the existing codec -> mimetype mapping as default to ensure that each
+        // codec at least maps to a mime type
+        let mut by_codec = CODEC_TO_MIME_TYPES
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect::<HashMap<String, String>>();
+
+        // After that we overwrite / extend the mapping with the definition given
+        // by the user
+        for (mime, codec_name) in &custom_codecs {
+            if mime != "*/*" {
+                by_codec.insert(mime.to_string(), codec_name.to_string());
+            }
+            by_codec.insert(codec_name.clone(), mime.clone());
         }
-        base
+
+        Self {
+            by_mime: custom_codecs,
+            by_codec,
+        }
     }
 
     /// get codec name from given Content-Type essence (e.g. "application/json")
+    /// if the specific codec isn't found provide the default code3c from `*/*`
     pub fn get_codec_name(&self, content_type: &str) -> Option<&String> {
-        self.by_mime.get(content_type)
+        self.by_mime
+            .get(content_type)
+            .or_else(|| self.by_mime.get("*/*"))
     }
 
     /// get mime type from given codec name

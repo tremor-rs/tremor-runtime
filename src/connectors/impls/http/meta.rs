@@ -50,7 +50,6 @@ impl HttpRequestBuilder {
         meta: Option<&Value>,
         codec_map: &MimeCodecMap,
         config: &client::Config,
-        configured_codec: &str,
     ) -> Result<Self> {
         let request_meta = meta.get("request");
         let method = if let Some(method_v) = request_meta.get("method") {
@@ -91,12 +90,11 @@ impl HttpRequestBuilder {
         if let Some(headers) = headers.as_object() {
             for (name, values) in headers {
                 if let Some(header_values) = values.as_array() {
-                    let mut v = Vec::with_capacity(header_values.len());
-                    for value in header_values {
-                        if let Some(header_value) = value.as_str() {
-                            v.push(HeaderValue::from_str(header_value)?);
-                        }
-                    }
+                    let v = header_values
+                        .iter()
+                        .filter_map(ValueAccess::as_str)
+                        .map(HeaderValue::from_str)
+                        .collect::<std::result::Result<Vec<_>, _>>()?;
                     request.append_header(name.as_ref(), v.as_slice());
                 } else if let Some(header_value) = values.as_str() {
                     request.append_header(name.as_ref(), header_value);
@@ -111,24 +109,23 @@ impl HttpRequestBuilder {
 
         let header_content_type = request.content_type();
 
-        let codec_overwrite = header_content_type
-            .as_ref()
-            .and_then(|mime| codec_map.get_codec_name(mime.essence()))
-            // only overwrite the codec if it is different from the configured one
-            .filter(|codec| *codec != configured_codec)
-            .map(ToString::to_string);
+        let codec_overwrite = if let Some(header_content_type) = &header_content_type {
+            codec_map.get_codec_name(header_content_type.essence())
+        } else {
+            codec_map.get_codec_name("*/*")
+        }
+        .cloned();
+
         let codec_content_type = codec_overwrite
             .as_ref()
             .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
-            .or_else(|| codec_map.get_mime_type(configured_codec))
             .and_then(|mime| Mime::from_str(mime).ok());
 
         // extract content-type and thus possible codec overwrite only from first element
         // precedence:
         //  1. from headers meta
-        //  2. from overwritten codec
-        //  3. from configured codec
-        //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
+        //  4. from the `*/*` codec if one was supplied
+        //  3. fall back to application/octet-stream if codec doesn't provide a mime-type
         let content_type = Some(
             header_content_type
                 .or(codec_content_type)
@@ -341,10 +338,8 @@ mod test {
             &Alias::new("flow", "http"),
         )?;
         let config = client::Config::new(&c)?;
-        let configured_codec = "json";
 
-        let mut b =
-            HttpRequestBuilder::new(request_id, meta, &codec_map, &config, configured_codec)?;
+        let mut b = HttpRequestBuilder::new(request_id, meta, &codec_map, &config)?;
 
         let r = b.finalize(&mut s).await?.ok_or("no data")?;
         assert_eq!(
