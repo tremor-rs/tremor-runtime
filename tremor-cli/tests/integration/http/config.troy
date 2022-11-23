@@ -9,6 +9,10 @@ flow
     codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/",
+      "mime_mapping": {
+        "application/json": "json-sorted",
+        "*/*": "json-sorted"
+      }
     }
   end;
 
@@ -47,11 +51,14 @@ flow
 
   define connector http_client from http_client
   with
-    codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/",
       "headers": {
         "Client": "Tremor"
+      },
+      "mime_mapping": {
+        "application/json": "json-sorted",
+        "*/*": "json-sorted"
       }
     },
     reconnect = {

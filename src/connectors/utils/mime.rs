@@ -76,9 +76,8 @@ impl MimeCodecMap {
         // by the user
         for (mime, codec_name) in &custom_codecs {
             if mime != "*/*" {
-                by_codec.insert(mime.to_string(), codec_name.to_string());
+                by_codec.insert(codec_name.clone(), mime.clone());
             }
-            by_codec.insert(codec_name.clone(), mime.clone());
         }
 
         Self {
