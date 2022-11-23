@@ -48,7 +48,8 @@ pub(crate) struct Config {
     tls: Option<TLSServerConfig>,
     /// custom codecs mapping from mime_type to custom codec name
     /// e.g. for handling `application/json` with the `binary` codec, if desired
-    custom_codecs: Option<HashMap<String, String>>,
+    /// the mime type of `*/*` serves as a default / fallback
+    mime_mapping: Option<HashMap<String, String>>,
 }
 
 impl ConfigImpl for Config {}
@@ -92,7 +93,7 @@ impl ConnectorBuilder for Builder {
             .as_ref()
             .map_or_else(|| HttpServer::DEFAULT_CODEC.to_string(), |c| c.name.clone());
         let inflight = Arc::default();
-        let codec_map = if let Some(custom_codecs) = config.custom_codecs.clone() {
+        let codec_map = if let Some(custom_codecs) = config.mime_mapping.clone() {
             MimeCodecMap::from_custom(custom_codecs)
         } else {
             MimeCodecMap::new()
