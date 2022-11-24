@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::client;
-use super::utils::{FixedBodyReader, RequestId, StreamingBodyReader};
+use super::{
+    client,
+    utils::{FixedBodyReader, RequestId, StreamingBodyReader},
+};
 use crate::connectors::{prelude::*, utils::mime::MimeCodecMap};
 use async_std::channel::{unbounded, Sender};
 use either::Either;
-use http_types::headers::HeaderValues;
-use http_types::Response;
 use http_types::{
-    headers::{self, HeaderValue},
+    headers::{self, HeaderValue, HeaderValues},
     mime::BYTE_STREAM,
-    Method, Mime, Request,
+    Method, Mime, Request, Response,
 };
 use std::str::FromStr;
 use tremor_value::Value;
@@ -41,6 +41,64 @@ pub(crate) struct HttpRequestBuilder {
     request: Option<Request>,
     body_data: BodyData,
     codec_overwrite: Option<String>,
+}
+
+#[derive(Clone)]
+pub(crate) struct HeaderValueValue<'v> {
+    finished: bool,
+    idx: usize,
+    v: &'v Value<'v>,
+}
+
+impl<'v> HeaderValueValue<'v> {
+    pub fn new(v: &'v Value<'v>) -> Self {
+        Self {
+            idx: 0,
+            finished: false,
+            v,
+        }
+    }
+}
+
+impl<'v> Iterator for HeaderValueValue<'v> {
+    type Item = HeaderValue;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.finished {
+            None
+        } else if let Some(a) = self.v.as_array() {
+            loop {
+                if a.is_empty() {
+                    self.finished = true;
+                    return None;
+                }
+                let v = a.get(self.idx)?;
+                self.idx += 1;
+                if let Some(v) = v.as_str().and_then(|v| HeaderValue::from_str(v).ok()) {
+                    return Some(v);
+                } else if let Ok(v) = HeaderValue::from_str(&v.encode()) {
+                    return Some(v);
+                }
+            }
+        } else if let Some(v) = self.v.as_str().and_then(|v| HeaderValue::from_str(v).ok()) {
+            self.finished = true;
+            Some(v)
+        } else if let Ok(v) = HeaderValue::from_str(&self.v.encode()) {
+            self.finished = true;
+            Some(v)
+        } else {
+            self.finished = true;
+            None
+        }
+    }
+}
+
+impl<'v> headers::ToHeaderValues for HeaderValueValue<'v> {
+    type Iter = HeaderValueValue<'v>;
+
+    fn to_header_values(&self) -> http_types::Result<Self::Iter> {
+        Ok(self.clone())
+    }
 }
 
 // TODO: do some deduplication with SinkResponse
@@ -71,7 +129,6 @@ impl HttpRequestBuilder {
             config.url.clone()
         };
         let mut request = Request::new(method, url.url().clone());
-        let headers = request_meta.get("headers");
 
         // first insert config headers
         for (config_header_name, config_header_values) in &config.headers {
@@ -86,19 +143,11 @@ impl HttpRequestBuilder {
                 }
             }
         }
+        let headers = request_meta.get("headers");
         // build headers
         if let Some(headers) = headers.as_object() {
             for (name, values) in headers {
-                if let Some(header_values) = values.as_array() {
-                    let v = header_values
-                        .iter()
-                        .filter_map(ValueAccess::as_str)
-                        .map(HeaderValue::from_str)
-                        .collect::<std::result::Result<Vec<_>, _>>()?;
-                    request.append_header(name.as_ref(), v.as_slice());
-                } else if let Some(header_value) = values.as_str() {
-                    request.append_header(name.as_ref(), header_value);
-                }
+                request.append_header(name.as_ref(), HeaderValueValue::new(values));
             }
         }
 
@@ -109,28 +158,7 @@ impl HttpRequestBuilder {
 
         let header_content_type = request.content_type();
 
-        let codec_overwrite = if let Some(header_content_type) = &header_content_type {
-            codec_map.get_codec_name(header_content_type.essence())
-        } else {
-            codec_map.get_codec_name("*/*")
-        }
-        .cloned();
-
-        let codec_content_type = codec_overwrite
-            .as_ref()
-            .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
-            .and_then(|mime| Mime::from_str(mime).ok());
-
-        // extract content-type and thus possible codec overwrite only from first element
-        // precedence:
-        //  1. from headers meta
-        //  4. from the `*/*` codec if one was supplied
-        //  3. fall back to application/octet-stream if codec doesn't provide a mime-type
-        let content_type = Some(
-            header_content_type
-                .or(codec_content_type)
-                .unwrap_or(BYTE_STREAM),
-        );
+        let (codec_overwrite, content_type) = consolidate_mime(header_content_type, codec_map);
 
         // set the content type if it is not set yet
         if request.content_type().is_none() {
@@ -232,6 +260,33 @@ impl HttpRequestBuilder {
             None
         }
     }
+}
+
+/// extract content-type and thus possible codec overwrite only from first element
+/// precedence:
+///  1. from headers meta
+///  4. from the `*/*` codec if one was supplied
+///  3. fall back to application/octet-stream if codec doesn't provide a mime-type
+pub(crate) fn consolidate_mime(
+    header_content_type: Option<Mime>,
+    codec_map: &MimeCodecMap,
+) -> (Option<String>, Option<Mime>) {
+    let codec_overwrite = if let Some(header_content_type) = &header_content_type {
+        codec_map.get_codec_name(header_content_type.essence())
+    } else {
+        codec_map.get_codec_name("*/*")
+    }
+    .cloned();
+    let codec_content_type = codec_overwrite
+        .as_ref()
+        .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
+        .and_then(|mime| Mime::from_str(mime).ok());
+    let content_type = Some(
+        header_content_type
+            .or(codec_content_type)
+            .unwrap_or(BYTE_STREAM),
+    );
+    (codec_overwrite, content_type)
 }
 
 /// Extract request metadata

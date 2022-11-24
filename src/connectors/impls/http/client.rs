@@ -57,8 +57,9 @@ pub(crate) struct Config {
     /// optional tls client config
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
     tls: Option<Either<TLSClientConfig, bool>>,
-    /// MIME mapping to/from tremor codecs
-    #[serde(default)]
+    /// custom codecs mapping from mime_type to custom codec name
+    /// e.g. for handling `application/json` with the `binary` codec, if desired
+    /// the mime type of `*/*` serves as a default / fallback
     mime_mapping: Option<HashMap<String, String>>,
 }
 
