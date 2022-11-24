@@ -83,9 +83,8 @@ async fn http_server_test() -> Result<()> {
     let port = free_port::find_free_tcp_port().await?;
     let url = format!("http://localhost:{port}/");
     let defn = literal!({
-        "codec": "json",
         "config": {
-            "url": url.clone()
+            "url": url.clone(),
         }
     });
     let connector =
@@ -207,6 +206,7 @@ async fn http_server_test() -> Result<()> {
                         "status": 400,
                         "headers": {
                             "some-other-header": ["foo", "bar"],
+                            "content-type": "application/json"
                         }
                     }
                 }
@@ -335,13 +335,12 @@ async fn https_server_test() -> Result<()> {
     let port = free_port::find_free_tcp_port().await?;
     let url = format!("https://localhost:{port}/");
     let defn = literal!({
-        "codec": "json",
         "config": {
             "url": url.clone(),
             "tls": {
                 "cert": cert_file,
                 "key": key_file
-            }
+            },
         }
     });
     let connector =

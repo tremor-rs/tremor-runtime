@@ -6,9 +6,12 @@ flow
 
   define connector http_server from http_server
   with
-    codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/",
+      "mime_mapping": {
+        "application/json": "json-sorted",
+        "*/*": "json-sorted"
+      }
     }
   end;
   create connector stdio from connectors::console;
