@@ -108,7 +108,7 @@ tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
 url = "2.3"
 value-trait = "0.5"
-zstd = "0.11"
+zstd = "0.12"
 
 # blaster / blackhole
 hdrhistogram = "7"
