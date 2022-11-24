@@ -1,0 +1,23 @@
+- {
+    "dir": "./before",
+    "cmd": "tremor",
+    "args": [
+      "server",
+      "run",
+      "-p",
+      "../before.pid",
+      "--debug-connectors",
+      "-n",
+      "./config.troy"
+    ],
+    "env": {
+      "RUST_LOG": "debug",
+      "TREMOR_PATH": "../../../lib:../../../../../tremor-script/lib"
+    },
+    "await": {
+      "wait-for-ms": [
+        "2000"
+      ]
+    },
+    "max-await-secs": 15
+  }

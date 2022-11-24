@@ -24,6 +24,7 @@ use crate::{
     pos::Span,
     prelude::*,
     registry::{Aggr as AggrRegistry, Registry},
+    NodeMeta,
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -60,7 +61,7 @@ impl Warning {
 #[derive(Default, Debug, Clone, Serialize, PartialEq)]
 pub struct Scope<'script> {
     /// Module of the scope
-    pub(crate) modules: std::collections::HashMap<String, module::Index>,
+    pub(crate) modules: std::collections::BTreeMap<String, module::Index>,
     /// Content of the scope
     pub content: Content<'script>,
     pub(crate) parent: Option<Box<Scope<'script>>>,
@@ -267,12 +268,21 @@ where
         }
     }
 
+    /// id - identifier that is shadowed
     pub(crate) fn register_shadow_var(&mut self, id: &str) -> usize {
         let r = self.reserve_shadow();
         self.shadowed_vars.push(id.to_string());
         r
     }
 
+    /// register an "anonymous" shadow variable from a AST node meta id
+    pub(crate) fn register_shadow_from_mid(&mut self, mid: &NodeMeta) -> usize {
+        let id = format!("{:?}", mid);
+        self.register_shadow_var(&id)
+    }
+
+    /// removes the last shadow variable
+    /// does not touch the locals
     pub(crate) fn end_shadow_var(&mut self) {
         self.shadowed_vars.pop();
     }
@@ -288,7 +298,8 @@ where
         r
     }
 
-    pub(crate) fn reserve_shadow(&mut self) -> usize {
+    /// this always needs to be used with `register_shadow_var`
+    fn reserve_shadow(&mut self) -> usize {
         self.var_id(&shadow_name(self.shadowed_vars.len()))
     }
 
@@ -316,6 +327,7 @@ where
     }
 }
 
+/// create a unique shadow name that cannot be created by users
 fn shadow_name(id: usize) -> String {
     format!(" __SHADOW {}__ ", id)
 }

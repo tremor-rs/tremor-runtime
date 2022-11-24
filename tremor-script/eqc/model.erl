@@ -19,9 +19,6 @@
 
 -export([eval/1, eval/2]).
 
-resolve(#state{locals = L}, {local, _} = K) ->
-    maps:get(K, L).
-
 combine_values(Key, null, Acc) -> maps:remove(Key, Acc);
 combine_values(Key, SpecVal = #{}, Acc) ->
     case maps:get(Key, Acc) of
@@ -139,20 +136,28 @@ ast_eval(#vars{} = S, {'+', A, B}) ->
     case {A1, B1} of
       {A1, B1} when is_binary(A1) andalso is_binary(B1) ->
 	  {S, <<A1/binary, B1/binary>>};
-      {A1, B1} -> {S2, A1 + B1}
+      {A1, B1} -> {S2, check_overflow(A1 + B1)}
     end;
 ast_eval(#vars{} = S, {'-', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
-    {S2, A1 - B1};
+    {S2, check_overflow(A1 - B1)};
 ast_eval(#vars{} = S, {'/', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
-    {S2, A1 / B1};
+    case is_float(A1) orelse is_float(B1) of
+        true ->
+            %% may be fine to divide by zero
+            {S2, try A1 / B1
+                 catch _:badarith -> exit(float_arith)
+                 end};
+        false ->
+            {S2, A1 / B1}
+    end;
 ast_eval(#vars{} = S, {'*', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
-    {S2, A1 * B1};
+    {S2, check_overflow(A1 * B1)};
 ast_eval(#vars{} = S, {'%', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
@@ -182,13 +187,22 @@ ast_eval(#vars{} = S, {'<=', A, B}) ->
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 =< B1};
 ast_eval(#vars{} = S, {'and', A, B}) ->
+    %% lazy!
     {S1, A1} = ast_eval(S, A),
-    {S2, B1} = ast_eval(S1, B),
-    {S2, A1 andalso B1};
+    case A1 of
+        true ->
+            ast_eval(S1, B);
+        false ->
+            {S1, A1}
+    end;
 ast_eval(#vars{} = S, {'or', A, B}) ->
+    %% lazy!
     {S1, A1} = ast_eval(S, A),
-    {S2, B1} = ast_eval(S1, B),
-    {S2, A1 orelse B1};
+    case A1 of
+        false -> ast_eval(S1, B);
+        true ->
+            {S1, A1}
+    end;
 ast_eval(#vars{} = S, {'not', A}) ->
     {S1, A1} = ast_eval(S, A), {S1, not A1};
 ast_eval(#vars{} = S, {'band', A, B}) ->
@@ -210,9 +224,10 @@ ast_eval(#vars{locals = L} = S, {'let', Path, Expr}) ->
 ast_eval(S, true) -> {S, true};
 ast_eval(S, false) -> {S, false};
 ast_eval(S, null) -> {S, null};
-ast_eval(S, N) when is_number(N) -> {S, N};
+ast_eval(S, N) when is_number(N) -> {S, check_overflow(N)};
 ast_eval(S, B) when is_binary(B) -> {S, B};
-ast_eval(S, {local, _} = L) -> {S, resolve(S, L)};
+ast_eval(#vars{locals = Ls} = S, {local, _} = K) ->
+    {S, maps:get(K, Ls)};
 ast_eval(#vars{} = S, {emit, A}) ->
     {S1, R} = ast_eval(S, A), {S1, {emit, R}};
 ast_eval(#vars{} = S, drop) -> {S, drop}.
@@ -228,3 +243,9 @@ eval(#vars{} = SNOT, Spec) ->
       {S, drop} -> {S, #{<<"drop">> => null}};
       {S, X} -> {S, #{<<"emit">> => util:clamp(X, 13)}}
     end.
+
+check_overflow(X) when is_integer(X),
+                       X < -16#8000000000000000 orelse X >  16#7fffffffffffffff ->
+    exit(overflow);
+check_overflow(X) ->
+    X.

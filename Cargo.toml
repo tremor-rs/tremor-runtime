@@ -9,7 +9,7 @@ license = "Apache-2.0"
 name = "tremor-runtime"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.5"
+version = "0.13.0-rc.9"
 rust-version = "1.62"
 
 [workspace]
@@ -49,9 +49,11 @@ base64 = "0.13"
 beef = { version = "0.5", features = ["impl_serde"] }
 bimap = { version = "0.6", features = ["serde"] }
 byteorder = "1"
-bytes = "1.2"
+bytes = "1.3"
 chrono = "0.4"
-chrono-tz = "0.6"
+# we have a dep on chrono-tz 0.8 in tremor-script
+# clickhouse-rs needs an upgrade to its chrono-tz dependency...
+clickhouse-chrono-tz = { version = "0.6", package = "chrono-tz" }
 
 # Once a new version of clickhouse-rs is released, we can stop using a git
 # repository as a dependency. The declaration can then be replaced with the
@@ -72,11 +74,11 @@ dashmap = "5.4"
 either = { version = "1.8", features = ["serde"] }
 error-chain = "0.12"
 file-mode = "0.1"
-futures = "0.3.24"
+futures = "0.3.25"
 event-listener = "2.5"
 glob = "0.3"
 halfbrown = "0.1"
-hashbrown = { version = "0.12", features = ["serde"] }
+hashbrown = { version = "0.13", features = ["serde"] }
 hex = "0.4"
 hostname = "0.3"
 http-types = "2.12"
@@ -90,15 +92,15 @@ lz4 = "1.24.0"
 memchr = "2.5"
 pin-project-lite = "0.2"
 rand = "0.8.5"
-regex = "1.6"
+regex = "1.7"
 rmp-serde = "1.1"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.9"
-simd-json = { version = "0.6", features = ["known-key"] }
-simd-json-derive = "0.4"
+simd-json = { version = "0.7", features = ["known-key"] }
+simd-json-derive = "0.7"
 snap = "1"
-
+socket2 = "0.4"
 syslog_loose = "0.18"
 tremor-common = { path = "tremor-common" }
 tremor-influx = { path = "tremor-influx" }
@@ -106,8 +108,8 @@ tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
 url = "2.3"
-value-trait = "0.4"
-zstd = "0.11"
+value-trait = "0.5"
+zstd = "0.12"
 
 # blaster / blackhole
 hdrhistogram = "7"
@@ -144,12 +146,12 @@ http-client = { git = "https://github.com/tremor-rs/http-client", rev = "059b23e
 #] }
 
 # elasticsearch
-elasticsearch = { version = "=8.4.0-alpha.1", default-features = false, features = [
+elasticsearch = { version = "=8.5.0-alpha.1", default-features = false, features = [
   "rustls-tls",
 ] }
 
 # ws
-async-tungstenite = { version = "0.17.2", features = [
+async-tungstenite = { version = "0.18.0", features = [
   "async-std-runtime",
   "async-tls",
 ] }
@@ -215,13 +217,15 @@ tonic = { version = "0.6.1", default-features = false, features = [
 ] }
 prost = "0.9.0"
 prost-types = "0.9.0"
-tremor-otelapis = { version = "0.2.4" }
+# This is related to https://github.com/tremor-rs/tremor-runtime/issues/1688 the otel API's need to
+# be updated together with tonic
+tremor-otelapis = { version = "=0.2.4" }
 
 # aws-s3
-aws-sdk-s3 = "0.19"
-aws-types = "0.49"
-aws-config = "0.49"
-aws-smithy-http = "0.49"
+aws-sdk-s3 = "0.21"
+aws-types = "0.51"
+aws-config = "0.51"
+aws-smithy-http = "0.51"
 
 # gcp
 googapis = { version = "0.6", default-features = false, features = [
@@ -232,7 +236,7 @@ googapis = { version = "0.6", default-features = false, features = [
 ] }
 gouth = { version = "0.2" }
 http = "0.2.8"
-reqwest = { version = "0.11.12", default-features = false, features = [
+reqwest = { version = "0.11.13", default-features = false, features = [
   "rustls-tls",
   "rustls-tls-native-roots",
 ] }
@@ -242,11 +246,15 @@ uuid = { version = "1.2", features = ["v4"] }
 
 # wal
 qwal = { git = "https://github.com/tremor-rs/qwal" }
+itoa = "1"
+ryu = "1"
+lexical = "6.1.1"
+simdutf8 = "0.1"
 
 [dev-dependencies]
 serial_test = { version = "0.9", features = ["logging"] }
 # path = "../serial_test/serial_test" 
-env_logger = "0.9.1"
+env_logger = "0.9.3"
 matches = "0.1"
 pretty_assertions = "1.3.0"
 proptest = "1.0"
@@ -262,7 +270,7 @@ num_cpus = "*"
 
 
 [features]
-default = ["integration-local"]
+default = []
 
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]

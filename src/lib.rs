@@ -154,7 +154,6 @@ mod tests {
     use super::*;
     use crate::system::{ShutdownMode, WorldConfig};
     use std::io::Write;
-    use tempfile;
 
     #[async_std::test]
     async fn test_load_troy_file() -> Result<()> {

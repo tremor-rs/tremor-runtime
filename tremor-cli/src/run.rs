@@ -18,7 +18,7 @@ use crate::errors::Result;
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
-use tremor_common::{file, ids::OperatorIdGen, time::nanotime};
+use tremor_common::{file, ids::OperatorIdGen, ports::IN, time::nanotime};
 use tremor_pipeline::{Event, EventId};
 use tremor_runtime::{
     codec::Codec,
@@ -340,7 +340,7 @@ impl Run {
 
         let runnable = tremor_pipeline::query::Query(runnable);
         let mut idgen = OperatorIdGen::new();
-        let mut pipeline = runnable.to_pipe(&mut idgen)?;
+        let mut pipeline = runnable.to_executable_graph(&mut idgen)?;
         let id = 0_u64;
 
         ingress.process(
@@ -353,7 +353,7 @@ impl Run {
                 let mut continuation = vec![];
 
                 if let Err(e) = async_std::task::block_on(runnable.enqueue(
-                    "in",
+                    IN,
                     Event {
                         id: EventId::from_id(0, 0, *id),
                         data: value.clone(),

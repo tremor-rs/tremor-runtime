@@ -610,7 +610,7 @@ fn segment() {
         mid: NodeMeta::dummy(),
         start: Box::new(imut_expr()),
         end: Box::new(imut_expr()),
-    }))
+    }));
 }
 #[test]
 fn recur() {
@@ -637,7 +637,7 @@ fn recur() {
         argc: 0,
         open: false,
         exprs: vec![]
-    })))
+    })));
 }
 #[test]
 fn clause_group() {
@@ -724,7 +724,7 @@ fn recur_eq_test() {
 }
 
 #[test]
-fn test_path_local_special_case() -> Result<()> {
+fn test_path_local_special_case() {
     let path = ImutExpr::Path(Path::Local(LocalPath {
         idx: 1,
         mid: NodeMeta::dummy(),
@@ -759,7 +759,6 @@ fn test_path_local_special_case() -> Result<()> {
         segments: vec![]
     })
     .ast_eq(&local));
-    Ok(())
 }
 
 #[test]
@@ -864,7 +863,7 @@ fn test_patch_operation() {
         mid: NodeMeta::dummy(),
     }
     .ast_eq(&PatchOperation::DefaultRecord {
-        expr: ImutExpr::null_lit(mid.clone()),
+        expr: ImutExpr::null_lit(mid),
         mid: NodeMeta::dummy(),
     }));
 }

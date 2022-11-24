@@ -240,7 +240,7 @@ mod test {
         fn integer_single_arg_no_error(x in 1_u64..u64::MAX) { // exclude 0 here
             let f = fun("random", "integer");
             let v = Value::from(x);
-            assert!(f(&[&v]).is_ok())
+            assert!(f(&[&v]).is_ok());
         }
     }
 
@@ -274,7 +274,7 @@ mod test {
         fn float_single_arg_no_error(x in (0.0_f64..f64::MAX).prop_filter("Values must be > 0.0", |x| *x > 0.0)) {
             let f = fun("random", "float");
             let v = Value::from(x);
-            assert!(f(&[&v]).is_ok())
+            assert!(f(&[&v]).is_ok());
         }
     }
 }

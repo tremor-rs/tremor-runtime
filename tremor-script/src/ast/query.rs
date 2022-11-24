@@ -204,6 +204,8 @@ pub struct ScriptDefinition<'script> {
     pub params: DefinitionalArgs<'script>,
     /// The script itself
     pub script: Script<'script>,
+    /// The script itself
+    pub named: HashMap<String, Script<'script>>,
 }
 impl_expr!(ScriptDefinition);
 
@@ -557,12 +559,13 @@ impl<'script> DefinitionalArgs<'script> {
             {
                 *arg_v = Some(v.clone());
             } else {
-                return error_generic(self, k, &"Unknown key");
+                return error_generic(creational, k, &format!("Unknown argument: {}", k.as_str()));
             }
         }
 
         if let Some((k, _)) = self.args.0.iter_mut().find(|(_, v)| v.is_none()) {
-            Err(format!("missing key: {}", k).into())
+            let k = k.clone();
+            error_generic(self, &k, &format!("Missing required argument: {}", k))
         } else {
             Ok(())
         }

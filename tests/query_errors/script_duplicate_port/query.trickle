@@ -1,0 +1,10 @@
+define script in_port
+script from port
+  event
+script from port
+  event
+script
+  event
+end;
+
+select event from in into out;

@@ -27,7 +27,7 @@ use super::{
     ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamCreate, Upable,
     WindowDefinition, WindowKind,
 };
-use crate::ast::optimizer::Optimizer;
+use crate::{ast::optimizer::Optimizer, prelude::Ranged};
 use crate::{ast::NodeMeta, impl_expr};
 use crate::{
     ast::{
@@ -359,8 +359,10 @@ pub struct ScriptDefinitionRaw<'script> {
     pub(crate) id: String,
     pub(crate) params: DefinitionalArgsRaw<'script>,
     pub(crate) script: ScriptRaw<'script>,
+    pub(crate) named: Vec<(IdentRaw<'script>, ScriptRaw<'script>)>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) mid: Box<NodeMeta>,
+    pub(crate) state: Option<ImutExprRaw<'script>>,
 }
 impl_expr!(ScriptDefinitionRaw);
 
@@ -376,20 +378,36 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         // below. The actual function registration occurs in the up() call in the usual way.
         //
 
+        let ex = self.extent();
         // Handle the content of the script in it's own module
+        let state = self.state.up(helper)?;
         helper.enter_scope();
-        let script = self.script.up_script(helper)?;
+        let mut script = self.script.up_script(helper)?;
+        script.state = state;
         let mid = self.mid.box_with_name(&self.id);
         helper.leave_scope()?;
         // Handle the params in the outside module
         let params = self.params;
         let params = params.up(helper)?;
+        let mut named = HashMap::new();
+        let mut named_in = self.named;
+        named_in.reverse(); // so we get nice errors
+        for (n, script) in named_in {
+            if &n == "in" {
+                return error_generic(&ex, &n, &"port `in` is reserved for the `script` section");
+            }
+            let script = script.up_script(helper)?;
+            if named.insert(n.clone().to_string(), script).is_some() {
+                return error_generic(&ex, &n, &"script port already defined");
+            }
+        }
 
         let script_defn = ScriptDefinition {
             mid,
             id: self.id,
             params,
             script,
+            named,
         };
 
         helper.add_query_doc(&script_defn.id, self.doc);

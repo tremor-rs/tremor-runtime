@@ -1,0 +1,3 @@
+Error: 
+    2 | unsigned::max + 1;
+      | ^^^^^^^^^^^^^^^^^ The binary operation `+` caused an over- or underflow

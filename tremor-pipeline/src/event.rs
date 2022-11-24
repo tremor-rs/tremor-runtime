@@ -467,6 +467,7 @@ mod test {
     use tremor_common::ids::{Id, OperatorId};
     use tremor_script::{Object, ValueAndMeta};
 
+    #[allow(clippy::unnecessary_wraps)] // as this is a function that gets passed as an argument and needs to fulful the bounds
     fn merge<'iref, 'head>(
         this: &'iref mut ValueAndMeta<'head>,
         other: ValueAndMeta<'head>,
@@ -482,12 +483,12 @@ mod test {
             // kind is always null on events
             e.insert_nocheck("kind".into(), Value::null());
             e.insert_nocheck("is_batch".into(), false.into());
-            a.push(Value::from(e))
+            a.push(Value::from(e));
         };
         Ok(())
     }
     #[test]
-    fn value_iters() {
+    fn value_iters() -> Result<()> {
         let mut b = Event {
             data: (Value::array(), 2).into(),
             is_batch: true,
@@ -506,17 +507,18 @@ mod test {
         assert!(b.data.consume(e2.data, merge).is_ok());
 
         let mut vi = b.value_iter();
-        assert_eq!(vi.next().unwrap(), &1);
-        assert_eq!(vi.next().unwrap(), &3);
+        assert_eq!(vi.next().ok_or("no value")?, &1);
+        assert_eq!(vi.next().ok_or("no value")?, &3);
         assert!(vi.next().is_none());
         let mut vmi = b.value_meta_iter();
-        assert_eq!(vmi.next().unwrap(), (&1.into(), &2.into()));
-        assert_eq!(vmi.next().unwrap(), (&3.into(), &4.into()));
+        assert_eq!(vmi.next().ok_or("no value")?, (&1.into(), &2.into()));
+        assert_eq!(vmi.next().ok_or("no value")?, (&3.into(), &4.into()));
         assert!(vmi.next().is_none());
+        Ok(())
     }
 
     #[test]
-    fn value_iters_split_last() {
+    fn value_iters_split_last() -> Result<()> {
         let mut b = Event {
             data: (Value::array(), 2).into(),
             is_batch: true,
@@ -532,14 +534,12 @@ mod test {
         };
         {
             let splitted = e1.value_iter().split_last();
-            assert!(splitted.is_some());
-            let (last, mut rest) = splitted.unwrap();
+            let (last, mut rest) = splitted.ok_or("no value")?;
             assert_eq!(last, &1);
             assert!(rest.next().is_none());
 
             let splitted_meta = e1.value_meta_iter().split_last();
-            assert!(splitted_meta.is_some());
-            let ((last_value, last_meta), mut rest) = splitted_meta.unwrap();
+            let ((last_value, last_meta), mut rest) = splitted_meta.ok_or("no value")?;
             assert_eq!(last_value, &1);
             assert_eq!(last_meta, &2);
             assert!(rest.next().is_none());
@@ -547,14 +547,12 @@ mod test {
         assert!(b.data.consume(e1.data, merge).is_ok());
         {
             let splitted = b.value_iter().split_last();
-            assert!(splitted.is_some());
-            let (last, mut rest) = splitted.unwrap();
+            let (last, mut rest) = splitted.ok_or("no value")?;
             assert_eq!(last, &1);
             assert!(rest.next().is_none());
 
             let splitted_meta = b.value_meta_iter().split_last();
-            assert!(splitted_meta.is_some());
-            let ((last_value, last_meta), mut rest) = splitted_meta.unwrap();
+            let ((last_value, last_meta), mut rest) = splitted_meta.ok_or("no value")?;
             assert_eq!(last_value, &1);
             assert_eq!(last_meta, &2);
             assert!(rest.next().is_none());
@@ -566,29 +564,26 @@ mod test {
         assert!(b.data.consume(e2.data, merge).is_ok());
         {
             let splitted = b.value_iter().split_last();
-            assert!(splitted.is_some());
-            let (last, mut rest) = splitted.unwrap();
+            let (last, mut rest) = splitted.ok_or("no value")?;
             assert_eq!(last, &3);
             let first = rest.next();
-            assert!(first.is_some());
-            assert_eq!(first.unwrap(), &1);
+            assert_eq!(first.ok_or("no value")?, &1);
 
             let splitted_meta = b.value_meta_iter().split_last();
-            assert!(splitted_meta.is_some());
-            let ((last_value, last_meta), mut rest) = splitted_meta.unwrap();
+            let ((last_value, last_meta), mut rest) = splitted_meta.ok_or("no value")?;
             assert_eq!(last_value, &3);
             assert_eq!(last_meta, &4);
             let first = rest.next();
-            assert!(first.is_some());
-            let (value, meta) = first.unwrap();
+            let (value, meta) = first.ok_or("no value")?;
             assert_eq!(value, &1);
             assert_eq!(meta, &2);
         }
+        Ok(())
     }
 
     #[test]
     fn cb() {
-        let e = Event::default();
+        let mut e = Event::default();
         assert_eq!(CbAction::from(true), CbAction::Ack);
         assert_eq!(CbAction::from(false), CbAction::Fail);
 
@@ -621,10 +616,7 @@ mod test {
         let (_, m) = ack_with_timing.data.parts();
         assert_eq!(Some(100), m.get_u64("time"));
 
-        let mut clone2 = e.clone();
-        clone2
-            .op_meta
-            .insert(OperatorId::new(42), OwnedValue::null());
+        e.op_meta.insert(OperatorId::new(42), OwnedValue::null());
     }
 
     #[test]
@@ -670,20 +662,20 @@ mod test {
     #[test]
     fn is_empty() -> Result<()> {
         let mut e = Event::default();
-        assert_eq!(false, e.is_empty());
+        assert!(!e.is_empty());
 
         e.is_batch = true;
         e.data = (Value::null(), Value::object()).into();
-        assert_eq!(true, e.is_empty());
+        assert!(e.is_empty());
 
         e.data = (Value::array(), Value::object()).into();
-        assert_eq!(true, e.is_empty());
+        assert!(e.is_empty());
 
         let mut value = Value::array_with_capacity(2);
         value.push(Value::from(true))?; // dummy events
         value.push(Value::from(false))?;
         e.data = (value, Value::object()).into();
-        assert_eq!(false, e.is_empty());
+        assert!(!e.is_empty());
         Ok(())
     }
     #[test]
@@ -695,15 +687,21 @@ mod test {
         });
         e.data = (Value::null(), m.clone()).into();
 
-        assert_eq!(e.correlation_meta().unwrap(), 1);
-        let mut e2 = Event::default();
-        e2.is_batch = true;
-        e2.data = (Value::array(), m.clone()).into();
-        e2.data.consume(e.data.clone(), merge).unwrap();
+        assert_eq!(e.correlation_meta().ok_or("no value")?, 1);
+        let mut e2 = Event {
+            is_batch: true,
+            data: (Value::array(), m.clone()).into(),
+            ..Default::default()
+        };
+
+        e2.data.consume(e.data.clone(), merge)?;
         m.try_insert("correlation", 2);
         e.data = (Value::null(), m.clone()).into();
-        e2.data.consume(e.data, merge).unwrap();
-        assert_eq!(e2.correlation_meta().unwrap(), Value::from(vec![1, 2]));
+        e2.data.consume(e.data, merge)?;
+        assert_eq!(
+            e2.correlation_meta().ok_or("no value")?,
+            Value::from(vec![1, 2])
+        );
 
         Ok(())
     }

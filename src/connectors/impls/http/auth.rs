@@ -73,7 +73,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn header_value_basic() -> Result<()> {
+    fn header_value_basic() {
         let auth = Auth::Basic {
             username: "badger".to_string(),
             password: "snot".to_string(),
@@ -82,18 +82,16 @@ mod tests {
             Ok(Some("Basic YmFkZ2VyOnNub3Q=".to_string())),
             auth.as_header_value()
         );
-        Ok(())
     }
 
     #[test]
-    fn header_value_bearer() -> Result<()> {
+    fn header_value_bearer() {
         let auth = Auth::Bearer("token".to_string());
         assert_eq!(Ok(Some("Bearer token".to_string())), auth.as_header_value());
-        Ok(())
     }
 
     #[test]
-    fn header_value_elastic_api_key() -> Result<()> {
+    fn header_value_elastic_api_key() {
         let auth = Auth::ElasticsearchApiKey {
             id: "badger".to_string(),
             api_key: "snot".to_string(),
@@ -102,6 +100,5 @@ mod tests {
             Ok(Some("ApiKey YmFkZ2VyOnNub3Q=".to_string())),
             auth.as_header_value()
         );
-        Ok(())
     }
 }

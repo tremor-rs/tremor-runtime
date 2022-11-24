@@ -319,16 +319,16 @@ impl From<&DummySqlType> for &'static SqlType {
             DummySqlType::Uuid => SqlType::Uuid,
             DummySqlType::DateTime => SqlType::DateTime(DateTimeType::DateTime32),
             DummySqlType::DateTime64Secs => {
-                SqlType::DateTime(DateTimeType::DateTime64(0, chrono_tz::Tz::UTC))
+                SqlType::DateTime(DateTimeType::DateTime64(0, clickhouse_chrono_tz::Tz::UTC))
             }
             DummySqlType::DateTime64Millis => {
-                SqlType::DateTime(DateTimeType::DateTime64(3, chrono_tz::Tz::UTC))
+                SqlType::DateTime(DateTimeType::DateTime64(3, clickhouse_chrono_tz::Tz::UTC))
             }
             DummySqlType::DateTime64Micros => {
-                SqlType::DateTime(DateTimeType::DateTime64(6, chrono_tz::Tz::UTC))
+                SqlType::DateTime(DateTimeType::DateTime64(6, clickhouse_chrono_tz::Tz::UTC))
             }
             DummySqlType::DateTime64Nanos => {
-                SqlType::DateTime(DateTimeType::DateTime64(9, chrono_tz::Tz::UTC))
+                SqlType::DateTime(DateTimeType::DateTime64(9, clickhouse_chrono_tz::Tz::UTC))
             }
         };
 
@@ -372,7 +372,10 @@ mod tests {
             };
         }
 
-        use DummySqlType::*;
+        use DummySqlType::{
+            Array, DateTime, DateTime64Micros, DateTime64Millis, DateTime64Nanos, DateTime64Secs,
+            Int16, Int32, Int64, Int8, Ipv4, Ipv6, String, UInt16, UInt32, UInt64, UInt8,
+        };
 
         test_display! {
             array :: Array(Box::new(UInt8)) => "Array(UInt8)",
@@ -414,7 +417,7 @@ mod tests {
     }
 
     mod dummy_sql_type_into_sql_type {
-        use chrono_tz::Tz::UTC;
+        use clickhouse_chrono_tz::Tz::UTC;
 
         use super::*;
 

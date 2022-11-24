@@ -161,9 +161,7 @@ mod test {
         let aggr_reg = crate::aggr_registry();
         if let Err(e) = Deploy::parse(query, &reg, &aggr_reg) {
             eprintln!("{}", e);
-            assert!(false, "error during parsing")
-        } else {
-            assert!(true)
+            panic!("error during parsing");
         }
     }
     #[test]

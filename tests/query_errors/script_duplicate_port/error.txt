@@ -1,0 +1,10 @@
+Error: 
+    1 | define script in_port
+    2 | script from port
+    3 |   event
+    4 | script from port
+      |             ^^^^ script port already defined
+    5 |   event
+    6 | script
+    7 |   event
+    8 | end;

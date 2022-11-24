@@ -310,6 +310,11 @@ pub struct TremorFnWrapper {
 }
 
 impl TremorFnWrapper {
+    /// name of the function (without module)
+    #[must_use]
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
     /// Creates a new wrapper
     #[must_use]
     pub fn new(module: String, name: String, fun: Box<dyn TremorFn>) -> Self {
@@ -900,18 +905,14 @@ mod tests {
             },
         ];
 
-        let mut i = 0;
-        for lhs in &exemplars {
-            let mut j = 0;
-            for rhs in &exemplars {
+        for (i, lhs) in exemplars.iter().enumerate() {
+            for (j, rhs) in exemplars.iter().enumerate() {
                 if i == j {
                     assert!(lhs == rhs);
                 } else {
                     assert!(lhs != rhs);
                 }
-                j += 1;
             }
-            i += 1;
         }
 
         // NOTE - equality checking of errors is unsupported and will always fail
@@ -1150,7 +1151,9 @@ mod tests {
     pub fn nested_module_path_fns() -> Result<()> {
         let mut registry = registry();
         registry.insert(tremor_const_fn!( foo::bar::baz | snot(_context) { Ok(Value::String("badger".into())) } ));
-        let x = registry.find("foo::bar::baz", "snot").unwrap();
+        let x = registry
+            .find("foo::bar::baz", "snot")
+            .map_err(|_| "Failed to find function")?;
         assert_eq!("foo::bar::baz", x.module);
         assert_eq!("snot", x.name);
 
@@ -1167,7 +1170,7 @@ mod tests {
                 "foo::bar::baz::beep::boop::fleek::flook::tick::tock::pop::weasel::snot",
                 "badger",
             )
-            .unwrap();
+            .map_err(|_| "Failed to find function")?;
         assert_eq!(
             "foo::bar::baz::beep::boop::fleek::flook::tick::tock::pop::weasel::snot",
             x.module

@@ -202,21 +202,21 @@ impl ErrorKind {
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
             CantSetWindowConst, Common, CyclicUse, DecreasingRange, DeployArtefactNotDefined,
-            DeployRequiredArgDoesNotResolve, DoubleConst, DoublePipelineCreate, DoubleStream,
-            EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok, InvalidAssign,
-            InvalidBinary, InvalidBitshift, InvalidConst, InvalidDefinitionalWithParam,
-            InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
-            InvalidHexLiteral, InvalidIntLiteral, InvalidPP, InvalidRecur, InvalidToken,
-            InvalidUnary, InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
-            MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
-            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
-            ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
-            QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
-            RuntimeError, TailingHereDoc, TypeConflict, TypeError, UnexpectedCharacter,
-            UnexpectedEndOfStream, UnexpectedEscapeCode, UnknownLocal, UnrecognizedToken,
-            UnterminatedExtractor, UnterminatedHereDoc, UnterminatedIdentLiteral,
-            UnterminatedInterpolation, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
-            ValueError, WithParamNoArg,
+            DeployRequiredArgDoesNotResolve, DivisionByZero, DoubleConst, DoublePipelineCreate,
+            DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok,
+            InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
+            InvalidDefinitionalWithParam, InvalidDrop, InvalidEmit, InvalidExtractor,
+            InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral, InvalidPP,
+            InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io, JsonError,
+            MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule, ModuleNotFound,
+            Msg, NoClauseHit, NoConstsAllowed, NoEventReferencesAllowed, NoLocalsAllowed,
+            NoObjectError, NotConstant, NotFound, Oops, Overflow, ParseIntError, ParserError,
+            PatchKeyExists, PipelineUnknownPort, QueryNodeDuplicateName, QueryNodeReservedName,
+            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
+            TypeError, UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode,
+            UnknownLocal, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
+            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
+            UpdateKeyMissing, Utf8Error, ValueError, WithParamNoArg,
         };
         match self {
             NoClauseHit(outer)
@@ -249,6 +249,8 @@ impl ErrorKind {
             | Generic(outer, inner, _)
             | InvalidAssign(outer, inner)
             | InvalidBinary(outer, inner, _, _, _)
+            | DivisionByZero(outer, inner, _)
+            | Overflow(outer, inner, _)
             | InvalidBinaryBoolean(outer, inner, _, _, _)
             | InvalidBitshift(outer, inner)
             | InvalidConst(outer, inner)
@@ -817,6 +819,14 @@ error_chain! {
             description("Invalid binary operation")
                 display("The binary operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
         }
+        DivisionByZero(expr: Span, inner: Span, op: ast::BinOpKind) {
+            description("Division by zero")
+                display("The binary operation `{}` must have a non zero RHS", op)
+        }
+        Overflow(expr: Span, inner: Span, op: ast::BinOpKind) {
+            description("Arithmetic overflow")
+                display("The binary operation `{}` caused an over- or underflow", op)
+        }
         InvalidBinaryBoolean(expr: Span, inner: Span, op: ast::BooleanBinOpKind, left: ValueType, right: Option<ValueType>) {
             description("Invalid binary operation")
                 display("The binary operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), right.map_or_else(|| "<not executed>", t2s))
@@ -1168,6 +1178,20 @@ pub(crate) fn error_invalid_binary<T, O: Ranged, I: Ranged>(
     )
     .into())
 }
+pub(crate) fn error_division_by_zero<T, O: Ranged, I: Ranged>(
+    outer: &O,
+    inner: &I,
+    op: ast::BinOpKind,
+) -> Result<T> {
+    Err(ErrorKind::DivisionByZero(outer.extent(), inner.extent(), op).into())
+}
+pub(crate) fn error_overflow<T, O: Ranged, I: Ranged>(
+    outer: &O,
+    inner: &I,
+    op: ast::BinOpKind,
+) -> Result<T> {
+    Err(ErrorKind::Overflow(outer.extent(), inner.extent(), op).into())
+}
 
 pub(crate) fn error_invalid_bitshift<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
     Err(ErrorKind::InvalidBitshift(outer.extent(), inner.extent()).into())
@@ -1360,6 +1384,6 @@ mod test {
         assert_matches!(
             r,
             ErrorKind::TypeError(ValueType::Object, ValueType::String)
-        )
+        );
     }
 }

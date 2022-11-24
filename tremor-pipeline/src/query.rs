@@ -156,7 +156,7 @@ impl Query {
     /// # Errors
     /// if the graph can not be turned into a pipeline
     #[allow(clippy::too_many_lines)]
-    pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<ExecutableGraph> {
+    pub fn to_executable_graph(&self, idgen: &mut OperatorIdGen) -> Result<ExecutableGraph> {
         let aggr_reg = tremor_script::aggr_registry();
         let reg = tremor_script::FN_REGISTRY.read()?;
         let mut helper = Helper::new(&reg, &aggr_reg);
@@ -380,7 +380,7 @@ impl Query {
                             nodes_by_name.insert(name.clone().into(), id);
                         }
 
-                        let mut graph = query.to_pipe(idgen)?;
+                        let mut graph = query.to_executable_graph(idgen)?;
                         graph.optimize();
 
                         if included_graphs
@@ -448,6 +448,12 @@ impl Query {
                     Optimizer::new(&helper).walk_script_defn(&mut defn)?;
 
                     let e = defn.extent();
+                    if let Some(state) = &defn.script.state {
+                        state
+                            .as_lit()
+                            .ok_or_else(|| err_generic(&e, state, &"state not constant"))?;
+                    }
+
                     let mut h = Dumb::new();
                     // We're trimming the code so no spaces are at the end then adding a newline
                     // to ensure we're left justified (this is a dot thing, don't question it)
@@ -585,7 +591,7 @@ impl Query {
         let dot = petgraph::dot::Dot::with_attr_getters(
             &pipe_graph,
             &[],
-            &|_g, _r| "".to_string(),
+            &|_g, _r| String::new(),
             &node_to_dot,
         );
 
@@ -669,6 +675,8 @@ impl Query {
                 }
             }
 
+            let states = State::new(graph.iter().map(op::Operator::initial_state).collect());
+
             Ok(ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())
@@ -676,7 +684,7 @@ impl Query {
                 stack: Vec::with_capacity(graph.len()),
                 id: pipeline_id.to_string(), // TODO make configurable
                 last_metrics: 0,
-                state: State::new(iter::repeat(Value::null()).take(graph.len()).collect()),
+                states,
                 graph,
                 inputs,
                 port_indexes,
@@ -721,7 +729,7 @@ fn node_to_dot(_g: &Graph<NodeConfig, Connection>, (_, c): (NodeIndex, &NodeConf
         NodeConfig {
             kind: NodeKind::Operator,
             ..
-        } => "".to_string(),
+        } => String::new(),
     }
 }
 
@@ -798,6 +806,7 @@ pub(crate) fn supported_operators(
         Some(ast::Stmt::ScriptDefinition(script)) => {
             Box::new(op::trickle::script::Script::new(tremor_script::Script {
                 script: script.script.clone(),
+                named: script.named.clone(),
                 aid: script.aid(),
                 warnings: BTreeSet::new(),
             }))
@@ -819,39 +828,40 @@ pub(crate) fn supported_operators(
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use crate::Result;
     use tremor_common::ids::Id;
 
-    use super::*;
     #[test]
-    fn query() {
+    fn query() -> Result<()> {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in into out;";
-        let query =
-            Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
+        let query = Query::parse(src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
         assert!(query.id().is_none());
 
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
-        let query =
-            Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
-        assert_eq!(query.id().unwrap(), "test");
+        let query = Query::parse(src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
+        assert_eq!(query.id(), Some("test"));
+        Ok(())
     }
 
     #[test]
-    fn custom_port() {
+    fn custom_port() -> Result<()> {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in/test_in into out/test_out;";
-        let q = Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
+        let q = Query::parse(src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
 
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();
-        let g = q.to_pipe(&mut idgen).unwrap();
+        let g = q.to_executable_graph(&mut idgen)?;
         assert!(g.inputs.contains_key("in/test_in"));
         assert_eq!(idgen.next_id().id(), first.id() + g.graph.len() as u64 + 1);
-        let out = g.graph.get(4).unwrap();
+        let out = g.graph.get(4).ok_or("no data")?;
         assert_eq!(out.id, "out/test_out");
         assert_eq!(out.kind, NodeKind::Output("test_out".into()));
+        Ok(())
     }
 }

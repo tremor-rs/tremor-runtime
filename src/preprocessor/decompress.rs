@@ -203,8 +203,7 @@ mod test {
             Some(&[0x1f, 0x8b, _, _, _, _]) => "gzip",
             Some(&[0x78, _, _, _, _, _]) => "zlib",
             Some(&[0xfd, b'7', b'z', _, _, _]) => "xz2",
-            Some(b"sNaPpY") => "snappy",
-            Some(&[0xff, 0x6, 0x0, 0x0, _, _]) => "snappy",
+            Some(b"sNaPpY" | &[0xff, 0x6, 0x0, 0x0, _, _]) => "snappy",
             Some(&[0x04, 0x22, 0x4d, 0x18, _, _]) => "lz4",
             Some(&[0x28, 0xb5, 0x2f, 0xfd, _, _]) => "zstd",
             _ => "fail/unknown",
@@ -224,9 +223,9 @@ mod test {
         let ext = &r?[0];
         let ext = ext.as_slice();
         // Assert actual encoded form is as expected ( magic code only )
-        assert_eq!(algo, decode_magic(&ext));
+        assert_eq!(algo, decode_magic(ext));
 
-        let r = pre.process(&mut ingest_ns, &ext);
+        let r = pre.process(&mut ingest_ns, ext);
         let out = &r?[0];
         let out = out.as_slice();
         // Assert actual decoded form is as expected
@@ -251,7 +250,7 @@ mod test {
         let ext = &r?[0];
         let ext = ext.as_slice();
 
-        let r = pre.process(&mut ingest_ns, &ext);
+        let r = pre.process(&mut ingest_ns, ext);
         let out = &r?[0];
         let out = out.as_slice();
         // Assert actual decoded form is as expected

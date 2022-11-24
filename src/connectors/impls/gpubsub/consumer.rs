@@ -63,10 +63,10 @@ fn default_ack_deadline() -> u64 {
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
-#[cfg(test)]
+#[cfg(all(test, feature = "gcp-integration"))]
 type GSubWithTokenProvider = GSub<crate::connectors::google::tests::TestTokenProvider>;
 
-#[cfg(not(test))]
+#[cfg(not(all(test, feature = "gcp-integration")))]
 type GSubWithTokenProvider = GSub<crate::connectors::google::GouthTokenProvider>;
 
 #[async_trait::async_trait]
@@ -171,7 +171,7 @@ async fn consumer_task<T: TokenProvider>(
             while let Ok(pull_id) = ack_recvr.recv().await {
                 if let (Some(ack_id)) = ack_ids_cc.write().await.remove(&pull_id) {
                     yield StreamingPullRequest {
-                        subscription: "".to_string(),
+                        subscription: String::new(),
                         ack_ids: vec![ack_id],
                         modify_deadline_seconds: vec![],
                         modify_deadline_ack_ids: vec![],

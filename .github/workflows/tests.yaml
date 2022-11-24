@@ -10,14 +10,14 @@ jobs:
   tests-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate code coverage
@@ -31,5 +31,5 @@ jobs:
           #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
           files: ./lcov.txt # optional
           flags: unittests # optional
-          fail_ci_if_error: true # optional (default = false)
+          fail_ci_if_error: ${{ github.event_name == 'pull_request' }} # only fail upon pull requests, where coverage is important
           verbose: true # optional (default = false)      

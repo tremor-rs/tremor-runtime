@@ -63,7 +63,7 @@ mod test {
         let v2 = Value::from("this is a test");
         let v3 = Value::from("cake");
 
-        assert_val!(f(&[&v1, &v2, &v3]), "cake is a test")
+        assert_val!(f(&[&v1, &v2, &v3]), "cake is a test");
     }
 
     #[test]
@@ -72,7 +72,7 @@ mod test {
         let v1 = Value::from("t...");
         let v2 = Value::from("this is a test");
         let v3 = Value::from("cake");
-        assert_val!(f(&[&v1, &v2, &v3]), "cake is a cake")
+        assert_val!(f(&[&v1, &v2, &v3]), "cake is a cake");
     }
 
     #[test]
@@ -90,6 +90,6 @@ mod test {
         let f = fun("re", "split");
         let v1 = Value::from(" ");
         let v2 = Value::from("this is a test");
-        assert_val!(f(&[&v1, &v2]), Value::from(vec!["this", "is", "a", "test"]))
+        assert_val!(f(&[&v1, &v2]), Value::from(vec!["this", "is", "a", "test"]));
     }
 }

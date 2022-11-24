@@ -11,11 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-use matches::assert_matches;
-
+#![allow(clippy::unwrap_used)]
 use super::*;
-use crate::{CustomFn, NodeMeta};
+use crate::{registry, CustomFn, NodeMeta};
+use matches::assert_matches;
 
 fn v(s: &'static str) -> ImutExpr<'static> {
     ImutExpr::literal(NodeMeta::dummy(), Value::from(s))
@@ -88,6 +87,14 @@ fn as_invoke() {
         is_const: false,
         inline: false,
     });
+    assert_eq!("f", invocable.name());
+    let invocable2 = Invocable::Intrinsic(
+        registry()
+            .find("array", "reverse")
+            .expect("Expected array::reverse to exist")
+            .clone(),
+    );
+    assert_eq!("reverse", invocable2.name());
     let i = Invoke {
         mid: NodeMeta::dummy(),
         node_id: NodeId {
@@ -105,6 +112,25 @@ fn as_invoke() {
     let e = ImutExpr::Invoke2(i.clone());
     assert!(Expr::Imut(e).as_invoke().is_some());
     let e = ImutExpr::Invoke3(i.clone());
+    assert!(Expr::Imut(e).as_invoke().is_some());
+
+    let i2 = Invoke {
+        mid: NodeMeta::dummy(),
+        node_id: NodeId {
+            module: Vec::new(),
+            id: "fun".to_string(),
+        },
+        invocable: invocable2,
+        args: Vec::new(),
+    };
+    assert!(Expr::Imut(v("snut")).as_invoke().is_none());
+    let e = ImutExpr::Invoke(i2.clone());
+    assert!(Expr::Imut(e).as_invoke().is_some());
+    let e = ImutExpr::Invoke1(i2.clone());
+    assert!(Expr::Imut(e).as_invoke().is_some());
+    let e = ImutExpr::Invoke2(i2.clone());
+    assert!(Expr::Imut(e).as_invoke().is_some());
+    let e = ImutExpr::Invoke3(i2.clone());
     assert!(Expr::Imut(e).as_invoke().is_some());
 }
 
@@ -243,6 +269,7 @@ fn replace_last_shadow_use() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn pp_is_exclusive() {
     let eq = PredicatePattern::Bin {
         lhs: "k1".into(),
@@ -333,7 +360,7 @@ fn pp_is_exclusive() {
             extractor: Extractor::Suffix("ake".into()),
         }),
     };
-    let teq2 = PredicatePattern::TildeEq {
+    let test_eq2 = PredicatePattern::TildeEq {
         lhs: "k2".into(),
         assign: "k".into(),
         key: "k2".into(),
@@ -356,11 +383,11 @@ fn pp_is_exclusive() {
         }),
     };
     assert!(
-        !teq.is_exclusive_to(&teq2),
+        !teq.is_exclusive_to(&test_eq2),
         "~= is not exclusive on different keys"
     );
     assert!(
-        !teq2.is_exclusive_to(&teq),
+        !test_eq2.is_exclusive_to(&teq),
         "~= is not exclusive on different keys"
     );
     assert!(

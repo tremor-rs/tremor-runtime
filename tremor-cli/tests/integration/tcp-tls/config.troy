@@ -54,8 +54,10 @@ flow
     codec = "json",
     config = {
       "url": "127.0.0.1:65535",
-      "no_delay": false,
       "buf_size": 1024,
+      "socket_options": {
+        "TCP_NODELAY": false
+      },
       "tls": {
           "cafile": "./before/localhost.cert",
           "domain": "localhost",

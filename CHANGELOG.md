@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+
+* Added new config `socket_options` to UDP, TCP and Websocket connectors to enable use of socket option `SO_REUSEPORT`
+* Added the `chunk` postprocessor for creating payloads as close to a configurable `max_bytes` as possible
+* Arithmetic expressions now error on overflows
+
+### Fixes
+
+* Fix `udp_client` connector connecting to IPv6 hosts.
+
+### Breaking Changes
+
+* Move `no_delay` config of `tcp_server` and `ws_server` to `socket_options.TCP_NODELAY`.
+
+## [0.13.0-rc.9]
+
+### New Features
+
+* Added `std::datetime` library for parsing, formatting and working with datetimes
+
+## [0.13.0-rc.7]
+
+### New Features
+
+* implement script enhancement RFC (initial state and port based scripts)
+
+### Fixes
+
+* Fix bug in local variable resolving when using expression-paths
+
+### Performance
+
+* Improve dogstatsd performance
+* Improve performance of `std::array::flatten` by roughly 30%
+
+
+## [0.13.0-rc.6]
 ### Fixes
 
 - Fix windows based on `interval` not sending the correct event id when timing out

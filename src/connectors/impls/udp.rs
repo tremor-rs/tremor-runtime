@@ -22,3 +22,6 @@ impl Defaults for UdpDefaults {
     const HOST: &'static str = "localhost";
     const PORT: u16 = 0;
 }
+
+const UDP_IPV4_UNSPECIFIED: &str = "0.0.0.0:0";
+const UDP_IPV6_UNSPECIFIED: &str = "[::]:0";

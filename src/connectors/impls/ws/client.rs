@@ -19,11 +19,14 @@ use super::{WsReader, WsWriter};
 use crate::{
     connectors::{
         prelude::*,
-        utils::tls::{tls_client_connector, TLSClientConfig},
+        utils::{
+            socket::{tcp_client_socket, TcpSocketOptions},
+            tls::{tls_client_connector, TLSClientConfig},
+        },
     },
     errors::err_connector_def,
 };
-use async_std::{net::TcpStream, sync::Arc};
+use async_std::sync::Arc;
 use async_tls::TlsConnector;
 use async_tungstenite::client_async;
 use either::Either;
@@ -36,8 +39,8 @@ const URL_SCHEME: &str = "tremor-ws-client";
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     url: Url<super::WsDefaults>,
-    #[serde(default = "default_true")]
-    no_delay: bool,
+    #[serde(default)]
+    socket_options: TcpSocketOptions,
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
     tls: Option<Either<TLSClientConfig, bool>>,
 }
@@ -50,16 +53,6 @@ pub(crate) struct Builder {}
 impl Builder {
     const MISSING_HOST: &'static str = "Invalid `url` - host missing";
     const MISSING_PORT: &'static str = "Not a valid WS type url - port specification missing";
-}
-
-fn condition_tcp_stream(config: &Config, stream: &TcpStream) -> Result<(SocketAddr, SocketAddr)> {
-    // this is known to fail on macOS for IPv6.
-    // See: https://github.com/rust-lang/rust/issues/95541
-    //if let Some(ttl) = config.ttl {
-    //    stream.set_ttl(ttl)?;
-    //}
-    stream.set_nodelay(config.no_delay)?;
-    Ok((stream.local_addr()?, stream.peer_addr()?))
 }
 
 #[async_trait::async_trait]
@@ -167,12 +160,8 @@ impl Connector for WsClient {
             .as_ref()
             .ok_or("Sink runtime not initialized")?;
 
-        let tcp_stream = async_std::net::TcpStream::connect((
-            self.config.url.host_or_local(),
-            self.config.url.port_or_dflt(),
-        ))
-        .await?;
-        let (local_addr, peer_addr) = condition_tcp_stream(&self.config, &tcp_stream)?;
+        let tcp_stream = tcp_client_socket(&self.config.url, &self.config.socket_options).await?;
+        let (local_addr, peer_addr) = (tcp_stream.local_addr()?, tcp_stream.peer_addr()?);
 
         if let Some(tls_connector) = self.tls_connector.as_ref() {
             // TLS

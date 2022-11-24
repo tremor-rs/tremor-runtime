@@ -19,8 +19,16 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::TcpReader;
-use crate::connectors::utils::tls::{tls_client_connector, TLSClientConfig};
-use crate::{connectors::prelude::*, errors::err_connector_def};
+use crate::{
+    connectors::{
+        prelude::*,
+        utils::{
+            socket::{tcp_client_socket, TcpSocketOptions},
+            tls::{tls_client_connector, TLSClientConfig},
+        },
+    },
+    errors::err_connector_def,
+};
 use async_std::{
     channel::{bounded, Receiver, Sender},
     net::TcpStream,
@@ -39,12 +47,12 @@ pub(crate) struct Config {
     url: Url<super::TcpDefaults>,
     // IP_TTL for ipv4 and hop limit for ipv6
     //ttl: Option<u32>,
-    #[serde(default = "default_true")]
-    no_delay: bool,
     #[serde(default = "default_buf_size")]
     buf_size: usize,
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
     tls: Option<Either<TLSClientConfig, bool>>,
+    #[serde(default)]
+    socket_options: TcpSocketOptions,
 }
 
 impl ConfigImpl for Config {}
@@ -215,18 +223,14 @@ impl Sink for TcpClientSink {
         let buf_size = self.config.buf_size;
 
         // connect TCP stream
-        let stream = TcpStream::connect((
-            self.config.url.host_or_local(),
-            self.config.url.port_or_dflt(),
-        ))
-        .await?;
+        let stream = tcp_client_socket(&self.config.url, &self.config.socket_options).await?;
         let local_addr = stream.local_addr()?;
+        let peer_addr = stream.peer_addr()?;
         // this is known to fail on macOS for IPv6.
         // See: https://github.com/rust-lang/rust/issues/95541
         //if let Some(ttl) = self.config.ttl {
         //    stream.set_ttl(ttl)?;
         //}
-        stream.set_nodelay(self.config.no_delay)?;
 
         let origin_uri = EventOriginUri {
             scheme: URL_SCHEME.to_string(),
@@ -248,8 +252,8 @@ impl Sink for TcpClientSink {
             let meta = ctx.meta(literal!({
                 "tls": true,
                 "peer": {
-                    "host": self.config.url.host_or_local().to_string(),
-                    "port": self.config.url.port()
+                    "host": peer_addr.ip().to_string(),
+                    "port": peer_addr.port()
                 }
             }));
             // register writer
@@ -272,8 +276,8 @@ impl Sink for TcpClientSink {
                 "tls": false,
                 // TODO: what to put into meta here?
                 "peer": {
-                    "host": self.config.url.host_or_local().to_string(),
-                    "port": self.config.url.port()
+                    "host": peer_addr.ip().to_string(),
+                    "port": peer_addr.port()
                 }
             }));
             // register writer

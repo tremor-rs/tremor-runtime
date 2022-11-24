@@ -50,6 +50,16 @@ pub(crate) fn default_buf_size() -> usize {
     DEFAULT_BUF_SIZE
 }
 
+/// Default TCP backlog size
+///
+/// Value taken from the Rust std library
+const DEFAULT_BACKLOG: i32 = 128;
+
+/// Default TCP backlog size
+pub(crate) fn default_backlog() -> i32 {
+    DEFAULT_BACKLOG
+}
+
 /// Encapsulates connector configuration
 pub(crate) use crate::connectors::ConnectorConfig;
 

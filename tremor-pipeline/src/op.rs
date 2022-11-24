@@ -141,6 +141,11 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     fn skippable(&self) -> bool {
         false
     }
+
+    /// Initial state for an operator
+    fn initial_state(&self) -> Value<'static> {
+        Value::const_null()
+    }
 }
 
 /// Initialisable trait that can be turned from a `NodeConfig`

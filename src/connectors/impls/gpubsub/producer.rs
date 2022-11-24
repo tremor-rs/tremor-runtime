@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::connectors::google::{AuthInterceptor, TokenProvider};
-
 use crate::connectors::prelude::{
     Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
     SinkManagerBuilder, SinkReply, Url,
@@ -55,11 +54,12 @@ impl ConfigImpl for Config {}
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
 
-#[cfg(not(test))]
-type GpubConnectorWithTokenProvider = GpubConnector<crate::connectors::google::GouthTokenProvider>;
-#[cfg(test)]
+#[cfg(all(test, feature = "gcp-integration"))]
 type GpubConnectorWithTokenProvider =
     GpubConnector<crate::connectors::google::tests::TestTokenProvider>;
+
+#[cfg(not(all(test, feature = "gcp-integration")))]
+type GpubConnectorWithTokenProvider = GpubConnector<crate::connectors::google::GouthTokenProvider>;
 
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
@@ -175,13 +175,13 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
                     .extract_meta(meta)
                     .get("ordering_key")
                     .as_str()
-                    .map_or_else(|| "".to_string(), ToString::to_string);
+                    .map_or_else(String::new, ToString::to_string);
 
                 messages.push(PubsubMessage {
                     data: payload,
                     attributes: HashMap::new(),
                     // publish_time and message_id will be ignored in the request and set by server
-                    message_id: "".to_string(),
+                    message_id: String::new(),
                     publish_time: None,
 
                     // from the metadata
@@ -237,6 +237,7 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "gcp-integration")]
 mod tests {
     use super::*;
     use crate::connectors::google::tests::TestTokenProvider;
@@ -247,10 +248,10 @@ mod tests {
             config: Config {
                 connect_timeout: 0,
                 request_timeout: 0,
-                url: Default::default(),
-                topic: "".to_string(),
+                url: Url::default(),
+                topic: String::new(),
             },
-            hostname: "".to_string(),
+            hostname: String::new(),
             client: None,
         };
 
@@ -263,10 +264,10 @@ mod tests {
             config: Config {
                 connect_timeout: 0,
                 request_timeout: 0,
-                url: Default::default(),
-                topic: "".to_string(),
+                url: Url::default(),
+                topic: String::new(),
             },
-            hostname: "".to_string(),
+            hostname: String::new(),
             client: None,
         };
 

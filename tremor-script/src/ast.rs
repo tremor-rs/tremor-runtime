@@ -274,6 +274,8 @@ pub struct Script<'script> {
     pub(crate) mid: Box<NodeMeta>,
     /// Expressions of the script
     pub exprs: Exprs<'script>,
+    /// initial state
+    pub state: Option<ImutExpr<'script>>,
     /// Locals
     pub locals: usize,
     #[serde(skip)]
@@ -324,7 +326,7 @@ impl<'script> Script<'script> {
     ///
     /// # Errors
     /// on runtime errors
-    pub(crate) fn run<'event>(
+    pub fn run<'event>(
         &self,
         context: &crate::EventContext,
         aggr: AggrType,
@@ -720,6 +722,7 @@ impl<'script> ImutExpr<'script> {
             None
         }
     }
+    /// Tries to turn the `ImutExpr` into a `Value`
     pub(crate) fn try_into_value(mut self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut self)?;
         if let ImutExpr::Literal(Literal { value: v, .. }) = self {
@@ -920,6 +923,14 @@ pub enum Invocable<'script> {
 }
 
 impl<'script> Invocable<'script> {
+    /// name of the invocable (without module)
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Intrinsic(wrapper) => wrapper.name(),
+            Self::Tremor(custom) => custom.name.as_str(),
+        }
+    }
     fn inline(self, args: ImutExprs<'script>, mid: Box<NodeMeta>) -> Result<ImutExpr<'script>> {
         match self {
             Invocable::Intrinsic(_f) => Err("can't inline intrinsic".into()),
@@ -1563,9 +1574,6 @@ impl<'script> Pattern<'script> {
                 false
             }
     }
-    fn is_assign(&self) -> bool {
-        matches!(self, Pattern::Assign(_))
-    }
     fn is_exclusive_to(&self, other: &Self) -> bool {
         use Pattern::{Assign, Expr, Record, Tuple};
         match (self, other) {
@@ -2094,9 +2102,9 @@ pub enum BinOpKind {
     /// we're forced to make this pub because of lalrpop
     Lt,
 
-    /// we're forced to make this pub because of lalrpop
+    /// shifts the bits keeping singness
     RBitShiftSigned,
-    /// we're forced to make this pub because of lalrpop
+    /// shifts the bit natively ignoring signness
     RBitShiftUnsigned,
     /// we're forced to make this pub because of lalrpop
     LBitShift,

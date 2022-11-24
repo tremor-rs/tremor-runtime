@@ -17,6 +17,7 @@ use crate::{connectors::impls::metronome, errors::Result};
 use std::time::Duration;
 use tremor_value::prelude::*;
 
+#[allow(clippy::cast_possible_truncation)]
 #[async_std::test]
 async fn connector_metronome_routing() -> Result<()> {
     let _ = env_logger::try_init();
@@ -43,7 +44,7 @@ async fn connector_metronome_routing() -> Result<()> {
     let event = out_pipeline.get_event().await?;
     let (data, _meta) = event.data.parts();
 
-    let at = data.get_u64("ingest_ns").unwrap();
+    let at = data.get_u64("ingest_ns").unwrap_or_default();
     assert!(at >= epoch);
 
     //cleanup

@@ -35,7 +35,7 @@ use value_trait::{Mutable, Value, ValueAccess};
 const ELASTICSEARCH_VERSION: &str = "8.4.1";
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 600000)]
+#[serial(elastic, timeout_ms = 6000000)]
 async fn connector_elastic() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -110,7 +110,7 @@ async fn connector_elastic() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event_not_batched, IN).await?;
-    let err_events = err.get_events()?;
+    let err_events = err.get_events();
     assert!(err_events.is_empty(), "Received err msgs: {:?}", err_events);
     let event = out.get_event().await?;
     assert_eq!(
@@ -176,7 +176,7 @@ async fn connector_elastic() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event_not_batched, IN).await?;
-    let err_events = err.get_events()?;
+    let err_events = err.get_events();
     assert!(err_events.is_empty(), "Received err msgs: {:?}", err_events);
     let event = out.get_event().await?;
     assert_eq!(
@@ -466,7 +466,7 @@ async fn connector_elastic() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 600000)]
+#[serial(elastic, timeout_ms = 6000000)]
 async fn auth_basic() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = clients::Cli::default();
@@ -530,7 +530,7 @@ async fn auth_basic() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 600000)]
+#[serial(elastic, timeout_ms = 6000000)]
 async fn auth_api_key() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = clients::Cli::default();
@@ -607,7 +607,7 @@ async fn auth_api_key() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 600000)]
+#[serial(elastic, timeout_ms = 6000000)]
 async fn auth_client_cert() -> Result<()> {
     let _ = env_logger::try_init();
     setup_for_tls();
@@ -747,7 +747,7 @@ async fn auth_client_cert() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 600000)]
+#[serial(elastic, timeout_ms = 6000000)]
 async fn elastic_https() -> Result<()> {
     let _ = env_logger::try_init();
     setup_for_tls();

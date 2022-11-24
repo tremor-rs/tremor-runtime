@@ -1,0 +1,173 @@
+### Support for parsing date strings to nanosecond timestamps and formatting nanosecond timestamps into strings and more.
+### 
+### The submodule [timezones](timezones.md) contains constants for each existing timezone in the IANA timezone database.
+### The submodule [formats](formats.md) contains constants commonly used formats.
+###
+### In this module we introduce a type called `datetime`.
+###
+### It is either:
+###  * a simple integer timestamp which is interpreted as *UTC nanosecond precision timestamp since epoch* or
+###  * a record with the following fields:
+###    * `timestamp`: a *UTC nanosecond precision timestamp since epoch*
+###    * `tz`: a timezone identifier from the [`std::datetime::timezones`](timezones.md) module or a string with a timezone name or a fixed offset
+###
+### It can be conveniently created and adapted with the [`with_timezone`](#with_timezoneutc_nanos-timezone) function.
+###
+use std::datetime::timezones;
+use std::datetime::formats;
+
+## Formats the given datetime according to [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339#section-5.6)
+##
+## Returns a string.
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::rfc3339(1667997961)
+## > ```
+intrinsic fn rfc3339(datetime) as datetime::rfc3339;
+
+## Formats the given datetime according to [RFC 2822](https://www.rfc-editor.org/rfc/rfc2822#section-3.3)
+##
+## Returns a string.
+intrinsic fn rfc2822(datetime) as datetime::rfc2822;
+
+## Formats the given nanosecond timestamp or datetime struct (created with `datetime::with_timezone`) 
+## according to the given format.
+##
+## Check [this documentation](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) from the Rust chrone datetime library
+## on supported format specifiers. It is also possible to chose formats from the `std::datetime::formats` module.
+##
+## > ```tremor
+## > datetime::format(datetime::with_timezone(123, datetime::timezones::EUROPE_BERLIN), "%Y-%m-%dT%H:%M:%S%:z") == "1970-01-01T01:00:00:+01:00"
+## > ```
+intrinsic fn format(datetime, format) as datetime::format;
+
+## Turn the given `utc_nanos` into a full datetime with the given `timezone`. For use in other functions of this module.
+## 
+## Provide a const timezone identifier from the `std::datetime::timezones` module 
+## or a string with timezone name or fixed offset
+## 
+## Returns a record with `timestamp` and `tz` fields.
+## This function errors if the timezone is invalid.
+intrinsic fn with_timezone(utc_nanos, timezone) as datetime::with_timezone;
+
+## Parse the given datetime string according to the given format into a nanosecond timestamp since epoch UTC
+##
+## Check [this documentation](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) from the Rust chrone datetime library
+## on supported format specifiers. It is also possible to chose formats from the `std::datetime::formats` module.
+##
+## This function errors if the given string cannot be parsed according to the given format.
+## If successful this function returns a 64-bit integer.
+##
+## Usage:
+## 
+## > ```tremor
+## > let nanos = datetime::parse(event.datetime, datetime::formats::RFC3339);
+## > ```
+intrinsic fn parse(string, format) as datetime::parse;
+
+## Extract the year number in in the calendar date
+## according to the proleptic Gregorian calendar.
+## 
+## > ```tremor
+## > use std::datetime;
+## > datetime::year(0)  == 1970
+## >```
+intrinsic fn year(datetime) as datetime::year;
+
+## Extract the month number starting from 1
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::month(0) == 1
+## > ```
+intrinsic fn month(datetime) as datetime::month;
+
+## Extract the ISO week number starting from 1
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::iso_week(0) == 1
+## > ```
+intrinsic fn iso_week(datetime) as datetime::iso_week;
+
+## Extract the day of the month starting from 1
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::day_of_month(0) == 1
+## > ```
+intrinsic fn day_of_month(datetime) as datetime::day_of_month;
+## Extract the day of the year starting from 1
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::day_of_year(0) == 1
+## > ```
+intrinsic fn day_of_year(datetime) as datetime::day_of_year;
+
+## Extract the hour number of the day starting from 0
+##
+## Returns an integer in the range of 0 to 23
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::hour(0) == 0
+## > ```
+intrinsic fn hour(datetime) as datetime::hour;
+
+## Extract the minute number of the day starting from 0
+##
+## Returns an integer in the range of 0 to 59
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::minute(0) == 0
+## > ```
+intrinsic fn minute(datetime) as datetime::minute;
+
+## Extract the second number of the day starting from 0
+##
+## Returns an integer in the range of 0 to 59
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::second(0) == 0
+## > ```
+intrinsic fn second(datetime) as datetime::second;
+
+## Extract the number of milliseconds since the last full second.
+##
+## For turning a timestamp into milliseconds use [`std::time::nanos::to_millis`](../time/nanos.md#to_millisnanos).
+##
+## Returns an integer
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::subsecond_millis(1_000_000) == 1
+## > ```
+intrinsic fn subsecond_millis(datetime) as datetime::subsecond_millis;
+
+## Extract the number of microseconds since the last full second
+##
+## For turning a timestamp into microseconds use [`std::time::nanos::to_micros`](../time/nanos.md#to_microsnanos).
+##
+## Returns an integer
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::subsecond_micros(1_000_000) == 1_000
+## > ```
+intrinsic fn subsecond_micros(datetime) as datetime::subsecond_micros;
+
+## Extract the number of nanoseconds since the last full second
+##
+## This is not the number of milliseconds since epoch.
+##
+## Returns an integer
+##
+## > ```tremor
+## > use std::datetime;
+## > datetime::subsecond_nanos(1_000_000) == 1_000_000
+## > ```
+intrinsic fn subsecond_nanos(datetime) as datetime::subsecond_nanos;

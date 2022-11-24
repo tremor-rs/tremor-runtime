@@ -200,6 +200,8 @@ error_chain! {
         Uuid(uuid::Error);
         Serenity(serenity::Error);
         InvalidMetadataValue(tonic::metadata::errors::InvalidMetadataValue);
+        Lexical(lexical::Error);
+        SimdUtf8(simdutf8::basic::Utf8Error);
     }
 
     errors {
@@ -446,7 +448,7 @@ mod test {
     #[test]
     fn test_err_conector_def() {
         let r = err_connector_def("snot", "badger").0;
-        assert_matches!(r, ErrorKind::InvalidConnectorDefinition(_, _))
+        assert_matches!(r, ErrorKind::InvalidConnectorDefinition(_, _));
     }
 
     #[test]
@@ -459,6 +461,6 @@ mod test {
         assert_matches!(
             r,
             ErrorKind::TypeError(ValueType::Object, ValueType::String)
-        )
+        );
     }
 }

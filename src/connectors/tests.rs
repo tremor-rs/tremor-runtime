@@ -210,11 +210,11 @@ impl ConnectorHarness {
     }
 
     pub(crate) async fn pause(&self) -> Result<()> {
-        Ok(self.addr.send(connectors::Msg::Pause).await?)
+        self.addr.send(connectors::Msg::Pause).await
     }
 
     pub(crate) async fn resume(&self) -> Result<()> {
-        Ok(self.addr.send(connectors::Msg::Resume).await?)
+        self.addr.send(connectors::Msg::Resume).await
     }
 
     pub(crate) async fn stop(self) -> Result<(Vec<Event>, Vec<Event>)> {
@@ -229,15 +229,11 @@ impl ConnectorHarness {
         let out_events = self
             .pipes
             .get(&OUT)
-            .map(TestPipeline::get_events)
-            .unwrap_or(Ok(vec![]))
-            .unwrap_or_default();
+            .map_or(vec![], TestPipeline::get_events);
         let err_events = self
             .pipes
             .get(&ERR)
-            .map(TestPipeline::get_events)
-            .unwrap_or(Ok(vec![]))
-            .unwrap_or_default();
+            .map_or(vec![], TestPipeline::get_events);
         for (port, p) in self.pipes {
             debug!("stopping pipeline connected to {port}");
             p.stop().await?;
@@ -266,10 +262,17 @@ impl ConnectorHarness {
     }
 
     /// everytime we boot up and start a sink connector
-    /// the runtime will emit a Cb Open and a Cb SinkStart message. We consume those here to clear out the pipe.
+    /// the runtime will emit a Cb Open and a Cb `SinkStart` message. We consume those here to clear out the pipe.
     ///
     /// # Errors
     /// If we receive different bootup contraflow messages
+    #[cfg(any(
+        feature = "kafka-integration",
+        feature = "es-integration",
+        feature = "s3-integration",
+        feature = "net-integration",
+        feature = "gcp-integration"
+    ))]
     pub(crate) async fn consume_initial_sink_contraflow(&self) -> Result<()> {
         if let Some(in_pipe) = self.get_pipe(IN) {
             for cf in [
@@ -327,7 +330,8 @@ impl ConnectorHarness {
         feature = "es-integration",
         feature = "socket-integration",
         feature = "net-integration",
-        feature = "ws-integration"
+        feature = "ws-integration",
+        feature = "gcp-integration"
     ))]
     pub(crate) async fn send_to_sink(&self, event: Event, port: Cow<'static, str>) -> Result<()> {
         self.addr.send_sink(SinkMsg::Event { event, port }).await
@@ -348,7 +352,11 @@ impl ConnectorHarness {
             .await
     }
 
-    #[cfg(any(feature = "kafka-integration", feature = "wal-integration"))]
+    #[cfg(any(
+        feature = "kafka-integration",
+        feature = "wal-integration",
+        feature = "gcp-integration"
+    ))]
     pub(crate) async fn send_contraflow(&self, cb: CbAction, id: EventId) -> Result<()> {
         self.addr.send_source(SourceMsg::Cb(cb, id)).await
     }
@@ -419,6 +427,7 @@ impl TestPipeline {
         feature = "es-integration",
         feature = "s3-integration",
         feature = "net-integration",
+        feature = "gcp-integration"
     ))]
     pub(crate) async fn get_contraflow(&self) -> Result<Event> {
         match self.rx_cf.recv().timeout(Duration::from_secs(20)).await?? {
@@ -427,7 +436,7 @@ impl TestPipeline {
     }
 
     // get all currently available events from the pipeline
-    pub(crate) fn get_events(&self) -> Result<Vec<Event>> {
+    pub(crate) fn get_events(&self) -> Vec<Event> {
         let mut events = Vec::with_capacity(self.rx.len());
         while let Ok(msg) = self.rx.try_recv() {
             match *msg {
@@ -435,18 +444,18 @@ impl TestPipeline {
                     events.push(event.clone());
                 }
                 pipeline::Msg::Signal(signal) => {
-                    debug!("Received signal: {:?}", signal.kind)
+                    debug!("Received signal: {:?}", signal.kind);
                 }
             }
         }
-        Ok(events)
+        events
     }
 
     /// get a single event from the pipeline
     /// wait for an event to arrive
     pub(crate) async fn get_event(&self) -> Result<Event> {
-        let start = Instant::now();
         const TIMEOUT: Duration = Duration::from_secs(120);
+        let start = Instant::now();
         loop {
             match self.rx.recv().timeout(TIMEOUT).await {
                 Ok(Ok(msg)) => {
@@ -454,7 +463,7 @@ impl TestPipeline {
                         pipeline::Msg::Event { event, .. } => break Ok(event),
                         // filter out signals
                         pipeline::Msg::Signal(signal) => {
-                            debug!("Received signal: {:?}", signal.kind)
+                            debug!("Received signal: {:?}", signal.kind);
                         }
                     }
                 }
@@ -500,7 +509,8 @@ impl TestPipeline {
 #[cfg(any(
     feature = "http-integration",
     feature = "ws-integration",
-    feature = "s3-integration"
+    feature = "s3-integration",
+    feature = "gcp-integration"
 ))]
 pub(crate) mod free_port {
 
@@ -530,10 +540,9 @@ pub(crate) mod free_port {
                     let port = listener.local_addr()?.port();
                     drop(listener);
                     return Ok(port);
-                } else {
-                    candidate = self.port;
-                    self.port = self.port.wrapping_add(1).min(*Self::RANGE.end());
                 }
+                candidate = self.port;
+                self.port = self.port.wrapping_add(1).min(*Self::RANGE.end());
             }
         }
     }

@@ -20,7 +20,9 @@ use serial_test::serial;
 use tremor_runtime::errors::*;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
-use tremor_script::{module::Manager, AggrType, EventContext, Return, Script, FN_REGISTRY};
+use tremor_script::{
+    highlighter::Dumb, module::Manager, AggrType, EventContext, Return, Script, FN_REGISTRY,
+};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
@@ -63,10 +65,15 @@ macro_rules! test_cases {
                     };
                     let context = EventContext::new(id as u64, Some(&uri));
                     let mut meta = Value::from(Object::default());
-                    match script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta)? {
-                        Return::Drop => (),
-                        Return::EmitEvent{..} => results.push(json),
-                        Return::Emit{value, ..} => results.push(value),
+                    match script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta) {
+                        Err(e) => {
+                            let msg = Dumb::error_to_string(&e)?;
+                            println!("{msg}");
+                            return Err(e.into());
+                        }
+                        Ok(Return::Drop) => (),
+                        Ok(Return::EmitEvent{..}) => results.push(json),
+                        Ok(Return::Emit{value, ..}) => results.push(value),
                     };
                 }
                 assert_eq!(results.len(), out_json.len());
@@ -152,6 +159,7 @@ test_cases!(
     empty_array_pattern,
     const_in_const_lookup,
     // INSERT
+    for_comprehension_filter,
     drop,
     const_fn_tremor,
     const_string_interpolation,

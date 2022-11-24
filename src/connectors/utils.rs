@@ -33,6 +33,9 @@ pub(crate) mod mime;
 /// Protocol Buffer utilities
 pub(crate) mod pb;
 
+/// Socket utilities
+pub(crate) mod socket;
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub(crate) struct ConnectionMeta {
     pub(crate) host: String,
@@ -50,7 +53,7 @@ impl From<SocketAddr> for ConnectionMeta {
 
 pub(crate) mod url {
 
-    use crate::errors::Result;
+    use crate::errors::{Error, Result};
     use regex::Regex;
     use serde::{Deserialize, Serialize};
     use std::marker::PhantomData;
@@ -183,11 +186,28 @@ pub(crate) mod url {
             self.url.port().unwrap_or(D::PORT)
         }
         pub(crate) fn host_or_local(&self) -> &str {
-            self.url.host_str().unwrap_or(D::HOST)
+            if let Some(host) = self.url.host_str() {
+                // the url lib is shit in that it prints ipv6 addresses with the brackets (e.g. [::1])
+                // but e.g. the socket handling libs want those addresses without, so we strip them here
+                // See: https://github.com/servo/rust-url/issues/770
+                if host.starts_with('[') {
+                    host.get(1..host.len() - 1).unwrap_or(D::HOST)
+                } else {
+                    host
+                }
+            } else {
+                D::HOST
+            }
         }
 
         pub(crate) fn url(&self) -> &url::Url {
             &self.url
+        }
+
+        pub(crate) fn set_port(&mut self, port: Option<u16>) -> Result<()> {
+            self.url
+                .set_port(port)
+                .map_err(|_| Error::from("Invalid port"))
         }
     }
 
@@ -207,11 +227,24 @@ pub(crate) mod url {
         #[test_case("scheme://host:42/path?query=1&query=2#fragment", "scheme://host:42/path?query=1&query=2#fragment"; "all the url features")]
         fn serialize_deserialize(input: &str, expected: &str) -> Result<()> {
             let mut input = format!("\"{input}\""); // prepare for json compat
-            let url: Url = simd_json::from_str(&mut input)?;
+            let url: Url = unsafe { simd_json::from_str(&mut input)? };
 
             let serialized = url.to_string();
             assert_eq!(expected, &serialized);
             Ok(())
+        }
+
+        #[test]
+        fn host_or_local_ipv6() {
+            let url: Url<HttpDefaults> = Url::parse("[::1]:123").expect("valid url");
+            assert_eq!(url.host_or_local(), "::1");
+            let url: Url<HttpDefaults> = Url::parse("[::]:123").expect("valid url");
+            assert_eq!(url.host_or_local(), "::");
+        }
+
+        #[test]
+        fn invalid_host() {
+            assert!(Url::<HttpDefaults>::parse("[").is_err());
         }
     }
 }
@@ -271,11 +304,11 @@ mod tests {
         let mut env_helper = EnvHelper::new();
         env_helper.set_var("snot", "badger");
         env_helper.remove_var("HOME");
-        assert_eq!("badger", std::env::var("snot").unwrap());
+        assert_eq!(Some("badger".to_string()), std::env::var("snot").ok());
 
         env_helper.set_var("snot", "meh");
 
-        assert_eq!("meh", std::env::var("snot").unwrap());
+        assert_eq!(Some("meh".to_string()), std::env::var("snot").ok());
 
         assert!(std::env::var("HOME").is_err());
         drop(env_helper);

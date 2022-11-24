@@ -17,6 +17,7 @@ use crate::{
         prelude::*,
         sink::channel_sink::ChannelSinkMsg,
         utils::{
+            socket::{tcp_server_socket, TcpSocketOptions},
             tls::{load_server_config, TLSServerConfig},
             ConnectionMeta,
         },
@@ -25,7 +26,6 @@ use crate::{
 };
 use async_std::{
     channel::{bounded, Receiver, Sender},
-    net::TcpListener,
     prelude::*,
     task::JoinHandle,
 };
@@ -45,6 +45,13 @@ pub(crate) struct Config {
     // TCP: receive buffer size
     #[serde(default = "default_buf_size")]
     buf_size: usize,
+
+    /// it is an `i32` because the underlying api also accepts an i32
+    #[serde(default = "default_backlog")]
+    backlog: i32,
+
+    #[serde(default)]
+    socket_options: TcpSocketOptions,
 }
 
 impl ConfigImpl for Config {}
@@ -187,10 +194,13 @@ impl Source for TcpServerSource {
             previous_handle.cancel().await;
         }
 
-        let host = self.config.url.host_or_local();
-        let port = self.config.url.port_or_dflt();
-
-        let listener = TcpListener::bind((host, port)).await?;
+        let listener = tcp_server_socket(
+            &self.config.url,
+            self.config.backlog,
+            &self.config.socket_options,
+        )
+        .await?;
+        info!("{ctx} Listening on {}", listener.local_addr()?);
 
         let ctx = ctx.clone();
         let tls_server_config = self.tls_server_config.clone();
@@ -295,7 +305,10 @@ impl Source for TcpServerSource {
                             runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
                         }
                     }
-                    Ok(Err(e)) => return Err(e.into()),
+                    Ok(Err(e)) => {
+                        error!("{ctx} Error Accepting: {e}");
+                        return Err(e.into());
+                    }
                     Err(_) => continue, // timeout accepting
                 };
             }

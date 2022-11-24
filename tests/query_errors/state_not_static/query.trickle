@@ -1,0 +1,13 @@
+use tremor::system;
+
+define script bad_state
+state
+  system::nanotime()
+script
+  state
+end;
+
+create script bad_state;
+
+select event from in into bad_state;
+select event from bad_state into out;

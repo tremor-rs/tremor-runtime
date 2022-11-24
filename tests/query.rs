@@ -119,7 +119,7 @@ fn trickle_to_pipe(query: String) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
     let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
-    Ok(q.to_pipe(&mut idgen)?)
+    Ok(q.to_executable_graph(&mut idgen)?)
 }
 
 async fn query_test_config(contents: String, file: &str) -> Result<()> {
@@ -140,7 +140,7 @@ async fn query_test_config(contents: String, file: &str) -> Result<()> {
             ..Event::default()
         };
         let mut r = vec![];
-        pipeline.enqueue("in", event, &mut r).await?;
+        pipeline.enqueue("in".into(), event, &mut r).await?;
         results.append(&mut r);
     }
 
@@ -299,6 +299,8 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
+    script_ports,
+    initial_state,
     unused_node,
     route_emit,
     drop_event,

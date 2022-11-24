@@ -207,7 +207,7 @@ impl Preprocessor for Base64 {
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(vec![base64::decode(&data)?])
+        Ok(vec![base64::decode(data)?])
     }
 }
 
@@ -307,10 +307,13 @@ mod test {
 
         let data = vec![1_u8, 2, 3];
 
-        let encoded = post_p.process(42, 23, &data)?.pop().unwrap();
+        let encoded = post_p.process(42, 23, &data)?.pop().ok_or("no data")?;
 
         let mut in_ns = 0u64;
-        let decoded = pre_p.process(&mut in_ns, &encoded)?.pop().unwrap();
+        let decoded = pre_p
+            .process(&mut in_ns, &encoded)?
+            .pop()
+            .ok_or("no data")?;
 
         assert!(pre_p.finish(None)?.is_empty());
 
@@ -323,7 +326,7 @@ mod test {
     }
 
     fn textual_prefix(len: usize) -> String {
-        format!("{} {}", len, String::from_utf8(vec![b'O'; len]).unwrap())
+        format!("{} {}", len, String::from_utf8_lossy(&vec![b'O'; len]))
     }
 
     use proptest::prelude::*;
@@ -343,11 +346,11 @@ mod test {
                 // here we chop the big string into up to 4 bits
                 let mut chopped = Vec::with_capacity(4);
                 let mut giant_string: String = tuple.1.clone();
-                while giant_string.len() > 0 && chopped.len() < 4 {
+                while !giant_string.is_empty() && chopped.len() < 4 {
                     // verify we are at a char boundary
-                    let indices = giant_string.char_indices();
+                    let mut indices = giant_string.char_indices();
                     let num_chars = giant_string.chars().count();
-                    if let Some((index, _)) = indices.skip(num_chars / 2).next() {
+                    if let Some((index, _)) = indices.nth(num_chars / 2) {
                         let mut splitted = giant_string.split_off(index);
                         std::mem::swap(&mut splitted, &mut giant_string);
                         chopped.push(splitted);
@@ -366,9 +369,9 @@ mod test {
         fn textual_length_prefix_prop((lengths, datas) in multiple_textual_lengths(5)) {
             let mut pre_p = pre::TextualLength::default();
             let mut in_ns = 0_u64;
-            let res: Vec<Vec<u8>> = datas.into_iter().map(|data| {
-                pre_p.process(&mut in_ns, data.as_bytes()).unwrap()
-            }).flatten().collect();
+            let res: Vec<Vec<u8>> = datas.into_iter().flat_map(|data| {
+                pre_p.process(&mut in_ns, data.as_bytes()).unwrap_or_default()
+            }).collect();
             assert_eq!(lengths.len(), res.len());
             for (processed, expected_len) in res.iter().zip(lengths) {
                 assert_eq!(expected_len, processed.len());
@@ -380,11 +383,11 @@ mod test {
             let data = vec![1_u8; length];
             let mut pre_p = pre::TextualLength::default();
             let mut post_p = post::TextualLength::default();
-            let encoded = post_p.process(0, 0, &data).unwrap().pop().unwrap();
+            let encoded = post_p.process(0, 0, &data).unwrap_or_default().pop().unwrap_or_default();
             let mut in_ns = 0_u64;
-            let mut res = pre_p.process(&mut in_ns, &encoded).unwrap();
+            let mut res = pre_p.process(&mut in_ns, &encoded).unwrap_or_default();
             assert_eq!(1, res.len());
-            let payload = res.pop().unwrap();
+            let payload = res.pop().unwrap_or_default();
             assert_eq!(length, payload.len());
         }
     }
@@ -403,8 +406,11 @@ mod test {
         let mut in_ns = 0_u64;
         let res: Vec<Vec<u8>> = datas
             .into_iter()
-            .map(|data| pre_p.process(&mut in_ns, data.as_bytes()).unwrap())
-            .flatten()
+            .flat_map(|data| {
+                pre_p
+                    .process(&mut in_ns, data.as_bytes())
+                    .unwrap_or_default()
+            })
             .collect();
         assert_eq!(lengths.len(), res.len());
         for (processed, expected_len) in res.iter().zip(lengths) {
@@ -417,9 +423,11 @@ mod test {
         let mut pre_p = pre::TextualLength::default();
         let data = textual_prefix(42);
         let mut in_ns = 0_u64;
-        let mut res = pre_p.process(&mut in_ns, data.as_bytes()).unwrap();
+        let mut res = pre_p
+            .process(&mut in_ns, data.as_bytes())
+            .unwrap_or_default();
         assert_eq!(1, res.len());
-        let payload = res.pop().unwrap();
+        let payload = res.pop().unwrap_or_default();
         assert_eq!(42, payload.len());
     }
 
@@ -429,15 +437,19 @@ mod test {
         let mut pre_p = pre::TextualLength::default();
         let mut post_p = post::TextualLength::default();
         let mut in_ns = 0_u64;
-        let res = pre_p.process(&mut in_ns, data).unwrap();
+        let res = pre_p.process(&mut in_ns, data).unwrap_or_default();
         assert_eq!(0, res.len());
 
         let data_empty = vec![];
-        let encoded = post_p.process(42, 23, &data_empty).unwrap().pop().unwrap();
-        assert_eq!("0 ", str::from_utf8(&encoded).unwrap());
-        let mut res2 = pre_p.process(&mut in_ns, &encoded).unwrap();
+        let encoded = post_p
+            .process(42, 23, &data_empty)
+            .unwrap_or_default()
+            .pop()
+            .unwrap_or_default();
+        assert_eq!("0 ", String::from_utf8_lossy(&encoded));
+        let mut res2 = pre_p.process(&mut in_ns, &encoded).unwrap_or_default();
         assert_eq!(1, res2.len());
-        let payload = res2.pop().unwrap();
+        let payload = res2.pop().unwrap_or_default();
         assert_eq!(0, payload.len());
     }
 
@@ -480,29 +492,26 @@ mod test {
     ];
 
     #[test]
-    fn test_lookup() -> Result<()> {
-        for t in LOOKUP_TABLE.iter() {
+    fn test_lookup() {
+        for t in &LOOKUP_TABLE {
             assert!(lookup(t).is_ok());
         }
         let t = "snot";
-        assert!(lookup(&t).is_err());
-        Ok(())
+        assert!(lookup(t).is_err());
     }
 
     #[test]
-    fn test_filter_empty() -> Result<()> {
+    fn test_filter_empty() {
         let mut pre = FilterEmpty::default();
-        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &vec![]));
+        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[]));
         assert_eq!(Ok(vec![]), pre.finish(None));
-        Ok(())
     }
 
     #[test]
-    fn test_filter_null() -> Result<()> {
+    fn test_filter_null() {
         let mut pre = FilterEmpty::default();
-        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &vec![]));
+        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[]));
         assert_eq!(Ok(vec![]), pre.finish(None));
-        Ok(())
     }
 
     #[test]
@@ -524,7 +533,7 @@ mod test {
         // Assert actual encoded form is as expected
         assert_eq!(enc, ext);
 
-        let r = pre.process(&mut ingest_ns, &ext);
+        let r = pre.process(&mut ingest_ns, ext);
         let out2 = &r?[0];
         let out2 = out2.as_slice();
         // Assert actual decoded form is as expected
@@ -543,7 +552,7 @@ mod test {
         let mut res = pre.process(&mut ingest_ns, input)?;
         let splitted = input
             .split(|c| *c == b'\n')
-            .map(|line| line.to_vec())
+            .map(<[u8]>::to_vec)
             .collect::<Vec<_>>();
         assert_eq!(splitted[..splitted.len() - 1].to_vec(), res);
         let mut finished = pre.finish(None)?;
@@ -584,6 +593,7 @@ mod test {
         };
     }
 
+    #[allow(clippy::type_complexity)]
     #[test]
     fn test_separate_no_buffer_no_maxlength() -> Result<()> {
         let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
@@ -599,6 +609,7 @@ mod test {
         Ok(())
     }
 
+    #[allow(clippy::type_complexity)]
     #[test]
     fn test_carriage_return_no_buffer_no_maxlength() -> Result<()> {
         let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
@@ -632,7 +643,7 @@ mod test {
         // Assert actual encoded form is as expected
         assert_eq!(&enc, &ext);
 
-        let r = pre.process(&mut ingest_ns, &ext);
+        let r = pre.process(&mut ingest_ns, ext);
         let out = &r?[0];
         let out = out.as_slice();
         // Assert actual decoded form is as expected

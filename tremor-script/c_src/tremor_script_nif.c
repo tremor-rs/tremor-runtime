@@ -10,6 +10,10 @@
 #include "erl_nif.h"
 #include "ts.h"
 
+// lets be save, this is 8 MB and hopefully should be enough
+// eventually it won't be and I'll be sad.
+const BUF_SIZE = 1024 * 1024 * 8;
+
 static ErlNifResourceType *ts_RESOURCE = NULL;
 
 typedef struct
@@ -39,10 +43,10 @@ static ERL_NIF_TERM ts_eval(ErlNifEnv *env, int argc,
     memcpy(ast_c_str, ast.data, ast.size);
     ast_c_str[ast.size] = 0;
 
-    unsigned char json_value[8192];
+    unsigned char json_value[BUF_SIZE];
     json_value[0] = 0;
-    tremor_script_c_eval(ast_c_str, json_value, 8192);
-    result.size = strnlen(json_value, 8192);
+    tremor_script_c_eval(ast_c_str, json_value, BUF_SIZE);
+    result.size = strnlen(json_value, BUF_SIZE);
     enif_alloc_binary(result.size, &result);
     memcpy(result.data, json_value, result.size);
     free(ast_c_str);

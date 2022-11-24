@@ -44,10 +44,10 @@ use crate::{
     ctx::NO_CONTEXT,
     errors::{
         err_need_obj, error_array_out_of_bound, error_bad_array_index, error_bad_key,
-        error_bad_key_err, error_decreasing_range, error_guard_not_bool, error_invalid_binary,
-        error_invalid_bitshift, error_need_arr, error_need_int, error_need_obj, error_need_str,
-        error_oops, error_patch_key_exists, error_patch_merge_type_conflict,
-        error_patch_update_key_missing, unknown_local, Result,
+        error_bad_key_err, error_decreasing_range, error_division_by_zero, error_guard_not_bool,
+        error_invalid_binary, error_invalid_bitshift, error_need_arr, error_need_int,
+        error_need_obj, error_need_str, error_oops, error_overflow, error_patch_key_exists,
+        error_patch_merge_type_conflict, error_patch_update_key_missing, unknown_local, Result,
     },
     prelude::*,
     stry, EventContext, Value, NO_AGGRS, NO_CONSTS,
@@ -248,8 +248,28 @@ where
     }
 }
 
+fn try_math<'run, 'event, T, O, I>(
+    f: impl Fn(T, T) -> Option<T>,
+    l: T,
+    r: T,
+    outer: &O,
+    inner: &I,
+    op: BinOpKind,
+) -> Result<Cow<'run, Value<'event>>>
+where
+    O: Ranged,
+    I: Ranged,
+    Value<'static>: From<T>,
+    'event: 'run,
+{
+    f(l, r).map_or_else(
+        || error_overflow(outer, inner, op),
+        |n| Ok(Cow::Owned(Value::from(n))),
+    )
+}
+
 #[inline]
-#[allow(clippy::cast_precision_loss)]
+#[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
 fn exec_binary_numeric<'run, 'event, OuterExpr, InnerExpr>(
     outer: &OuterExpr,
     inner: &InnerExpr,
@@ -275,8 +295,8 @@ where
             Gte => Ok(static_bool!(l >= r)),
             Lt => Ok(static_bool!(l < r)),
             Lte => Ok(static_bool!(l <= r)),
-            Add => Ok(Cow::Owned(Value::from(l + r))),
-            Sub if l >= r => Ok(Cow::Owned(Value::from(l - r))),
+            Add => try_math(u64::checked_add, l, r, outer, inner, op),
+            Sub if l >= r => Ok(Cow::Owned(Value::from(l - r))), // we check this ahead of time anyway so no reason to add an extra error
             Sub => {
                 // Handle substraction that would turn this into a negative
                 // to do that we calculate r-i (the inverse) and then
@@ -284,24 +304,28 @@ where
                 let d = r - l;
 
                 d.try_into().ok().and_then(i64::checked_neg).map_or_else(
-                    || error_invalid_binary(outer, inner, op, lhs, rhs),
+                    || error_overflow(outer, inner, op),
                     |res| Ok(Cow::Owned(Value::from(res))),
                 )
             }
-            Mul => Ok(Cow::Owned(Value::from(l * r))),
-            Div => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
-            Mod => Ok(Cow::Owned(Value::from(l % r))),
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            RBitShiftUnsigned | RBitShiftSigned => l.checked_shr(r as u32).map_or_else(
-                || error_invalid_bitshift(outer, inner),
-                |n| Ok(Cow::Owned(Value::from(n))),
-            ),
-
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            LBitShift => match l.checked_shl(r as u32) {
-                Some(n) => Ok(Cow::Owned(Value::from(n))),
-                None => error_invalid_bitshift(outer, inner),
-            },
+            Mul => try_math(u64::checked_mul, l, r, outer, inner, op),
+            Div if r > 0 => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
+            Mod if r > 0 => Ok(Cow::Owned(Value::from(l % r))),
+            Mod | Div => error_division_by_zero(outer, inner, op),
+            RBitShiftUnsigned | RBitShiftSigned => u32::try_from(r)
+                .ok()
+                .and_then(|r| l.checked_shr(r))
+                .map_or_else(
+                    || error_invalid_bitshift(outer, inner),
+                    |n| Ok(Cow::Owned(Value::from(n))),
+                ),
+            LBitShift => u32::try_from(r)
+                .ok()
+                .and_then(|r| l.checked_shl(r))
+                .map_or_else(
+                    || error_invalid_bitshift(outer, inner),
+                    |n| Ok(Cow::Owned(Value::from(n))),
+                ),
             _ => error_invalid_binary(outer, inner, op, lhs, rhs),
         }
     } else if let (Some(l), Some(r)) = (lhs.as_i64(), rhs.as_i64()) {
@@ -313,30 +337,42 @@ where
             Gte => Ok(static_bool!(l >= r)),
             Lt => Ok(static_bool!(l < r)),
             Lte => Ok(static_bool!(l <= r)),
-            Add => Ok(Cow::Owned(Value::from(l + r))),
-            Sub => Ok(Cow::Owned(Value::from(l - r))),
-            Mul => Ok(Cow::Owned(Value::from(l * r))),
-            Div => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
-            Mod => Ok(Cow::Owned(Value::from(l % r))),
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            RBitShiftSigned => l.checked_shr(r as u32).map_or_else(
-                || error_invalid_bitshift(outer, inner),
-                |n| Ok(Cow::Owned(Value::from(n))),
-            ),
+            Add => try_math(i64::checked_add, l, r, outer, inner, op),
+            Sub => try_math(i64::checked_sub, l, r, outer, inner, op),
+            Mul => try_math(i64::checked_mul, l, r, outer, inner, op),
+            Div if r != 0 => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
+            Mod if r != 0 => Ok(Cow::Owned(Value::from(l % r))),
+            Mod | Div => error_division_by_zero(outer, inner, op),
+            RBitShiftSigned => u32::try_from(r)
+                .ok()
+                .and_then(|r| l.checked_shr(r))
+                .map_or_else(
+                    || error_invalid_bitshift(outer, inner),
+                    |n| Ok(Cow::Owned(Value::from(n))),
+                ),
+            // This is a bit a bit tricky, for unsigned shift right we need to turnj
+            // our left hand side into a u64 so that the shift right operation does no
+            // preserve signness then turn the result back inot a i64 to match the original
+            // type. We can't use try_from for the u64 <-> i64 conversions
             #[allow(
                 clippy::cast_possible_truncation,
                 clippy::cast_sign_loss,
                 clippy::cast_possible_wrap
             )]
-            RBitShiftUnsigned => (l as u64).checked_shr(r as u32).map_or_else(
-                || error_invalid_bitshift(outer, inner),
-                |n| Ok(Cow::Owned(Value::from(n as i64))),
-            ),
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            LBitShift => l.checked_shl(r as u32).map_or_else(
-                || error_invalid_bitshift(outer, inner),
-                |n| Ok(Cow::Owned(Value::from(n))),
-            ),
+            RBitShiftUnsigned => u32::try_from(r)
+                .ok()
+                .and_then(|r| (l as u64).checked_shr(r))
+                .map_or_else(
+                    || error_invalid_bitshift(outer, inner),
+                    |n| Ok(Cow::Owned(Value::from(n as i64))),
+                ),
+            LBitShift => u32::try_from(r)
+                .ok()
+                .and_then(|r| l.checked_shl(r))
+                .map_or_else(
+                    || error_invalid_bitshift(outer, inner),
+                    |n| Ok(Cow::Owned(Value::from(n))),
+                ),
             _ => error_invalid_binary(outer, inner, op, lhs, rhs),
         }
     } else if let (Some(l), Some(r)) = (lhs.cast_f64(), rhs.cast_f64()) {
@@ -701,20 +737,11 @@ where
     ))
 }
 
-fn merge_values<'event, Outer, Inner>(
-    outer: &Outer,
-    inner: &Inner,
-    value: &mut Value<'event>,
-    replacement: &Value<'event>,
-) -> Result<()>
-where
-    Outer: BaseExpr,
-    Inner: BaseExpr,
-{
+fn merge_values<'event>(value: &mut Value<'event>, replacement: &Value<'event>) -> Result<()> {
     if let Some((rep, map)) = replacement.as_object().zip(value.as_object_mut()) {
         for (k, v) in rep {
             if let Some(k) = map.get_mut(k) {
-                stry!(merge_values(outer, inner, k, v));
+                stry!(merge_values(k, v));
             } else {
                 //NOTE: We got to clone here since we're duplicating values
                 map.insert(k.clone(), v.clone());
@@ -929,7 +956,7 @@ fn patch_value<'run, 'event>(
                 cow, mvalue, mid, ..
             } => match obj.get_mut(&cow) {
                 Some(value) if value.is_object() && mvalue.is_object() => {
-                    stry!(merge_values(patch_expr, expr, value, &mvalue));
+                    stry!(merge_values(value, &mvalue));
                 }
                 Some(other) => {
                     let key = cow.to_string();
@@ -937,13 +964,13 @@ fn patch_value<'run, 'event>(
                 }
                 None => {
                     let mut new_value = Value::object();
-                    stry!(merge_values(patch_expr, expr, &mut new_value, &mvalue));
+                    stry!(merge_values(&mut new_value, &mvalue));
                     obj.insert(cow, new_value);
                 }
             },
             MergeRecord { mvalue, mid, .. } => {
                 if mvalue.is_object() {
-                    stry!(merge_values(patch_expr, expr, target, &mvalue));
+                    stry!(merge_values(target, &mvalue));
                 } else {
                     return error_patch_merge_type_conflict(
                         patch_expr,

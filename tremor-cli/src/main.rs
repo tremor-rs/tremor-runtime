@@ -175,7 +175,7 @@ mod tests {
     use temp_dir::TempDir;
     #[test]
     fn test_template() -> Result<()> {
-        let d = TempDir::new().unwrap();
+        let d = TempDir::new()?;
         let name = "template";
         create_template(PathBuf::from(d.path()), name)?;
         let mut template_root = d.child(name);

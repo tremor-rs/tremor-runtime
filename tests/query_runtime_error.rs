@@ -14,7 +14,7 @@
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use std::path::PathBuf;
-use tremor_common::{file, ids::OperatorIdGen};
+use tremor_common::{file, ids::OperatorIdGen, ports::IN};
 
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
@@ -32,7 +32,7 @@ fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
     let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
-    Ok(q.to_pipe(&mut idgen)?)
+    Ok(q.to_executable_graph(&mut idgen)?)
 }
 
 const TEST_DIR: &str = "tests/query_runtime_errors";
@@ -87,7 +87,7 @@ macro_rules! test_cases {
                     };
                     let mut r = vec![];
                     // run the pipeline, if an error occurs, dont stop but check for equivalence with `error.txt`
-                    match pipeline.enqueue("in", event, &mut r).await {
+                    match pipeline.enqueue(IN, event, &mut r).await {
                         Err(PipelineError(PipelineErrorKind::Script(e), o)) => {
                             if let Some(err) = err.as_ref() {
                                 let e = tremor_script::errors::Error(e, o);
@@ -126,6 +126,7 @@ macro_rules! test_cases {
 test_cases!(
     branch_error_then_ok,
     // INSERT
+    script_bad_port,
     meta_and_use,
     binary_operators_or_left,
     binary_operators_or_right,

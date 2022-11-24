@@ -247,12 +247,16 @@ where
 }
 
 #[cfg(test)]
+#[cfg(feature = "gcp-integration")]
 mod test {
+    #![allow(clippy::cast_possible_wrap)]
     use super::*;
-    use crate::connectors::google::tests::TestTokenProvider;
     use crate::connectors::impls::gcl;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
+    use crate::connectors::{
+        google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
+    };
     use async_std::channel::bounded;
     use bytes::Bytes;
     use futures::future::Ready;
@@ -261,10 +265,14 @@ mod test {
     use http::{HeaderMap, HeaderValue};
     use http_body::Body;
     use prost::Message;
-    use std::fmt::{Debug, Display, Formatter};
     use std::task::Poll;
+    use std::{
+        collections::HashMap,
+        fmt::{Debug, Display, Formatter},
+    };
     use tonic::body::BoxBody;
     use tonic::codegen::Service;
+    use tremor_common::ids::SinkId;
     use tremor_pipeline::CbAction::Trigger;
     use tremor_pipeline::EventId;
     use tremor_value::{literal, structurize};
@@ -305,6 +313,7 @@ mod test {
             Poll::Ready(Ok(()))
         }
 
+        #[allow(clippy::unwrap_used, clippy::cast_possible_truncation)] // We don't control the return type here
         fn call(&mut self, _request: http::Request<BoxBody>) -> Self::Future {
             let mut buffer = vec![];
 
@@ -318,7 +327,7 @@ mod test {
             let (mut tx, body) = tonic::transport::Body::channel();
             let jh = async_std::task::spawn(async move {
                 let response = response.data().await.unwrap().unwrap();
-                let len: [u8; 4] = (response.len() as i32).to_ne_bytes();
+                let len: [u8; 4] = (response.len() as u32).to_ne_bytes();
                 let len = Bytes::from(len.to_vec());
                 tx.send_data(len).await.unwrap();
                 tx.send_data(response).await.unwrap();
@@ -352,17 +361,17 @@ mod test {
                 connect_timeout: 0,
                 request_timeout: 0,
                 default_severity: 0,
-                labels: Default::default(),
+                labels: HashMap::default(),
                 concurrency: 0,
             },
             tx,
             MockChannelFactory,
         );
         let sink_context = SinkContext {
-            uid: Default::default(),
+            uid: SinkId::default(),
             alias: Alias::new("a", "b"),
-            connector_type: Default::default(),
-            quiescence_beacon: Default::default(),
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
 
@@ -370,12 +379,6 @@ mod test {
 
         let event = Event {
             id: EventId::new(1, 2, 3, 4),
-            ingest_ns: 0,
-            origin_uri: None,
-            kind: None,
-            is_batch: false,
-            cb: Default::default(),
-            op_meta: Default::default(),
             data: EventPayload::from(ValueAndMeta::from(literal!({
                 "message": "test",
                 "severity": "INFO",
@@ -384,7 +387,7 @@ mod test {
                     "label2": "value2"
                 }
             }))),
-            transactional: false,
+            ..Default::default()
         };
         sink.on_event(
             "",
@@ -396,8 +399,7 @@ mod test {
                 vec![],
                 &"a".into(),
                 &Alias::new("a", "b"),
-            )
-            .unwrap(),
+            )?,
             0,
         )
         .await?;
@@ -411,7 +413,7 @@ mod test {
     fn fails_if_the_event_is_not_an_object() -> Result<()> {
         let now = tremor_common::time::nanotime();
         let mut timestamp = Timestamp {
-            seconds: now as i64 / 1_000_000_000i64,
+            seconds: (now / 1_000_000_000u64) as i64,
             nanos: (now % 1_000_000_000) as i32,
         };
         timestamp.normalize();
@@ -450,8 +452,7 @@ mod test {
         let (reply_tx, _reply_rx) = async_std::channel::unbounded();
         let config = Config::new(&literal!({
             "connect_timeout": 1_000_000
-        }))
-        .unwrap();
+        }))?;
 
         let mut sink = GclSink::<TestTokenProvider, _>::new(config, reply_tx, MockChannelFactory);
 
@@ -460,10 +461,10 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext {
-                    uid: Default::default(),
+                    uid: SinkId::default(),
                     alias: Alias::new("", ""),
-                    connector_type: Default::default(),
-                    quiescence_beacon: Default::default(),
+                    connector_type: ConnectorType::default(),
+                    quiescence_beacon: QuiescenceBeacon::default(),
                     notifier: ConnectionLostNotifier::new(rx),
                 },
                 &mut EventSerializer::new(
@@ -472,8 +473,7 @@ mod test {
                     vec![],
                     &ConnectorType::from(""),
                     &Alias::new("", ""),
-                )
-                .unwrap(),
+                )?,
                 0,
             )
             .await;

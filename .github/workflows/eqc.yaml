@@ -5,16 +5,16 @@ on: [push]
 jobs:
   api:
     if: github.repository_owner == 'tremor-rs' && github.actor!= 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Verify valid EQC_LICENSE
         run: test -n "${{secrets.EQC_LICENSE}}"
-      - uses: actions/checkout@v1.0.0
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-      - uses: Swatinem/rust-cache@v1
-      - uses: gleam-lang/setup-erlang@v1.1.2
+      - uses: Swatinem/rust-cache@v2
+      - uses: gleam-lang/setup-erlang@v1.1.3
         with:
           otp-version: 23.1
       - name: Install deps
@@ -33,16 +33,16 @@ jobs:
         run: ./.github/checks/eqc.sh
   tremor-script:
     if: github.repository_owner == 'tremor-rs' && github.actor!= 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Verify valid EQC_LICENSE
         run: test -n "${{secrets.EQC_LICENSE}}"
-      - uses: actions/checkout@v1.0.0
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-      - uses: Swatinem/rust-cache@v1
-      - uses: gleam-lang/setup-erlang@v1.1.2
+      - uses: Swatinem/rust-cache@v2
+      - uses: gleam-lang/setup-erlang@v1.1.3
         with:
           otp-version: 23.1
       - name: Install deps

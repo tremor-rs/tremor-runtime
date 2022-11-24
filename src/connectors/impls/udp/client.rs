@@ -15,8 +15,11 @@
 
 //! UDP Client
 
-use crate::connectors::prelude::*;
-use async_std::net::UdpSocket;
+use crate::connectors::{
+    prelude::*,
+    utils::socket::{udp_socket, UdpSocketOptions},
+};
+use async_std::net::{ToSocketAddrs, UdpSocket};
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -25,6 +28,8 @@ pub(crate) struct Config {
     url: Url<super::UdpDefaults>,
     /// Optional ip/port to bind to
     bind: Option<Url<super::UdpDefaults>>,
+    #[serde(default)]
+    socket_options: UdpSocketOptions,
 }
 
 impl ConfigImpl for Config {}
@@ -100,23 +105,38 @@ impl UdpClientSink {
 
 #[async_trait::async_trait()]
 impl Sink for UdpClientSink {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let bind = self
-            .config
-            .bind
-            .as_ref()
-            .map_or(("0.0.0.0", 0), |b| (b.host_or_local(), b.port_or_dflt()));
-        let socket = UdpSocket::bind(bind).await?;
-
-        socket
-            .connect((
-                self.config.url.host_or_local(),
-                self.config.url.port_or_dflt(),
-            ))
-            .await?;
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        let connect_addrs = (
+            self.config.url.host_or_local(),
+            self.config.url.port_or_dflt(),
+        )
+            .to_socket_addrs()
+            .await?
+            .collect::<Vec<_>>();
+        let bind = if let Some(bind) = self.config.bind.clone() {
+            bind
+        } else {
+            // chose default bind if unspecified by checking the first resolved connect addr
+            let is_ipv4 = connect_addrs
+                .first()
+                .ok_or_else(|| format!("unable to resolve {}", self.config.url))?
+                .is_ipv4();
+            if is_ipv4 {
+                Url::parse(super::UDP_IPV4_UNSPECIFIED)?
+            } else {
+                Url::parse(super::UDP_IPV6_UNSPECIFIED)?
+            }
+        };
+        debug!("{ctx} Binding to {}...", &bind);
+        let socket = udp_socket(&bind, &self.config.socket_options).await?;
+        debug!("{ctx} Bound to {}", socket.local_addr()?);
+        debug!("{ctx} Connecting to {}...", &self.config.url);
+        socket.connect(connect_addrs.as_slice()).await?;
+        debug!("{ctx} Connected to {}", socket.peer_addr()?);
         self.socket = Some(socket);
         Ok(true)
     }
+
     async fn on_event(
         &mut self,
         _input: &str,

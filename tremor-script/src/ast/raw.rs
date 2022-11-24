@@ -16,6 +16,8 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use std::hash::{Hash, Hasher};
+
 use crate::ast::optimizer::Optimizer;
 use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
@@ -152,6 +154,7 @@ impl<'script> ScriptRaw<'script> {
         Ok(Script {
             mid: self.mid,
             exprs,
+            state: None,
             locals: helper.locals.len(),
             docs: helper.docs.clone(),
         })
@@ -268,12 +271,30 @@ impl<'script> Upable<'script> for BytesRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Debug, PartialEq, Serialize, Clone, Eq)]
+#[derive(Debug, Serialize, Clone, Eq)]
 pub struct IdentRaw<'script> {
     pub(crate) mid: Box<NodeMeta>,
     pub id: beef::Cow<'script, str>,
 }
 impl_expr!(IdentRaw);
+
+impl PartialEq<str> for IdentRaw<'_> {
+    fn eq(&self, other: &str) -> bool {
+        self.id == other
+    }
+}
+
+impl PartialEq for IdentRaw<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Hash for IdentRaw<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
 
 impl<'script> IdentRaw<'script> {
     /// empty ident
@@ -285,7 +306,7 @@ impl<'script> IdentRaw<'script> {
     }
 
     /// literal ident injected at position `mid`
-    pub(crate) fn literal(mid: Box<NodeMeta>, s: &'static str) -> Self {
+    pub(crate) fn literal(mid: Box<NodeMeta>, s: &'script str) -> Self {
         Self {
             mid,
             id: Cow::const_str(s),
@@ -1002,13 +1023,10 @@ where
         helper.possible_leaf = was_leaf;
         let mut exprs = self.exprs.up(helper)?;
 
-        // If we are in an assign pattern we'd have created
-        // a shadow variable, this needs to be undoine at the end
-        if pattern.is_assign() {
-            helper.end_shadow_var();
-        }
-
         if let Pattern::Assign(AssignPattern { idx, .. }) = &pattern {
+            // If we are in an assign pattern we'd have created
+            // a shadow variable, this needs to be undone at the end
+            helper.end_shadow_var();
             if let Some(expr) = exprs.last_mut() {
                 expr.replace_last_shadow_use(*idx);
             };
@@ -1644,16 +1662,17 @@ impl<'script> Upable<'script> for PathRaw<'script> {
         use PathRaw::{Const, Event, Expr, Local, Meta, Reserved, State};
         Ok(match self {
             Local(p) => {
-                // Handle local constatns
+                // Handle local constants
                 if helper.is_const_path(&p) {
                     let id = p.root.id;
                     let c: crate::ast::Const =
                         helper.get(&NodeId::from(&id))?.ok_or("invalid constant")?;
                     let mid = p.mid.box_with_name(&id);
+                    let var = helper.register_shadow_from_mid(&mid);
                     Path::Expr(ExprPath {
                         expr: Box::new(ImutExpr::literal(c.mid, c.value)),
                         segments: p.segments.up(helper)?,
-                        var: 0,
+                        var,
                         mid,
                     })
                 } else {
@@ -1808,7 +1827,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
             let msg = format!("The constant {node_id} (absolute path) is not defined.",);
             err_generic(&mid.range, &mid.range, &msg)
         })?;
-        let var = helper.reserve_shadow();
+        let var = helper.register_shadow_from_mid(&mid);
 
         Ok(ExprPath {
             expr: Literal::boxed_expr(mid.clone(), c.value),
@@ -1829,7 +1848,7 @@ impl<'script> Upable<'script> for ExprPathRaw<'script> {
     type Target = ExprPath<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let var = helper.reserve_shadow();
+        let var = helper.register_shadow_from_mid(&self.mid);
         let segments = self.segments.up(helper)?;
         let expr = Box::new(self.expr.up(helper)?);
         helper.end_shadow_var();

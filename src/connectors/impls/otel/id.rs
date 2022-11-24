@@ -187,7 +187,7 @@ pub mod test {
             arb_hexen in prop::collection::vec("[a-f0-9]{16}", 16..=16)
         ) {
             for expected in arb_hexen {
-                let bytes = hex::decode(&expected).unwrap();
+                let bytes = hex::decode(&expected).unwrap_or_default();
 
                 let json = Value::Bytes(bytes.clone().into());
                 let pb = hex_span_id_to_pb(Some(&json))?;
@@ -200,7 +200,7 @@ pub mod test {
             arb_hexen in prop::collection::vec("[a-f0-9]{32}", 32..=32)
         ) {
             for expected in arb_hexen {
-                let bytes = hex::decode(&expected).unwrap();
+                let bytes = hex::decode(&expected).unwrap_or_default();
 
                 let json = Value::Bytes(bytes.clone().into());
                 let pb = hex_trace_id_to_pb(Some(&json))?;

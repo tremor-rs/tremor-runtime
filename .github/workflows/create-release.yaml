@@ -20,7 +20,7 @@ jobs:
           VERSION=${BRANCH_NAME#release/}
           echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Initialize mandatory git config
         run: |
           git config user.name "GitHub actions"
@@ -34,14 +34,11 @@ jobs:
       - name: Extract release notes
         id: extract-release-notes
         uses: ffurrer2/extract-release-notes@v1
-      - name: Create release
-        uses: actions/create-release@v1
         with:
-          tag_name: v${{ env.RELEASE_VERSION }}
-          release_name: Release v${{ env.RELEASE_VERSION }}
-          draft: false
-          prerelease: ${{env.RC == 'rc'}}
-          body: ${{ steps.extract-release-notes.outputs.release_notes }}
+          # we produce this file for creating the release with gh later on
+          release_notes_file: RELEASE_NOTES_v${{ env.RELEASE_VERSION }}.md
+      - name: Create release
+        run: gh release create v${{ env.RELEASE_VERSION }} --title "Release v${{env.RELEASE_VERSION}}" --notes-file RELEASE_NOTES_v${{ env.RELEASE_VERSION }}.md
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       - name: Trigger publish crates workflow

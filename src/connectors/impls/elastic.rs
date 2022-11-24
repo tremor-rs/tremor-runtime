@@ -949,8 +949,8 @@ mod tests {
                 .build(&alias, &connector_config, &kill_switch)
                 .await
                 .err()
-                .unwrap()
-                .to_string()
+                .map(|e| e.to_string())
+                .unwrap_or_default()
         );
         Ok(())
     }
@@ -976,8 +976,8 @@ mod tests {
                 .build(&alias, &connector_config, &kill_switch)
                 .await
                 .err()
-                .unwrap()
-                .to_string()
+                .map(|e| e.to_string())
+                .unwrap_or_default()
         );
         Ok(())
     }
@@ -1022,8 +1022,7 @@ mod tests {
 {}
 "#
             )),
-            ops.bytes()
-                .map(|b| String::from_utf8_lossy(&b.to_vec()).to_string())
+            ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
         );
 
         let meta = literal!({
@@ -1048,8 +1047,7 @@ mod tests {
 {"doc":{}}
 "#
             )),
-            ops.bytes()
-                .map(|b| String::from_utf8_lossy(&b.to_vec()).to_string())
+            ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
         );
         Ok(())
     }

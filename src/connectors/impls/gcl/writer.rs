@@ -214,7 +214,7 @@ fn value_to_monitored_resource(
                     };
                     Ok(Some(MonitoredResource {
                         r#type: match kind {
-                            None => "".to_string(),
+                            None => String::new(),
                             Some(kind) => kind.to_string(),
                         },
                         labels,

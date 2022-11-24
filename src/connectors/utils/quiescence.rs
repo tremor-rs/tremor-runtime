@@ -160,9 +160,6 @@ mod tests {
         assert_eq!(futures::poll!(read_future.as_mut()), Poll::Ready(true));
         assert_eq!(futures::poll!(write_future.as_mut()), Poll::Ready(true));
 
-        drop(read_future);
-        drop(write_future);
-
         ctrl_beacon.stop_reading();
 
         // don't continue reading when stopped reading

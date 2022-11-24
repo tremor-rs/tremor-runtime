@@ -318,14 +318,17 @@ mod tests {
             assert_eq!("snot", pp[0].name);
             assert!(pp[0].config.is_some());
             if let Some(config) = &pp[0].config {
-                assert_eq!("\n", config.get("separator").unwrap().to_string());
+                assert_eq!(
+                    "\n",
+                    config.get_str("separator").unwrap_or_default().to_string()
+                );
             }
         }
         Ok(())
     }
 
     #[test]
-    fn test_connector_config_wrong_config() -> Result<()> {
+    fn test_connector_config_wrong_config() {
         let config = literal!({
             "preprocessors": [],
             "postprocessors": [],
@@ -336,7 +339,6 @@ mod tests {
         let id = Alias::new(flow::Alias::new("flow"), "my_id");
         let res = Connector::from_config(&id, "fancy_schmancy".into(), &config);
         assert!(res.is_err());
-        assert_eq!(String::from("Invalid Definition for connector \"flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().unwrap().to_string());
-        Ok(())
+        assert_eq!(String::from("Invalid Definition for connector \"flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
     }
 }

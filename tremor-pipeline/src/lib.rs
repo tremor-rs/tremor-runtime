@@ -1070,10 +1070,10 @@ mod test {
         let fourtytwo = r#""42""#;
         let mut fourtytwo_s = fourtytwo.to_string();
         let mut fourtytwo_i = "42".to_string();
-        assert_eq!(fourtytwo, p.json_string().unwrap());
+        assert_eq!(fourtytwo, p.json_string().unwrap_or_default());
         assert_eq!(
-            p,
-            PrimStr::from_slice(unsafe { fourtytwo_s.as_bytes_mut() }).unwrap()
+            PrimStr::from_slice(unsafe { fourtytwo_s.as_bytes_mut() }),
+            Ok(p)
         );
         assert!(PrimStr::<i32>::from_slice(unsafe { fourtytwo_i.as_bytes_mut() }).is_err());
     }
@@ -1095,9 +1095,9 @@ mod test {
         assert!(m1.contains_key(op_id2));
         assert!(m1.contains_key(op_id3));
 
-        assert_eq!(m1.get(op_id1).unwrap(), &2);
-        assert_eq!(m1.get(op_id2).unwrap(), &1);
-        assert_eq!(m1.get(op_id3).unwrap(), &2);
+        assert_eq!(m1.get(op_id1).as_u64(), Some(2));
+        assert_eq!(m1.get(op_id2).as_u64(), Some(1));
+        assert_eq!(m1.get(op_id3).as_u64(), Some(2));
     }
 
     #[test]
@@ -1109,24 +1109,24 @@ mod test {
 
     #[test]
     fn cbaction_is_gd() {
-        assert_eq!(CbAction::None.is_gd(), false);
+        assert!(!CbAction::None.is_gd());
 
-        assert_eq!(CbAction::Fail.is_gd(), true);
-        assert_eq!(CbAction::Ack.is_gd(), true);
+        assert!(CbAction::Fail.is_gd());
+        assert!(CbAction::Ack.is_gd());
 
-        assert_eq!(CbAction::Restore.is_gd(), false);
-        assert_eq!(CbAction::Trigger.is_gd(), false);
+        assert!(!CbAction::Restore.is_gd());
+        assert!(!CbAction::Trigger.is_gd());
     }
 
     #[test]
     fn cbaction_is_cb() {
-        assert_eq!(CbAction::None.is_cb(), false);
+        assert!(!CbAction::None.is_cb());
 
-        assert_eq!(CbAction::Fail.is_cb(), false);
-        assert_eq!(CbAction::Ack.is_cb(), false);
+        assert!(!CbAction::Fail.is_cb());
+        assert!(!CbAction::Ack.is_cb());
 
-        assert_eq!(CbAction::Restore.is_cb(), true);
-        assert_eq!(CbAction::Trigger.is_cb(), true);
+        assert!(CbAction::Restore.is_cb());
+        assert!(CbAction::Trigger.is_cb());
     }
 
     #[test]
@@ -1213,15 +1213,15 @@ mod test {
         );
 
         let mut teid2 = TrackedPullIds::new(1, 2, 3, 4);
-        let eid1 = EventId::from_id(1, 2, 6);
-        let eid2 = EventId::from_id(1, 2, 1);
-        teid2.track(&eid1);
-        assert_eq!(teid2.max_pull_id, eid1.event_id);
+        let eid_1 = EventId::from_id(1, 2, 6);
+        teid2.track(&eid_1);
+        assert_eq!(teid2.max_pull_id, eid_1.event_id);
         assert_eq!(teid2.min_pull_id, 3);
 
-        teid2.track(&eid2);
-        assert_eq!(teid2.min_pull_id, eid2.event_id);
-        assert_eq!(teid2.max_pull_id, eid1.event_id);
+        let eid_2 = EventId::from_id(1, 2, 1);
+        teid2.track(&eid_2);
+        assert_eq!(teid2.min_pull_id, eid_2.event_id);
+        assert_eq!(teid2.max_pull_id, eid_1.event_id);
 
         let teid3 = TrackedPullIds::from((1, 2, 19));
         teid2.merge(&teid3);
@@ -1246,7 +1246,7 @@ mod test {
         eid.track_id(source, 2, 1);
         eid.track_id(2, 1, 42);
         let mut streams = eid.get_streams(source).into_iter().collect::<Vec<_>>();
-        streams.sort();
+        streams.sort_unstable();
 
         assert_eq!(vec![1_u64, 2], streams);
         assert_eq!(

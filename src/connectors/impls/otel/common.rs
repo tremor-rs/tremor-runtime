@@ -183,24 +183,23 @@ pub(crate) fn instrumentation_library_to_pb(data: &Value<'_>) -> Result<Instrume
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::float_cmp)]
     use simd_json::prelude::*;
     use tremor_otelapis::opentelemetry::proto::common::v1::{ArrayValue, KeyValueList};
 
     use super::*;
 
     #[test]
-    fn any_value_none() -> Result<()> {
+    fn any_value_none() {
         let pb = AnyValue { value: None };
         let json = any_value_to_json(pb.clone());
         let back_again = any_value_to_pb(&json);
         assert!(json.is_null());
         assert_eq!(pb, back_again);
-
-        Ok(())
     }
 
     #[test]
-    fn any_value_string() -> Result<()> {
+    fn any_value_string() {
         let pb = AnyValue {
             value: Some(any_value::Value::StringValue("snot".into())),
         };
@@ -210,18 +209,16 @@ mod tests {
         assert_eq!(pb, back_again);
 
         let pb = AnyValue {
-            value: Some(any_value::Value::StringValue("".into())),
+            value: Some(any_value::Value::StringValue(String::new())),
         };
         let json = any_value_to_json(pb.clone());
         let back_again = any_value_to_pb(&json);
         assert_eq!(json, "");
         assert_eq!(pb, back_again);
-
-        Ok(())
     }
 
     #[test]
-    fn any_value_bool() -> Result<()> {
+    fn any_value_bool() {
         let pb = AnyValue {
             value: Some(any_value::Value::BoolValue(true)),
         };
@@ -237,12 +234,10 @@ mod tests {
         let back_again = any_value_to_pb(&json);
         assert_eq!(json, false);
         assert_eq!(pb, back_again);
-
-        Ok(())
     }
 
     #[test]
-    fn any_value_int() -> Result<()> {
+    fn any_value_int() {
         let pb = AnyValue {
             value: Some(any_value::Value::IntValue(0i64)),
         };
@@ -266,12 +261,10 @@ mod tests {
         let back_again = any_value_to_pb(&json);
         assert_eq!(json, std::i64::MIN);
         assert_eq!(pb, back_again);
-
-        Ok(())
     }
 
     #[test]
-    fn any_value_double() -> Result<()> {
+    fn any_value_double() {
         let pb = AnyValue {
             value: Some(any_value::Value::DoubleValue(0f64)),
         };
@@ -295,12 +288,10 @@ mod tests {
         let back_again = any_value_to_pb(&json);
         assert_eq!(json, std::f64::MIN);
         assert_eq!(pb, back_again);
-
-        Ok(())
     }
 
     #[test]
-    fn any_value_list() -> Result<()> {
+    fn any_value_list() {
         let snot = AnyValue {
             value: Some(any_value::Value::StringValue("snot".into())),
         };
@@ -323,11 +314,10 @@ mod tests {
         let expected: Value = literal!([]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
-        Ok(())
     }
 
     #[test]
-    fn any_value_record() -> Result<()> {
+    fn any_value_record() {
         let snot = AnyValue {
             value: Some(any_value::Value::StringValue("snot".into())),
         };
@@ -355,8 +345,6 @@ mod tests {
         let expected: Value = literal!({});
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
-
-        Ok(())
     }
 
     #[test]

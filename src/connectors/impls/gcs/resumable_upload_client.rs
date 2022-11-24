@@ -320,6 +320,7 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
 impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
     DefaultClient<THttpClient, TBackoffStrategy>
 {
+    #[allow(clippy::unnecessary_wraps)] // test requerst a result
     pub fn new(client: THttpClient, backoff_strategy: TBackoffStrategy) -> Result<Self> {
         Ok(Self {
             #[cfg(not(test))]
@@ -376,6 +377,7 @@ pub(crate) fn create_client(connect_timeout: Duration) -> Result<H1Client> {
 mod tests {
     use super::*;
     use async_std::task::block_on;
+    use http_client::Config;
     use http_types::{Error, Response, StatusCode};
     use std::fmt::{Debug, Formatter};
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -429,7 +431,7 @@ mod tests {
     #[async_std::test]
     async fn can_bucket_exists() -> Result<()> {
         let client = MockHttpClient {
-            config: Default::default(),
+            config: Config::default(),
             handle_request: Box::new(|req| {
                 assert_eq!(req.url().path(), "/b/snot");
                 assert_eq!(req.method(), Method::Get);
@@ -457,11 +459,11 @@ mod tests {
     #[async_std::test]
     pub async fn can_start_upload() -> Result<()> {
         let client = MockHttpClient {
-            config: Default::default(),
+            config: Config::default(),
             handle_request: Box::new(|req| {
                 assert_eq!(req.url().path(), "/upload/b/bucket/o");
                 assert_eq!(
-                    req.url().query().unwrap(),
+                    req.url().query().unwrap_or_default(),
                     "name=somefile&uploadType=resumable".to_string()
                 );
 
@@ -491,7 +493,7 @@ mod tests {
     #[async_std::test]
     pub async fn can_delete_upload() -> Result<()> {
         let client = MockHttpClient {
-            config: Default::default(),
+            config: Config::default(),
             handle_request: Box::new(|req| {
                 assert_eq!(req.method(), Method::Delete);
                 assert_eq!(req.url().path(), "/upload_session");
@@ -521,11 +523,16 @@ mod tests {
     #[async_std::test]
     pub async fn can_upload_data() -> Result<()> {
         let client = MockHttpClient {
-            config: Default::default(),
+            config: Config::default(),
             handle_request: Box::new(|mut req| {
-                let body = block_on(req.body_bytes()).unwrap();
+                let body = block_on(req.body_bytes())?;
                 assert_eq!(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9], body);
-                assert_eq!(req.header("Content-Range").unwrap()[0], "bytes 0-9/*");
+                assert_eq!(
+                    req.header("Content-Range")
+                        .and_then(|v| v.get(0))
+                        .map(http_types::headers::HeaderValue::as_str),
+                    Some("bytes 0-9/*")
+                );
 
                 let mut response = Response::new(StatusCode::Ok);
                 response.insert_header("Range", "bytes=0-10");
@@ -534,7 +541,7 @@ mod tests {
             simulate_failure: Arc::new(AtomicBool::new(true)),
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
-        let session_url = url::Url::parse("https://example.com/session").unwrap();
+        let session_url = url::Url::parse("https://example.com/session")?;
         let mut api_client = DefaultClient {
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
@@ -555,12 +562,12 @@ mod tests {
     #[async_std::test]
     pub async fn upload_data_fails_on_failed_request() -> Result<()> {
         let client = MockHttpClient {
-            config: Default::default(),
+            config: Config::default(),
             handle_request: Box::new(|_req| Ok(Response::new(StatusCode::InternalServerError))),
             simulate_failure: Arc::new(AtomicBool::new(true)),
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
-        let session_url = url::Url::parse("https://example.com/session").unwrap();
+        let session_url = url::Url::parse("https://example.com/session")?;
         let mut api_client = DefaultClient {
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
@@ -581,9 +588,14 @@ mod tests {
     #[async_std::test]
     pub async fn can_finish_upload() -> Result<()> {
         let client = MockHttpClient {
-            config: Default::default(),
+            config: Config::default(),
             handle_request: Box::new(|req| {
-                assert_eq!(req.header("Content-Range").unwrap()[0], "bytes 10-12/13");
+                assert_eq!(
+                    req.header("Content-Range")
+                        .and_then(|v| v.get(0))
+                        .map(http_types::headers::HeaderValue::as_str),
+                    Some("bytes 10-12/13")
+                );
 
                 Ok(Response::new(StatusCode::Ok))
             }),
@@ -591,7 +603,7 @@ mod tests {
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
 
-        let session_url = url::Url::parse("https://example.com/session").unwrap();
+        let session_url = url::Url::parse("https://example.com/session")?;
         let mut api_client = DefaultClient {
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
@@ -608,29 +620,29 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn retries_on_server_error() {
+    async fn retries_on_server_error() -> Result<()> {
         let request_handled = Arc::new(AtomicBool::new(false));
         let request_handled_clone = request_handled.clone();
 
         let response = retriable_request(
             &ExponentialBackoffRetryStrategy::new(3, Duration::from_nanos(1)),
             &mut MockHttpClient {
-                config: Default::default(),
+                config: Config::default(),
                 handle_request: Box::new(move |_req| {
                     request_handled_clone.swap(true, Ordering::Acquire);
 
                     Ok(Response::new(StatusCode::Ok))
                 }),
                 simulate_failure: Arc::new(AtomicBool::new(true)),
-                simulate_transport_failure: Arc::new(Default::default()),
+                simulate_transport_failure: Arc::default(),
             },
             || Ok(Request::new(Method::Get, "http://example.com")),
         )
-        .await
-        .unwrap();
+        .await?;
 
         assert!(request_handled.load(Ordering::Acquire));
         assert_eq!(response.status(), StatusCode::Ok);
+        Ok(())
     }
 
     #[async_std::test]
@@ -638,12 +650,12 @@ mod tests {
         let response = retriable_request(
             &ExponentialBackoffRetryStrategy::new(3, Duration::from_nanos(1)),
             &mut MockHttpClient {
-                config: Default::default(),
+                config: Config::default(),
                 handle_request: Box::new(move |_req| {
                     Ok(Response::new(StatusCode::InternalServerError))
                 }),
                 simulate_failure: Arc::new(AtomicBool::new(true)),
-                simulate_transport_failure: Arc::new(Default::default()),
+                simulate_transport_failure: Arc::default(),
             },
             || Ok(Request::new(Method::Get, "http://example.com")),
         )
@@ -653,17 +665,17 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn retries_on_request_creation_failure() {
+    async fn retries_on_request_creation_failure() -> Result<()> {
         let request_handled = Arc::new(AtomicBool::new(false));
         let request_handled_clone = request_handled.clone();
 
         let response = retriable_request(
             &ExponentialBackoffRetryStrategy::new(3, Duration::from_nanos(1)),
             &mut MockHttpClient {
-                config: Default::default(),
+                config: Config::default(),
                 handle_request: Box::new(move |_req| Ok(Response::new(StatusCode::Ok))),
                 simulate_failure: Arc::new(AtomicBool::new(true)),
-                simulate_transport_failure: Arc::new(Default::default()),
+                simulate_transport_failure: Arc::default(),
             },
             || {
                 if !request_handled_clone.swap(true, Ordering::Acquire) {
@@ -673,27 +685,28 @@ mod tests {
                 Ok(Request::new(Method::Get, "http://example.com"))
             },
         )
-        .await
-        .unwrap();
+        .await?;
 
         assert!(request_handled.load(Ordering::Acquire));
         assert_eq!(response.status(), StatusCode::Ok);
+        Ok(())
     }
 
     #[test]
-    pub fn mock_http_client_config() {
+    pub fn mock_http_client_config() -> Result<()> {
         let mut client = MockHttpClient {
-            config: Default::default(),
+            config: Config::default(),
             handle_request: Box::new(|_| Ok(Response::new(StatusCode::Ok))),
-            simulate_failure: Arc::new(Default::default()),
-            simulate_transport_failure: Arc::new(Default::default()),
+            simulate_failure: Arc::default(),
+            simulate_transport_failure: Arc::default(),
         };
 
         let mut config = http_client::Config::new();
         config.timeout = Some(Duration::from_secs(1000));
 
-        client.set_config(config.clone()).unwrap();
+        client.set_config(config.clone())?;
 
         assert_eq!(client.config().timeout, config.timeout);
+        Ok(())
     }
 }

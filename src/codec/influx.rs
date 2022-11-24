@@ -129,7 +129,7 @@ mod tests {
             "fields": {"temperature": 82.0},
             "timestamp": 1_465_839_830_100_400_200_i64
         });
-        assert_eq!(decoded, &e)
+        assert_eq!(decoded, &e);
     }
 
     #[allow(clippy::too_many_lines)]
@@ -295,7 +295,7 @@ mod tests {
             let expected: Value = case.1.clone();
             let got = decoded;
             let bin = BInflux::encode(&expected)?;
-            if got != &expected {
+            if got != expected {
                 println!("{} fails while decoding", &case.2);
                 assert_eq!(got.encode(), expected.encode());
             }
@@ -325,7 +325,7 @@ mod tests {
 
             "timestamp": 1_465_839_830_100_400_200_i64
         });
-        assert_eq!(decoded, &e)
+        assert_eq!(decoded, &e);
     }
 
     #[test]
@@ -344,7 +344,7 @@ mod tests {
             "fields": {"temperature": 82},
             "timestamp": 1_465_839_830_100_400_200_i64
         });
-        assert_eq!(decoded, &e)
+        assert_eq!(decoded, &e);
     }
 
     #[test]

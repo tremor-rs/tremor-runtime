@@ -1002,6 +1002,7 @@ mod test {
     use crate::errors::Result;
     use proptest::prelude::*;
 
+    #[allow(clippy::unwrap_used)] // yay proptest
     fn topics_and_index() -> BoxedStrategy<(Vec<String>, usize)> {
         proptest::collection::hash_set(proptest::string::string_regex(".+").unwrap(), 1..100_usize)
             .prop_flat_map(|topics| {
@@ -1016,14 +1017,14 @@ mod test {
             (topics, topic_idx) in topics_and_index(),
             partition in 0..i32::MAX,
             offset in 0..i64::MAX
-        ) {
-            let topic = topics.get(topic_idx).unwrap().to_string();
+        )  {
+            let topic = topics.get(topic_idx).map_or_else(String::new, ToString::to_string);
             let resolver = TopicResolver::new(topics);
 
             let (stream_id, pull_id) = resolver.resolve_stream_and_pull_ids_inner(topic.as_str(), partition, offset);
             let res = resolver.resolve_topic(stream_id, pull_id);
             assert!(res.is_some());
-            let (resolved_topic, resolved_partition, resolved_offset) = res.unwrap();
+            let (resolved_topic, resolved_partition, resolved_offset) = if let Some(v) = res {v} else { panic!("no data") };
             assert_eq!(topic.as_str(), resolved_topic);
             assert_eq!(partition, resolved_partition);
             assert_eq!(Offset::Offset(offset), resolved_offset);

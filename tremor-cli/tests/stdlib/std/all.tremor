@@ -1,6 +1,7 @@
 use std::array;
 use std::base64;
 use std::binary;
+use std::datetime;
 use std::float;
 use std::integer;
 use std::json;
@@ -99,7 +100,15 @@ test::suite({
     }),
     test::test({
       "name": "array flatten 1",
-      "test": test::assert("array flatten 1", array::flatten([["a","b"],[1,2]]), [ "a", "b", 1, 2] )
+      "test": test::assert("array flatten 1", array::flatten([["a","b"],[1,2], [[3, 4, null, {}], [[5, 6], [[7, 8], [], 9]]]]), [ "a", "b", 1, 2, 3, 4, null, {}, 5, 6, 7, 8, 9] )
+    }),
+    test::test({
+      "name": "array flatten 2",
+      "test": test::assert("array flatten 2", array::flatten([]), [] )
+    }),
+    test::test({
+      "name": "array flatten 3",
+      "test": test::assert("array flatten 2", array::flatten([false, [], [[], [[[]], [[], [null]]]], true]), [false, null, true] )
     }),
     test::test({
       "name": "array coalesce 1",
@@ -723,6 +732,125 @@ test::suite({
     test::test({
       "name": "from_micros",
       "test": test::assert("time::nanos::from_micros", nanos::to_micros(nanos::from_micros(42)), 42)
+    }),
+    test::test({
+      "name": "truncate_micros",
+      "test": test::assert("time::nanos::truncate_micros", nanos::truncate_micros(9_999), 9_000)
+    }),
+    test::test({
+      "name": "truncate_millis",
+      "test": test::assert("time::nanos::truncate_millis", nanos::truncate_millis(9_999_999), 9_000_000)
+    }),
+    test::test({
+      "name": "truncate_seconds",
+      "test": test::assert("time::nanos::truncate_seconds", nanos::truncate_seconds(9_999_999_999), 9_000_000_000)
+    }),
+    test::test({
+      "name": "truncate_minutes",
+      "test": test::assert("time::nanos::truncate_minutes", nanos::truncate_minutes(69_999_999_999), 60_000_000_000)
+    }),
+    test::test({
+      "name": "truncate_hours",
+      "test": test::assert("time::nanos::truncate_hours", nanos::truncate_hours(3_699_999_999_999), 3_600_000_000_000)
+    }),
+    test::test({
+      "name": "truncate_hours_negative",
+      "test": test::assert("time::nanos::truncate_hours", nanos::truncate_hours(-1), -3_600_000_000_000)
+    }),
+    test::test({
+      "name": "truncate_days",
+      "test": test::assert("time::nanos::truncate_days", nanos::truncate_days(86_499_999_999_999), 86_400_000_000_000)
+    }),
+  ]
+});
+
+test::suite({
+  "name": "datetime",
+  "tags": ["datetime"],
+  "tests": [
+    test::test({
+      "name": "rfc3339",
+      "test": test::assert("datetime::rfc3339", datetime::rfc3339(0), "1970-01-01T00:00:00+00:00")
+    }),
+    test::test({
+      "name": "rfc3339",
+      "test": test::assert("datetime::rfc2282", datetime::rfc2822(0), "Thu, 01 Jan 1970 00:00:00 +0000")
+    }),
+    test::test({
+      "name": "rfc3339 Z",
+      "test": test::assert("datetime::rfc3339 Z", datetime::rfc3339(1_559_655_782_000_000_000), "2019-06-04T13:43:02+00:00")
+    }),
+    test::test({
+      "name": "format timestamp",
+      "test": test::assert("datetime::format", datetime::format(1667998614978835761, datetime::formats::RFC2822), "Wed, 09 Nov 2022 12:56:54 +0000")
+    }),
+    test::test({
+      "name": "format with timezone",
+      "test": test::assert("datetime::format", datetime::format(datetime::with_timezone(123, datetime::timezones::EUROPE_BERLIN), "%Y-%m-%dT%H:%M:%S.%f%:z"), "1970-01-01T01:00:00.000000123+01:00")
+    }),
+    test::test({
+      "name": "with_timezone attach",
+      "test": test::assert("datetime::with_timezone", datetime::with_timezone(0, datetime::timezones::EUROPE_LONDON), {"timestamp": 0, "tz": datetime::timezones::EUROPE_LONDON})
+    }),
+    test::test({
+      "name": "with_timezone name",
+      "test": test::assert("datetime::with_timezone", datetime::with_timezone(0, "Europe/London"), {"timestamp": 0, "tz": "Europe/London"})
+    }),
+    test::test({
+      "name": "with_timezone offset",
+      "test": test::assert("datetime::with_timezone", datetime::with_timezone(0, "-0200"), {"timestamp": 0, "tz": "-0200"})
+    }),
+    test::test({
+      "name": "with_timezone update",
+      "test": test::assert("datetime::with_timezone", datetime::with_timezone({"timestamp": 0, "tz": datetime::timezones::EUROPE_LONDON}, datetime::timezones::ATLANTIC_JAN_MAYEN), {"timestamp": 0, "tz": datetime::timezones::ATLANTIC_JAN_MAYEN})
+    }),
+    test::test({
+      "name": "parse",
+      "test": test::assert("datetime::parse", datetime::parse("2022-11-09T14:46:11.499274824+01:00", datetime::formats::RFC3339), 1668001571499274824)
+    }),
+    test::test({
+      "name": "year",
+      "test": test::assert("datetime::year", datetime::year(0), 1970)
+    }),
+    test::test({
+      "name": "month",
+      "test": test::assert("datetime::month", datetime::month(0), 1)
+    }),
+    test::test({
+      "name": "iso_week",
+      "test": test::assert("datetime::iso_week", datetime::iso_week(1668001571499274824), 45)
+    }),
+    test::test({
+      "name": "day_of_month",
+      "test": test::assert("datetime::day_of_month", datetime::day_of_month(nanos::from_days(40)), 10)
+    }),
+    test::test({
+      "name": "day_of_year",
+      "test": test::assert("datetime::day_of_year", datetime::day_of_year(nanos::from_days(40)), 41)
+    }),
+    test::test({
+      "name": "hour",
+      "test": test::assert("datetime::hour", datetime::hour({"timestamp": 0, "tz": "+01:00"}), 1)
+    }),
+    test::test({
+      "name": "minute",
+      "test": test::assert("datetime::minute", datetime::minute({"timestamp": 0, "tz": "+01:02"}), 2)
+    }),
+    test::test({
+      "name": "second",
+      "test": test::assert("datetime::second", datetime::second(0), 0)
+    }),
+    test::test({
+      "name": "subsecond_millis",
+      "test": test::assert("datetime::subsecond_millis", datetime::subsecond_millis(1668001571499274824), 499)
+    }),
+    test::test({
+      "name": "subsecond_micros",
+      "test": test::assert("datetime::subsecond_micros", datetime::subsecond_micros(1668001571499274824), 499274)
+    }),
+    test::test({
+      "name": "subsecond_nanos",
+      "test": test::assert("datetime::subsecond_nanos", datetime::subsecond_nanos(1668001571499274824), 499274824)
     }),
   ]
 });

@@ -33,7 +33,7 @@ macro_rules! lex_ok {
 
 #[rustfmt::skip]
 #[test]
-fn interpolate() -> Result<()> {
+fn interpolate() {
     lex_ok! {
         r#"  "" "#,
         r#"  ~ "# => Token::DQuote,
@@ -80,12 +80,11 @@ fn interpolate() -> Result<()> {
         r#"                        ~ "# => Token::RBrace,
         r#"                         ~ "# => Token::DQuote,
     };
-    Ok(())
 }
 
 #[rustfmt::skip]
 #[test]
-fn number_parsing() -> Result<()> {
+fn number_parsing() {
     lex_ok! {
     "1_000_000",
     "~~~~~~~~~" => Token::IntLiteral(1_000_000), };
@@ -106,12 +105,11 @@ fn number_parsing() -> Result<()> {
     lex_ok! {
     "0xFF_AA_00",
     "~~~~~~~~~~" => Token::IntLiteral(16_755_200), };
-    Ok(())
 }
 
 #[rustfmt::skip]
 #[test]
-fn paths() -> Result<()> {
+fn paths() {
     lex_ok! {
         "  hello_hahaha8ABC ",
         "  ~~~~~~~~~~~~~~~~ " => Token::Ident("hello_hahaha8ABC".into(), false),
@@ -131,12 +129,11 @@ fn paths() -> Result<()> {
         "  ~ " => Token::Dollar,
         "   ~~~~~~ " => Token::Ident("borp".into(), true),
     };
-    Ok(())
 }
 
 #[rustfmt::skip]
 #[test]
-fn keywords() -> Result<()> {
+fn keywords() {
     lex_ok! {
     " let ",
     " ~~~ " => Token::Let, };
@@ -173,12 +170,11 @@ fn keywords() -> Result<()> {
     lex_ok! {
         " intrinsic ",
         " ~~~~~~~~~ " => Token::Intrinsic, };
-    Ok(())
 }
 
 #[rustfmt::skip]
 #[test]
-fn operators() -> Result<()> {
+fn operators()  {
     lex_ok! {
         " not null ",
         " ~~~ " => Token::Not,
@@ -283,11 +279,11 @@ fn operators() -> Result<()> {
         " % ",
         " ~ " => Token::Mod,
     };
-    Ok(())
+    
 }
 
 #[test]
-fn should_disambiguate() -> Result<()> {
+fn should_disambiguate() {
     // Starts with ':'
     lex_ok! {
         " : ",
@@ -340,12 +336,10 @@ fn should_disambiguate() -> Result<()> {
         " . ",
         " ~ " => Token::Dot,
     };
-
-    Ok(())
 }
 
 #[test]
-fn delimiters() -> Result<()> {
+fn delimiters() {
     lex_ok! {
                 " ( ) { } [ ] ",
                 " ~           " => Token::LParen,
@@ -355,11 +349,10 @@ fn delimiters() -> Result<()> {
                 "         ~   " => Token::LBracket,
                 "           ~ " => Token::RBracket,
     };
-    Ok(())
 }
 
 #[test]
-fn string() -> Result<()> {
+fn string() {
     lex_ok! {
         r#" "\n" "#,
         r#" ~    "# => Token::DQuote,
@@ -446,12 +439,11 @@ fn string() -> Result<()> {
         r#"            ~ "# => Token::DQuote,
     };
     //lex_ko! { r#" "\\\" "#, " ~~~~~ " => ErrorKind::UnterminatedStringLiteral { start: Location::new(1,2,2), end: Location::new(1,7,7) } }
-    Ok(())
 }
 
 #[rustfmt::skip]
 #[test]
-fn heredoc() -> Result<()> {
+fn heredoc(){
     lex_ok! {
         r#""""
               """"#,
@@ -460,11 +452,10 @@ fn heredoc() -> Result<()> {
         r#"              ~~~"# => Token::HereDocEnd,
     };
 
-    Ok(())
 }
 
 #[test]
-fn test_preprocessor() -> Result<()> {
+fn test_preprocessor() {
     lex_ok! {
         r#"use "foo.tremor" ;"#,
         r#"~~~               "# => Token::Use,
@@ -473,11 +464,10 @@ fn test_preprocessor() -> Result<()> {
         r#"               ~  "# => Token::DQuote,
         r#"                 ~"# => Token::Semi,
     };
-    Ok(())
 }
 
 #[test]
-fn test_test_literal_format_bug_regression() -> Result<()> {
+fn test_test_literal_format_bug_regression() {
     let snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
 
     let mut res = String::new();
@@ -488,10 +478,10 @@ fn test_test_literal_format_bug_regression() -> Result<()> {
         res.push_str(&format!("{}", b.value));
     }
     assert_eq!(snot, res);
-    Ok(())
 }
 
 #[test]
+#[allow(clippy::float_cmp)]
 fn lexer_long_float() -> Result<()> {
     let f = 48_354_865_651_623_290_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000.0;
     let source = format!("{:.1}", f); // ensure we keep the .0
@@ -505,12 +495,13 @@ fn lexer_long_float() -> Result<()> {
 
 proptest! {
     // negative floats are constructed in the AST later
-    #[test]
+    #[allow(clippy::float_cmp)]
+#[test]
     fn float_literals_precision(f in 0_f64..f64::MAX) {
         if f.round() != f {
             let float = format!("{:.}", f);
             for token in Lexer::new(&float, arena::Index::default()) {
-                let _ = token?;
+                assert!(token.is_ok());
             }
         }
     }
@@ -518,17 +509,13 @@ proptest! {
 
 proptest! {
     // negative floats are constructed in the AST later
+    #[allow(clippy::float_cmp)]
     #[test]
     fn float_literals_scientific(f in 0_f64..f64::MAX) {
         let float = format!("{:e}", f);
-        for token in Lexer::new(&float, arena::Index::default()) {
-            match token {
-                Ok(spanned) =>
-                    match spanned.value {
-                        Token::FloatLiteral(f_token, _f_str) => assert_eq!(f, f_token),
-                        _ => ()
-                    }
-                _ => ()
+        for token in Lexer::new(&float, arena::Index::default()).flatten() {
+            if let Token::FloatLiteral(f_token, _) = token.value {
+                assert_eq!(f, f_token);
             }
         }
     }

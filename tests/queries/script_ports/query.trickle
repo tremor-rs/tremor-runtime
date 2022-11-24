@@ -1,0 +1,13 @@
+
+define script ports
+script from odd
+  emit "odd"
+script
+  emit "even"
+end;
+
+create script ports;
+
+select event from in where event % 2 == 0 into ports/in;
+select event from in where event % 2 == 1 into ports/odd;
+select event from ports into out;

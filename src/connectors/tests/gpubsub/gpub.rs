@@ -31,7 +31,7 @@ use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 600000)]
+#[serial(gpubsub, timeout_ms = 6000000)]
 async fn no_connection() -> Result<()> {
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
@@ -50,7 +50,7 @@ async fn no_connection() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 600000)]
+#[serial(gpubsub, timeout_ms = 6000000)]
 async fn no_hostname() -> Result<()> {
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
@@ -71,7 +71,7 @@ async fn no_hostname() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 600000)]
+#[serial(gpubsub, timeout_ms = 6000000)]
 async fn simple_publish() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -104,7 +104,7 @@ async fn simple_publish() -> Result<()> {
             name: "projects/test/topics/test".to_string(),
             labels: Default::default(),
             message_storage_policy: None,
-            kms_key_name: "".to_string(),
+            kms_key_name: String::new(),
             schema_settings: None,
             satisfies_pzs: false,
             message_retention_duration: None,
@@ -121,7 +121,7 @@ async fn simple_publish() -> Result<()> {
             labels: Default::default(),
             enable_message_ordering: false,
             expiration_policy: None,
-            filter: "".to_string(),
+            filter: String::new(),
             dead_letter_policy: None,
             retry_policy: None,
             detached: false,
@@ -177,7 +177,7 @@ async fn simple_publish() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 600000)]
+#[serial(gpubsub, timeout_ms = 6000000)]
 async fn simple_publish_with_timeout() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -210,7 +210,7 @@ async fn simple_publish_with_timeout() -> Result<()> {
             name: "projects/test/topics/test".to_string(),
             labels: Default::default(),
             message_storage_policy: None,
-            kms_key_name: "".to_string(),
+            kms_key_name: String::new(),
             schema_settings: None,
             satisfies_pzs: false,
             message_retention_duration: None,
@@ -227,7 +227,7 @@ async fn simple_publish_with_timeout() -> Result<()> {
             labels: Default::default(),
             enable_message_ordering: false,
             expiration_policy: None,
-            filter: "".to_string(),
+            filter: String::new(),
             dead_letter_policy: None,
             retry_policy: None,
             detached: false,

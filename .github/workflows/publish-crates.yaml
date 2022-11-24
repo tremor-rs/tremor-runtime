@@ -7,7 +7,7 @@ jobs:
     name: Publish tremor common
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
       - uses: actions-rs/toolchain@v1
@@ -24,7 +24,7 @@ jobs:
     name: Publish tremor value
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
       - uses: actions-rs/toolchain@v1
@@ -41,7 +41,7 @@ jobs:
     name: Publish tremor influx
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
       - uses: actions-rs/toolchain@v1
@@ -59,7 +59,7 @@ jobs:
     name: Publish tremor script
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
       - uses: actions-rs/toolchain@v1
@@ -78,7 +78,7 @@ jobs:
     name: Trigger Tremor LS release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
       - uses: actions-rs/toolchain@v1

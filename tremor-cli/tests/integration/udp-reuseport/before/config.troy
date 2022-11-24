@@ -1,0 +1,28 @@
+define flow reuseport
+flow
+  use integration;
+  use tremor::pipelines;
+
+  define connector server from udp_server
+  with
+    codec = "json-sorted",
+    config = {
+      "url": "127.0.0.1:22222",
+      "socket_options": {
+        "SO_REUSEPORT": true
+      }
+    }
+  end;
+  create connector server;
+  create connector output from integration::write_file;
+  create connector exit from integration::exit;
+
+  create pipeline out_or_exit from integration::out_or_exit;
+
+  connect /connector/server to /pipeline/out_or_exit;
+  connect /pipeline/out_or_exit/out to /connector/output;
+  connect /pipeline/out_or_exit/exit to /connector/exit;
+end;
+
+deploy flow reuseport01 from reuseport;
+deploy flow reuseport02 from reuseport;
