@@ -253,7 +253,7 @@ simdutf8 = "0.1"
 [dev-dependencies]
 serial_test = { version = "0.9", features = ["logging"] }
 # path = "../serial_test/serial_test" 
-env_logger = "0.9.3"
+env_logger = "0.10.0"
 matches = "0.1"
 pretty_assertions = "1.3.0"
 proptest = "1.0"
