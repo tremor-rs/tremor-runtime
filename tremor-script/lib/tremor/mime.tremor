@@ -35,4 +35,7 @@ const codec_to_mime = {
     "binflux": "application/octet-stream",
     "statsd": "text/plain",
     "dogstatsd": "text/plain",
-}
+};
+
+## constant used for matching any mime type agains a codec
+const amy = "*/*";
