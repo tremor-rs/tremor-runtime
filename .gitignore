@@ -53,3 +53,4 @@ tremor-script/current_counterexample.eqc
 /lalrpop-docgen
 .vscode/configurationCache.log
 .vscode/dryrun.log
+tremor-script-nif/libpath

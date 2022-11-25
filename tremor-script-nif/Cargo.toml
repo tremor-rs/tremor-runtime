@@ -1,0 +1,22 @@
+[package]
+name = "tremor-script-nif"
+authors = ["The Tremor Team"]
+build = "build.rs"
+description = "Tremor Script NIF"
+edition = "2021"
+homepage = "https://www.tremor.rs"
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/tremor-rs/tremor-runtime"
+version = "0.13.0-rc.9"
+rust-version = "1.62"
+
+[lib]
+name = "tremor"
+crate-type = ["dylib"]
+
+[dependencies]
+rustler = "0.26.0"
+tremor-script = { path = "../tremor-script", features = [
+    "erlang-float-testing",
+] }

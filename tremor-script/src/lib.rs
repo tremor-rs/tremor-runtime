@@ -34,7 +34,6 @@ extern crate pretty_assertions;
 pub mod arena;
 /// The Tremor Script AST
 pub mod ast;
-mod compat;
 /// Context struct for tremor-script
 pub mod ctx;
 mod datetime;

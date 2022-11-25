@@ -21,7 +21,9 @@ members = [
   "tremor-influx",
   "tremor-pipeline",
   "tremor-script",
+  "tremor-script-nif",
   "tremor-value",
+
 ]
 
 [profile.release]

@@ -328,7 +328,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
                     // any suggestions are welcome
                     #[cfg(feature = "erlang-float-testing")]
                     Value::Static(value_trait::StaticNode::F64(_float)) => {
-                        *string = StrLitElement::Lit("42".into())
+                        *string = StrLitElement::Lit("42".into());
                     }
                     other => *string = StrLitElement::Lit(other.json_string()?.into()),
                 }

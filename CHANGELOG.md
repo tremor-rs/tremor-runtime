@@ -7,6 +7,7 @@
 * Added new config `socket_options` to UDP, TCP and Websocket connectors to enable use of socket option `SO_REUSEPORT`
 * Added the `chunk` postprocessor for creating payloads as close to a configurable `max_bytes` as possible
 * Arithmetic expressions now error on overflows
+* Rust based erlang nif for trmeor-script EQC testing
 
 ### Fixes
 
