@@ -17,6 +17,7 @@ crate-type = ["dylib"]
 
 [dependencies]
 rustler = "0.26.0"
-tremor-script = { path = "../tremor-script", features = [
-    "erlang-float-testing",
-] }
+tremor-script = { path = "../tremor-script" }
+
+[features]
+erlang-float-testing = ["tremor-script/erlang-float-testing"]
