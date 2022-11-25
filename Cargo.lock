@@ -6076,7 +6076,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rmp-serde",
- "rustls 0.19.1",
+ "rustls 0.20.7",
  "rustls-native-certs",
  "ryu",
  "serde",
