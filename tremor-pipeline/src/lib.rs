@@ -86,8 +86,7 @@ pub struct PluggableLoggingAppender {
 
 impl Append for PluggableLoggingAppender {
     fn append(&self, record: &log::Record) -> anyhow::Result<()> {
-
-        let path = record.module_path().map(ToString::to_string).unwrap();
+        let path = record.module_path().map(ToString::to_string).unwrap(); // TODO pluggable_logging see if unwrap should be removed
         let lang = if path == "tremor_pipeline::logging" {
             LogSource::Tremor
         } else {
@@ -99,7 +98,7 @@ impl Append for PluggableLoggingAppender {
             "args": record.args().to_string(),
             "origin": lang.to_string(),
             "path": path,
-            "file": record.file().map(ToString::to_string).unwrap(),
+            "file": record.file().map(ToString::to_string).unwrap(), // TODO pluggable_logging see if unwrap should be removed
             "line": record.line()
         });
 
@@ -109,7 +108,7 @@ impl Append for PluggableLoggingAppender {
             origin_uri: None,
         };
 
-		println!("{:?}", msg);
+        println!("{:?}", msg);
         block_on(self.tx.broadcast(msg))?;
         Ok(())
     }
@@ -195,7 +194,7 @@ pub struct MetricsMsg {
 }
 
 #[derive(Debug, Clone)]
-/// LogSource from which the logs are coming (Rust, Tremor, etc.)
+/// `LogSource` from which the logs are coming (Rust, Tremor, etc.)
 pub enum LogSource {
     /// The Rust language: system logs
     Rust,

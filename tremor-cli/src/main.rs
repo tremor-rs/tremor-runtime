@@ -117,12 +117,12 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Server { command } => {
             command.run().await;
             Ok(())
-        },
+        }
         Command::Test(t) => t.run().await,
         Command::Dbg(d) => d.run(),
         Command::Run(r) => r.run().await,
         Command::Doc(d) => d.run(),
-        Command::New { name } => create_template(std::env::current_dir()?, &name)
+        Command::New { name } => create_template(std::env::current_dir()?, &name),
     }
 }
 

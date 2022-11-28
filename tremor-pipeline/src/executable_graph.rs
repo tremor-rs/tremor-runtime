@@ -257,7 +257,7 @@ pub struct ExecutableGraph {
     pub(crate) last_metrics: u64,
     pub(crate) metric_interval: Option<u64>,
     pub(crate) metrics_channel: MetricsSender,
-    
+
     #[allow(dead_code)]
     // TODO logging `pub(crate) logging_channel: LoggingSender`
     pub(crate) logging_channel: LoggingSender,

@@ -43,7 +43,10 @@ async fn deploy_test_config(contents: String) -> Result<()> {
             h.timeout(Duration::from_secs(10)).await??;
         }
         otherwise => {
-            panic!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
+            panic!(
+                "Expected valid deployment file, compile phase, but got an unexpected error: {:?}",
+                otherwise
+            );
         }
     }
 

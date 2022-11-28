@@ -27,7 +27,7 @@ pub fn run() {
     let config = Config::builder()
         .appender(Appender::builder().build("stdout", Box::new(stdout)))
         .build(Root::builder().appender("stdout").build(LevelFilter::Debug))
-        .unwrap();
+        .unwrap(); // TODO pluggable_logging see if unwrap should be removed
 
-    log4rs::init_config(config).unwrap();
+    log4rs::init_config(config).unwrap(); // TODO pluggable_logging see if unwrap should be removed
 }

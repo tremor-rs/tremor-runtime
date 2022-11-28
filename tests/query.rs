@@ -13,6 +13,11 @@
 // limitations under the License.
 
 use async_std::prelude::FutureExt;
+use log::LevelFilter;
+use log4rs::{
+    config::{Appender, Root},
+    Config,
+};
 use pretty_assertions::assert_eq;
 use serial_test::serial;
 use std::fs;
@@ -22,7 +27,7 @@ use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::{Event, EventId};
-use tremor_script::FN_REGISTRY;
+use tremor_pipeline::{PluggableLoggingAppender, LOGGING_CHANNEL};
 use tremor_runtime::system::ShutdownMode;
 use tremor_runtime::{
     errors::*,
@@ -30,13 +35,7 @@ use tremor_runtime::{
 };
 use tremor_script::module::Manager;
 use tremor_script::utils::*;
-use log::LevelFilter;
-use log4rs::{
-    config::{Appender, Root},
-    Config,
-};
-use tremor_pipeline::{PluggableLoggingAppender, LOGGING_CHANNEL};
-
+use tremor_script::FN_REGISTRY;
 
 fn cd(path: String) {
     std::env::set_current_dir(path).unwrap();
@@ -84,7 +83,10 @@ async fn deploy_test_config(contents: String, file: &str) -> Result<()> {
             }
         }
         otherwise => {
-            println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
+            println!(
+                "Expected valid deployment file, compile phase, but got an unexpected error: {:?}",
+                otherwise
+            );
             otherwise?;
         }
     }
@@ -219,7 +221,6 @@ async fn main_config(file: &str) -> Result<()> {
     result
 }
 
-
 async fn run() {
     let tx = LOGGING_CHANNEL.tx();
 
@@ -233,15 +234,13 @@ async fn run() {
     log4rs::init_config(config).unwrap();
 }
 
-
-
 macro_rules! test_cases {
     ($($file:ident),*) => {
         $(
             #[async_std::test]
             #[serial(query, timeout_ms = 120000)]
             async fn $file() -> Result<()> {
-				main_config(stringify!($file)).await
+                main_config(stringify!($file)).await
             }
         )*
     };
@@ -253,8 +252,8 @@ macro_rules! test_cases_with_server {
             #[async_std::test]
             #[serial(query, timeout_ms = 120000)]
             async fn $file() -> Result<()> {
-				run().await;
-				main_config(stringify!($file)).await
+                run().await;
+                main_config(stringify!($file)).await
             }
         )*
     };
@@ -327,5 +326,5 @@ test_cases!(
 );
 
 test_cases_with_server!(
-	pluggable_logging_operator
+    pluggable_logging_operator
 );

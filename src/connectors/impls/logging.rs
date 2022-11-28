@@ -127,11 +127,11 @@ impl Source for LoggingSource {
     /// which would tell them to stop sending. There could be multiple logging connectors running at the same time
     /// and one connector quiescing should not lead to logging being stopped for each and every other connector.
     #[cfg(test)]
-	fn asynchronous(&self) -> bool {
+    fn asynchronous(&self) -> bool {
         false
     }
-	#[cfg(not(test))]
-	fn asynchronous(&self) -> bool {
+    #[cfg(not(test))]
+    fn asynchronous(&self) -> bool {
         true
     }
 }
