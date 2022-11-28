@@ -137,7 +137,11 @@ macro_rules! with_timezone {
                 }
                 Err(_e) => {
                     let offset_secs = parse_fixed_offset(timezone_str).map_err($to_function_err)?;
-                    let $tz_ident = FixedOffset::east(offset_secs);
+                    let $tz_ident = FixedOffset::east_opt(offset_secs).ok_or_else(|| {
+                        $to_function_err(Error::from(format!(
+                            "Invalid timezone offset seconds: {timezone_str}"
+                        )))
+                    })?;
                     $code
                 }
             }
@@ -289,7 +293,7 @@ mod tests {
     fn with_timezone_str(input: &str, offset_secs: i32) {
         let res = (|| {
             with_timezone!(Value::from(input), tz, to_ferr, {
-                let naive = NaiveDate::from_ymd(1970, 1, 1);
+                let naive = NaiveDate::from_ymd_opt(1970, 1, 1).expect("valid date");
                 assert_eq!(
                     offset_secs,
                     tz.offset_from_utc_date(&naive).fix().local_minus_utc()
@@ -336,7 +340,10 @@ mod tests {
     #[test]
     fn parse_fixed_offset_all_timezones() {
         for tz in chrono_tz::TZ_VARIANTS {
-            let dt = tz.timestamp(0, 0);
+            let dt = tz
+                .timestamp_opt(0, 0)
+                .single()
+                .expect("Valid literal timestamp");
             let tz_str1 = dt.format("%z").to_string();
             let tz_str3 = dt.format("%:z").to_string();
             assert!(
