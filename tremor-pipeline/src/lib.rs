@@ -86,10 +86,16 @@ pub struct PluggableLoggingAppender {
 
 impl Append for PluggableLoggingAppender {
     fn append(&self, record: &log::Record) -> anyhow::Result<()> {
-        let path = record.module_path().map(ToString::to_string).unwrap(); // TODO pluggable_logging see if unwrap should be removed
-        let lang = if path == "tremor_pipeline::logging" {
-            LogSource::Tremor
+        let path: String;
+        let lang = if let Some(optional_path) = record.module_path().map(ToString::to_string) {
+            path = optional_path;
+            if path == "tremor_pipeline::logging" {
+                LogSource::Tremor
+            } else {
+                LogSource::Rust
+            }
         } else {
+            path = String::from("Path could not be retrieved");
             LogSource::Rust
         };
 
@@ -98,7 +104,7 @@ impl Append for PluggableLoggingAppender {
             "args": record.args().to_string(),
             "origin": lang.to_string(),
             "path": path,
-            "file": record.file().map(ToString::to_string).unwrap(), // TODO pluggable_logging see if unwrap should be removed
+            "file": record.file().map(ToString::to_string),
             "line": record.line()
         });
 

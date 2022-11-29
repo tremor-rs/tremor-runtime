@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::Result;
 use log::LevelFilter;
 use log4rs::{
     config::{Appender, Root},
@@ -19,15 +20,23 @@ use log4rs::{
 };
 use tremor_pipeline::{PluggableLoggingAppender, LOGGING_CHANNEL};
 
-pub fn run() {
+pub fn run() -> Result<()> {
     let tx = LOGGING_CHANNEL.tx();
 
     let stdout = PluggableLoggingAppender { tx };
 
-    let config = Config::builder()
+    let config = match Config::builder()
         .appender(Appender::builder().build("stdout", Box::new(stdout)))
         .build(Root::builder().appender("stdout").build(LevelFilter::Debug))
-        .unwrap(); // TODO pluggable_logging see if unwrap should be removed
+    {
+        Ok(config) => config,
+        Err(_) => {
+            return Err("config could be built".into());
+        }
+    };
 
-    log4rs::init_config(config).unwrap(); // TODO pluggable_logging see if unwrap should be removed
+    match log4rs::init_config(config) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(err.to_string().into()),
+    }
 }

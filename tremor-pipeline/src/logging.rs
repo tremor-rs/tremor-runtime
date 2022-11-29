@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{errors::Result};
+use crate::errors::Result;
 use simd_json::ValueAccess;
 use tremor_script::{
     registry::{mfa, FResult, FunctionError, Mfa, Registry},
@@ -80,29 +80,37 @@ impl TremorFn for PluggableLoggingFm {
             .split_first()
             .and_then(|(f, arg_stack)| Some((f.as_str()?, arg_stack)))
         {
-            let out = if arg_stack.len() > 1 {
-                let arg_stack: Vec<Value> = arg_stack.iter().map(|v| v.clone_static()).collect();
-                positional_formatting(this_mfa(), format, &Value::Array(arg_stack))
-            } else if arg_stack.len() == 1 {
-                let mut arg_stack: Vec<&&Value> = arg_stack.iter().collect();
-                let &arg_stack = arg_stack.pop().ok_or(FunctionError::RuntimeError{mfa: this_mfa(), error: "missing argument".into()})?;
-
-                if arg_stack.as_object().is_some() {
-                    // retrieve format args as a hashmap
-                    named_formatting(this_mfa(), format, arg_stack)
-                } else if arg_stack.as_array().is_some() {
-                    positional_formatting(this_mfa(), format, arg_stack)
-                } else {
-                    positional_formatting(
-                        this_mfa(),
-                        format,
-                        &Value::Array(vec![arg_stack.clone()]),
-                    )
+            let out = match arg_stack.len() {
+                0 => {
+                    // arg_stack.len() < 1 (== 0)
+                    positional_formatting(this_mfa(), format, &Value::Array(vec![]))
+                    // `arg_stack` is empty
                 }
-            } else {
-                // arg_stack.len() < 1 (== 0)
-                positional_formatting(this_mfa(), format, &Value::Array(vec![]))
-                // `arg_stack` is empty
+                1 => {
+                    let mut arg_stack: Vec<&&Value> = arg_stack.iter().collect();
+                    let &arg_stack = arg_stack.pop().ok_or(FunctionError::RuntimeError {
+                        mfa: this_mfa(),
+                        error: "missing argument".into(),
+                    })?;
+
+                    if arg_stack.as_object().is_some() {
+                        // retrieve format args as a hashmap
+                        named_formatting(this_mfa(), format, arg_stack)
+                    } else if arg_stack.as_array().is_some() {
+                        positional_formatting(this_mfa(), format, arg_stack)
+                    } else {
+                        positional_formatting(
+                            this_mfa(),
+                            format,
+                            &Value::Array(vec![arg_stack.clone()]),
+                        )
+                    }
+                }
+                _ => {
+                    let arg_stack: Vec<Value> =
+                        arg_stack.iter().map(|v| v.clone_static()).collect();
+                    positional_formatting(this_mfa(), format, &Value::Array(arg_stack))
+                }
             };
 
             match out {
@@ -149,7 +157,7 @@ impl TremorFn for PluggableLoggingFm {
                 err => err,
             }
         } else {
-            Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "expected 1st parameter to format to be a format specifier e.g. to print a number use `string::format(\"{}\", 1)`".into()})
+            Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "expected 1st parameter to format to be a format specifier e.g. to print a number use `string::format(\"{}\", 1)`".to_string()})
         }
     }
 
@@ -174,14 +182,12 @@ fn positional_formatting<'event>(
     format: &str,
     arg_stack: &Value,
 ) -> FResult<Value<'event>> {
-
     let mut remaining_args: Vec<&Value>;
-
 
     if let Some(arg_stack) = arg_stack.as_array() {
         remaining_args = arg_stack.iter().rev().collect();
     } else {
-        return Err(FunctionError::RuntimeError{mfa: this_mfa, error: format!("`arg_stack` of type `&Value` should hold a vector as `Vec<&Value>`, but couldn't be cast as one")});
+        return Err(FunctionError::RuntimeError{mfa: this_mfa, error: ("`arg_stack` of type `&Value` should hold a vector as `Vec<&Value>`, but couldn't be cast as one").to_owned()});
     }
 
     let mut out = String::with_capacity(format.len());
@@ -200,7 +206,7 @@ fn positional_formatting<'event>(
                 Some((_, '}')) => if let Some(arg) = remaining_args.pop() {
                     out.push_str(&match format_tremor_value(arg) {
                         Ok(s) => s,
-                        Err(e) => return Err(FunctionError::RuntimeError{mfa: this_mfa, error: format!("{}", e.description())})
+                        Err(e) => return Err(FunctionError::RuntimeError{mfa: this_mfa, error: format!("{e}")})
                     });
                 } else {
                         return Err(FunctionError::RuntimeError{mfa: this_mfa, error: format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {pos} can not be filled")});
@@ -228,16 +234,15 @@ fn named_formatting<'event>(
     format: &str,
     arg_stack: &Value,
 ) -> FResult<Value<'event>> {
-
     let format_fields: &tremor_value::Object;
 
     if let Some(arg_stack) = arg_stack.as_object() {
         format_fields = arg_stack;
     } else {
-        return Err(FunctionError::RuntimeError{mfa: this_mfa, error: format!("`arg_stack` of type `&Value` should hold a vector as `&tremor_value::Object` aka `&HashMap<Cow<str, Wide>, Value>`, but couldn't be cast as one")});
+        return Err(FunctionError::RuntimeError{
+			mfa: this_mfa,
+			error: ("`arg_stack` of type `&Value` should hold a vector as `&tremor_value::Object` aka `&HashMap<Cow<str, Wide>, Value>`, but couldn't be cast as one").to_owned()});
     }
-
-    
 
     let mut out = String::with_capacity(format.len());
     let mut iter = format.chars().enumerate();
@@ -268,10 +273,11 @@ fn named_formatting<'event>(
                             if init {
                                 out.push('{');
                                 break;
-                            } else {
-                                return Err(FunctionError::RuntimeError{mfa: this_mfa, error: format!("the format specifier at {pos} is invalid. You have to terminate `{{` with another `{{` to escape it")});
                             }
-                        },
+                            return Err(FunctionError::RuntimeError{
+								mfa: this_mfa,
+								error: format!("the format specifier at {pos} is invalid. You have to terminate `{{` with another `{{` to escape it")});
+                            	},
                         Some((_, '}')) => {
                             match format_fields.get(identifier.as_str()) {
                                 Some(value) =>  {
@@ -279,7 +285,7 @@ fn named_formatting<'event>(
                                         Ok(result) => {
                                             out.push_str(result.as_str());
                                         },
-                                        Err(e) => return Err(FunctionError::RuntimeError{mfa: this_mfa, error: format!("{}", e.description())})
+                                        Err(e) => return Err(FunctionError::RuntimeError{mfa: this_mfa, error: format!("{e}")})
                                     };
                                 },
                                 None => return Err(FunctionError::RuntimeError{mfa: this_mfa, error: format!("the format name at {pos} cannot be found among* the `Value:Object` given. Cannot insert field mapped with name {identifier} because it was not found in the given hashmap of args. *This is sus")})
@@ -311,8 +317,6 @@ fn format_tremor_value(value: &Value) -> Result<String> {
     let mut result = String::new();
     let parsing_error = Err("Not Implemented. Could not deserialize from `Tremor::Value` to any supported rust types.\nSupported types are either &str, i32, bool, Vec, bytes, HashMap".into());
 
-
-
     if let Some(string) = value.as_str() {
         result.push_str(string);
         return Ok(result);
@@ -343,9 +347,8 @@ fn format_tremor_value(value: &Value) -> Result<String> {
                     }
                 };
             } else {
-                return Err("tremor_value::Array is empty but should not be".into())
+                return Err("tremor_value::Array is empty but should not be".into());
             }
-
         }
         for v in &array {
             result.push_str(&match format_tremor_value(&v.clone_static()) {
@@ -385,7 +388,7 @@ fn format_tremor_value(value: &Value) -> Result<String> {
 
             if let Some(pair) = obj.iter().last() {
                 let p: (&str, &String) = (
-                    pair.0.clone().unwrap_borrowed(), // TODO pluggable_logging check if `unwrap_borrowed` should be removed
+                    &pair.0.clone(),
                     &match format_tremor_value(&pair.1.clone_static()) {
                         Ok(v) => v,
                         Err(_) => {
@@ -400,14 +403,13 @@ fn format_tremor_value(value: &Value) -> Result<String> {
                 p2.push_str(": ");
                 p2.push_str(p.1);
                 last = p2;
-            }
-            else {
-                return Err("tremor_value::Object is empty but should not be".into())
+            } else {
+                return Err("tremor_value::Object is empty but should not be".into());
             }
         }
 
         for pair in obj.iter() {
-            let pair = (pair.0.clone().unwrap_borrowed(), pair.1); // TODO pluggable_logging check if `unwrap_borrowed` should be removed
+            let pair = (&pair.0.clone().to_string(), pair.1);
             result.push_str(pair.0); //  key
             result.push_str(": "); //  sep
             result.push_str(
@@ -427,8 +429,7 @@ fn format_tremor_value(value: &Value) -> Result<String> {
 
         return Ok(result);
     }
-
-    return parsing_error;
+    parsing_error
 }
 
 /// Extend function registry with standard logging functions

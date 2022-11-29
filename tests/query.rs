@@ -79,7 +79,7 @@ async fn deploy_test_config(contents: String, file: &str) -> Result<()> {
             handle.timeout(Duration::from_secs(10)).await??; // let the time to finish previous async flows
             match world.stop(ShutdownMode::Graceful).await {
                 Ok(anything) => println!("Shutting down world gave: \"{anything:?}\""),
-                Err(error) => println!("Error shutting down world gracefully: {error}")
+                Err(error) => println!("Error shutting down world gracefully: {error}"),
             }
         }
         otherwise => {
@@ -325,6 +325,4 @@ test_cases!(
     pluggable_logging_dev
 );
 
-test_cases_with_server!(
-    pluggable_logging_operator
-);
+test_cases_with_server!(pluggable_logging_operator);
