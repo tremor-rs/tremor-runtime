@@ -1124,7 +1124,7 @@ mod tests {
 
         let (start_tx, mut start_rx) = crate::channel::bounded(qsize());
         flow.start(start_tx).await?;
-        start_rx.recv().await??;
+        start_rx.recv().await.ok_or_else(empty_error)??;
 
         let connector = flow.get_connector("foo".to_string()).await?;
         assert_eq!(String::from("test::foo"), connector.alias.to_string());

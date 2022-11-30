@@ -90,7 +90,7 @@ async fn build_archive(name: &str, entrypoint: &str) -> Result<Vec<u8>> {
     let aggr_reg = tremor_script::registry::aggr();
     let mut hl = highlighter::Term::stderr();
     let src_str: &str = &src;
-    let mut deploy = match Deploy::parse(src_str, &*FN_REGISTRY.read()?, &aggr_reg) {
+    let mut deploy = match Deploy::parse(&src_str, &*FN_REGISTRY.read()?, &aggr_reg) {
         Ok(deploy) => deploy,
         Err(e) => {
             hl.format_error(&e)?;

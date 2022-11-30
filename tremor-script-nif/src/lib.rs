@@ -42,7 +42,7 @@ rustler::atoms! {
 #[rustler::nif]
 fn eval<'e>(env: Env<'e>, src: &str) -> NifResult<Term<'e>> {
     let reg: Registry = registry::registry();
-    let script = Script::parse(src, &reg).map_err(|_| NifError::Atom("compilation"))?;
+    let script = Script::parse(&src, &reg).map_err(|_| NifError::Atom("compilation"))?;
 
     let mut event = Value::object();
     let mut meta = Value::object();
