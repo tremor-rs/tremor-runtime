@@ -178,7 +178,7 @@ rdkafka-sys = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f
   "cmake-build",
   "libz-static",
 ], default-features = false } # tracking the version rdkafka depends on
-smol = "1.2.5"
+smol = "1.3.0"
 
 # crononome
 cron = "0.12.0"
