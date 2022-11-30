@@ -1,3 +1,17 @@
+// Copyright 2022, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 mod statemachine;
 
 pub use self::statemachine::{AppId, FlowId, InstanceId};
@@ -9,7 +23,7 @@ use crate::{
     raft::{archive::TremorAppDef, ClusterError, NodeId},
     system::Runtime,
 };
-use async_std::{net::ToSocketAddrs, sync::RwLock};
+use async_std::sync::RwLock;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use openraft::{
     async_trait::async_trait,
@@ -32,6 +46,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use super::node::Addr;
+
 /**
  * Here you will set the types of request that will interact with the raft nodes.
  * For example the `Set` will be used to write data (key and value) to the raft database.
@@ -42,6 +58,12 @@ use std::{
 pub enum TremorRequest {
     /// Set a key to the provided value in the cluster state
     Set { key: String, value: String },
+    /// Add the given node to the cluster and store its metadata (only addr for now)
+    /// This command should be committed before a learner is added to the cluster, so the leader can contact it via its `addr`.
+    AddNode { addr: Addr },
+    /// Remove Node with the given `node_id`
+    /// This command should be committed after removing a learner from the cluster.
+    RemoveNode { node_id: NodeId },
     /// extract archive, parse sources, save sources in arena, put app into state machine
     InstallApp { app: TremorAppDef, file: Vec<u8> },
     /// delete from statemachine, delete sources from arena
@@ -137,7 +159,6 @@ pub struct TremorSnapshot {
 #[derive(Debug)]
 pub struct Store {
     db: Arc<rocksdb::DB>,
-    //runtime: Runtime,
     /// The Raft state machine.
     pub(crate) state_machine: RwLock<TremorStateMachine>,
 }
@@ -163,13 +184,22 @@ pub enum Error {
     JSON(serde_json::Error),
     RocksDB(rocksdb::Error),
     Io(std::io::Error),
+    Storage(openraft::StorageError),
     // FIXME: this is horrid, aaaaaahhhhh!
     Tremor(Mutex<RuntimeError>),
     TremorScript(Mutex<tremor_script::errors::Error>),
     MissingApp(AppId),
     MissingFlow(AppId, FlowId),
     MissingInstance(AppId, InstanceId),
+    RunningInstances(AppId),
+    NodeAlreadyAdded(NodeId),
     Other(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl<T: Send + Sync + 'static> From<std::sync::PoisonError<T>> for Error {
+    fn from(e: std::sync::PoisonError<T>) -> Self {
+        Self::Other(Box::new(e))
+    }
 }
 
 impl From<FromUtf8Error> for Error {
@@ -231,6 +261,11 @@ impl Display for Error {
             Error::MissingInstance(app, instance) => {
                 write!(f, "missing instance: {}::{}", app, instance)
             }
+            Error::Storage(e) => write!(f, "Storage: {e}"),
+            Error::NodeAlreadyAdded(node_id) => write!(f, "Node {node_id} already added"),
+            Error::RunningInstances(app_id) => {
+                write!(f, "App {app_id} still has running instances")
+            }
         }
     }
 }
@@ -241,12 +276,6 @@ fn store_w_err(e: impl StdError + 'static) -> StorageError {
 fn store_r_err(e: impl StdError + 'static) -> StorageError {
     StorageIOError::new(ErrorSubject::Store, ErrorVerb::Read, AnyError::new(&e)).into()
 }
-fn vote_w_err(e: impl StdError + 'static) -> StorageError {
-    StorageIOError::new(ErrorSubject::Vote, ErrorVerb::Write, AnyError::new(&e)).into()
-}
-fn vote_r_err(e: impl StdError + 'static) -> StorageError {
-    StorageIOError::new(ErrorSubject::Vote, ErrorVerb::Read, AnyError::new(&e)).into()
-}
 fn logs_r_err(e: impl StdError + 'static) -> StorageError {
     StorageIOError::new(ErrorSubject::Logs, ErrorVerb::Read, AnyError::new(&e)).into()
 }
@@ -255,24 +284,12 @@ fn logs_w_err(e: impl StdError + 'static) -> StorageError {
 }
 fn snap_w_err(meta: &SnapshotMeta, e: impl StdError + 'static) -> StorageError {
     StorageIOError::new(
-        ErrorSubject::Snapshot(meta.signature()),
+        ErrorSubject::Snapshot(meta.clone()),
         ErrorVerb::Write,
         AnyError::new(&e),
     )
     .into()
 }
-// FIXME: delete this?
-// fn snap_r_err(
-//     meta: SnapshotMeta<ExampleNodeId>,
-//     e: impl StdError + 'static,
-// ) -> StorageError<ExampleNodeId> {
-//     StorageIOError::new(
-//         ErrorSubject::Snapshot(meta),
-//         ErrorVerb::Read,
-//         AnyError::new(&e),
-//     )
-//     .into()
-// }
 
 impl From<Error> for StorageError {
     fn from(e: Error) -> StorageError {
@@ -289,8 +306,12 @@ pub(crate) trait GetCfHandle {
     }
 
     /// node column family
-    fn cf_node(&self) -> Result<&ColumnFamily, Error> {
-        self.cf(Store::NODE)
+    fn cf_nodes(&self) -> Result<&ColumnFamily, Error> {
+        self.cf(Store::NODES)
+    }
+
+    fn cf_self(&self) -> Result<&ColumnFamily, Error> {
+        self.cf(Store::SELF)
     }
 
     /// logs columns family
@@ -332,13 +353,14 @@ impl Store {
     }
 
     fn set_hard_state_(&self, hard_state: &HardState) -> StorageResult<()> {
-        Ok(self.put(
+        self.put(
             self.db.cf_store()?,
             Self::HARD_STATE,
             serde_json::to_vec(hard_state)
                 .map_err(Error::JSON)?
                 .as_slice(),
-        ))
+        )
+        .map_err(store_w_err)
     }
 
     fn get_last_purged_(&self) -> StorageResult<Option<LogId>> {
@@ -400,7 +422,7 @@ impl Store {
 }
 
 #[async_trait]
-impl RaftStorage<TremorRequest, TremorResponse> for Arc<Store> {
+impl RaftStorage<TremorRequest, TremorResponse> for Store {
     type SnapshotData = Cursor<Vec<u8>>;
 
     async fn save_hard_state(&self, hs: &HardState) -> Result<(), StorageError> {
@@ -504,7 +526,7 @@ impl RaftStorage<TremorRequest, TremorResponse> for Arc<Store> {
     }
 
     async fn last_applied_state(
-        &mut self,
+        &self,
     ) -> StorageResult<(Option<LogId>, Option<EffectiveMembership>)> {
         let state_machine = self.state_machine.read().await;
         Ok((
@@ -513,12 +535,13 @@ impl RaftStorage<TremorRequest, TremorResponse> for Arc<Store> {
         ))
     }
 
-    // #[tracing::instrument(level = "trace", skip(self, entries))]
+    //#[tracing::instrument(level = "trace", skip(self, entries))]
     /// apply committed entries to the state machine, start the operation encoded in the `TremorRequest`
     async fn apply_to_state_machine(
-        &mut self,
+        &self,
         entries: &[&Entry<TremorRequest>],
     ) -> StorageResult<Vec<TremorResponse>> {
+        debug!("apply_to_state_machine {entries:?}");
         let mut result = Vec::with_capacity(entries.len());
 
         let mut sm = self.state_machine.write().await;
@@ -535,10 +558,10 @@ impl RaftStorage<TremorRequest, TremorResponse> for Arc<Store> {
                 }
                 EntryPayload::Membership(ref mem) => {
                     debug!("[{}] replicate membership to sm", entry.log_id);
-                    sm.set_last_membership(&EffectiveMembership::new(
-                        Some(entry.log_id),
-                        mem.clone(),
-                    ))?;
+                    sm.set_last_membership(&EffectiveMembership {
+                        log_id: entry.log_id,
+                        membership: mem.clone(),
+                    })?;
                     result.push(TremorResponse { value: None });
                 }
             };
@@ -568,7 +591,7 @@ impl RaftStorage<TremorRequest, TremorResponse> for Arc<Store> {
 
         let snapshot_id = format!(
             "{}-{}-{}",
-            last_applied_log.map(|x| x.leader_id).unwrap_or_default(),
+            last_applied_log.map(|x| x.term).unwrap_or_default(),
             last_applied_log.map_or(0, |l| l.index),
             snapshot_idx
         );
@@ -599,7 +622,7 @@ impl RaftStorage<TremorRequest, TremorResponse> for Arc<Store> {
     // #[tracing::instrument(level = "trace", skip(self, snapshot))]
     /// installs snapshot and applies all the deltas to statemachine and runtime
     async fn install_snapshot(
-        &mut self,
+        &self,
         meta: &SnapshotMeta,
         snapshot: Box<Self::SnapshotData>,
     ) -> StorageResult<StateMachineChanges> {
@@ -618,7 +641,7 @@ impl RaftStorage<TremorRequest, TremorResponse> for Arc<Store> {
             let updated_state_machine: SerializableTremorStateMachine =
                 serde_json::from_slice(&new_snapshot.data).map_err(|e| {
                     StorageIOError::new(
-                        ErrorSubject::Snapshot(new_snapshot.meta.signature()),
+                        ErrorSubject::Snapshot(new_snapshot.meta.clone()),
                         ErrorVerb::Read,
                         AnyError::new(&e),
                     )
@@ -627,16 +650,17 @@ impl RaftStorage<TremorRequest, TremorResponse> for Arc<Store> {
             state_machine
                 .apply_diff_from_snapshot(updated_state_machine)
                 .await?;
+            self.set_current_snapshot_(&new_snapshot)?;
         }
 
-        self.set_current_snapshot_(&new_snapshot)?;
-        Ok(())
+        Ok(StateMachineChanges {
+            last_applied: meta.last_log_id,
+            is_snapshot: true,
+        })
     }
 
     // #[tracing::instrument(level = "trace", skip(self))]
-    async fn get_current_snapshot(
-        &mut self,
-    ) -> StorageResult<Option<Snapshot<Self::SnapshotData>>> {
+    async fn get_current_snapshot(&self) -> StorageResult<Option<Snapshot<Self::SnapshotData>>> {
         match Store::get_current_snapshot_(self)? {
             Some(snapshot) => {
                 let data = snapshot.data.clone();
@@ -651,13 +675,38 @@ impl RaftStorage<TremorRequest, TremorResponse> for Arc<Store> {
 }
 impl Store {
     // db column families
-    const NODE: &'static str = "node";
+
+    /// storing `node_id` and addr of the current node
+    const SELF: &'static str = "self";
+
+    /// storing node metadata for all nodes somehow participating in the cluster (learners and voters)
+    const NODES: &'static str = "nodes";
+
+    /// storing raft logs
     const LOGS: &'static str = "logs";
+    /// storing `RaftStorage` related stuff
     const STORE: &'static str = "store";
-    const DATA: &'static str = "data";
+
+    /// storing key-value-data
+    const KV_DATA: &'static str = "data";
+    /// storing installed tremor apps
     const APPS: &'static str = "apps";
+    /// storing tremor flow instances and their current/intended state
     const INSTANCES: &'static str = "instances";
+
+    /// storing state machine related stuff
     const STATE_MACHINE: &'static str = "state_machine";
+
+    const COLUMN_FAMILIES: [&'static str; 8] = [
+        Self::SELF,
+        Self::NODES,
+        Self::LOGS,
+        Self::STORE,
+        Self::KV_DATA,
+        Self::APPS,
+        Self::INSTANCES,
+        Self::STATE_MACHINE,
+    ];
 
     // keys
     const LAST_MEMBERSHIP: &'static str = "last_membership";
@@ -666,6 +715,9 @@ impl Store {
     const SNAPSHOT_INDEX: &'static str = "snapshot_index";
     const SNAPSHOT: &'static str = "snapshot";
     const HARD_STATE: &'static str = "hard_state";
+    /// for storing the own `node_id`
+    const NODE_ID: &'static str = "node_id";
+    const NODE_ADDR: &'static str = "node_addr";
 
     /// Initialize the rocksdb column families.
     ///
@@ -676,69 +728,68 @@ impl Store {
         db_opts.create_missing_column_families(true);
         db_opts.create_if_missing(true);
 
-        let node = ColumnFamilyDescriptor::new(Store::NODE, Options::default());
-        let store = ColumnFamilyDescriptor::new(Store::STORE, Options::default());
-        let state_machine = ColumnFamilyDescriptor::new(Store::STATE_MACHINE, Options::default());
-        let data = ColumnFamilyDescriptor::new(Store::DATA, Options::default());
-        let logs = ColumnFamilyDescriptor::new(Store::LOGS, Options::default());
-        let apps = ColumnFamilyDescriptor::new(Store::APPS, Options::default());
-        let instances = ColumnFamilyDescriptor::new(Store::INSTANCES, Options::default());
-
-        DB::open_cf_descriptors(
-            &db_opts,
-            db_path,
-            vec![node, store, state_machine, data, logs, apps, instances],
-        )
-        .map_err(ClusterError::Rocks)
+        let cf_iter = Self::COLUMN_FAMILIES
+            .into_iter()
+            .map(|cf_name| ColumnFamilyDescriptor::new(cf_name, Options::default()));
+        DB::open_cf_descriptors(&db_opts, db_path, cf_iter).map_err(ClusterError::Rocks)
     }
 
-    pub(crate) fn get_node_data(&self) -> Result<(NodeId, String, String), ClusterError> {
+    pub(crate) fn get_self(&self) -> Result<(NodeId, Addr), ClusterError> {
         let id = self
-            .get_node_id()?
+            .get_self_node_id()?
             .ok_or("invalid cluster store, node_id missing")?;
-        let api_addr = self
-            .get_api_addr()?
-            .ok_or("invalid cluster store, http_addr missing")?;
+        let addr = self
+            .get_self_addr()?
+            .ok_or("invalid cluster store, node_addr missing")?;
 
-        let rpc_addr = self
-            .get_rpc_addr()?
-            .ok_or("invalid cluster store, rpc_addr missing")?;
-        Ok((id, api_addr, rpc_addr))
+        Ok((id, addr))
+    }
+
+    /// Store the information about the current node itself in the `db`
+    fn set_self(db: &DB, node_id: NodeId, addr: &Addr) -> Result<(), ClusterError> {
+        let node_id_bytes = id_to_bin(node_id)?;
+        let addr_bytes = serde_json::to_vec(addr)?;
+        let cf = db.cf_self()?;
+        db.put_cf(cf, Store::NODE_ID, node_id_bytes)?;
+        db.put_cf(cf, Store::NODE_ADDR, &addr_bytes)?;
+        Ok(())
+    }
+
+    /// # Errors
+    /// if the store fails to read the RPC address
+    pub fn get_self_addr(&self) -> Result<Option<Addr>, Error> {
+        Ok(self
+            .db
+            .get_cf(self.db.cf_self()?, Store::NODE_ADDR)?
+            .map(|v| serde_json::from_slice(&v))
+            .transpose()?)
+    }
+    /// # Errors
+    /// if the store fails to read the node id
+    pub fn get_self_node_id(&self) -> Result<Option<NodeId>, Error> {
+        self.db
+            .get_cf(self.db.cf_self()?, Store::NODE_ID)?
+            .map(|v| bin_to_id(&v))
+            .transpose()
     }
 
     /// bootstrapping constructor - storing the given node data in the db
     pub(crate) async fn bootstrap<P: AsRef<Path>>(
-        db_path: P,
         node_id: NodeId,
-        rpc_addr: impl Into<String> + ToSocketAddrs,
-        api_addr: impl Into<String> + ToSocketAddrs,
+        addr: &Addr,
+        db_path: P,
         world: Runtime,
     ) -> Result<Arc<Store>, ClusterError> {
         let db = Self::init_db(db_path)?;
-        let node_id = id_to_bin(*node_id)?;
-        if let Err(e) = rpc_addr.to_socket_addrs().await {
-            return Err(ClusterError::Other(format!("Invalid rpc_addr {e}")));
-        }
-        if let Err(e) = api_addr.to_socket_addrs().await {
-            return Err(ClusterError::Other(format!("Invalid api_add {e}")));
-        }
+        Self::set_self(&db, node_id, addr)?;
 
-        let cf = db.cf_handle(Store::NODE).ok_or("no node column family")?;
-
-        db.put_cf(cf, "node_id", node_id)?;
-        db.put_cf(cf, "rpc_addr", rpc_addr.into().as_bytes())?;
-        db.put_cf(cf, "api_addr", api_addr.into().as_bytes())?;
         let db = Arc::new(db);
         let state_machine = RwLock::new(
             TremorStateMachine::new(db.clone(), world.clone())
                 .await
                 .map_err(Error::from)?,
         );
-        Ok(Arc::new(Self {
-            db,
-            state_machine,
-            //runtime: world,
-        }))
+        Ok(Arc::new(Self { db, state_machine }))
     }
 
     /// loading constructor - loading the given database
@@ -761,33 +812,6 @@ impl Store {
         };
         Ok(Arc::new(this))
     }
-
-    /// # Errors
-    /// if the store fails to read the API address
-    pub fn get_api_addr(&self) -> Result<Option<String>, Error> {
-        let api_addr = self
-            .db
-            .get_cf(self.db.cf_node()?, "api_addr")?
-            .map(|v| String::from_utf8(v).map_err(Error::Utf8))
-            .transpose()?;
-        Ok(api_addr)
-    }
-    /// # Errors
-    /// if the store fails to read the RPC address
-    pub fn get_rpc_addr(&self) -> Result<Option<String>, Error> {
-        self.db
-            .get_cf(self.db.cf_node()?, "rpc_addr")?
-            .map(|v| String::from_utf8(v).map_err(Error::Utf8))
-            .transpose()
-    }
-    /// # Errors
-    /// if the store fails to read the node id
-    pub fn get_node_id(&self) -> Result<Option<NodeId>, Error> {
-        self.db
-            .get_cf(self.db.cf_node()?, "node_id")?
-            .map(|v| bin_to_id(&v).map(NodeId::from))
-            .transpose()
-    }
 }
 
 #[cfg(test)]
@@ -800,13 +824,13 @@ mod tests {
     fn init_db_is_idempotent() -> ClusterResult<()> {
         let dir = tempfile::tempdir()?;
         let db = Store::init_db(dir.path())?;
-        let handle = db.cf_handle(Store::NODE).ok_or("no data")?;
+        let handle = db.cf_handle(Store::NODES).ok_or("no data")?;
         let data = vec![1_u8, 2_u8, 3_u8];
         db.put_cf(handle, "node_id", data.clone())?;
         drop(db);
 
         let db2 = Store::init_db(dir.path())?;
-        let handle2 = db2.cf_handle(Store::NODE).ok_or("no data")?;
+        let handle2 = db2.cf_handle(Store::NODES).ok_or("no data")?;
         let res2 = db2.get_cf(handle2, "node_id")?;
         assert_eq!(Some(data), res2);
         Ok(())

@@ -83,11 +83,6 @@ pub(crate) enum ClusterCommand {
     },
     /// Starts a cluster node that is part as a cluster already
     Start {
-        /// optional node_id to assign to the current node,
-        /// if not provided will be read from previously initialized cluster state
-        /// or a random id will be created
-        #[clap(short, long, value_parser = clap::value_parser!(u64))]
-        node_id: Option<u64>,
         /// Database dir to store raft data in
         #[clap(short, long, value_parser = clap::value_parser!(String))]
         db_dir: String,

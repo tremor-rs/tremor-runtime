@@ -174,6 +174,7 @@ error_chain! {
         Hex(hex::FromHexError);
         HttpHeaderError(http::header::InvalidHeaderValue);
         InfluxEncoderError(influx::EncoderError);
+        InvalidHeaderName(reqwest::header::InvalidHeaderName);
         Io(std::io::Error);
         JsonAccessError(value_trait::AccessError);
         JsonError(simd_json::Error);
@@ -184,9 +185,9 @@ error_chain! {
         MsgPackEncoderError(rmp_serde::encode::Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
+        RaftAPIError(crate::raft::api::client::Error);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
-        InvalidHeaderName(reqwest::header::InvalidHeaderName);
         RustlsError(rustls::Error);
         Sled(sled::Error);
         SnappyError(snap::Error);

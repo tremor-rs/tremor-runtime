@@ -181,6 +181,7 @@ version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eef94a982ad4ebc3036bb072f45fcbb63a6b1b91932a6f5d982a166d8d529916"
 dependencies = [
+ "anyhow",
  "serde",
 ]
 
@@ -3790,17 +3791,19 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openraft"
-version = "0.8.4"
-source = "git+https://github.com/datafuselabs/openraft.git#00ea4cca39e8129e9375e33ba67d0ead23fdc902"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8716b2ad806538a9b4ccc5a5c838a957c3b026c9c4c4929fdb16ad6cd930a53b"
 dependencies = [
  "anyerror",
+ "anyhow",
  "async-trait",
  "byte-unit",
+ "bytes 1.4.0",
  "clap 3.2.23",
  "derive_more",
  "futures",
  "maplit",
- "pin-utils",
  "rand 0.8.5",
  "serde",
  "thiserror",
@@ -5607,9 +5610,9 @@ dependencies = [
 
 [[package]]
 name = "tarpc"
-version = "0.30.0"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dd84a0fdd485d04b67be6009a04603489c8cb00ade830e4dd2e3660bef855b1"
+checksum = "71a98cc1a0a9013e8df3900d09c597dd65cfc6ea4d42968629b1b9ea949acf8f"
 dependencies = [
  "anyhow",
  "fnv",

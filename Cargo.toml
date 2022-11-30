@@ -206,10 +206,8 @@ lexical = "6.1.1"
 simdutf8 = "0.1"
 
 # Clustering
-openraft = { version = "0.8", git = "https://github.com/datafuselabs/openraft.git", features = [
-  "serde",
-] }
-tarpc = { version = "0.30", features = ["full"] }
+tarpc = { version = "0.31", features = ["full"] }
+openraft = { version = "0.7.3" }
 serde_json = "1.0.57"
 rocksdb = "0.19.0"
 tar = "*"

@@ -16,24 +16,22 @@
 use crate::{
     errors::Result,
     raft::{
-        app, client,
-        network::{api, management, raft, Raft as TarPCRaftService},
+        api, app,
+        network::{raft, Raft as TarPCRaftService},
         store::Store,
-        ClusterError, ClusterResult, Network, NodeId, TremorNode,
+        ClusterError, ClusterResult, Network, NodeId,
     },
     system::{Runtime, ShutdownMode, WorldConfig},
 };
 use async_std::{
     channel::{bounded, Sender},
     net::ToSocketAddrs,
-    prelude::FutureExt,
     task::{self, JoinHandle},
 };
 use futures::{future, prelude::*};
 use openraft::{Config, Raft};
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Display,
+    collections::BTreeSet,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -63,19 +61,17 @@ impl ClusterNodeKillSwitch {
 
 pub struct Running {
     node: Node,
+    server_state: Arc<app::Tremor>,
     kill_switch_tx: Sender<ShutdownMode>,
     run_handle: JoinHandle<ClusterResult<()>>,
 }
 
 impl Running {
     #[must_use]
-    pub fn api_addr(&self) -> &str {
-        self.node.api_addr()
+    pub fn node_data(&self) -> (NodeId, Addr) {
+        (self.server_state.id, self.server_state.addr.clone())
     }
-    #[must_use]
-    pub fn node_id(&self) -> NodeId {
-        self.node.node_id()
-    }
+
     #[must_use]
     pub fn node(&self) -> &Node {
         &self.node
@@ -83,7 +79,7 @@ impl Running {
 
     async fn start(
         node: Node,
-        raft: Raft<TremorRequest, TremorResponse, Network, Arc<Store>>,
+        raft: Raft<TremorRequest, TremorResponse, Network, Store>,
         server_state: Arc<app::Tremor>,
         runtime: Runtime,
         runtime_handle: JoinHandle<Result<()>>,
@@ -92,12 +88,11 @@ impl Running {
 
         let tcp_server_state = server_state.clone();
         let mut listener =
-            tarpc::serde_transport::tcp::listen(&server_state.rpc_addr, Json::default).await?;
+            tarpc::serde_transport::tcp::listen(&server_state.addr.rpc(), Json::default).await?;
         listener.config_mut().max_frame_length(usize::MAX);
 
-        let http_api_addr = server_state.api_addr.clone();
-        let mut http_api_server = tide::Server::with_state(server_state);
-        management::install_rest_endpoints(&mut http_api_server);
+        let http_api_addr = server_state.addr.api().to_string();
+        let mut http_api_server = tide::Server::with_state(server_state.clone());
         api::install_rest_endpoints(&mut http_api_server);
         let run_handle = task::spawn(async move {
             let mut tcp_future = Box::pin(
@@ -148,9 +143,13 @@ impl Running {
                     let shutdown_mode = shutdown_mode.unwrap_or(ShutdownMode::Forceful);
                     info!("Tremor cluster node stopping in {shutdown_mode:?} mode");
                     // tcp and http api stopped listening as we don't poll them no more
+                    // FIXME: something here is hanging infinitely
                     raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
+                    info!("Raft engine did stop.");
+                    info!("Stopping the Tremor runtime...");
                     runtime.stop(shutdown_mode).await?;
                     runtime_future.await?;
+                    info!("Tremor runtime stopped.");
                 }
             }
             info!("Tremor cluster node stopped");
@@ -159,6 +158,7 @@ impl Running {
 
         Ok(Self {
             node,
+            server_state,
             kill_switch_tx,
             run_handle,
         })
@@ -179,134 +179,62 @@ impl Running {
     pub async fn join(self) -> ClusterResult<()> {
         self.run_handle.await
     }
-
-    /// # Errors
-    /// when the cluster can't be joined
-    pub async fn join_cluster(
-        &self,
-        endpoint: impl ToString + Display,
-        voter: bool,
-    ) -> ClusterResult<()> {
-        // try to contact the endpoint
-        let my_id = self.node.id;
-        debug!("Establishing connectivity to {endpoint}");
-        let mut client = client::Tremor::new(my_id, endpoint.to_string());
-
-        let timeout = Duration::from_secs(5);
-        let metrics = client
-            .metrics()
-            .timeout(timeout)
-            .await
-            .map_err(|_| {
-                format!(
-                    "Timeout connecting to {endpoint} after {}s",
-                    timeout.as_secs()
-                )
-            })?
-            .map_err(|e| format!("Error connecting to {endpoint}: {e}"))?;
-
-        // check if we are already part of the cluster an endpoint is pointing at
-        for config in metrics.membership_config.membership.get_joint_config() {
-            if config.contains(&my_id) {
-                info!(
-                    "Already voter of cluster at endpoint: {}",
-                    endpoint.to_string()
-                );
-                return Ok(());
-            }
-        }
-
-        // find out who the leader is
-        let leader_id = metrics.current_leader.ok_or("No leader present!")?;
-
-        let leader = metrics.membership_config.get_node(&leader_id);
-        let leader_addr = leader.api_addr.clone();
-
-        // contact the leader directly
-        let mut client = client::Tremor::new(leader_id, leader_addr.clone());
-
-        info!("Joining {leader_addr} as Learner");
-        client
-            .add_learner(
-                my_id,
-                self.node.rpc_addr.clone(),
-                self.node.api_addr.clone(),
-            )
-            .await
-            .map_err(|e| format!("Failed to add learner: {e}"))?;
-
-        info!("Waiting until we have joined");
-        let mut membership: BTreeSet<_>;
-        loop {
-            task::sleep(Duration::from_secs(1)).await;
-
-            let metrics = client.metrics().await.map_err(|e| format!("error: {e}"))?;
-
-            if !metrics
-                .membership_config
-                .nodes()
-                .any(|(id, _)| id == &my_id)
-            {
-                continue;
-            }
-
-            membership = metrics
-                .membership_config
-                .nodes()
-                .map(|(id, _)| *id)
-                .collect();
-            membership.insert(my_id);
-            break;
-        }
-        if voter {
-            info!("Joining the cluster as a voting member...");
-
-            client
-                .change_membership(&membership)
-                .await
-                .map_err(|e| format!("Failed to update membershipo learner: {e}"))?;
-        }
-        Ok(())
-    }
 }
 
 /// internal struct carrying all data to start a cluster node
 /// and keeps all the state for an ordered clean shutdown
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Node {
-    // static configuration stuff to actually start the node
-    id: NodeId,
-    api_addr: String,
-    rpc_addr: String,
     db_dir: PathBuf,
     raft_config: Arc<Config>,
 }
 
-impl Node {
-    #[must_use]
-    pub fn api_addr(&self) -> &str {
-        &self.api_addr
+#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub struct Addr {
+    /// Address for API access (from outside of the cluster)
+    api: String,
+    /// Address for RPC access (inter-node)
+    rpc: String,
+}
+
+impl std::fmt::Display for Addr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Addr")
+            .field("api", &self.api)
+            .field("rpc", &self.rpc)
+            .finish()
     }
-    #[must_use]
-    pub fn node_id(&self) -> NodeId {
-        self.id
-    }
-    pub fn new(
-        id: NodeId,
-        rpc_addr: impl Into<String> + ToSocketAddrs,
-        api_addr: impl Into<String> + ToSocketAddrs,
-        db_dir: impl AsRef<Path>,
-        raft_config: Config,
-    ) -> Self {
+}
+
+impl Addr {
+    /// constructor
+    pub fn new(api: impl Into<String>, rpc: impl Into<String>) -> Self {
         Self {
-            id,
-            api_addr: api_addr.into(),
-            rpc_addr: rpc_addr.into(),
+            api: api.into(),
+            rpc: rpc.into(),
+        }
+    }
+
+    /// get the api addr
+    #[must_use]
+    pub fn api(&self) -> &str {
+        &self.api
+    }
+
+    /// get the rpc addr
+    #[must_use]
+    pub fn rpc(&self) -> &str {
+        &self.rpc
+    }
+}
+
+impl Node {
+    pub fn new(db_dir: impl AsRef<Path>, raft_config: Config) -> Self {
+        Self {
             db_dir: PathBuf::from(db_dir.as_ref()),
             raft_config: Arc::new(raft_config),
         }
     }
-
     /// Load the latest state from `db_dir`
     /// and start the cluster with it
     ///
@@ -319,17 +247,16 @@ impl Node {
         let world_config = WorldConfig::default(); // TODO: make configurable
         let (runtime, runtime_handle) = Runtime::start(world_config).await?;
 
-        let store = Store::load(&db_dir, runtime.clone()).await?;
+        let store: Arc<Store> = Store::load(&db_dir, runtime.clone()).await?;
         // ensure we have working node data
-        let (node_id, api_addr, rpc_addr) = store.get_node_data()?;
-        let node = Self::new(node_id, &rpc_addr, &api_addr, db_dir, raft_config.clone());
+        let (node_id, addr) = store.get_self()?;
+        let node = Self::new(db_dir, raft_config.clone());
 
-        let network = Network::new();
-        let raft = Raft::new(node.id, node.raft_config.clone(), network, store.clone());
+        let network = Network::new(store.clone());
+        let raft = Raft::new(node_id, node.raft_config.clone(), network, store.clone());
         let server_state = Arc::new(app::Tremor {
             id: node_id,
-            api_addr,
-            rpc_addr,
+            addr,
             raft: raft.clone(),
             store,
         });
@@ -339,64 +266,125 @@ impl Node {
     /// Just start the cluster node and let it do whatever it does
     /// # Errors
     /// when the node can't be started
-    pub async fn start(&mut self) -> ClusterResult<Running> {
+    pub async fn try_join(
+        &mut self,
+        addr: Addr,
+        endpoints: Vec<String>,
+        promote_to_voter: bool,
+    ) -> ClusterResult<Running> {
+        if endpoints.is_empty() {
+            return Err(ClusterError::Other(
+                "No join endpoints provided".to_string(),
+            ));
+        }
+
+        // for now we infinitely try to join until it succeeds
+        let mut join_wait = Duration::from_secs(2);
+        let (client, node_id) = 'outer: loop {
+            for endpoint in &endpoints {
+                info!("Trying to join existing cluster via {endpoint}...");
+                let client = api::client::Tremor::new(endpoint)?;
+                // TODO: leader will start replication stream to this node and fail, until we start our machinery
+                let node_id = match client.add_node(&addr).await {
+                    Ok(node_id) => node_id,
+                    Err(e) => {
+                        // TODO: ensure we don't error here, when we are already learner
+                        warn!("Error connecting to {endpoint}: {e}");
+                        continue;
+                    }
+                };
+                break 'outer (client, node_id);
+            }
+            // exponential backoff
+            join_wait *= 2;
+            info!(
+                "Waiting for {}s before retrying to join...",
+                join_wait.as_secs()
+            );
+            task::sleep(join_wait).await;
+        };
+
         let world_config = WorldConfig::default(); // TODO: make configurable
         let (runtime, runtime_handle) = Runtime::start(world_config).await?;
-        let store = Store::bootstrap(
-            &self.db_dir,
-            self.id,
-            &self.rpc_addr,
-            &self.api_addr,
-            runtime.clone(),
-        )
-        .await?;
-        let network = Network::new();
-        let raft = Raft::new(self.id, self.raft_config.clone(), network, store.clone());
+        let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
+        let network = Network::new(store.clone());
+        let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone());
+
         let server_state = Arc::new(app::Tremor {
-            id: self.id,
-            api_addr: self.api_addr.clone(),
-            rpc_addr: self.rpc_addr.clone(),
+            id: node_id,
+            addr,
             raft: raft.clone(),
             store,
         });
-        Running::start(self.clone(), raft, server_state, runtime, runtime_handle).await
+        let running =
+            Running::start(self.clone(), raft, server_state, runtime, runtime_handle).await?;
+
+        // only when the node is started (listens for HTTP, TCP etc)
+        // we can add it as learner and optionally promote it to a voter
+
+        info!("Adding Node {node_id} as Learner...");
+        let res = client.add_learner(node_id).await?;
+        info!("Node {node_id} successully added as learner");
+        if let Some(log_id) = res {
+            info!("Learner {node_id} has applied the log up to {log_id}.");
+        }
+
+        if promote_to_voter {
+            info!("Promoting Node {node_id} to Voter...");
+            client.promote_voter(&node_id).await?;
+            // FIXME: wait for the node to be a voter
+            info!("Node {node_id} became Voter.");
+        }
+        Ok(running)
     }
 
     /// Bootstrap and start this cluster node as a single node cluster
     /// of which it immediately becomes the leader.
     /// # Errors
     /// if bootstrapping a a leader fails
-    pub async fn bootstrap_as_single_node_cluster(&mut self) -> ClusterResult<Running> {
+    pub async fn bootstrap_as_single_node_cluster(&mut self, addr: Addr) -> ClusterResult<Running> {
         let world_config = WorldConfig::default(); // TODO: make configurable
         let (runtime, runtime_handle) = Runtime::start(world_config).await?;
-        let store = Store::bootstrap(
-            &self.db_dir,
-            self.id,
-            &self.rpc_addr,
-            &self.api_addr,
-            runtime.clone(),
-        )
-        .await?;
-        let network = Network::new();
-        let raft = Raft::new(self.id, self.raft_config.clone(), network, store.clone());
+        let node_id = NodeId::default();
+        let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
+        let network = Network::new(store.clone());
 
-        let mut nodes = BTreeMap::new();
-        nodes.insert(
-            self.id,
-            TremorNode {
-                api_addr: self.api_addr.clone(),
-                rpc_addr: self.rpc_addr.clone(),
-            },
-        );
+        let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone());
+
+        let mut nodes = BTreeSet::new();
+        nodes.insert(node_id);
         // this is the crucial bootstrapping step
         raft.initialize(nodes).await?;
-        let server_state = Arc::new(app::Tremor {
-            id: self.id,
-            api_addr: self.api_addr.clone(),
-            rpc_addr: self.rpc_addr.clone(),
-            raft: raft.clone(),
-            store,
-        });
-        Running::start(self.clone(), raft, server_state, runtime, runtime_handle).await
+        // lets make ourselves known to the cluster state as first operation, so new joiners will see us as well
+        // this is critical
+        // FIXME: debug_assert that node_id remains 0
+        match raft
+            .client_write(TremorRequest::AddNode { addr: addr.clone() })
+            .await
+        {
+            Ok(r) => {
+                let assigned_node_id = r
+                    .data
+                    .value
+                    .ok_or_else(|| {
+                        ClusterError::Other("Invalid Response from raft for AddNode".to_string())
+                    })?
+                    .parse::<NodeId>()
+                    .map_err(|e| {
+                        ClusterError::Other(format!("Invalid node_id returned from AddNode: {e}"))
+                    })?;
+                debug_assert_eq!(node_id, assigned_node_id, "Adding initial leader resulted in a differing node_id: {assigned_node_id}, expected: {node_id}");
+                let server_state = Arc::new(app::Tremor {
+                    id: node_id,
+                    addr,
+                    raft: raft.clone(),
+                    store,
+                });
+                Running::start(self.clone(), raft, server_state, runtime, runtime_handle).await
+            }
+            Err(e) => Err(ClusterError::Other(format!(
+                "Error adding myself to the bootstrapped cluster: {e}"
+            ))),
+        }
     }
 }

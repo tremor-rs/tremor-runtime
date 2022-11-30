@@ -1,65 +1,19 @@
-use crate::raft::{
-    network::raft_network_impl::Network,
-    store::{Store, TremorRequest, TremorResponse},
-};
-
-use openraft::{error::InitializeError, Config, ConfigError, Raft};
-use std::{
-    collections::BTreeSet,
-    fmt::{Display, Formatter},
-    sync::{Arc, Mutex},
-};
-
+pub mod api;
 pub mod app;
 pub mod archive;
-pub mod client;
 pub mod network;
 pub mod node;
 pub mod store;
 
-#[derive(
-    Default, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord, Clone,
-)]
-pub struct NodeId(u64);
-
-impl NodeId {
-    #[must_use]
-    pub fn random() -> Self {
-        Self(rand::random())
-    }
-}
-
-impl From<u64> for NodeId {
-    fn from(id: u64) -> Self {
-        Self(id)
-    }
-}
-
-impl From<NodeId> for u64 {
-    fn from(id: NodeId) -> Self {
-        id.0
-    }
-}
-
-impl std::fmt::Display for NodeId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl AsRef<u64> for NodeId {
-    fn as_ref(&self) -> &u64 {
-        &self.0
-    }
-}
-
-impl std::ops::Deref for NodeId {
-    type Target = u64;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+use api::client::Error;
+use network::raft_network_impl::Network;
+pub use openraft::NodeId;
+use openraft::{error::InitializeError, Config, ConfigError, Raft};
+use std::{
+    fmt::{Display, Formatter},
+    sync::{Arc, Mutex},
+};
+use store::{Store, TremorRequest, TremorResponse};
 
 /// load a default raft config
 /// # Errors
@@ -88,7 +42,8 @@ impl Display for TremorNode {
     }
 }
 
-pub type Tremor = Raft<TremorRequest, TremorResponse, Network, Arc<store::Store>>;
+pub type Tremor = Raft<TremorRequest, TremorResponse, Network, store::Store>;
+// FIXME: move to api module
 type Server = tide::Server<Arc<app::Tremor>>;
 
 #[derive(Debug)]
@@ -98,7 +53,9 @@ pub enum ClusterError {
     Io(std::io::Error),
     Store(store::Error),
     Initialize(InitializeError),
+    Serde(serde_json::Error),
     Config(ConfigError),
+    Client(Error),
     // FIXME: this is a horrible hack
     Runtime(Mutex<crate::Error>),
 }
@@ -144,9 +101,21 @@ impl From<ConfigError> for ClusterError {
     }
 }
 
+impl From<Error> for ClusterError {
+    fn from(e: Error) -> Self {
+        Self::Client(e)
+    }
+}
+
 impl From<crate::Error> for ClusterError {
     fn from(e: crate::Error) -> Self {
         ClusterError::Runtime(Mutex::new(e))
+    }
+}
+
+impl From<serde_json::Error> for ClusterError {
+    fn from(e: serde_json::Error) -> Self {
+        ClusterError::Serde(e)
     }
 }
 
@@ -160,6 +129,8 @@ impl Display for ClusterError {
             ClusterError::Initialize(e) => write!(f, "{}", e),
             ClusterError::Config(e) => write!(f, "{}", e),
             ClusterError::Runtime(e) => write!(f, "{:?}", e.lock()),
+            ClusterError::Serde(e) => write!(f, "{e}"),
+            ClusterError::Client(e) => e.fmt(f),
         }
     }
 }
@@ -170,24 +141,13 @@ type ClusterResult<T> = Result<T, ClusterError>;
 /// Removes a node from a cluster
 /// # Errors
 /// When the node can't be removed
-pub async fn remove_node(node_id: NodeId, api_addr: String) -> Result<(), crate::errors::Error> {
-    let mut client = client::Tremor::new(node_id, api_addr);
-    let metrics = client.metrics().await.map_err(|e| format!("error: {e}",))?;
-    let leader_id = metrics.current_leader.ok_or("No leader present!")?;
-    let leader = metrics.membership_config.get_node(&leader_id);
-    let leader_addr = leader.api_addr.clone();
-    println!("communication with leader: {leader_addr} establisehd.",);
-    let mut client = client::Tremor::new(leader_id, leader_addr.clone());
-    let metrics = client.metrics().await.map_err(|e| format!("error: {e}"))?;
-    let membership: BTreeSet<_> = metrics
-        .membership_config
-        .nodes()
-        .filter_map(|(id, _)| if *id == node_id { None } else { Some(*id) })
-        .collect();
-    client
-        .change_membership(&membership)
-        .await
-        .map_err(|e| format!("Failed to update membershipo learner: {e}"))?;
+pub async fn remove_node<T: ToString + ?Sized>(
+    node_id: NodeId,
+    api_addr: &T,
+) -> Result<(), crate::errors::Error> {
+    let client = api::client::Tremor::new(api_addr)?;
+    client.demote_voter(&node_id).await?;
+    client.remove_learner(&node_id).await?;
     println!("Membership updated: node {node_id} removed.");
     Ok(())
 }

@@ -1,81 +1,33 @@
-use std::{fmt::Display, sync::Arc};
+// Copyright 2022, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-use super::{app, store::TremorRequest};
-use futures::Future;
-use openraft::{
-    error::{AppendEntriesError, InstallSnapshotError, VoteError},
-    raft::{
-        AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest,
-        InstallSnapshotResponse, VoteRequest, VoteResponse,
-    },
+use super::store::TremorRequest;
+use openraft::raft::{
+    AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse,
+    VoteRequest, VoteResponse,
 };
-use tide::{Body, Endpoint, Request, Response, StatusCode};
+use openraft::AnyError;
+use tarpc;
 
-pub mod api;
-pub mod management;
 pub mod raft;
 pub mod raft_network_impl;
 
 #[tarpc::service]
 pub(crate) trait Raft {
-    async fn vote(vote: VoteRequest) -> Result<VoteResponse, VoteError>;
+    async fn vote(vote: VoteRequest) -> Result<VoteResponse, AnyError>;
     async fn append(
         req: AppendEntriesRequest<TremorRequest>,
-    ) -> Result<AppendEntriesResponse, AppendEntriesError>;
-    async fn snapshot(
-        req: InstallSnapshotRequest,
-    ) -> Result<InstallSnapshotResponse, InstallSnapshotError>;
-}
-
-type APIRequest = Request<Arc<app::Tremor>>;
-pub type APIResult<T: serde::Serialize + serde::Deserialize<'static>> = Result<T, APIError>;
-
-#[derive(Debug, Clone)]
-pub enum APIError {
-    Other(String),
-}
-
-trait ResultToStatus {
-    fn status(&self) -> StatusCode;
-}
-
-impl Display for APIError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            APIError::Other(s) => write!(f, "{}", s),
-        }
-    }
-}
-impl std::error::Error for APIError {}
-
-impl ResultToStatus for APIError {
-    fn status(&self) -> StatusCode {
-        match self {
-            APIError::Other(_) => StatusCode::InternalServerError,
-        }
-    }
-}
-
-impl<T> ResultToStatus for Result<T, APIError> {
-    fn status(&self) -> StatusCode {
-        match self {
-            Ok(_) => StatusCode::Ok,
-            Err(e) => e.status(),
-        }
-    }
-}
-
-async fn wrapp<F, R>(f: fn(APIRequest) -> F) -> impl Endpoint
-where
-    R: serde::Serialize,
-    F: Future<Output = Result<R, APIError>> + Send + 'static,
-{
-    |req: Request<()>| async move {
-        let res = f.call(req).await;
-        let status = res.status();
-
-        Response::builder(status)
-            .body(Body::from_json(*res))
-            .build()
-    }
+    ) -> Result<AppendEntriesResponse, AnyError>;
+    async fn snapshot(req: InstallSnapshotRequest) -> Result<InstallSnapshotResponse, AnyError>;
 }

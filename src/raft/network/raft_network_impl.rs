@@ -1,119 +1,117 @@
-use crate::raft::{network::RaftClient, store::TremorRequest, NodeId, TremorNode};
-use anyhow::Result;
+// Copyright 2022, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use crate::raft::{
+    network::RaftClient,
+    store::{Store, TremorRequest},
+    NodeId,
+};
 use async_trait::async_trait;
+use dashmap::{mapref::entry::Entry, DashMap};
 use openraft::{
     raft::{
         AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest,
         InstallSnapshotResponse, VoteRequest, VoteResponse,
     },
-    AnyError, RaftNetwork,
+    RaftNetwork,
 };
-use serde::{de::DeserializeOwned, Serialize};
-use tarpc::{client, context, tokio_serde::formats::Json};
+use std::sync::Arc;
+use tarpc::context;
 
-pub struct Network {}
+#[derive(Clone, Debug)]
+pub struct Network {
+    store: Arc<Store>,
+    pool: DashMap<NodeId, RaftClient>,
+}
 
 impl Network {
-    pub(crate) fn new() -> Self {
-        Self {}
+    pub(crate) fn new(store: Arc<Store>) -> Arc<Self> {
+        Arc::new(Self {
+            store,
+            pool: DashMap::default(),
+        })
     }
-    /// # Errors
-    /// if the rpc call fails
-    pub async fn send_rpc<Req, Resp, Err>(
-        &self,
-        target: NodeId,
-        target_node: Option<&TremorNode>,
-        uri: &str,
-        req: Req,
-    ) -> Result<Resp>
-    where
-        Req: Serialize,
-        Err: std::error::Error + DeserializeOwned,
-        Resp: DeserializeOwned,
-    {
-        let addr = target_node
-            .map(|x| &x.rpc_addr)
-            .ok_or_else(|| AnyError::default())?; // FIXME: node not found error
 
-        let target_url = format!("http://{}/{}", addr, uri);
-        let client = reqwest::Client::new();
-
-        let resp = client.post(target_url).json(&req).send().await?;
-
-        let result: Result<Resp, Err> = resp.json().await?;
-
-        result
+    /// Create a new TCP client for the given `target` node
+    ///
+    /// This requires the `target` to be known to the cluster state.
+    async fn new_client(&self, target: NodeId) -> anyhow::Result<RaftClient> {
+        let sm = self.store.state_machine.read().await;
+        let addr = sm
+            .known_nodes
+            .get(&target)
+            .ok_or_else(|| anyhow::anyhow!(format!("Node {target} not known to the cluster")))?;
+        let transport = tarpc::serde_transport::tcp::connect(
+            addr.rpc(),
+            tarpc::tokio_serde::formats::Json::default,
+        )
+        .await?;
+        let client = RaftClient::new(tarpc::client::Config::default(), transport).spawn();
+        Ok(client)
     }
-}
 
-// NOTE: This could be implemented also on `Arc<ExampleNetwork>`, but since it's empty, implemented directly.
-// #[async_trait]
-// impl RaftNetworkFactory<TremorTypeConfig> for Network {
-//     type Network = TremorNetworkConnection;
-//     type ConnectionError = ClusterError;
-//     async fn new_client(
-//         &mut self,
-//         target: NodeId,
-//         node: &TremorNode,
-//     ) -> Result<Self::Network, Self::ConnectionError> {
-//         Ok(TremorNetworkConnection {
-//             addr: node.rpc_addr.clone(),
-//             client: None,
-//             target,
-//         })
-//     }
-// }
-
-pub struct TremorNetworkConnection {
-    addr: String,
-    client: Option<RaftClient>,
-    target: NodeId,
-}
-impl TremorNetworkConnection {
-    async fn c<E: std::error::Error + DeserializeOwned>(&mut self) -> Result<&RaftClient> {
-        if self.client.is_none() {
-            let transport = tarpc::serde_transport::tcp::connect(&self.addr, Json::default).await?;
-            self.client = Some(RaftClient::new(client::Config::default(), transport).spawn());
-        }
-        self.client.as_ref().ok_or_else(|| AnyError::default())
+    /// Ensure we have a client to the node identified by `target`
+    ///
+    /// Pick it from the pool first, if that fails, create a new one
+    async fn ensure_client(&self, target: NodeId) -> anyhow::Result<RaftClient> {
+        // TODO: get along without the cloning
+        let client = match self.pool.entry(target) {
+            Entry::Occupied(oe) => oe.get().clone(),
+            Entry::Vacant(ve) => {
+                let client = self.new_client(target).await?;
+                ve.insert(client.clone());
+                client
+            }
+        };
+        Ok(client)
     }
 }
 
 #[async_trait]
-impl RaftNetwork<TremorRequest> for TremorNetworkConnection {
+impl RaftNetwork<TremorRequest> for Network {
     async fn send_append_entries(
         &self,
         target: NodeId,
         rpc: AppendEntriesRequest<TremorRequest>,
-    ) -> Result<AppendEntriesResponse> {
-        let r = self.c().await?.append(context::current(), rpc).await;
-        if r.is_err() {
-            self.reset_client(target);
-        };
-        r?
+    ) -> anyhow::Result<AppendEntriesResponse> {
+        // FIXME: implement reconnects
+        Ok(self
+            .ensure_client(target)
+            .await?
+            .append(context::current(), rpc)
+            .await??)
     }
 
     async fn send_install_snapshot(
         &self,
         target: NodeId,
         rpc: InstallSnapshotRequest,
-    ) -> Result<InstallSnapshotResponse> {
-        let r = self
-            .c(target)
+    ) -> anyhow::Result<InstallSnapshotResponse> {
+        // FIXME: implement reconnects
+        Ok(self
+            .ensure_client(target)
             .await?
             .snapshot(context::current(), rpc)
-            .await;
-        if r.is_err() {
-            self.reset_client(target);
-        };
-        r?
+            .await??)
     }
 
-    async fn send_vote(&self, target: NodeId, rpc: VoteRequest) -> Result<VoteResponse> {
-        let r = self.c().await?.vote(context::current(), rpc).await;
-        if r.is_err() {
-            self.reset_client(target);
-        };
-        r?
+    async fn send_vote(&self, target: NodeId, rpc: VoteRequest) -> anyhow::Result<VoteResponse> {
+        // FIXME: implement reconnects
+        Ok(self
+            .ensure_client(target)
+            .await?
+            .vote(context::current(), rpc)
+            .await??)
     }
 }

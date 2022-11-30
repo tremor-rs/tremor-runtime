@@ -14,7 +14,7 @@
 
 use crate::{
     cli::{AppsCommands, Cluster, ClusterCommand},
-    errors::Result,
+    errors::{Error, Result},
 };
 use async_std::{io::ReadExt, stream::StreamExt, task};
 
@@ -22,13 +22,13 @@ use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::low_level::signal_name;
 use signal_hook_async_std::Signals;
 use simd_json::OwnedValue;
-use std::{collections::HashMap, path::Path, time::Duration};
+use std::{collections::HashMap, path::Path};
 use tremor_common::asy::file;
 use tremor_runtime::{
     raft::{
+        api::client::{print_metrics, Tremor as Client},
         archive,
-        client::{self, print_metrics},
-        node::{ClusterNodeKillSwitch, Node},
+        node::{Addr, ClusterNodeKillSwitch, Node},
         remove_node,
         store::{AppId, FlowId, InstanceId, TremorInstanceState},
         ClusterError, NodeId,
@@ -48,7 +48,7 @@ fn get_api(input: Option<String>) -> Result<String> {
 async fn handle_signals(
     signals: Signals,
     kill_switch: ClusterNodeKillSwitch,
-    node_to_remove_on_term: Option<(String, NodeId)>,
+    node_to_remove_on_term: Option<(NodeId, Addr)>,
 ) {
     let mut signals = signals.fuse();
 
@@ -69,9 +69,9 @@ async fn handle_signals(
                 // down yet it has the full cluster informaiton and we know for use it is up.
                 // Otherwise if we'd cache a API endpoint that endpoint might have been autoscaled
                 // away or replaced by now.
-                if let Some((ref api, node)) = node_to_remove_on_term {
-                    println!("SIGTERM received, removing {node} from cluster");
-                    if let Err(e) = remove_node(node, api.clone()).await {
+                if let Some((node_id, ref addr)) = node_to_remove_on_term {
+                    println!("SIGTERM received, removing {node_id} from cluster");
+                    if let Err(e) = remove_node(node_id, addr.api()).await {
                         error!("Cluster leave failed: {e}");
                     };
                 }
@@ -116,22 +116,19 @@ impl Cluster {
                 db_dir,
                 remove_on_sigterm,
             } => {
+                // the bootstrap node always starts with a node_id of 0
+                // it will be assigned a new one during bootstrap
                 let node_id = NodeId::default();
                 info!("Boostrapping Tremor node with id {node_id}...");
 
-                let mut node = Node::new(
-                    node_id,
-                    rpc,
-                    api.clone(),
-                    db_dir,
-                    tremor_runtime::raft::config()?,
-                );
-                let running_node = node.bootstrap_as_single_node_cluster().await?;
+                let addr = Addr::new(api.clone(), rpc);
+                let mut node = Node::new(db_dir, tremor_runtime::raft::config()?);
+                let running_node = node.bootstrap_as_single_node_cluster(addr.clone()).await?;
 
                 // install signal handler
                 let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;
                 let signal_handle = signals.handle();
-                let node_to_remove_on_term = remove_on_sigterm.then_some((api, node_id));
+                let node_to_remove_on_term = remove_on_sigterm.then_some((node_id, addr));
 
                 let signal_handler_task = task::spawn(handle_signals(
                     signals,
@@ -151,7 +148,6 @@ impl Cluster {
             // target/debug/tremor cluster start  --db-dir temp/test-db2 --api 127.0.0.1:8002 --rpc 127.0.0.1:9002 --join 127.0.0.1:8001
             // target/debug/tremor cluster start --db-dir temp/test-db3 --api 127.0.0.1:8003 --rpc 127.0.0.1:9003 --join 127.0.0.1:8001
             ClusterCommand::Start {
-                node_id,
                 db_dir,
                 rpc,
                 api,
@@ -159,59 +155,43 @@ impl Cluster {
                 remove_on_sigterm,
                 passive,
             } => {
+                // start db and statemachine
+                // start raft
+                // node_id assigned during bootstrap or join
                 let running_node = if Path::new(&db_dir).exists()
                     && !tremor_common::file::is_empty(&db_dir)?
                 {
+                    if !join.is_empty() {
+                        // TODO: check if join nodes are part of the known cluster, if so, don't error
+                        return Err(Error::from(
+                            "Cannot join another cluster with existing db directory",
+                        ));
+                    }
                     info!("Loading existing Tremor node state from {db_dir}.");
                     Node::load_from_store(&db_dir, tremor_runtime::raft::config()?).await?
                 } else {
                     // db dir does not exist
-                    let node_id = node_id.map_or_else(NodeId::random, NodeId::from);
                     let rpc_addr = rpc.ok_or_else(|| ClusterError::from("missing rpc address"))?;
                     let api_addr = api.ok_or_else(|| ClusterError::from("missing api address"))?;
-                    info!("Boostrapping cluster node with id {node_id} and db_dir {db_dir}");
-                    let mut node = Node::new(
-                        node_id,
-                        rpc_addr,
-                        api_addr,
-                        &db_dir,
-                        tremor_runtime::raft::config()?,
-                    );
-                    node.start().await?
+                    let addr = Addr::new(api_addr, rpc_addr);
+
+                    info!("Bootstrapping cluster node with addr {addr} and db_dir {db_dir}");
+                    let mut node = Node::new(&db_dir, tremor_runtime::raft::config()?);
+
+                    // attempt to join any one of the given endpoints, stop once we joined one
+                    node.try_join(addr, join, !passive).await?
                 };
 
                 // install signal handler
                 let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;
                 let signal_handle = signals.handle();
-                let node_to_remove_on_term = remove_on_sigterm
-                    .then_some((running_node.api_addr().to_string(), running_node.node_id()));
+                let node_to_remove_on_term = remove_on_sigterm.then_some(running_node.node_data());
                 let signal_handler_task = task::spawn(handle_signals(
                     signals,
                     running_node.kill_switch(),
                     node_to_remove_on_term,
                 ));
 
-                // attempt to join any one of the given endpoints, stop once we joined one
-                if !join.is_empty() {
-                    // for no we infinitely try to join until it succeeds
-                    'outer: loop {
-                        let mut join_wait = Duration::from_secs(2);
-                        for endpoint in &join {
-                            info!("Trying to join existing cluster via {endpoint}...");
-                            if running_node.join_cluster(endpoint, !passive).await.is_ok() {
-                                info!("Successfully joined cluster via {endpoint}.");
-                                break 'outer;
-                            }
-                        }
-                        // exponential backoff
-                        join_wait *= 2;
-                        info!(
-                            "Waiting for {}s before retrying to join...",
-                            join_wait.as_secs()
-                        );
-                        task::sleep(join_wait).await;
-                    }
-                }
                 // wait for the node to be finished
                 if let Err(e) = running_node.join().await {
                     error!("Error: {e}");
@@ -220,14 +200,13 @@ impl Cluster {
                 signal_handler_task.cancel().await;
             }
             ClusterCommand::Remove { node, api } => {
-                let node_id = NodeId::from(node);
                 let api_addr = get_api(api)?;
 
-                remove_node(node_id, api_addr).await?;
+                remove_node(node, &api_addr).await?;
             }
             // target/debug/tremor cluster status --api 127.0.0.1:8001
             ClusterCommand::Status { api, json } => {
-                let mut client = client::Tremor::new(NodeId::default(), get_api(api)?);
+                let client = Client::new(&get_api(api)?)?;
                 let r = client.metrics().await.map_err(|e| format!("error: {e}"))?;
                 if json {
                     println!("{}", serde_json::to_string_pretty(&r)?);
@@ -236,7 +215,7 @@ impl Cluster {
                 }
             }
             ClusterCommand::Apps { api, command } => {
-                command.run(get_api(api)?).await?;
+                command.run(get_api(api)?.as_str()).await?;
             }
             ClusterCommand::Package {
                 name,
@@ -252,10 +231,10 @@ impl Cluster {
 
 impl AppsCommands {
     #[allow(clippy::too_many_lines)] // FIXME
-    pub(crate) async fn run(self, api: String) -> Result<()> {
+    pub(crate) async fn run(self, api: &str) -> Result<()> {
         match self {
             AppsCommands::List { json } => {
-                let mut client = client::Tremor::new(NodeId::default(), api);
+                let client = Client::new(api)?;
                 let r = client.list().await.map_err(|e| format!("error: {e}"))?;
                 if json {
                     println!("{}", serde_json::to_string_pretty(&r)?);
@@ -266,34 +245,32 @@ impl AppsCommands {
                 }
             }
             AppsCommands::Install { file } => {
-                let mut client = client::Tremor::new(NodeId::default(), api.clone());
+                let client = Client::new(api)?;
                 let mut file = file::open(&file).await?;
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf).await?;
-                let r = client
+                let res = client
                     .install(&buf)
                     .await
-                    .map_err(|e| format!("error: {e}"))?;
+                    .map_err(|e| format!("error: {e}"));
 
-                match r {
-                    Ok(r) => println!(
-                        "Application `{}` successfully installed",
-                        r.data.value.unwrap_or_default()
-                    ),
+                match res {
+                    Ok(app_id) => println!("Application `{app_id}` successfully installed",),
                     Err(e) => eprintln!("Application failed to install: {e:?}"),
                 }
             }
             AppsCommands::Uninstall { app } => {
-                let mut client = client::Tremor::new(NodeId::default(), api.clone());
+                let client = Client::new(api)?;
                 let app_id = AppId(app);
-                let r = client
+                let res = client
                     .uninstall_app(&app_id)
                     .await
-                    .map_err(|e| format!("error: {e}"))?;
+                    .map_err(|e| format!("error: {e}"));
 
-                match r {
-                    Ok(_) => println!("App `{app_id}` successfully unisntalled",),
-                    Err(e) => eprintln!("Application failed to be uninstalled: {e:?}"),
+                if let Err(e) = res {
+                    eprintln!("Application `{app_id}` failed to be uninstalled: {e:?}");
+                } else {
+                    println!("App `{app_id}` successfully uninstalled",);
                 }
             }
 
@@ -304,7 +281,7 @@ impl AppsCommands {
                 config,
                 paused,
             } => {
-                let mut client = client::Tremor::new(NodeId::default(), api.clone());
+                let client = Client::new(api)?;
                 let config: HashMap<String, OwnedValue> = if let Some(config) = config {
                     serde_json::from_str(&config)?
                 } else {
@@ -312,75 +289,63 @@ impl AppsCommands {
                 };
                 let flow = flow.map_or_else(|| FlowId("main".to_string()), FlowId);
                 let app_id = AppId(app);
+                let instance_id = InstanceId(instance);
                 let running = !paused;
-                let r = client
-                    .start(&app_id, &flow, &InstanceId(instance), config, running)
+                let res = client
+                    .start(&app_id, &flow, &instance_id, config, running)
                     .await
-                    .map_err(|e| format!("error: {e}"))?;
+                    .map_err(|e| format!("error: {e}"));
 
-                match r {
-                    Ok(r) => println!(
-                        "Instance `{app_id}/{flow}/{}` successfully started",
-                        r.data.value.unwrap_or_default()
-                    ),
-                    Err(e) => eprintln!("Application start to install: {e:?}"),
+                if let Err(e) = res {
+                    eprintln!("Instance `{app_id}/{instance_id}` failed to start: {e:?}");
+                } else {
+                    println!("Instance `{app_id}/{instance_id}` successfully started",);
                 }
             }
 
             AppsCommands::Stop { app, instance } => {
-                let mut client = client::Tremor::new(NodeId::default(), api.clone());
+                let client = Client::new(api)?;
                 let app_id = AppId(app);
-                let r = client
-                    .stop_instance(&app_id, &InstanceId(instance))
+                let instance_id = InstanceId(instance);
+                let res = client
+                    .stop_instance(&app_id, &instance_id)
                     .await
-                    .map_err(|e| format!("error: {e}"))?;
-
-                match r {
-                    Ok(r) => println!(
-                        "Instance `{app_id}/{}` successfully stopped",
-                        r.data.value.unwrap_or_default()
-                    ),
-                    Err(e) => eprintln!("Application start to install: {e:?}"),
+                    .map_err(|e| format!("error: {e}"));
+                if let Err(e) = res {
+                    eprintln!("Instance `{app_id}/{instance_id}` failed to stop: {e:?}");
+                } else {
+                    println!("Instance `{app_id}/{instance_id}` stopped",);
                 }
             }
             AppsCommands::Pause { app, instance } => {
-                let mut client = client::Tremor::new(NodeId::default(), api.clone());
+                let client = Client::new(api)?;
                 let app_id = AppId(app);
-                let r = client
-                    .change_instance_state(
-                        &app_id,
-                        &InstanceId(instance),
-                        TremorInstanceState::Pause,
-                    )
+                let instance_id = InstanceId(instance);
+                let res = client
+                    .change_instance_state(&app_id, &instance_id, TremorInstanceState::Pause)
                     .await
-                    .map_err(|e| format!("error: {e}"))?;
+                    .map_err(|e| format!("error: {e}"));
 
-                match r {
-                    Ok(r) => println!(
-                        "Instance `{app_id}/{}` successfully paused",
-                        r.data.value.unwrap_or_default()
-                    ),
-                    Err(e) => eprintln!("Application start to install: {e:?}"),
+                if let Err(e) = res {
+                    eprintln!("Instance `{app_id}/{instance_id}` failed to pause: {e:?}");
+                } else {
+                    println!("Instance `{app_id}/{instance_id}` successfully paused",);
                 }
             }
             AppsCommands::Resume { app, instance } => {
-                let mut client = client::Tremor::new(NodeId::default(), api.clone());
+                let client = Client::new(api)?;
                 let app_id = AppId(app);
-                let r = client
-                    .change_instance_state(
-                        &app_id,
-                        &InstanceId(instance),
-                        TremorInstanceState::Resume,
-                    )
-                    .await
-                    .map_err(|e| format!("error: {e}"))?;
+                let instance_id = InstanceId(instance);
 
-                match r {
-                    Ok(r) => println!(
-                        "Instance `{app_id}/{}` successfully resumed",
-                        r.data.value.unwrap_or_default()
-                    ),
-                    Err(e) => eprintln!("Application start to install: {e:?}"),
+                let res = client
+                    .change_instance_state(&app_id, &instance_id, TremorInstanceState::Resume)
+                    .await
+                    .map_err(|e| format!("error: {e}"));
+
+                if let Err(e) = res {
+                    eprintln!("Instance `{app_id}/{instance_id}` failed to resume: {e:?}");
+                } else {
+                    println!("Instance `{app_id}/{instance_id}` successfully resumed",);
                 }
             }
         }
