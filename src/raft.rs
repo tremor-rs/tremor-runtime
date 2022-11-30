@@ -148,6 +148,7 @@ pub async fn remove_node<T: ToString + ?Sized>(
     let client = api::client::Tremor::new(api_addr)?;
     client.demote_voter(&node_id).await?;
     client.remove_learner(&node_id).await?;
+    client.remove_node(&node_id).await?;
     println!("Membership updated: node {node_id} removed.");
     Ok(())
 }

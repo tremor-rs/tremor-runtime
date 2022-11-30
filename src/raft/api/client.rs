@@ -261,6 +261,20 @@ impl Tremor {
             .await
     }
 
+    /// Remove a node from the cluster
+    ///
+    /// After this call a node is not reachable anymore for all nodes still participating in the cluster
+    /// # Errors
+    /// if the api call fails
+    pub async fn remove_node(&self, node_id: &NodeId) -> ClientResult<()> {
+        self.api_req(
+            &format!("cluster/nodes/{node_id}"),
+            Method::DELETE,
+            None::<&()>,
+        )
+        .await
+    }
+
     /// Add a node as learner.
     ///
     /// If the node has never been added to the cluster before, its address will be published in the cluster state
@@ -268,7 +282,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails e.g. because the node is already a learner
-    pub async fn add_learner(&self, node_id: NodeId) -> ClientResult<Option<LogId>> {
+    pub async fn add_learner(&self, node_id: &NodeId) -> ClientResult<Option<LogId>> {
         self.api_req(
             &format!("cluster/learners/{node_id}"),
             Method::PUT,

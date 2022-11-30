@@ -323,7 +323,7 @@ impl Node {
         // we can add it as learner and optionally promote it to a voter
 
         info!("Adding Node {node_id} as Learner...");
-        let res = client.add_learner(node_id).await?;
+        let res = client.add_learner(&node_id).await?;
         info!("Node {node_id} successully added as learner");
         if let Some(log_id) = res {
             info!("Learner {node_id} has applied the log up to {log_id}.");
