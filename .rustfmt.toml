@@ -1,0 +1,17 @@
+# doc comments are also formated (nightly)
+# format_code_in_doc_comments = true
+
+# enforce lower case for hex literals (nightly)
+# hex_literal_case = "Lower"
+
+# define import modularity (nightly)
+# imports_granularity = "Crate"
+
+# normalize docs (nightly)
+# normalize_doc_attributes = true
+
+# reorder impls (nightly)
+# reorder_impl_items = true
+
+# Enforce grouping for imports (nightly)
+# group_imports = "StdExternalCrate"
