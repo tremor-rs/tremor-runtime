@@ -215,7 +215,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
             }
             ["little", "signed", "integer"] => (BytesDataType::SignedInteger, Endian::Little),
             other => {
-                return Err(err_generic(
+                return Err(error_generic(
                     &self,
                     &self,
                     &format!("Not a valid data type: '{}'", other.join("-")),
@@ -224,7 +224,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
         };
         let bits = if let Some(bits) = self.bits {
             if bits == 0 || bits > 64 {
-                return Err(err_generic(
+                return Err(error_generic(
                     &self,
                     &self,
                     &format!("negative bits or bits > 64 are are not allowed: {}", bits),
@@ -955,7 +955,7 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
         let arglen = self.exprs.len();
         if (helper.is_open && argc < arglen) || (!helper.is_open && argc != arglen) {
             let m = format!("Wrong number of arguments {argc} != {arglen}");
-            return error_generic(&self, &self, &m);
+            return err_generic(&self, &self, &m);
         }
         let exprs = self.exprs.up(helper)?.into_iter().collect();
         helper.possible_leaf = was_leaf;
@@ -1831,7 +1831,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
 
         let c: Const = helper.get(&node_id)?.ok_or_else(|| {
             let msg = format!("The constant {node_id} (absolute path) is not defined.",);
-            err_generic(&mid.range, &mid.range, &msg)
+            error_generic(&mid.range, &mid.range, &msg)
         })?;
         let var = helper.register_shadow_from_mid(&mid);
 

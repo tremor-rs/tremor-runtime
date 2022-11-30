@@ -942,7 +942,7 @@ pub fn already_defined_err<S>(e: &S, what: &str) -> Error
 where
     S: BaseExpr + Ranged,
 {
-    err_generic(
+    error_generic(
         e,
         e,
         &format!(
@@ -956,7 +956,7 @@ pub fn not_defined_err<S>(e: &S, what: &str) -> Error
 where
     S: BaseExpr + Ranged,
 {
-    err_generic(
+    error_generic(
         e,
         e,
         &format!(
@@ -1046,15 +1046,15 @@ pub fn query_guard_not_bool_err<O: Ranged, I: Ranged>(stmt: &O, inner: &I, got: 
 /// We can still be polite in our error reports!
 /// # Errors
 /// The parameters transformed into a generic error
-pub fn error_generic<T, O: Ranged, I: Ranged, S: ToString>(
+pub fn err_generic<T, O: Ranged, I: Ranged, S: ToString>(
     outer: &O,
     inner: &I,
     error: &S,
 ) -> Result<T> {
-    Err(err_generic(outer, inner, error))
+    Err(error_generic(outer, inner, error))
 }
 
-pub fn err_generic<O: Ranged, I: Ranged, S: ToString>(outer: &O, inner: &I, error: &S) -> Error {
+pub fn error_generic<O: Ranged, I: Ranged, S: ToString>(outer: &O, inner: &I, error: &S) -> Error {
     ErrorKind::Generic(outer.extent(), inner.extent(), error.to_string()).into()
 }
 

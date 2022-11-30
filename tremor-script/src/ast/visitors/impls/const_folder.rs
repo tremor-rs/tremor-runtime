@@ -17,8 +17,8 @@ use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
     ast::{base_expr::Ranged, binary::extend_bytes_from_value, NodeMeta},
     errors::{
-        err_invalid_unary, err_need_int, error_array_out_of_bound, error_bad_key,
-        error_decreasing_range, error_generic, error_need_arr, error_need_obj,
+        err_generic, err_invalid_unary, err_need_int, error_array_out_of_bound, error_bad_key,
+        error_decreasing_range, error_need_arr, error_need_obj,
     },
     interpreter::{exec_binary, exec_unary, Env},
     lexer::Span,
@@ -418,11 +418,7 @@ fn reduce_path<'script>(
                     return error_need_obj(&outer, segment, value.value_type());
                 }
                 if subrange.is_some() {
-                    return error_generic(
-                        &outer,
-                        segment,
-                        &"We can't index a name into a subrange.",
-                    );
+                    return err_generic(&outer, segment, &"We can't index a name into a subrange.");
                 }
                 if let Some(v) = key.lookup(&value) {
                     subrange = None;

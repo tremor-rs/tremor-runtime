@@ -45,7 +45,7 @@ use tremor_script::{
         WindowKind,
     },
     errors::{
-        err_generic, not_defined_err, query_node_duplicate_name_err,
+        error_generic, not_defined_err, query_node_duplicate_name_err,
         query_stream_duplicate_name_err, query_stream_not_defined_err,
     },
     highlighter::{Dumb, Highlighter},
@@ -403,14 +403,14 @@ impl Query {
                             )
                             .is_some()
                         {
-                            return Err(Error::from(err_generic(
+                            return Err(Error::from(error_generic(
                                 &s.extent(),
                                 &s.extent(),
                                 &format!("Can't create the pipeline `{}` twice", s.alias),
                             )));
                         }
                     } else {
-                        return Err(Error::from(err_generic(
+                        return Err(Error::from(error_generic(
                             &s.extent(),
                             &s.extent(),
                             &format!("Unknown pipeline `{}`", s.target),
@@ -459,7 +459,7 @@ impl Query {
                     if let Some(state) = &defn.script.state {
                         state
                             .as_lit()
-                            .ok_or_else(|| err_generic(&e, state, &"state not constant"))?;
+                            .ok_or_else(|| error_generic(&e, state, &"state not constant"))?;
                     }
 
                     let mut h = Dumb::new();

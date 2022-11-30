@@ -24,7 +24,7 @@ use crate::{
     ast::{
         base_expr::Ranged,
         docs::{FlowDoc, ModDoc},
-        error_generic,
+        err_generic,
         node_id::NodeId,
         query::raw::{
             ConfigRaw, CreationalWithRaw, DefinitionalArgsRaw, DefinitionalArgsWithRaw,
@@ -56,7 +56,7 @@ pub fn run_script<'script>(expr: &Script<'script>) -> Result<Value<'script>> {
 
     match expr.run(&ctx, AggrType::Emit, &mut event, &mut state, &mut meta) {
         Ok(Return::Emit { value, .. }) => Ok(value),
-        _otherwise => error_generic(
+        _otherwise => err_generic(
             expr,
             expr,
             &"Failed to evaluate script at compile time".to_string(),

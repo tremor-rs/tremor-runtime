@@ -22,7 +22,7 @@ use super::{
     ArgsExprs, CreationalWith, DefinitionalArgs, DefinitionalArgsWith, WithExprs,
 };
 use super::{
-    error_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, OperatorCreate,
+    err_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, OperatorCreate,
     OperatorDefinition, OperatorKind, PipelineCreate, PipelineDefinition, Query, Result,
     ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamCreate, Upable,
     WindowDefinition, WindowKind,
@@ -35,7 +35,7 @@ use crate::ast::{
     },
     Ident,
 };
-use crate::errors::{err_generic, Error};
+use crate::errors::{error_generic, Error};
 use crate::{ast::optimizer::Optimizer, prelude::Ranged};
 use crate::{ast::NodeMeta, impl_expr};
 use crate::{
@@ -280,7 +280,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
             if let StmtRaw::StreamStmt(stream_raw) = stmt {
                 if ports_set.contains(&stream_raw.id) {
                     let stream = stream_raw.clone().up(helper)?;
-                    return error_generic(&stream, &stream, &Self::STREAM_PORT_CONFILCT);
+                    return err_generic(&stream, &stream, &Self::STREAM_PORT_CONFILCT);
                 }
             }
         }
@@ -398,11 +398,11 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         named_in.reverse(); // so we get nice errors
         for (n, script) in named_in {
             if &n == "in" {
-                return error_generic(&ex, &n, &"port `in` is reserved for the `script` section");
+                return err_generic(&ex, &n, &"port `in` is reserved for the `script` section");
             }
             let script = script.up_script(helper)?;
             if named.insert(n.clone().to_string(), script).is_some() {
-                return error_generic(&ex, &n, &"script port already defined");
+                return err_generic(&ex, &n, &"script port already defined");
             }
         }
 
@@ -465,7 +465,7 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
             .map(|s| -> Result<_> {
                 let mut s = s.up_script(helper)?;
                 for expr in &mut s.exprs {
-                    OnlyMutState::validate(expr).map_err(|e| err_generic(expr, expr, &e))?;
+                    OnlyMutState::validate(expr).map_err(|e| error_generic(expr, expr, &e))?;
                 }
                 Ok(s)
             })
@@ -478,8 +478,8 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
                 if i == "tick" {
                     let mut s = s.up_script(helper)?;
                     for expr in &mut s.exprs {
-                        OnlyMutState::validate(expr).map_err(|e| err_generic(expr, expr, &e))?;
-                        NoEventAccess::validate(expr).map_err(|e| err_generic(expr, expr, &e))?;
+                        OnlyMutState::validate(expr).map_err(|e| error_generic(expr, expr, &e))?;
+                        NoEventAccess::validate(expr).map_err(|e| error_generic(expr, expr, &e))?;
                     }
                     Ok(s)
                 } else {
