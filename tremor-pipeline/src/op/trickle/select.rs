@@ -28,7 +28,7 @@ use tremor_common::stry;
 use tremor_script::{
     self,
     ast::{self, ImutExpr, RunConsts, SelectStmt},
-    errors::{error_generic, Result as TSResult},
+    errors::{err_generic, Result as TSResult},
     interpreter::{Env, LocalStack},
     prelude::*,
     utils::sorted_serialize,
@@ -288,7 +288,7 @@ impl Operator for Select {
                             // if we can't delete it check if we're having too many groups,
                             // if so, error.
                             if ctx.cardinality >= *max_groups {
-                                return error_generic(select.as_ref(), inner, &format!(
+                                return err_generic(select.as_ref(), inner, &format!(
                                         "Maxmimum amount of groups reached ({}). Ignoring group [{}]",
                                         max_groups,
                                         *max_groups + 1

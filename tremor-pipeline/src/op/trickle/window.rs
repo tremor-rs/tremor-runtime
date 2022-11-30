@@ -20,7 +20,7 @@ use tremor_common::{ids::OperatorId, stry};
 use tremor_script::{
     self,
     ast::{AggrSlice, Aggregates, Consts, RunConsts, Script, Select, WindowDefinition},
-    errors::Result,
+    errors::{err_generic, error_generic, Result},
     interpreter::{Env, LocalStack},
     prelude::*,
     Value, NO_AGGRS,
@@ -513,7 +513,7 @@ impl<'v> TryFrom<&Value<'v>> for Actions {
             if let [emit, include] = *r.as_slice() {
                 Ok(Actions { include, emit })
             } else {
-                Err("A array return needs to be a two element array of booleans with the form `[emit, include]`".into())
+                Err("An array as return value needs to be a two-element array of booleans with the form `[emit, include]`".into())
             }
         } else {
             Err(format!(
@@ -574,9 +574,16 @@ impl Trait for TumblingOnState {
             event_meta,      // $
         ));
         match value {
-            Return::Emit { value, .. } => Actions::try_from(&value),
-            Return::EmitEvent { .. } => Actions::try_from(&*unwind_event),
-            Return::Drop { .. } => Err("State based window didn't provide a boolean return".into()),
+            Return::Emit { value, .. } => {
+                Actions::try_from(&value).map_err(|e| error_generic(&self.script, &self.script, &e))
+            }
+            Return::EmitEvent { .. } => Actions::try_from(&*unwind_event)
+                .map_err(|e| error_generic(&self.script, &self.script, &e)),
+            Return::Drop { .. } => err_generic(
+                &self.script,
+                &self.script,
+                &"State based window didn't provide a boolean return",
+            ),
         }
     }
 
@@ -596,11 +603,15 @@ impl Trait for TumblingOnState {
             )?;
 
             match value {
-                Return::Emit { value, .. } => Actions::try_from(&value),
-                Return::EmitEvent { .. } => Actions::try_from(&unwind_event),
-                Return::Drop { .. } => {
-                    Err("State based window didn't provide a boolean return".into())
-                }
+                Return::Emit { value, .. } => Actions::try_from(&value)
+                    .map_err(|e| error_generic(tick_script, tick_script, &e)),
+                Return::EmitEvent { .. } => Actions::try_from(&unwind_event)
+                    .map_err(|e| error_generic(tick_script, tick_script, &e)),
+                Return::Drop { .. } => err_generic(
+                    tick_script,
+                    tick_script,
+                    &"State based window didn't provide a boolean return",
+                ),
             }
         } else {
             Ok(Actions::all_false())

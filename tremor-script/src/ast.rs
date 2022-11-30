@@ -50,7 +50,7 @@ use crate::{
         eq::AstEq,
         raw::{BytesDataType, Endian},
     },
-    errors::{error_generic, error_no_locals, Kind as ErrorKind, Result},
+    errors::{err_generic, error_no_locals, Kind as ErrorKind, Result},
     impl_expr, impl_expr_ex, impl_expr_no_lt,
     interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
     lexer::Span,
@@ -607,7 +607,7 @@ impl<'script> Expr<'script> {
             Ok(imut)
         } else {
             let e = self.extent();
-            error_generic(&e.expand_lines(2), self, &Self::NOT_IMUT)
+            err_generic(&e.expand_lines(2), self, &Self::NOT_IMUT)
         }
     }
 }
