@@ -49,7 +49,7 @@ impl<'script> ImutExprVisitor<'script> for OnlyMutState {}
 pub(crate) struct NoEventAccess {}
 
 impl NoEventAccess {
-    // Validates that only state is every mutated
+    // Validates that only state is every accessed, not `event` or `$`
     pub fn validate(e: &mut Expr) -> Result<()> {
         let mut v = Self::default();
         ExprWalker::walk_expr(&mut v, e)
