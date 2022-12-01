@@ -6096,7 +6096,6 @@ dependencies = [
  "tremor-pipeline",
  "tremor-script",
  "tremor-value",
- "tungstenite",
  "url",
  "uuid 1.2.2",
  "value-trait",
