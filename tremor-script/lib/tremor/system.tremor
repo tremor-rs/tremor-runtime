@@ -38,6 +38,11 @@ intrinsic fn instance() as system::instance;
 
 ## Returns the current time in epoch nanoseconds
 ##
+## WARNING: This function is expensive, please
+## avoid using it if you can use `ingest_ns` instead.
+## `ingest_ns` is virtually free as it is genreated 
+## only once per event.
+##
 ## > ```tremor
 ## > use tremor::system;
 ## > let now = system::nanotime();
