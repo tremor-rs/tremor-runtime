@@ -1,0 +1,10 @@
+### Helpers for state based windows
+
+## Emits the window and include the current event into the **emitted** window.
+const EMIT_AND_INCLUDE = [true, ture];
+
+## Wmits the window and include the current event into the **next** window.
+const EMIT_AND_EXCLUDE = [true, false];
+
+## Don't emit the window.
+const DONT_EMIT = false;
