@@ -1,0 +1,93 @@
+#
+
+define flow logging_flow_varargs
+flow
+	use tremor::pipelines;
+	use tremor::connectors;
+	define connector read_file from file
+	args
+		file = "in"
+	with
+		codec = "json-sorted",
+		preprocessors = ["separate"],
+		config = {
+				"path": args.file,
+				"mode": "read"
+		},
+	end;
+	define connector write_file from file
+	args
+		file = "out"
+	with
+		codec = "json-sorted",
+		postprocessors = ["separate"],
+		config = {
+				"path": args.file,
+				"mode": "truncate"
+		},
+	end;
+
+	define pipeline filter_out_userLogs
+	into
+		out, err, exit
+	pipeline
+		define script flat_line
+		script
+			let event.line = 0;
+			emit event;
+		end;
+		create script flat_line;
+
+
+		select match event of
+			case %{origin == "Tremor"} => event # Filtering out system logs
+		end
+		from in into flat_line;
+		select event
+		from flat_line into out;
+	end;
+
+	define pipeline logging_pipeline
+	pipeline
+		use tremor::logging;
+		select match event of
+			case %{absent data7} => 
+				match event of
+					case %{absent data2} =>
+						match event of
+							case %{absent data1} => logging::info(event.msg)
+							default => logging::info(event.msg, event.data1)
+						end
+					default => logging::info(event.msg, event.data1, event.data2)
+				end
+			default => logging::info(event.msg, event.data1, event.data2, event.data3, event.data4, event.data5, event.data6, event.data7) # todo compléter les ...
+		end
+		from in into out;
+	end;
+
+define connector logging from logs;
+
+	# Create read/write logging connectors
+	create connector logging;
+
+	# Create read/write file connectors
+	create connector reader from read_file;
+	create connector writer from write_file;
+	
+	# Create read/write exit connectors
+	create connector exit from connectors::exit;
+	
+	# Create pipelines
+	create pipeline logging_pipeline;
+	create pipeline filter_out_userLogs;
+	create pipeline passthrough from pipelines::passthrough;
+
+	# Connections
+	connect /connector/reader to /pipeline/logging_pipeline;
+	connect /pipeline/logging_pipeline to /connector/exit;
+	
+	connect /connector/logging to /pipeline/filter_out_userLogs;
+	connect /pipeline/filter_out_userLogs to /connector/writer;
+	end;
+deploy flow logging_flow_varargs;
+

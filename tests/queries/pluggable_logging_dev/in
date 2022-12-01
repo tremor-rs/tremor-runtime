@@ -23,3 +23,5 @@
 {"level": "WARN" , "msg": "(nope)   Named    - Ayo syntax error in there: {field provided is a bad idk", "data": {"field provided": 1}}
 {"level": "TRACE", "msg": "(nope) Positional - Ayo syntax error in there: {field provided is a bad idk", "data": [1]}
 {"level": "ERROR", "msg": "(good)   Named    - Last sentence to be {what?}", "data": {"what?": "sure", "what": "actually no"}}
+{"level": "INFO", "msg": "(good) Positional - Multiple things expected: {} {} {} {} {} {} {}", "data1": 3, "data2": [2], ..., "data7": {"wow": "okay"}}
+//todo compléter les ...

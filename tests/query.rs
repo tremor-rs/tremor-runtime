@@ -325,4 +325,6 @@ test_cases!(
     pluggable_logging_dev
 );
 
-test_cases_with_server!(pluggable_logging_operator);
+test_cases_with_server!(
+pluggable_logging_operator,
+pluggable_logging_varargs);
