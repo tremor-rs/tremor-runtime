@@ -23,7 +23,6 @@ members = [
   "tremor-script",
   "tremor-script-nif",
   "tremor-value",
-
 ]
 
 [profile.release]

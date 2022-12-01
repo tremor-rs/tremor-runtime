@@ -19,10 +19,6 @@ WORKDIR /app
 
 COPY Cargo.* /app/
 
-# We change lto to 'thin' for docker builds so it
-# can be build on more moderate system
-RUN mv Cargo.toml Cargo.toml.orig && sed 's/lto = true/lto = "thin"/' Cargo.toml.orig > Cargo.toml
-
 # Main library
 COPY src /app/src
 COPY build.rs /app/build.rs
@@ -30,6 +26,7 @@ COPY .cargo /app/.cargo
 # supporting libraries
 COPY tremor-pipeline /app/tremor-pipeline
 COPY tremor-script /app/tremor-script
+COPY tremor-script-nif /app/tremor-script-nif
 COPY tremor-api /app/tremor-api
 COPY tremor-influx /app/tremor-influx
 COPY tremor-value /app/tremor-value
