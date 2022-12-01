@@ -173,4 +173,43 @@ mod test {
         );
         Ok(())
     }
+
+    #[test]
+    fn duplicate_keys_unsorted() -> Result<()> {
+        let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
+        let mut codec = Json::<Unsorted>::default();
+        let res = codec.decode(input.as_mut_slice(), 0)?;
+        assert_eq!(Some(literal!({"key": 2})), res); // duplicate keys are deduplicated with last-key-wins strategy
+        let value = res.expect("No value");
+        let serialized = codec.encode(&value)?;
+        assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
+
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_keys_sorted() -> Result<()> {
+        let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
+        let mut codec = Json::<Sorted>::default();
+        let res = codec.decode(input.as_mut_slice(), 0)?;
+        assert_eq!(Some(literal!({"key": 2})), res); // duplicate keys are deduplicated with last-key-wins strategy
+        let value = res.expect("No value");
+        let serialized = codec.encode(&value)?;
+        assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
+
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_keys_into_static() -> Result<()> {
+        let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
+        let mut codec = Json::<Unsorted>::default();
+        let res = codec.decode(input.as_mut_slice(), 0)?;
+        assert_eq!(Some(literal!({"key": 2})), res); // duplicate keys are deduplicated with last-key-wins strategy
+        let value = res.expect("No value");
+        let serialized = codec.encode(&value)?;
+        assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
+
+        Ok(())
+    }
 }

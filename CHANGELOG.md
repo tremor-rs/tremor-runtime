@@ -12,6 +12,7 @@
 ### Fixes
 
 * Fix `udp_client` connector connecting to IPv6 hosts.
+* Fix `json` codec to deduplicate duplicate keys by using the last key in the JSON record.
 
 ### Breaking Changes
 

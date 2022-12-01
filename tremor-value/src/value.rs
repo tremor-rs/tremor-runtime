@@ -600,9 +600,10 @@ impl<'de> ValueDeserializer<'de> {
         let mut res = Object::with_capacity(len);
 
         for _ in 0..len {
-            // We know the tape is sane
+            // The tape might contain duplicate keys, by doing a regular map insert
+            // we might lose some performance, but get consistent last-key-wins behaviour
             if let Node::String(key) = unsafe { self.0.next_() } {
-                res.insert_nocheck(key.into(), self.parse());
+                res.insert(key.into(), self.parse());
             } else {
                 // ALLOW: we guarantee this in the tape
                 unreachable!();
@@ -1441,7 +1442,17 @@ mod test {
             prop_assert_eq!(v.clone(), f.as_str());
             prop_assert_eq!(v, f);
         }
+    }
 
+    #[test]
+    fn test_into_static_duplicate_keys() {
+        let mut input = r#"{"key":1,"key": 2}"#.as_bytes().to_vec();
+        let value = parse_to_value(input.as_mut_slice()).expect("failed to decode");
+        let into_static = value.clone().into_static();
+        assert_eq!(value, into_static);
+        let clone_static = value.clone_static();
+        assert_eq!(value, clone_static);
+        assert_eq!(into_static, clone_static);
     }
     #[test]
     fn test_union_cmp() {
