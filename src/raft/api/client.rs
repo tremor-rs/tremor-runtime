@@ -82,10 +82,12 @@ impl Tremor {
         }
         // FYI: 307 redirects are followed here with a default redirect limit of 10
         // if we target a non-leader, it will return with a 307 and redirect us to the leader
-        let resp = request.send().await?;
+        let resp = request.send().await?.error_for_status()?;
         let result: Resp = resp.json().await?;
-        if let Ok(json) = serde_json::to_string_pretty(&result) {
-            debug!("<<< client recv reply from {target_url}: {json}",);
+        if log::log_enabled!(log::Level::Debug) {
+            if let Ok(json) = serde_json::to_string_pretty(&result) {
+                debug!("<<< client recv reply from {target_url}: {json}",);
+            }
         }
 
         Ok(result)
