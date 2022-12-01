@@ -26,7 +26,11 @@ use async_std::{
 use async_tls::TlsConnector;
 use async_tungstenite::{
     accept_async, client_async,
-    tungstenite::{stream::MaybeTlsStream, Message, WebSocket},
+    tungstenite::{
+        protocol::{frame::coding::CloseCode, CloseFrame},
+        stream::MaybeTlsStream,
+        Message, WebSocket,
+    },
     WebSocketStream,
 };
 use futures::SinkExt;
@@ -42,7 +46,6 @@ use std::{
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
-use tungstenite::protocol::{frame::coding::CloseCode, CloseFrame};
 
 /// A minimal websocket test client harness
 struct TestClient<S> {
