@@ -1,4 +1,4 @@
-const c = 7;
+const C = 7;
 let $data = { "exists": 1 };
 let e = "exists";
 let ne = "does't";
@@ -17,7 +17,7 @@ let bad_idx = 42;
   "absent-kw-false": match absent $data.exists of case true => "ko" default => "ok" end,
   "present-kw-true": match present $data.not_here of case true => "ko" default => "ok" end,
   "present-kw-false": match present $data.exists of case true => "ok" default => "ko" end,
-  "present-const": present c,
+  "present-const": present C,
   "present-local-not": present cake,
   "present-local": present $data,
   "present-local-nested1": present $data["exists"],

@@ -1,2 +1,2 @@
-const one = 1;
-const one = "two";
+const ONE = 1;
+const ONE = "two";

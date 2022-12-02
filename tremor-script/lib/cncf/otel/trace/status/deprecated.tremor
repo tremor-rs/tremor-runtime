@@ -1,52 +1,52 @@
   ### Represents deprecated status codes
 
   ## Deprecated status - Ok
-  const ok = 0;
+  const OK = 0;
 
   ## Deprecated status - Cancelled
-  const cancelled = 1;
+  const CANCELLED = 1;
 
   ## Deprecated status - Unknown error
-  const unknown_error = 2;
+  const UNKNOWN_ERROR = 2;
 
   ## Deprecated status - Invalid argument
-  const invalid_argument = 3;
+  const INVALID_ARGUMENT = 3;
 
   ## Deprecated status - Deadline exceeded
-  const deadline_exceeded = 4;
+  const DEADLINE_EXCEEDED = 4;
 
   ## Deprecated status - Not found
-  const not_found = 5;
+  const NOT_FOUND = 5;
 
   ## Deprecated status - Already exists
-  const already_exists = 6;
+  const ALREADY_EXISTS = 6;
 
   ## Deprecated status - Permission denied
-  const permission_denied = 7;
+  const PERMISSION_DENIED = 7;
 
   ## Deprecated status - Resource exhausted
-  const resource_exhausted = 8;
+  const RESOURCE_EXHAUSTED = 8;
 
   ## Deprecated status - Failed precodition
-  const failed_precondition = 9;
+  const FAILED_PRECONDITION = 9;
 
   ## Deprecated status - Aborted
-  const aborted = 10;
+  const ABORTED = 10;
 
   ## Deprecated status - Out of range
-  const out_of_range = 11;
+  const OUT_OF_RANGE = 11;
 
   ## Deprecated status - Unimplemented
-  const unimplemented = 12;
+  const UNIMPLEMENTED = 12;
 
   ## Deprecated status - Internal error
-  const internal_error = 13;
+  const INTERNAL_ERROR = 13;
 
   ## Deprecated status - Unavailable
-  const unvailable = 14;
+  const UNVAILABLE = 14;
 
   ## Deprecated status - Data loss
-  const data_loss = 15;
+  const DATA_LOSS = 15;
 
   ## Deprecated status - Unauthenticated
-  const unauthenticated = 16;
+  const UNAUTHENTICATED = 16;

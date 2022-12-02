@@ -1,7 +1,7 @@
 mod my_mod with
-  const answer = 42;
+  const ANSWER = 42;
   fn add(a) with
-    a + answer
+    a + ANSWER
   end;
 end;
 my_mod::add(event)

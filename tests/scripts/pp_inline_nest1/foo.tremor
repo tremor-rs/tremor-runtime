@@ -4,4 +4,4 @@
 # should we do this as `use bar;` of `use foo::bar;`?
 
 use foo::bar ;
-const snot = "snot";
+const SNOT = "snot";

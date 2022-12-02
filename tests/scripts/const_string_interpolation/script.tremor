@@ -1,3 +1,3 @@
-const one = 1;
-const string = "one is #{one}";
-string
+const ONE = 1;
+const STRING = "one is #{ONE}";
+STRING

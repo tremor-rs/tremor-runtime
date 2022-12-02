@@ -1,2 +1,2 @@
-const out = {"this was": ["a", "const"]};
-out
+const OUT = {"this was": ["a", "const"]};
+OUT

@@ -1,5 +1,5 @@
-const a = {"snot": "badger"};
+const A = {"snot": "badger"};
 
-let a.snot = event;
+let A.snot = event;
 
-a
+A

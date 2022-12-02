@@ -1,10 +1,10 @@
 ### Signed integer constants
 
 ## Max signed value
-const max = 9223372036854775807;
+const MAX = 9223372036854775807;
 
 ## Minimal signed value
 ##
 # see https://github.com/tremor-rs/tremor-runtime/issues/127
 # note the lexer is limited in how we can represent min
-const min = -9223372036854775808;
+const MIN = -9223372036854775808;
