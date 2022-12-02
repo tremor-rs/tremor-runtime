@@ -1,0 +1,5 @@
+Warning(performance): 
+    1 | use tremor::system;
+    2 | 
+    3 | system::nanotime()
+      | ^^^^^^^^^^^^^^^^^^ `nanotime` requires a call to the operating system's time subsystem for each invocation, using `ingest_ns` as an alternative where possible is preferable.

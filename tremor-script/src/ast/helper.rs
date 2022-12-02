@@ -28,14 +28,40 @@ use crate::{
 };
 use beef::Cow;
 use halfbrown::HashMap;
-use std::{collections::BTreeSet, mem};
+use std::{collections::BTreeSet, fmt::Display, mem};
 
 /// ordered collection of warnings
 pub type Warnings = std::collections::BTreeSet<Warning>;
 
+/// Class of warning that gives additional insight into the warning's intent
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Copy)]
+pub enum WarningClass {
+    /// A general warning that isn't specific to a particular class
+    General,
+    /// A warning that is related to performance
+    Performance,
+    /// A warning that is related to consistency
+    Consistency,
+    /// A warning that is related to possibly unexpected behaviour
+    Behaviour,
+}
+
+impl Display for WarningClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::General => write!(f, "general"),
+            Self::Performance => write!(f, "performance"),
+            Self::Consistency => write!(f, "consistency"),
+            Self::Behaviour => write!(f, "behaviour"),
+        }
+    }
+}
+
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 /// A warning generated while lexing or parsing
 pub struct Warning {
+    /// type of the warning
+    pub class: WarningClass,
     /// Outer span of the warning
     pub outer: Span,
     /// Inner span of thw warning
@@ -45,15 +71,16 @@ pub struct Warning {
 }
 
 impl Warning {
-    fn new<T: ToString>(inner: Span, outer: Span, msg: &T) -> Self {
+    fn new<T: ToString>(outer: Span, inner: Span, msg: &T, class: WarningClass) -> Self {
         Self {
+            class,
             outer,
             inner,
             msg: msg.to_string(),
         }
     }
-    fn new_with_scope<T: ToString>(warning_scope: Span, msg: &T) -> Self {
-        Self::new(warning_scope, warning_scope, msg)
+    fn new_with_scope<T: ToString>(warning_scope: Span, msg: &T, class: WarningClass) -> Self {
+        Self::new(warning_scope, warning_scope, msg, class)
     }
 }
 
@@ -319,11 +346,17 @@ where
         })
     }
 
-    pub(crate) fn warn<S: ToString>(&mut self, inner: Span, outer: Span, msg: &S) {
-        self.warnings.insert(Warning::new(inner, outer, msg));
+    pub(crate) fn warn<S: ToString>(
+        &mut self,
+        outer: Span,
+        inner: Span,
+        msg: &S,
+        class: WarningClass,
+    ) {
+        self.warnings.insert(Warning::new(outer, inner, msg, class));
     }
-    pub(crate) fn warn_with_scope<S: ToString>(&mut self, r: Span, msg: &S) {
-        self.warnings.insert(Warning::new_with_scope(r, msg));
+    pub(crate) fn warn_with_scope<S: ToString>(&mut self, r: Span, msg: &S, class: WarningClass) {
+        self.warnings.insert(Warning::new_with_scope(r, msg, class));
     }
 }
 

@@ -1,3 +1,3 @@
 Error: 
-    3 |   signed::min
-      |   ^^^^^^^^^^^ The constant signed::min (absolute path) is not defined.
+    3 |   signed::MIN
+      |   ^^^^^^^^^^^ The constant signed::MIN (absolute path) is not defined.

@@ -1,0 +1,3 @@
+Warning(consistency): 
+    1 | const a = "a";
+      | ^^^^^^^^^^^^^ const's are canonically written in UPPER_CASE

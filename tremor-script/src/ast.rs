@@ -926,7 +926,7 @@ impl<'script> Invoke<'script> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// An invocable expression form
 pub enum Invocable<'script> {
     /// Reference to a builtin or intrinsic function

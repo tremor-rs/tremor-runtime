@@ -26,7 +26,11 @@ pub fn load(registry: &mut Registry) {
             Ok(Value::from(_input.is_empty()))
         }))
         .insert(
-            tremor_const_fn! (record|contains(_context, _input: Object, _contains: String) {
+            tremor_const_fn! (record|contains(_context, _input: Object, _contains: String)[
+                WarningClass::Performance,
+                // ALLOW: false positive
+                "`record::contains(the_record, the_key)` can be replaced by `present the_record[the_key]` for better results"
+            ] {
                 Ok(Value::from(_input.get(_contains).is_some()))
             }),
         )
@@ -73,7 +77,10 @@ pub fn load(registry: &mut Registry) {
         }).collect();
         Ok(Value::from(r))
     }))
-        .insert(tremor_const_fn!(record|combine(_context, _left: Object, _right: Object) {
+        .insert(tremor_const_fn!(record|combine(_context, _left: Object, _right: Object)[
+            WarningClass::Performance,
+            "`record::combine(one_record, two_record)` can be replaced by `merge one_record of two_record end` for better results"
+        ] {
         Ok(Value::from(_left.iter().chain(_right.iter()).map(|(k, v)| (k.clone(), v.clone())).collect::<Object>()))
         })).insert(tremor_const_fn!(record|rename(_context, _target: Object, _renameings: Object) {
             Ok(Value::from(_target.iter().map(|(k, v)| if let Some(Value::String(k1)) = _renameings.get(k) {

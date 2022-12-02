@@ -1,7 +1,7 @@
-Warning: 
+Warning(behaviour): 
     1 | merge event of match true of
     2 |   case true => true
-    3 |   default => true
-    4 |   default => false
+    3 |   case _ => true
+    4 |   case _ => false
     5 | end end
       | ^^^ A match statement with more then one default clause will never reach any but the first default clause.

@@ -48,6 +48,7 @@ use serde::Serialize;
 use super::{
     base_expr::Ranged,
     docs::{FnDoc, ModDoc},
+    helper::WarningClass,
     module::Manager,
     Const, NodeId, NodeMeta,
 };
@@ -483,6 +484,13 @@ impl<'script> Upable<'script> for ConstRaw<'script> {
     type Target = Const<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        if self.name.to_uppercase() != self.name {
+            helper.warn_with_scope(
+                self.extent(),
+                &"const's are canonically written in UPPER_CASE",
+                WarningClass::Consistency,
+            );
+        }
         let expr = self.expr.up(helper)?;
         let value = expr.try_into_value(helper)?;
         helper.add_const_doc(&self.name, self.comment.clone(), value.value_type());
@@ -1529,9 +1537,10 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
             });
             if duplicated {
                 helper.warn(
-                    self.mid.range,
                     self.mid.range.expand_lines(2),
+                    self.mid.range,
                     &format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of the extractor.", present),
+                    WarningClass::Behaviour
                 );
             }
         }
@@ -1546,9 +1555,10 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
             });
             if duplicated {
                 helper.warn(
-                    self.mid.range,
                     self.mid.range.expand_lines(2),
+                    self.mid.range,
                     &format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
+                    WarningClass::Behaviour
                 );
             }
         }
@@ -2080,6 +2090,34 @@ fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
 
 const NO_DFLT: &str = "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.";
 const MULT_DFLT: &str = "A match statement with more then one default clause will never reach any but the first default clause.";
+const DFLT: &str = "using `case _ =>` is the prefered style over `default =>`.";
+
+// Checks for warnings in match arms
+fn check_patterns<Ex>(patterns: &[PredicateClause<Ex>], mid: &NodeMeta, helper: &mut Helper)
+where
+    Ex: Expression,
+{
+    let defaults = patterns
+        .iter()
+        .filter(|p| p.pattern.is_default() && p.guard.is_none())
+        .count();
+    match defaults {
+        0 => helper.warn_with_scope(mid.range, &NO_DFLT, WarningClass::Behaviour),
+        x if x > 1 => helper.warn_with_scope(mid.range, &MULT_DFLT, WarningClass::Behaviour),
+        _ => (),
+    };
+    for pattern in patterns {
+        if pattern.pattern == Pattern::Default {
+            helper.warn(
+                mid.range,
+                pattern.extent(),
+                &DFLT,
+                WarningClass::Consistency,
+            );
+        }
+    }
+}
+
 impl<'script, Ex> Upable<'script> for MatchRaw<'script, Ex>
 where
     <Ex as Upable<'script>>::Target: Expression + 'script,
@@ -2093,15 +2131,8 @@ where
             .map(|v| v.up(helper))
             .collect::<Result<_>>()?;
 
-        let defaults = patterns
-            .iter()
-            .filter(|p| p.pattern.is_default() && p.guard.is_none())
-            .count();
-        match defaults {
-            0 => helper.warn_with_scope(self.mid.range, &NO_DFLT),
-            x if x > 1 => helper.warn_with_scope(self.mid.range, &MULT_DFLT),
-            _ => (),
-        };
+        check_patterns(&patterns, &self.mid, helper);
+
         // If the last statement is a global default we can simply remove it
         let default = if let Some(PredicateClause {
             pattern: Pattern::Default,
@@ -2228,6 +2259,9 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                 .map_err(|e| e.into_err(&outer, &inner, Some(helper.reg)))?;
             let args = self.args.up(helper)?.into_iter().collect();
             let mf = node_id.fqn();
+            if let Some((class, warning)) = invocable.warning() {
+                helper.warn(outer, inner, &warning, class);
+            }
             Ok(Invoke {
                 mid: self.mid.box_with_name(&mf),
                 node_id,
@@ -2239,7 +2273,32 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
 
             // of the form: [mod, mod1, name] - where the list of idents is effectively a fully qualified resource name
             if let Some(f) = helper.get::<FnDefn>(&node_id)? {
+                if let [Expr::Imut(
+                    ImutExpr::Invoke(Invoke {
+                        invocable: Invocable::Intrinsic(invocable),
+                        ..
+                    })
+                    | ImutExpr::Invoke1(Invoke {
+                        invocable: Invocable::Intrinsic(invocable),
+                        ..
+                    })
+                    | ImutExpr::Invoke2(Invoke {
+                        invocable: Invocable::Intrinsic(invocable),
+                        ..
+                    })
+                    | ImutExpr::Invoke3(Invoke {
+                        invocable: Invocable::Intrinsic(invocable),
+                        ..
+                    }),
+                )] = f.body.as_slice()
+                {
+                    if let Some((class, warning)) = invocable.warning() {
+                        helper.warn(outer, inner, &warning, class);
+                    }
+                }
+
                 let invocable = Invocable::Tremor(f.into());
+
                 let args = self.args.up(helper)?.into_iter().collect();
                 Ok(Invoke {
                     mid: self.mid.box_with_name(&node_id.fqn()),
@@ -2311,8 +2370,8 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             )
             .into());
         }
-        if let Some(warning) = invocable.warning() {
-            helper.warn_with_scope(self.extent(), &warning);
+        if let Some((class, warning)) = invocable.warning() {
+            helper.warn_with_scope(self.extent(), &warning, class);
         }
         let aggr_id = helper.aggregates.len();
         let args = self.args.up(helper)?.into_iter().collect();

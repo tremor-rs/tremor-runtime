@@ -1,0 +1,3 @@
+use std::array;
+array::push([], event);
+array::concatenate([], [event]);

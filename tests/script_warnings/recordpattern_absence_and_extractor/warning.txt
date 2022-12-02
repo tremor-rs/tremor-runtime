@@ -1,14 +1,14 @@
-Warning: 
+Warning(behaviour): 
     1 | match event of
     2 |   case %{ absent key, key ~= re|snot| } => true
       |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ The field key is checked with both absence and another extractor, this test can never be true.
     3 |   case %{ key ~= re|snot|, absent key } => true
-    4 |   default => true
+    4 |   case _ => true
 
-Warning: 
+Warning(behaviour): 
     1 | match event of
     2 |   case %{ absent key, key ~= re|snot| } => true
     3 |   case %{ key ~= re|snot|, absent key } => true
       |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ The field key is checked with both absence and another extractor, this test can never be true.
-    4 |   default => true
+    4 |   case _ => true
     5 | end
