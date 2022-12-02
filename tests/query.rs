@@ -322,9 +322,8 @@ test_cases!(
     guard_having,
     history,
     roundrobin,
-    pluggable_logging_dev
+    pluggable_logging_dev,
+    pluggable_logging_dev_varargs
 );
 
-test_cases_with_server!(
-pluggable_logging_operator,
-pluggable_logging_varargs);
+test_cases_with_server!(pluggable_logging_operator);

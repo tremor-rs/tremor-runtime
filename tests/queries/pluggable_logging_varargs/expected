@@ -1,2 +1,0 @@
-{"args":"(good) Positional - Multiple things expected: 3","file":"tremor-pipeline/src/logging.rs","level":"INFO","line":0,"origin":"Tremor","path":"tremor_pipeline::logging"}
-{"args":"(good) Positional - Multiple things expected: 3 [2]","file":"tremor-pipeline/src/logging.rs","level":"INFO","line":0,"origin":"Tremor","path":"tremor_pipeline::logging"}

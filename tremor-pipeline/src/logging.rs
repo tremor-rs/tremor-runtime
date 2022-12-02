@@ -327,6 +327,11 @@ fn format_tremor_value(value: &Value) -> Result<String> {
         return Ok(result);
     }
 
+    if let Some(float32) = value.as_f32() {
+        result.push_str(&float32.to_string());
+        return Ok(result);
+    }
+
     if let Some(boolean) = value.as_bool() {
         result.push_str(&boolean.to_string());
         return Ok(result);

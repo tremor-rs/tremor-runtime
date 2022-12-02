@@ -1,2 +1,0 @@
-{"level": "INFO", "msg": "(good) Positional - Multiple things expected: {}", "data1": 3}
-{"level": "INFO", "msg": "(good) Positional - Multiple things expected: {} {}", "data1": 3, "data2": [2]}
