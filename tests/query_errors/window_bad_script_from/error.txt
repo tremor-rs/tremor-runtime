@@ -1,1 +1,9 @@
-Error: Only `tick` scripts are supported by windows
+Error: 
+    1 | define window bad from tumbling
+    2 | state 0
+    3 | script from no
+      |             ^^ Only `tick` scripts are supported by windows
+    4 |   false
+    5 | script
+    6 |   true
+    7 | end;
