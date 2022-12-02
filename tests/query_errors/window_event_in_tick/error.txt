@@ -1,3 +1,10 @@
 Error: 
+    1 | define window w from tumbling
+    2 | state
+    3 |   null
+    4 | script from tick
     5 |   event + 1
       |   ^^^^^^^^^ `event` isn't accessible in this context
+    6 | script
+    7 |   let state = event
+    8 | end;

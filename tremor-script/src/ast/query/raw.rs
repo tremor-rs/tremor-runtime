@@ -458,12 +458,13 @@ impl_expr!(WindowDefinitionRaw);
 impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
     type Target = WindowDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let extent = self.extent();
         let maybe_script = self
             .script
             .map(|s| -> Result<_> {
                 let mut s = s.up_script(helper)?;
                 for expr in &mut s.exprs {
-                    OnlyMutState::validate(expr).map_err(|e| error_generic(expr, expr, &e))?;
+                    OnlyMutState::validate(expr).map_err(|e| error_generic(&extent, expr, &e))?;
                 }
                 Ok(s)
             })
@@ -476,12 +477,14 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
                 if i == "tick" {
                     let mut s = s.up_script(helper)?;
                     for expr in &mut s.exprs {
-                        OnlyMutState::validate(expr).map_err(|e| error_generic(expr, expr, &e))?;
-                        NoEventAccess::validate(expr).map_err(|e| error_generic(expr, expr, &e))?;
+                        OnlyMutState::validate(expr)
+                            .map_err(|e| error_generic(&extent, expr, &e))?;
+                        NoEventAccess::validate(expr)
+                            .map_err(|e| error_generic(&extent, expr, &e))?;
                     }
                     Ok(s)
                 } else {
-                    Err(Error::from("Only `tick` scripts are supported by windows"))
+                    err_generic(&extent, &i, &"Only `tick` scripts are supported by windows")
                 }
             })
             .transpose()?;
