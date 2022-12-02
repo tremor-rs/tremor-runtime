@@ -1,0 +1,11 @@
+define window oops from tumbling
+state
+  0
+script from tick
+  signed::min
+script
+  use std::integer::signed;
+  0
+end;
+
+select event from in into out;

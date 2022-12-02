@@ -82,6 +82,7 @@ impl<'script> ScriptRaw<'script> {
         self,
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Script<'script>> {
+        helper.enter_scope();
         let mut exprs = vec![];
 
         for e in self.exprs {
@@ -150,7 +151,7 @@ impl<'script> ScriptRaw<'script> {
                 .doc
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         });
-
+        helper.leave_scope()?;
         Ok(Script {
             mid: self.mid,
             exprs,
