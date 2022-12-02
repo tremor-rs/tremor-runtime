@@ -853,8 +853,8 @@ impl Aggr {
         self.functions.get(module)
     }
 }
-///modifié
-// Test utility to grab a function from the registry
+
+/// Test utility to grab a function from the registry
 pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
     let f = registry()
         .find(m, f)
@@ -869,15 +869,6 @@ pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Va
 mod tests {
     use super::*;
     use simd_json::prelude::*;
-
-    // // Test utility to grab a function from the registry
-    // pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
-    //     let f = registry()
-    //         .find(m, f)
-    //         .expect("could not find function")
-    //         .clone();
-    //     move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext::new(0, None), args) }
-    // }
 
     #[test]
     pub fn fun_error_equality_checks() {

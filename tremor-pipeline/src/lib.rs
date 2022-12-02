@@ -114,14 +114,11 @@ impl Append for PluggableLoggingAppender {
             origin_uri: None,
         };
 
-        println!("{:?}", msg);
         block_on(self.tx.broadcast(msg))?;
         Ok(())
     }
 
-    fn flush(&self) {
-        todo!("TODO logging impl Append for PluggableLoggingAppender :: fn flush");
-    }
+    fn flush(&self) {}
 }
 
 trait Encode {}
