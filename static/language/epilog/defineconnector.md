@@ -1,9 +1,10 @@
 
 ```tremor
+use std::time::nanos;
 define connector metronome from metronome
   with
     config = {
-      "interval": 1
+      "interval": nanos::from_millis(1)
     }
 end;
 ```

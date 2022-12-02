@@ -2,10 +2,11 @@ define flow main
 flow
   use tremor::connectors;
   use integration;
+  use std::time::nanos;
 
   define connector metronome from metronome
   with
-    config = {"interval": 500}
+    config = {"interval": nanos::from_millis(500)}
   end;
   
   define pipeline main
