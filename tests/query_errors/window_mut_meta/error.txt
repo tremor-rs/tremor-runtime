@@ -1,0 +1,3 @@
+Error: 
+    6 |   let $ = a
+      |       ^^^^^ Can not assign to `$` here

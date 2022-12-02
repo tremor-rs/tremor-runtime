@@ -1,0 +1,9 @@
+define window bad from tumbling
+state 0
+script from no
+  false
+script
+  true
+end;
+
+select event from in into out;
