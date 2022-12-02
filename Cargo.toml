@@ -21,6 +21,7 @@ members = [
   "tremor-influx",
   "tremor-pipeline",
   "tremor-script",
+  "tremor-script-nif",
   "tremor-value",
 ]
 
@@ -155,7 +156,6 @@ async-tungstenite = { version = "0.18.0", features = [
   "async-std-runtime",
   "async-tls",
 ] }
-tungstenite = { version = "0.17.3", features = ["rustls"] }
 
 # for tcp & ws
 async-tls = "0.11"
@@ -177,7 +177,7 @@ rdkafka-sys = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f
   "cmake-build",
   "libz-static",
 ], default-features = false } # tracking the version rdkafka depends on
-smol = "1.2.5"
+smol = "1.3.0"
 
 # crononome
 cron = "0.12.0"
@@ -254,7 +254,7 @@ simdutf8 = "0.1"
 [dev-dependencies]
 serial_test = { version = "0.9", features = ["logging"] }
 # path = "../serial_test/serial_test" 
-env_logger = "0.9.3"
+env_logger = "0.10.0"
 matches = "0.1"
 pretty_assertions = "1.3.0"
 proptest = "1.0"

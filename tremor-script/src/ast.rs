@@ -835,11 +835,11 @@ impl<'script> StringLit<'script> {
                 crate::ast::StrLitElement::Expr(e) => {
                     let r = e.run(opts, env, event, state, meta, local)?;
                     if let Some(s) = r.as_str() {
-                        out.push_str(&s);
+                        out.push_str(s);
                     } else if let Some(_f) = r.as_f64() {
                         out.push_str("42");
                     } else {
-                        out.push_str(crate::utils::sorted_serialize(&r)?.as_str());
+                        out.push_str(&crate::utils::sorted_serialize(&r)?);
                     };
                 }
             }

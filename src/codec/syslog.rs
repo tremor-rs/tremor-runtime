@@ -351,6 +351,7 @@ fn compose_pri(facility: SyslogFacility, severity: SyslogSeverity) -> i32 {
 #[cfg(test)]
 mod test {
     use super::*;
+    use chrono::LocalResult;
     use test_case::test_case;
     use tremor_value::literal;
 
@@ -358,7 +359,11 @@ mod test {
     struct TestNow {}
     impl Now for TestNow {
         fn now(&self) -> DateTime<Utc> {
-            Utc.ymd(1970, 1, 1).and_hms(0, 0, 0)
+            if let LocalResult::Single(utc) = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0) {
+                utc
+            } else {
+                panic!("Literal epoch date should be valid.");
+            }
         }
     }
 

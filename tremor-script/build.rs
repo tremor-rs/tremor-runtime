@@ -27,7 +27,7 @@ const TIMEZONE_DOCS: &str = r#"### Timezones extracted from TZ data
 ### ```
 "#;
 
-fn create_timezones_tremor(file: &mut impl Write) {
+fn create_timezones_tremor(file: &mut Vec<u8>) {
     //let mut file = std::fs::File::create(&path).expect("Unable to create file timezones.tremor");
     file.write_all(TIMEZONE_DOCS.as_bytes()).unwrap();
 
@@ -50,6 +50,69 @@ fn create_timezones_tremor(file: &mut impl Write) {
     }
 }
 
+// We can't really do this as the files would need to be generated here but need to live in
+// tremor-runtime. This creates a chicken & Egg problem as we'd need to depend on aech other
+// to build.
+// const MIME_DOCS: &str = r#"### Mimetypes mappings to codecs
+// ###
+// ### Usage:
+// ###
+// ### ```tremor
+// ### use tremor::mime;
+// ### let codec = mime_to_codec["application/json"];
+// ### ```
+// "#;
+
+// fn create_mime_file(file: &mut Vec<u8>) {
+//     //let mut file = std::fs::File::create(&path).expect("Unable to create file timezones.tremor");
+//     file.write_all(MIME_DOCS.as_bytes()).unwrap();
+//     file write_all("## Mapping of mimetypes to codecs\n")
+//     file.write_all("const mime_to_codec = {\n");
+//     for (m, c) in ... {
+//     }
+//     file.write_all("};\m");
+//     file write_all("## Mapping of codecs to mimetypes\n")
+//     file.write_all("const codec_to_mime = {\n");
+//     for (m, c) in ... {
+//     }
+//     file.write_all("};\m");
+// }
+
+/// we generate the file into a buffer and compare it against the current one we only change it if
+/// those two differ if so, we overwrite the old one.
+///
+/// The reasoning behing this is that a buidl script shouldn't modify anything outside of `$OUT_DIR`.
+/// If we do nonetheless, cargo (righfully) complains during publishing the crate.
+/// With this logic it only writes when either the data or this build script got updated.
+/// We are going to catch this and do a clean commit, to avoid it happenign during publish.
+fn maybe_rewrite_file<G>(path: &[&str], generator: G)
+where
+    G: Fn(&mut Vec<u8>),
+{
+    let mut generated = Vec::new();
+    generator(&mut generated);
+    let mut stdlib_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for p in path {
+        stdlib_file.push(p);
+    }
+
+    let stdlib = std::fs::read(&stdlib_file).unwrap_or_else(|_| {
+        panic!(
+            "Expected {} to exist in the stdlib",
+            stdlib_file.to_string_lossy()
+        )
+    });
+    if stdlib != generated {
+        // only write if the contents differ
+        std::fs::write(&stdlib_file, &generated).unwrap_or_else(|_| {
+            panic!(
+                "Expected to be able to write to {}",
+                stdlib_file.to_string_lossy()
+            )
+        });
+    }
+}
+
 fn main() {
     lalrpop::Configuration::new()
         .use_cargo_dir_conventions()
@@ -59,27 +122,9 @@ fn main() {
     println!("cargo:rustc-cfg=can_join_spans");
     println!("cargo:rustc-cfg=can_show_location_of_runtime_parse_error");
 
-    // we generate the timezones file into a buffer and compare it against the current one
-    // we only change it if those two differ
-    // if so, we overwrite the old one.
-    //
-    // The reasoning behing this is that a buidl script shouldn't modify anything outside of `$OUT_DIR`.
-    // If we do nonetheless, cargo (righfully) complains during publishing the crate.
-    // With this logic it only writes when either chrono_tz or this build script got updated.
-    // We are going to catch this and do a clean commit, to avoid it happenign during publish.
-    let mut generated = Vec::new();
-    create_timezones_tremor(&mut generated);
-    let mut stdlib_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    stdlib_file.push("lib");
-    stdlib_file.push("std");
-    stdlib_file.push("datetime");
-    stdlib_file.push("timezones.tremor");
-
-    let stdlib =
-        std::fs::read(&stdlib_file).expect("Expected timezones.tremor to exist in the stdlib");
-    if stdlib != generated {
-        // only write if the contents differ
-        std::fs::write(&stdlib_file, &generated)
-            .expect("Expected to be able to write to timezones.tremor")
-    }
+    maybe_rewrite_file(
+        &["lib", "std", "datetime", "timezones.tremor"],
+        create_timezones_tremor,
+    );
+    // maybe_rewrite_file(&["lib", "tremor", "mime.tremor"], create_mime_file);
 }

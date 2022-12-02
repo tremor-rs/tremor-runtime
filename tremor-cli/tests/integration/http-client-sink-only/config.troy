@@ -6,9 +6,12 @@ flow
 
   define connector http_server from http_server
   with
-    codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/",
+      "mime_mapping": {
+        "application/json": "json-sorted",
+        "*/*": "json-sorted"
+      }
     }
   end;
   create connector stdio from connectors::console;
@@ -41,14 +44,17 @@ flow
 
   define connector http_client from http_client
   with
-    codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/snot",
       "method": "PUT",
       "headers": {
         "X-Something": "snot"
       },
-      "timeout": nanos::from_seconds(10)
+      "timeout": nanos::from_seconds(10),
+      "mime_mapping": {
+        "application/json": "json-sorted",
+        "*/*": "json-sorted"
+      }
     }
   end;
   create connector http_client;

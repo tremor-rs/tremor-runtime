@@ -31,4 +31,5 @@ comment:
 
 ignore:
   - "tremor-cli"
+  - "tremor-script-nif"
   - "depricated"

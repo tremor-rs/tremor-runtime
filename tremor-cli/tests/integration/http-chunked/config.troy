@@ -6,9 +6,12 @@ flow
 
   define connector http_server from http_server
   with
-    codec = "string",
     config = {
       "url": "http://localhost:65535/",
+      "mime_mapping": {
+        "text/plain": "string",
+        "*/*": "string"
+      }
     }
   end;
 
@@ -68,11 +71,14 @@ flow
 
   define connector http_client from http_client
   with
-    codec = "string",
     config = {
       "url": "http://localhost:65535/",
       "headers": {
         "transfer-encoding": ["chunked"]
+      },
+      "mime_mapping": {
+        "text/plain": "string",
+        "*/*": "string"
       }
     },
     reconnect = {

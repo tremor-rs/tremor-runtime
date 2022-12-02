@@ -7,14 +7,17 @@
 * Added new config `socket_options` to UDP, TCP and Websocket connectors to enable use of socket option `SO_REUSEPORT`
 * Added the `chunk` postprocessor for creating payloads as close to a configurable `max_bytes` as possible
 * Arithmetic expressions now error on overflows
+* Rust based erlang nif for tremor-script EQC testing
 
 ### Fixes
 
 * Fix `udp_client` connector connecting to IPv6 hosts.
+* Fix `json` codec to deduplicate duplicate keys by using the last key in the JSON record.
 
 ### Breaking Changes
 
 * Move `no_delay` config of `tcp_server` and `ws_server` to `socket_options.TCP_NODELAY`.
+* The HTTP connectors now work with the `mime_mapping` instead of `codec`
 
 ## [0.13.0-rc.9]
 

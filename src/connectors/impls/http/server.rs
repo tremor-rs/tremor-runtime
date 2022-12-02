@@ -12,31 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::{
-    prelude::*,
-    utils::{mime::MimeCodecMap, tls::TLSServerConfig},
+use super::{
+    meta::{consolidate_mime, extract_request_meta, BodyData, HeaderValueValue},
+    utils::{FixedBodyReader, RequestId, StreamingBodyReader},
 };
-use crate::{connectors::spawn_task, errors::err_connector_def};
-use async_std::channel::unbounded;
+use crate::{
+    connectors::{
+        prelude::*,
+        spawn_task,
+        utils::{mime::MimeCodecMap, tls::TLSServerConfig},
+    },
+    errors::err_connector_def,
+};
 use async_std::{
-    channel::{bounded, Receiver, Sender},
+    channel::{bounded, unbounded, Receiver, Sender},
     task::JoinHandle,
 };
 use dashmap::DashMap;
 use halfbrown::{Entry, HashMap};
-use http_types::headers::{self, HeaderValue, HeaderValues};
-use http_types::{mime::BYTE_STREAM, Mime, StatusCode};
+use http_types::{
+    headers::{self, HeaderValues},
+    StatusCode,
+};
 use simd_json::ValueAccess;
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 use tide::{
     listener::{Listener, ToListener},
     Response,
 };
 use tide_rustls::TlsListener;
 use tremor_common::ids::Id;
-
-use super::meta::{extract_request_meta, BodyData};
-use super::utils::{FixedBodyReader, RequestId, StreamingBodyReader};
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -48,8 +53,8 @@ pub(crate) struct Config {
     tls: Option<TLSServerConfig>,
     /// custom codecs mapping from mime_type to custom codec name
     /// e.g. for handling `application/json` with the `binary` codec, if desired
-    #[serde(default)]
-    custom_codecs: HashMap<String, String>,
+    /// the mime type of `*/*` serves as a default / fallback
+    mime_mapping: Option<HashMap<String, String>>,
 }
 
 impl ConfigImpl for Config {}
@@ -71,7 +76,7 @@ impl ConnectorBuilder for Builder {
     async fn build_cfg(
         &self,
         id: &Alias,
-        raw_config: &ConnectorConfig,
+        _raw_config: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
@@ -87,20 +92,18 @@ impl ConnectorBuilder for Builder {
             port: None,
             path: vec![],
         };
-        // extract expected content types from configured codec
-        let configured_codec = raw_config
-            .codec
-            .as_ref()
-            .map_or_else(|| HttpServer::DEFAULT_CODEC.to_string(), |c| c.name.clone());
         let inflight = Arc::default();
-        let codec_map = MimeCodecMap::with_overwrites(&config.custom_codecs);
+        let codec_map = if let Some(custom_codecs) = config.mime_mapping.clone() {
+            MimeCodecMap::from_custom(custom_codecs)
+        } else {
+            MimeCodecMap::new()
+        };
 
         Ok(Box::new(HttpServer {
             config,
             origin_uri,
             tls_server_config,
             inflight,
-            configured_codec,
             codec_map,
         }))
     }
@@ -112,12 +115,10 @@ pub(crate) struct HttpServer {
     origin_uri: EventOriginUri,
     tls_server_config: Option<TLSServerConfig>,
     inflight: Arc<DashMap<RequestId, Sender<Response>>>,
-    configured_codec: String,
     codec_map: MimeCodecMap,
 }
 
 impl HttpServer {
-    const DEFAULT_CODEC: &'static str = "json";
     /// we need to avoid 0 as a request id
     ///
     /// As we misuse the `request_id` as the `stream_id` and if we use 0, we get `DEFAULT_STREAM_ID`
@@ -128,7 +129,7 @@ impl HttpServer {
 #[async_trait::async_trait()]
 impl Connector for HttpServer {
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional(Self::DEFAULT_CODEC)
+        CodecReq::Structured
     }
 
     async fn create_source(
@@ -146,7 +147,7 @@ impl Connector for HttpServer {
             origin_uri: self.origin_uri.clone(),
             server_task: None,
             tls_server_config: self.tls_server_config.clone(),
-            configured_codec: self.configured_codec.clone(),
+
             codec_map: self.codec_map.clone(),
         };
         builder.spawn(source, source_context).map(Some)
@@ -157,11 +158,7 @@ impl Connector for HttpServer {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = HttpServerSink::new(
-            self.inflight.clone(),
-            self.codec_map.clone(),
-            self.configured_codec.clone(),
-        );
+        let sink = HttpServerSink::new(self.inflight.clone(), self.codec_map.clone());
         builder.spawn(sink, sink_context).map(Some)
     }
 }
@@ -175,7 +172,6 @@ struct HttpServerSource {
     request_tx: Sender<RawRequestData>,
     server_task: Option<JoinHandle<()>>,
     tls_server_config: Option<TLSServerConfig>,
-    configured_codec: String,
     codec_map: MimeCodecMap,
 }
 
@@ -283,21 +279,19 @@ impl Source for HttpServerSource {
         } else {
             // codec overwrite, depending on requests content-type
             // only set the overwrite if it is different than the configured codec
-            let codec_overwrite = if let Some(content_type) = content_type {
-                let maybe_codec = self.codec_map.get_codec_name(content_type.as_str());
-                maybe_codec
-                    .filter(|c| *c != &self.configured_codec)
-                    .cloned()
-            } else {
-                None
-            };
+            let codec_overwrite = content_type
+                .and_then(|t| self.codec_map.get_codec_name(t.as_str()))
+                .or_else(|| self.codec_map.get_codec_name("*/*"))
+                .cloned()
+                .unwrap_or_else(|| "binary".to_string());
+
             SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
                 data,
                 meta: Some(meta),
                 stream: None, // a http request is a discrete unit and not part of any stream
                 port: None,
-                codec_overwrite,
+                codec_overwrite: Some(codec_overwrite),
             }
         })
     }
@@ -315,22 +309,16 @@ impl Source for HttpServerSource {
 struct HttpServerSink {
     inflight: Arc<DashMap<RequestId, Sender<Response>>>,
     codec_map: MimeCodecMap,
-    configured_codec: String,
 }
 
 impl HttpServerSink {
     const ERROR_MSG_EXTRACT_VALUE: &'static str = "Error turning Event into HTTP response";
     const ERROR_MSG_APPEND_RESPONSE: &'static str = "Error appending batched data to HTTP response";
 
-    fn new(
-        inflight: Arc<DashMap<RequestId, Sender<Response>>>,
-        codec_map: MimeCodecMap,
-        configured_codec: String,
-    ) -> Self {
+    fn new(inflight: Arc<DashMap<RequestId, Sender<Response>>>, codec_map: MimeCodecMap) -> Self {
         Self {
             inflight,
             codec_map,
-            configured_codec,
         }
     }
 }
@@ -367,14 +355,7 @@ impl Sink for HttpServerSink {
                         if let Some((rid, sender)) = self.inflight.remove(&rid) {
                             debug!("{ctx} Building response for request_id {rid}");
                             let mut response = ctx.bail_err(
-                                SinkResponse::build(
-                                    rid,
-                                    sender,
-                                    http_meta,
-                                    &self.codec_map,
-                                    &self.configured_codec,
-                                )
-                                .await,
+                                SinkResponse::build(rid, sender, http_meta, &self.codec_map).await,
                                 Self::ERROR_MSG_EXTRACT_VALUE,
                             )?;
 
@@ -414,7 +395,6 @@ impl Sink for HttpServerSink {
                                             sender,
                                             http_meta,
                                             &self.codec_map,
-                                            &self.configured_codec,
                                         )
                                         .await,
                                         Self::ERROR_MSG_EXTRACT_VALUE,
@@ -451,7 +431,6 @@ impl Sink for HttpServerSink {
                                                 sender,
                                                 http_meta,
                                                 &self.codec_map,
-                                                &self.configured_codec,
                                             )
                                             .await,
                                             Self::ERROR_MSG_EXTRACT_VALUE,
@@ -528,9 +507,8 @@ impl SinkResponse {
         tx: Sender<Response>,
         http_meta: Option<&Value<'event>>,
         codec_map: &MimeCodecMap,
-        configured_codec: &String,
     ) -> Result<Self> {
-        let mut res = tide::Response::new(StatusCode::Ok);
+        let mut response = tide::Response::new(StatusCode::Ok);
 
         // build response headers and status etc.
         let request_meta = http_meta.get("request");
@@ -547,81 +525,50 @@ impl SinkResponse {
             // Otherwise - Default status based on request method
             request_meta.map_or(StatusCode::Ok, |request_meta| {
                 let method = request_meta.get_str("method").unwrap_or("error");
-                match method {
-                    "DELETE" | "delete" => StatusCode::NoContent,
-                    "POST" | "post" => StatusCode::Created,
+                match method.to_lowercase().as_str() {
+                    "delete" => StatusCode::NoContent,
+                    "post" => StatusCode::Created,
                     _otherwise => StatusCode::Ok,
                 }
             })
         };
-        res.set_status(status);
+        response.set_status(status);
         let headers = response_meta.get("headers");
 
         // build headers
         if let Some(headers) = headers.as_object() {
             for (name, values) in headers {
-                if let Some(header_values) = values.as_array() {
-                    let mut v = Vec::with_capacity(header_values.len());
-                    for value in header_values {
-                        if let Some(header_value) = value.as_str() {
-                            v.push(HeaderValue::from_str(header_value)?);
-                        }
-                    }
-                    res.append_header(name.as_ref(), v.as_slice());
-                } else if let Some(header_value) = values.as_str() {
-                    res.append_header(name.as_ref(), header_value);
-                }
+                response.append_header(name.as_ref(), HeaderValueValue::new(values));
             }
         }
-        let chunked = res
+
+        let chunked = response
             .header(headers::TRANSFER_ENCODING)
             .map(HeaderValues::last)
             .map_or(false, |te| te.as_str() == "chunked");
 
-        let header_content_type = res.content_type();
+        let header_content_type = response.content_type();
 
-        let codec_overwrite = header_content_type
-            .as_ref()
-            .and_then(|mime| codec_map.get_codec_name(mime.essence()))
-            // only overwrite the codec if it is different from the configured one
-            .filter(|codec| *codec != configured_codec)
-            .cloned();
-        let codec_content_type = codec_overwrite
-            .as_ref()
-            .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
-            .or_else(|| codec_map.get_mime_type(configured_codec))
-            .and_then(|mime| Mime::from_str(mime).ok());
-
-        // extract content-type and thus possible codec overwrite only from first element
-        // precedence:
-        //  1. from headers meta
-        //  2. from overwritten codec
-        //  3. from configured codec
-        //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
-        let content_type = Some(
-            header_content_type
-                .or(codec_content_type)
-                .unwrap_or(BYTE_STREAM),
-        );
+        let (codec_overwrite, content_type) = consolidate_mime(header_content_type, codec_map);
 
         // set content-type if not explicitly set in the response headers meta
         // either from the configured or overwritten codec
-        if res.content_type().is_none() {
+        if response.content_type().is_none() {
             if let Some(ct) = content_type {
-                res.set_content_type(ct);
+                response.set_content_type(ct);
             }
         }
         let (body_data, res) = if chunked {
             let (chunk_tx, chunk_rx) = unbounded();
             let streaming_reader = StreamingBodyReader::new(chunk_rx);
-            res.set_body(tide::Body::from_reader(streaming_reader, None));
+            response.set_body(tide::Body::from_reader(streaming_reader, None));
             // chunked encoding and content-length cannot go together
-            res.remove_header(headers::CONTENT_LENGTH);
+            response.remove_header(headers::CONTENT_LENGTH);
             // we can already send out the response and stream the rest of the chunks upon calling `append`
-            tx.send(res).await?;
+            tx.send(response).await?;
             (BodyData::Chunked(chunk_tx), None)
         } else {
-            (BodyData::Data(Vec::with_capacity(4)), Some(res))
+            (BodyData::Data(Vec::with_capacity(4)), Some(response))
         };
         Ok(Self {
             request_id,
