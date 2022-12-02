@@ -1,0 +1,9 @@
+define window bad from tumbling
+state 0
+
+script
+  let a = 7;
+  let event = a
+end;
+
+select event from in into out;

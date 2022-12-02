@@ -124,6 +124,9 @@ test_cases!(
     pp_embed_unrecognized_token4,
     pp_embed_unrecognized_token5,
     // INSERT
+    window_mut_meta,
+    window_mut_event,
+    window_bad_script_from,
     scope_window_script5,
     scope_window_script4,
     scope_window_script3,

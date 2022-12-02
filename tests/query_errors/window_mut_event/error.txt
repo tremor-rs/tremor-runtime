@@ -1,0 +1,3 @@
+Error: 
+    6 |   let event = a
+      |       ^^^^^^^^^ Can not assign to `event` here
