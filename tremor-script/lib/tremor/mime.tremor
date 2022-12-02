@@ -8,7 +8,7 @@
 ### ```
 
 ## Mapping of mimetypes to codecs
-const mime_to_codec = {
+const MIME_TO_CODEC = {
     "application/json": "json",
     "application/yaml": "yaml",
     "text/csv": "csv",
@@ -22,7 +22,7 @@ const mime_to_codec = {
 };
 
 ## Mapping of codecs to mimetypes
-const codec_to_mime = {
+const CODEC_TO_MIME = {
     "json-sorted": "application/json",
     "json": "application/json",
     "csv": "text/csv",
@@ -38,4 +38,7 @@ const codec_to_mime = {
 };
 
 ## constant used for matching any mime type agains a codec
-const amy = "*/*";
+const ANY = "*/*";
+
+## Same as `ANY`, for backwards compatibility due to a typo in earlier versions
+const AMY = "*/*";

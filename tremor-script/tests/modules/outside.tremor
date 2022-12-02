@@ -1,16 +1,16 @@
 use loading::deep::inside;
 
-const outside = inside::inside;
-const outside_linked = inside::linked;
+const OUTSIDE = inside::INSIDE;
+const OUTSIDE_LINKED = inside::LINKED;
 
 intrinsic fn is_empty(input) as string::is_empty;
 
 fn f_outside() with
-  is_empty(outside)
+  is_empty(OUTSIDE)
 end;
 
 fn f_outside_inside() with
-  inside::inside
+  inside::INSIDE
 end;
 
 fn f_other_function() with

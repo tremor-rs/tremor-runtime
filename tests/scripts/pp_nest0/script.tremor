@@ -1,6 +1,6 @@
 use foo4;
 
 match event of
-  case {} => "snot #{foo4::snot}"
+  case {} => "snot #{foo4::SNOT}"
   default => "ko"
 end;

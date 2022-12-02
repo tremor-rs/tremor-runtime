@@ -1,4 +1,4 @@
-const a = {"what": ["snot"], "key": "what"};
-const b = ( a[a.key][0] + " badger" );
+const A = {"what": ["snot"], "key": "what"};
+const B = ( A[A.key][0] + " badger" );
 
-"#{b}: #{event}!"
+"#{B}: #{event}!"

@@ -1,2 +1,2 @@
-const snot = "snot";
-const badger = ("badger " + snot);
+const SNOT = "snot";
+const BADGER = ("badger " + SNOT);

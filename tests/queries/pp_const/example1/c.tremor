@@ -1,5 +1,5 @@
 # c.tremor
-const map = {
+const MAP = {
   "🔧": 1,
   "🏫": 2,
   "👷": 3,

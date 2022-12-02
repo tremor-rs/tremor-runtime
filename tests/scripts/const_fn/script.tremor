@@ -1,3 +1,3 @@
 use std::math;
-const two = math::max(1, 2);
-two
+const TWO = math::max(1, 2);
+TWO

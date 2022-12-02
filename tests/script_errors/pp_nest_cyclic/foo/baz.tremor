@@ -1,3 +1,3 @@
 use foo::bar;
 
-const baz = "baz";
+const BAZ = "baz";

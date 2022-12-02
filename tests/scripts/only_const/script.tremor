@@ -1,1 +1,1 @@
-const this = "that"
+const THIS = "that"
