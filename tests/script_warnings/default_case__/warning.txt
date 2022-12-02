@@ -1,0 +1,5 @@
+Warning(consistency): 
+    1 | match event of
+    2 |   default => event
+      |   ^^^^^^^^^^^^^^^^ using `case _ =>` is the prefered style over `default =>`.
+    3 | end

@@ -1,0 +1,3 @@
+use std::record;
+record::contains(event, "snot");
+record::combine(event, {"snot": "badger"});

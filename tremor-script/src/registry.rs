@@ -15,7 +15,7 @@
 mod custom_fn;
 pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
-use crate::ast::base_expr::Ranged;
+use crate::ast::{base_expr::Ranged, helper::WarningClass};
 use crate::errors::{best_hint, Error, Kind as ErrorKind, Result};
 use crate::utils::hostname as get_hostname;
 use crate::Value;
@@ -68,7 +68,7 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
         self.arity().contains(&n)
     }
     /// A possible warnings the use of this function should cause
-    fn warning(&self) -> Option<String> {
+    fn warning(&self) -> Option<(WarningClass, String)> {
         None
     }
 }
@@ -95,6 +95,10 @@ pub trait TremorFn: Sync + Send {
     /// at compile time.
     fn is_const(&self) -> bool {
         false
+    }
+    /// A possible warnings the use of this function should cause
+    fn warning(&self) -> Option<(WarningClass, String)> {
+        None
     }
 }
 /// The result of a function
@@ -348,6 +352,12 @@ impl TremorFnWrapper {
     pub fn is_const(&self) -> bool {
         self.fun.is_const()
     }
+
+    /// A possible warnings the use of this function should cause
+    #[must_use]
+    pub fn warning(&self) -> Option<(WarningClass, String)> {
+        self.fun.warning()
+    }
 }
 
 impl Clone for TremorFnWrapper {
@@ -383,40 +393,77 @@ pub struct Registry {
 #[macro_export]
 macro_rules! tremor_fn {
     // NOTE `type` is a rust keyword  and a tremor module - it needs special handling for macros
+    (type | $name:ident($context:ident) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!(type) ; $name(false, None, $context) $code)
+        }
+    };
     (type | $name:ident($context:ident, $($arg:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!(stringify!(type) ; $name(false, $context, $($arg),*) $code)
+            tremor_fn_!(stringify!(type) ; $name(false, None, $context, $($arg),*) $code)
         }
     };
     (type | $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!(stringify!(type) ; $name(false, $context, $($arg : $type),*) $code)
-        }
-    };
-    (type | $name:ident($context:ident) $code:block) => {
-        {
-            use $crate::tremor_fn_;
-            tremor_fn_!(stringify!(type) ; $name(false, $context) $code)
+            tremor_fn_!(stringify!(type) ; $name(false, None, $context, $($arg : $type),*) $code)
         }
     };
     ($module:path | $name:ident($context:ident, $($arg:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!(stringify!($module) ; $name(false, $context, $($arg),*) $code)
+            tremor_fn_!(stringify!($module) ; $name(false, None, $context, $($arg),*) $code)
         }
     };
     ($module:path | $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!(stringify!($module) ; $name(false, $context, $($arg : $type),*) $code)
+            tremor_fn_!(stringify!($module) ; $name(false, None, $context, $($arg : $type),*) $code)
         }
     };
     ($module:path | $name:ident($context:ident) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!(stringify!($module) ; $name(false, $context) $code)
+            tremor_fn_!(stringify!($module) ; $name(false, None, $context) $code)
+        }
+    };
+    // with warnings
+    (type | $name:ident($context:ident)[$class:expr, $msg:expr] $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!(type) ; $name(false, Some(($class, $msg.into())), $context) $code)
+        }
+    };
+    (type | $name:ident($context:ident, $($arg:ident),*)[$class:expr, $msg:expr] $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!(type) ; $name(false, Some(($class, $msg.into())), $context, $($arg),*) $code)
+        }
+    };
+    (type | $name:ident($context:ident, $($arg:ident : $type:ident),*)[$class:expr, $msg:expr] $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!(type) ; $name(false, Some(($class, $msg.into())), $context, $($arg : $type),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident),*)[$class:expr, $msg:expr] $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(false, Some(($class, $msg.into())), $context, $($arg),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident : $type:ident),*)[$class:expr, $msg:expr] $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(false, Some(($class, $msg.into())), $context, $($arg : $type),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident)[$class:expr, $msg:expr] $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(false, Some(($class, $msg.into())), $context) $code)
         }
     };
 }
@@ -426,40 +473,79 @@ macro_rules! tremor_fn {
 #[macro_export]
 macro_rules! tremor_const_fn {
     // NOTE `type` is a rust keyword  and a tremor module - it needs special handling for macros
+    (type | $name:ident($context:ident) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!(type) ; $name(true, None, $context) $code)
+        }
+    };
     (type | $name:ident($context:ident, $($arg:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!(stringify!(type) ; $name(true, $context, $($arg),*) $code)
+            tremor_fn_!(stringify!(type) ; $name(true, None, $context, $($arg),*) $code)
         }
     };
     (type | $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!(stringify!(type) ; $name(true, $context, $($arg : $type),*) $code)
-        }
-    };
-    (type | $name:ident($context:ident) $code:block) => {
-        {
-            use $crate::tremor_fn_;
-            tremor_fn_!(stringify!(type) ; $name(true, $context) $code)
-        }
-    };
-    ($module:path | $name:ident($context:ident, $($arg:ident),*) $code:block) => {
-        {
-            use $crate::tremor_fn_;
-            tremor_fn_!(stringify!($module) ; $name(true, $context, $($arg),*) $code)
-        }
-    };
-    ($module:path | $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
-        {
-            use $crate::tremor_fn_;
-            tremor_fn_!(stringify!($module) ; $name(true, $context, $($arg : $type),*) $code)
+            tremor_fn_!(stringify!(type) ; $name(true, None, $context, $($arg : $type),*) $code)
         }
     };
     ($module:path | $name:ident($context:ident) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!(stringify!($module) ; $name(true, $context) $code)
+            tremor_fn_!(stringify!($module) ; $name(true, None, $context) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident),*) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(true, None, $context, $($arg),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(true, None, $context, $($arg : $type),*) $code)
+        }
+    };
+
+    // with warnings
+
+    (type | $name:ident($context:ident)[$class:expr, $msg:expr]  $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!(type) ; $name(true,, Some(($class, $msg.into())) $context) $code)
+        }
+    };
+    (type | $name:ident($context:ident, $($arg:ident),*)[$class:expr, $msg:expr]  $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!(type) ; $name(true,, Some(($class, $msg.into())) $context, $($arg),*) $code)
+        }
+    };
+    (type | $name:ident($context:ident, $($arg:ident : $type:ident),*)[$class:expr, $msg:expr]  $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!(type) ; $name(true,, Some(($class, $msg.into())) $context, $($arg : $type),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident)[$class:expr, $msg:expr]  $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(true, Some(($class, $msg.into())), $context) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident),*)[$class:expr, $msg:expr]  $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(true, Some(($class, $msg.into())), $context, $($arg),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident : $type:ident),*)[$class:expr, $msg:expr]  $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(true, Some(($class, $msg.into())), $context, $($arg : $type),*) $code)
         }
     };
 }
@@ -468,17 +554,16 @@ macro_rules! tremor_const_fn {
 /// Internal tremor function creation macro - DO NOT USE
 #[macro_export]
 macro_rules! tremor_fn_ {
-    ($module:expr ; $name:ident($const:expr, $context:ident, $($arg:ident),*) $code:block) => {
+    ($module:expr ; $name:ident($const:expr, $warn:expr, $context:ident, $($arg:ident),*) $code:block) => {
         {
             macro_rules! replace_expr {
                 ($_t:tt $sub:expr) => {
                     $sub
                 };
             }
-            use $crate::Value;
-            use $crate::EventContext;
-            use $crate::registry::{TremorFnWrapper, TremorFn};
-            use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
+            use $crate::{EventContext, Value};
+            use $crate::ast::helper::{WarningClass};
+            use $crate::registry::{TremorFnWrapper, TremorFn, FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
             // const MOD: &'static str = $module;
             mod $name {
@@ -521,6 +606,9 @@ macro_rules! tremor_fn_ {
                 fn is_const(&self) -> bool {
                     $const
                 }
+                fn warning(&self) -> Option<(WarningClass, String)> {
+                    $warn
+                }
             }
 
             TremorFnWrapper::new(
@@ -531,17 +619,16 @@ macro_rules! tremor_fn_ {
         }
     };
 
-    ($module:expr ; $name:ident($const:expr, $context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+    ($module:expr ; $name:ident($const:expr, $warn:expr, $context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
             macro_rules! replace_expr {
                 ($_t:tt $sub:expr) => {
                     $sub
                 };
             }
-            use $crate::Value;
-            use $crate::EventContext;
-            use $crate::registry::{TremorFnWrapper, TremorFn};
-            use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
+            use $crate::{EventContext, Value};
+            use $crate::ast::helper::{WarningClass};
+            use $crate::registry::{TremorFnWrapper, TremorFn, FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
             // const MOD: &'static str = $module;
             mod $name {
@@ -588,6 +675,9 @@ macro_rules! tremor_fn_ {
                 fn is_const(&self) -> bool {
                     $const
                 }
+                fn warning(&self) -> Option<(WarningClass, String)> {
+                    $warn
+                }
             }
 
             TremorFnWrapper::new(
@@ -598,12 +688,11 @@ macro_rules! tremor_fn_ {
         }
     };
 
-    ($module:expr ; $name:ident($const:expr, $context:ident) $code:block) => {
+    ($module:expr ; $name:ident($const:expr, $warn:expr, $context:ident) $code:block) => {
         {
-            use $crate::Value;
-            use $crate::EventContext;
-            use $crate::registry::{TremorFnWrapper, TremorFn};
-            use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
+            use $crate::{EventContext, Value};
+            use $crate::ast::helper::{WarningClass};
+            use $crate::registry::{TremorFnWrapper, TremorFn, FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = 0;
             // const MOD: &'static str = $module;
             mod $name {
@@ -643,6 +732,9 @@ macro_rules! tremor_fn_ {
                 }
                 fn is_const(&self) -> bool {
                     $const
+                }
+                fn warning(&self) -> Option<(WarningClass, String)> {
+                    $warn
                 }
             }
 
@@ -766,7 +858,7 @@ impl TremorAggrFnWrapper {
 
     /// A possible warnings the use of this function should cause
     #[must_use]
-    pub fn warning(&self) -> Option<String> {
+    pub fn warning(&self) -> Option<(WarningClass, String)> {
         self.fun.warning()
     }
 

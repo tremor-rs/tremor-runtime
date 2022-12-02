@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+
+* Warning types: now warnings can specify what they are about (performance, behaviour, etc.)
+* New warnings for consistency, behaviour and performance
+* Functions now can create warnings
+
+### Breaking Changes
+* **all** std library constants are now uppercase
+
 ## [0.13.0-rc.10]
 
 ### New Features

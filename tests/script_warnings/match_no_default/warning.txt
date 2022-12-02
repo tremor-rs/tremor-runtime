@@ -1,4 +1,4 @@
-Warning: 
+Warning(behaviour): 
     1 | match true of
     2 |   case true => true
     3 | end

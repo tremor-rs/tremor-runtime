@@ -41,6 +41,7 @@ macro_rules! test_cases {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
+                println!("Loading warning: {}", err_file);
                 let mut file = file::open(err_file)?;
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
@@ -65,6 +66,11 @@ test_cases!(
     match_imut_no_default,
     match_imut_multiple_default,
     // INSERT
+    record_perf,
+    array_perf,
+    default_case__,
+    nanotime,
+    lower_case_const,
     recordpattern_absence_and_extractor,
     recordpattern_presence_and_extractor,
 );

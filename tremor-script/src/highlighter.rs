@@ -17,6 +17,7 @@
 
 use crate::{
     arena::Arena,
+    ast::helper::WarningClass,
     lexer::{Token, TokenSpan},
 };
 use crate::{ast::helper::Warning, errors::UnfinishedToken};
@@ -26,22 +27,22 @@ use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 /// Error Level
 pub enum ErrorLevel {
     /// Error
     Error,
     /// Warning
-    Warning,
+    Warning(WarningClass),
     /// Hint
     Hint,
 }
 
 impl ErrorLevel {
-    fn to_color(&self) -> Color {
+    fn to_color(self) -> Color {
         match self {
             Self::Error => Color::Red,
-            Self::Warning => Color::Yellow,
+            Self::Warning(_) => Color::Yellow,
             Self::Hint => Color::Green,
         }
     }
@@ -120,7 +121,7 @@ impl From<&Warning> for Error {
             end: warning.inner.end(),
             callout: warning.msg.clone(),
             hint: None,
-            level: ErrorLevel::Warning,
+            level: ErrorLevel::Warning(warning.class),
             token: None,
         }
     }
@@ -344,9 +345,9 @@ pub trait Highlighter {
                 }
             }
             Some(Error {
-                level: ErrorLevel::Warning,
+                level: ErrorLevel::Warning(class),
                 ..
-            }) => writeln!(self.get_writer(), "Warning: ")?,
+            }) => writeln!(self.get_writer(), "Warning({class}): ")?,
             Some(Error {
                 level: ErrorLevel::Hint,
                 ..
