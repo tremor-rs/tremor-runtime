@@ -1,17 +1,22 @@
 define flow exit
 flow
+  use std::time::nanos;
+
   define pipeline p
   pipeline
-  select event from in into out;
+    select event from in into out;
   end;
+
   define connector e from exit;
   define connector m from metronome
   with
-    config = {"interval": 1}
+    config = {"interval": nanos::from_millis(1)}
   end;
+
   create connector e;
   create connector m;
   create pipeline p;
+
   connect /connector/m to /pipeline/p;
   connect /pipeline/p to /connector/e;
 end;
