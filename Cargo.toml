@@ -23,7 +23,6 @@ members = [
   "tremor-script",
   "tremor-script-nif",
   "tremor-value",
-
 ]
 
 [profile.release]
@@ -156,7 +155,6 @@ async-tungstenite = { version = "0.18.0", features = [
   "async-std-runtime",
   "async-tls",
 ] }
-tungstenite = { version = "0.17.3", features = ["rustls"] }
 
 # for tcp & ws
 async-tls = "0.11"
