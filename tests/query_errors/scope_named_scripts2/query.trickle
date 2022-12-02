@@ -1,0 +1,9 @@
+define script named
+script from one_thing
+  signed::min
+script
+  use std::integer::signed;
+  signed::max
+end;
+
+select event from in into out;

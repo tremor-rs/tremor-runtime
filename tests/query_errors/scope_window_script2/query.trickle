@@ -1,0 +1,10 @@
+use std::integer::signed;
+
+define window oops from tumbling
+state
+  0
+script
+  signed::max
+end;
+
+select event from in into out;

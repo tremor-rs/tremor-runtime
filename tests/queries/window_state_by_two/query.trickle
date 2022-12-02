@@ -1,4 +1,4 @@
-use tremor::origin;
+
 define window by_two from tumbling
 state
   0

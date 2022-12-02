@@ -1,9 +1,8 @@
-use tremor::origin;
 define window by_two from tumbling
 state
   0
 script
-  let state = state + 1
+  let state = state + 1;
   [state % 2 == 0, state % 2 == 0]
 end;
 
