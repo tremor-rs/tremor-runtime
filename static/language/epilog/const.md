@@ -2,8 +2,8 @@
 
 ```tremor
 use std::base64;
-const snot = "snot";
-const badger = "badger";
-const snot_badger = { "#{snot}": "#{base64::encode(badger)}" };
+const SNOT = "snot";
+const BADGER = "badger";
+const SNOT_BADGER = { "#{snot}": "#{base64::encode(badger)}" };
 ```
 
