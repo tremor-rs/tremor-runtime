@@ -34,7 +34,7 @@ fn main() {
 
     // Location of libtremor
 
-    let mut libpath = Path::new(&here).join("..").join("target");
+    let mut libpath = Path::new(&here).join("target");
     if host_triple != target_triple {
         libpath = libpath.join(&target_triple);
     }

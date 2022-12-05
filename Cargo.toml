@@ -21,9 +21,10 @@ members = [
   "tremor-influx",
   "tremor-pipeline",
   "tremor-script",
-  "tremor-script-nif",
   "tremor-value",
 ]
+default-members = ["tremor-cli"]
+exclude = ["tremor-script-nif"]
 
 [profile.release]
 debug = true
