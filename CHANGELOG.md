@@ -31,7 +31,6 @@
 
 * Move `no_delay` config of `tcp_server` and `ws_server` to `socket_options.TCP_NODELAY`.
 * The HTTP connectors now work with the `mime_mapping` instead of `codec`.
-* All constants in the stdlib are now UPPERCASE.
 
 ## [0.13.0-rc.9]
 
