@@ -27,7 +27,7 @@ pub fn load(registry: &mut Registry) {
         }))
         .insert(
             tremor_const_fn! (record|contains(_context, _input: Object, _contains: String)[
-                WarningClass::Performance,
+                warning::Class::Performance,
                 // ALLOW: false positive
                 "`record::contains(the_record, the_key)` can be replaced by `present the_record[the_key]` for better results"
             ] {
@@ -78,7 +78,7 @@ pub fn load(registry: &mut Registry) {
         Ok(Value::from(r))
     }))
         .insert(tremor_const_fn!(record|combine(_context, _left: Object, _right: Object)[
-            WarningClass::Performance,
+            warning::Class::Performance,
             "`record::combine(one_record, two_record)` can be replaced by `merge one_record of two_record end` for better results"
         ] {
         Ok(Value::from(_left.iter().chain(_right.iter()).map(|(k, v)| (k.clone(), v.clone())).collect::<Object>()))

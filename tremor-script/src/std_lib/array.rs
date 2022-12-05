@@ -44,7 +44,7 @@ pub fn load(registry: &mut Registry) {
             )
         }))
         .insert(tremor_const_fn! (array|push(_context, _input, _value)[
-            WarningClass::Performance,
+            warning::Class::Performance,
             "`array::push(the_array, element)` can be replaced by `the_array + [element]` for better results"
         ] {
             _input.as_array().map_or_else(
@@ -100,7 +100,7 @@ pub fn load(registry: &mut Registry) {
             }).collect::<Vec<_>>()))
         }))
         .insert(tremor_const_fn!(array|concatenate(_context, _left: Array, _right: Array)[
-            WarningClass::Performance,
+            warning::Class::Performance,
             "`array::concatenate(one_array, two_array)` can be replaced by `one_array + two_array` for better results"
         ] {
             let output: Vec<Value> = [_left.as_slice(), _right.as_slice()].concat();

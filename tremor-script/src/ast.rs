@@ -40,6 +40,9 @@ pub mod docs;
 /// collection of AST walkers (for impl'ing)
 pub mod walkers;
 
+/// Warnings
+pub mod warning;
+
 pub use self::helper::Helper;
 pub use self::node_id::{BaseRef, NodeId};
 use self::walkers::ImutExprWalker;
@@ -1577,6 +1580,7 @@ pub enum Pattern<'script> {
     /// Gates if no other pattern matches
     Default,
 }
+
 impl<'script> Pattern<'script> {
     fn is_default(&self) -> bool {
         matches!(self, Pattern::Default)

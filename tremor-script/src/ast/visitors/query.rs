@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{helper::raw::WindowName, module::Content};
-
 use super::super::visitors::prelude::*;
+use crate::ast::{module::Content, query::raw::WindowName};
 use VisitRes::Walk;
 
 /// Visitor for traversing all `Exprs`s within the given `Exprs`

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{
-    ast::helper::WarningClass,
+    ast::warning,
     registry::{Aggr as AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper},
 };
 
@@ -133,9 +133,9 @@ impl TremorAggrFn for CollectFlattened {
     fn arity(&self) -> RangeInclusive<usize> {
         1..=1
     }
-    fn warning(&self) -> Option<(WarningClass, String)> {
+    fn warning(&self) -> Option<(warning::Class, String)> {
         Some((
-            WarningClass::Performance,
+            warning::Class::Performance,
             String::from("Collect functions are very expensive memory wise, try avoiding them."),
         ))
     }
@@ -177,9 +177,9 @@ impl TremorAggrFn for CollectNested {
     fn arity(&self) -> RangeInclusive<usize> {
         1..=1
     }
-    fn warning(&self) -> Option<(WarningClass, String)> {
+    fn warning(&self) -> Option<(warning::Class, String)> {
         Some((
-            WarningClass::Performance,
+            warning::Class::Performance,
             String::from("Collect functions are very expensive memory wise, try avoiding them."),
         ))
     }

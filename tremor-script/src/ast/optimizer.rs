@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::helper::raw::WindowName;
 use crate::ast::visitors::{
     ArrayAdditionOptimizer, ConstFolder, ExprVisitor, ImutExprVisitor, QueryVisitor, VisitRes,
 };
@@ -33,6 +32,8 @@ use crate::ast::{
 use crate::errors::Result;
 use crate::module::Content;
 use beef::Cow;
+
+use super::query::raw::WindowName;
 
 struct CombinedVisitor<First, Second> {
     first: First,
