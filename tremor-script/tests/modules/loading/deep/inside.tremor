@@ -2,5 +2,5 @@ const INSIDE = 42;
 const LINKED = INSIDE; 
 
 fn f_inside() with
-  LINKED
+  INSIDE
 end;
