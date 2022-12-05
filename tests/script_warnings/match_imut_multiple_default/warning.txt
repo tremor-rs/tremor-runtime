@@ -3,5 +3,14 @@ Warning(behaviour):
     2 |   case true => true
     3 |   case _ => true
     4 |   case _ => false
-    5 | end end
-      | ^^^ A match statement with more then one default clause will never reach any but the first default clause.
+      |   ^^^^^^^^^^^^^^^ Any but the first `default` / `case _` statement are unreachable and will be ignored.
+    5 |   case _ => "snot"
+    6 | end end
+Warning(behaviour): 
+    1 | merge event of match true of
+    2 |   case true => true
+    3 |   case _ => true
+    4 |   case _ => false
+    5 |   case _ => "snot"
+      |   ^^^^^^^^^^^^^^^^ Any but the first `default` / `case _` statement are unreachable and will be ignored.
+    6 | end end

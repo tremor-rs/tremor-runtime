@@ -17,7 +17,7 @@
 use super::{
     deploy::raw::{ConnectorDefinitionRaw, FlowDefinitionRaw},
     docs::{Docs, ModDoc},
-    helper::raw::{
+    query::raw::{
         OperatorDefinitionRaw, PipelineDefinitionRaw, ScriptDefinitionRaw, WindowDefinitionRaw,
     },
     raw::{AnyFnRaw, ConstRaw, IdentRaw, UseRaw},

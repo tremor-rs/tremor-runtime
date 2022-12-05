@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::ast::{
-    helper::raw::WindowName, module::Content, CreationalWith, DefinitionalArgs, WithExpr,
+    module::Content, query::raw::WindowName, CreationalWith, DefinitionalArgs, WithExpr,
 };
 
 use super::super::visitors::prelude::*;

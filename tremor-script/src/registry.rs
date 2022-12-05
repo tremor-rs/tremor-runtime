@@ -15,11 +15,13 @@
 mod custom_fn;
 pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
-use crate::ast::{base_expr::Ranged, helper::WarningClass};
-use crate::errors::{best_hint, Error, Kind as ErrorKind, Result};
-use crate::utils::hostname as get_hostname;
-use crate::Value;
-use crate::{tremor_fn, EventContext};
+use crate::{
+    ast::{base_expr::Ranged, warning},
+    errors::{best_hint, Error, Kind as ErrorKind, Result},
+    tremor_fn,
+    utils::hostname as get_hostname,
+    EventContext, Value,
+};
 use downcast_rs::{impl_downcast, DowncastSync};
 use halfbrown::HashMap;
 use std::default::Default;
@@ -68,7 +70,7 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
         self.arity().contains(&n)
     }
     /// A possible warnings the use of this function should cause
-    fn warning(&self) -> Option<(WarningClass, String)> {
+    fn warning(&self) -> Option<(warning::Class, String)> {
         None
     }
 }
@@ -97,7 +99,7 @@ pub trait TremorFn: Sync + Send {
         false
     }
     /// A possible warnings the use of this function should cause
-    fn warning(&self) -> Option<(WarningClass, String)> {
+    fn warning(&self) -> Option<(warning::Class, String)> {
         None
     }
 }
@@ -355,7 +357,7 @@ impl TremorFnWrapper {
 
     /// A possible warnings the use of this function should cause
     #[must_use]
-    pub fn warning(&self) -> Option<(WarningClass, String)> {
+    pub fn warning(&self) -> Option<(warning::Class, String)> {
         self.fun.warning()
     }
 }
@@ -562,7 +564,7 @@ macro_rules! tremor_fn_ {
                 };
             }
             use $crate::{EventContext, Value};
-            use $crate::ast::helper::{WarningClass};
+            use $crate::ast::warning;
             use $crate::registry::{TremorFnWrapper, TremorFn, FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
             // const MOD: &'static str = $module;
@@ -606,7 +608,7 @@ macro_rules! tremor_fn_ {
                 fn is_const(&self) -> bool {
                     $const
                 }
-                fn warning(&self) -> Option<(WarningClass, String)> {
+                fn warning(&self) -> Option<(warning::Class, String)> {
                     $warn
                 }
             }
@@ -627,7 +629,7 @@ macro_rules! tremor_fn_ {
                 };
             }
             use $crate::{EventContext, Value};
-            use $crate::ast::helper::{WarningClass};
+            use $crate::ast::warning;
             use $crate::registry::{TremorFnWrapper, TremorFn, FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
             // const MOD: &'static str = $module;
@@ -675,7 +677,7 @@ macro_rules! tremor_fn_ {
                 fn is_const(&self) -> bool {
                     $const
                 }
-                fn warning(&self) -> Option<(WarningClass, String)> {
+                fn warning(&self) -> Option<(warning::Class, String)> {
                     $warn
                 }
             }
@@ -691,7 +693,7 @@ macro_rules! tremor_fn_ {
     ($module:expr ; $name:ident($const:expr, $warn:expr, $context:ident) $code:block) => {
         {
             use $crate::{EventContext, Value};
-            use $crate::ast::helper::{WarningClass};
+            use $crate::ast::warning;
             use $crate::registry::{TremorFnWrapper, TremorFn, FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = 0;
             // const MOD: &'static str = $module;
@@ -733,7 +735,7 @@ macro_rules! tremor_fn_ {
                 fn is_const(&self) -> bool {
                     $const
                 }
-                fn warning(&self) -> Option<(WarningClass, String)> {
+                fn warning(&self) -> Option<(warning::Class, String)> {
                     $warn
                 }
             }
@@ -858,7 +860,7 @@ impl TremorAggrFnWrapper {
 
     /// A possible warnings the use of this function should cause
     #[must_use]
-    pub fn warning(&self) -> Option<(WarningClass, String)> {
+    pub fn warning(&self) -> Option<(warning::Class, String)> {
         self.fun.warning()
     }
 

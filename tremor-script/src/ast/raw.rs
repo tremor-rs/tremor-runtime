@@ -48,9 +48,8 @@ use serde::Serialize;
 use super::{
     base_expr::Ranged,
     docs::{FnDoc, ModDoc},
-    helper::WarningClass,
     module::Manager,
-    Const, NodeId, NodeMeta,
+    warning, Const, NodeId, NodeMeta,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Eq)]
@@ -488,7 +487,7 @@ impl<'script> Upable<'script> for ConstRaw<'script> {
             helper.warn_with_scope(
                 self.extent(),
                 &"const's are canonically written in UPPER_CASE",
-                WarningClass::Consistency,
+                warning::Class::Consistency,
             );
         }
         let expr = self.expr.up(helper)?;
@@ -1540,7 +1539,7 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
                     self.mid.range.expand_lines(2),
                     self.mid.range,
                     &format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of the extractor.", present),
-                    WarningClass::Behaviour
+                    warning::Class::Behaviour
                 );
             }
         }
@@ -1558,7 +1557,7 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
                     self.mid.range.expand_lines(2),
                     self.mid.range,
                     &format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
-                    WarningClass::Behaviour
+                    warning::Class::Behaviour
                 );
             }
         }
@@ -2089,7 +2088,8 @@ fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
 }
 
 const NO_DFLT: &str = "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.";
-const MULT_DFLT: &str = "A match statement with more then one default clause will never reach any but the first default clause.";
+const MULT_DFLT: &str =
+    "Any but the first `default` / `case _` statement are unreachable and will be ignored.";
 const DFLT: &str = "using `case _ =>` is the prefered style over `default =>`.";
 
 // Checks for warnings in match arms
@@ -2097,22 +2097,30 @@ fn check_patterns<Ex>(patterns: &[PredicateClause<Ex>], mid: &NodeMeta, helper: 
 where
     Ex: Expression,
 {
-    let defaults = patterns
+    let mut seen_default = false;
+
+    for p in patterns
         .iter()
         .filter(|p| p.pattern.is_default() && p.guard.is_none())
-        .count();
-    match defaults {
-        0 => helper.warn_with_scope(mid.range, &NO_DFLT, WarningClass::Behaviour),
-        x if x > 1 => helper.warn_with_scope(mid.range, &MULT_DFLT, WarningClass::Behaviour),
-        _ => (),
+    {
+        if seen_default {
+            helper.warn(mid.range, p.extent(), &MULT_DFLT, warning::Class::Behaviour);
+        } else {
+            seen_default = true;
+        }
+    }
+
+    if !seen_default {
+        helper.warn_with_scope(mid.range, &NO_DFLT, warning::Class::Behaviour);
     };
+
     for pattern in patterns {
         if pattern.pattern == Pattern::Default {
             helper.warn(
                 mid.range,
                 pattern.extent(),
                 &DFLT,
-                WarningClass::Consistency,
+                warning::Class::Consistency,
             );
         }
     }

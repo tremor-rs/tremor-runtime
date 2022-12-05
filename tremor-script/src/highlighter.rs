@@ -17,12 +17,11 @@
 
 use crate::{
     arena::Arena,
-    ast::helper::WarningClass,
-    lexer::{Token, TokenSpan},
+    ast::warning::{self, Warning},
+    errors::{Error as ScriptError, UnfinishedToken},
+    lexer::{self, Span, Token, TokenSpan},
+    pos::Location,
 };
-use crate::{ast::helper::Warning, errors::UnfinishedToken};
-use crate::{errors::Error as ScriptError, lexer::Span};
-use crate::{lexer, pos::Location};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
@@ -33,7 +32,7 @@ pub enum ErrorLevel {
     /// Error
     Error,
     /// Warning
-    Warning(WarningClass),
+    Warning(warning::Class),
     /// Hint
     Hint,
 }
