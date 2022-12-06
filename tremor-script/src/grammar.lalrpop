@@ -809,8 +809,8 @@ FnCases: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
 }
 
 FnCaseDefault: PredicateClauseRaw<'input, ExprRaw<'input>> = {
-    <start:@L> "default" <exprs:Effectors> <end:@L> => {
-        PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, mid: NodeMeta::new_box(start, end)}
+    <start:@L> "case" "_" <exprs:Effectors> <end:@L> => {
+        PredicateClauseRaw { pattern: PatternRaw::DoNotCare, exprs, guard: None, mid: NodeMeta::new_box(start, end)}
     }
 }
 
@@ -1262,7 +1262,6 @@ Predicates: PredicatesRaw<'input, ExprRaw<'input>> = {
 /// A case statement
 PredicateClause: PredicateClauseRaw<'input, ExprRaw<'input>> = {
     <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, mid: NodeMeta::new_box(start, end) },
-    <start:@L> "default" <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, mid: NodeMeta::new_box(start, end) },
 }
 
 /// Effoectors aka (=>  ... )
@@ -1310,7 +1309,6 @@ CasePattern: PatternRaw<'input> = {
 /// A case statement
 PredicateClauseImut: PredicateClauseRaw<'input, ImutExprRaw<'input>> = {
     <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, mid: NodeMeta::new_box(start, end) },
-    <start:@L> "default" <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, mid: NodeMeta::new_box(start, end) },
 }
 
 /// Effoectors aka (=>  ... )

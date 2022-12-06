@@ -1,4 +1,4 @@
 emit match event of
   case foo = %{ test ~= re|^http://.*/$|, footle == "bar" } => foo
-  default => "ko"
+  case _ => "ko"
 end

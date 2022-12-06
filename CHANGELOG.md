@@ -10,6 +10,7 @@
 
 ### Breaking Changes
 * **all** std library constants are now uppercase
+* Remove `default` in `match of` and `fn of` and standardize on `case _`
 
 ## [0.13.0-rc.10]
 

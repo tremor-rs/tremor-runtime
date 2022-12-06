@@ -3,7 +3,7 @@
 match event of
   case result = %[ 1, 2 ] => result
   case %[ _ ] => "ignore"
-  default => null
+  case _ => null
 end
 ```
 

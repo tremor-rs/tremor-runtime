@@ -1173,10 +1173,8 @@ where
                     })
                 }
                 Pattern::Assign(_) => error_oops(outer, 0xdead_0004, "nested assign pattern"),
-                Pattern::Default => error_oops(outer, 0xdead_0005, "default in assign"),
             }
         }
-        Pattern::Default => Ok(true),
     }
 }
 

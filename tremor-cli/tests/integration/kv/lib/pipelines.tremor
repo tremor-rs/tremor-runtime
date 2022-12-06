@@ -16,7 +16,7 @@ pipeline
         # direct some events to batch, some not
         let port = match $ of
             case %{ batch == true } => emit event => "batch"
-            default => emit event => "out"
+            case _ => emit event => "out"
         end;
     end;
 

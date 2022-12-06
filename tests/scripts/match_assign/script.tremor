@@ -5,5 +5,5 @@ end;
 
 match a of
   case true => event
-  default => snot
+  case _ => snot
 end

@@ -3,7 +3,7 @@ script
 	fn factorial_(acc, n) of
 		case (acc, n) when n > 0 =>
 			recur(acc * n, n - 1)
-		default => acc
+		case _ => acc
 
 	end;
   fn factorial(n) with

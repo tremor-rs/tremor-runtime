@@ -2,5 +2,5 @@ use foo3:: bar ::baz    ::    mork  as    bork ;
     
 match event of
   case {} => "snot #{bork::SNOT}"
-  default => "ko"
+  case _ => "ko"
 end;

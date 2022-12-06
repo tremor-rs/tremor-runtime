@@ -168,7 +168,7 @@ end;
 fn truncate_micros(nanos) with
   match nanos < 0 of
     case true => (nanos - NANOS_PER_MICROSECOND) - (nanos % NANOS_PER_MICROSECOND)
-    default => nanos - (nanos % NANOS_PER_MICROSECOND)
+    case _ => nanos - (nanos % NANOS_PER_MICROSECOND)
   end
 end;
 
@@ -184,7 +184,7 @@ end;
 fn truncate_millis(nanos) with
   match nanos < 0 of
     case true => (nanos - NANOS_PER_MILLISECOND) - (nanos % NANOS_PER_MILLISECOND)
-    default => nanos - (nanos % NANOS_PER_MILLISECOND)
+    case _ => nanos - (nanos % NANOS_PER_MILLISECOND)
   end
 end;
 
@@ -200,7 +200,7 @@ end;
 fn truncate_seconds(nanos) with
   match nanos < 0 of
     case true => (nanos - NANOS_PER_SECOND) - (nanos % NANOS_PER_SECOND)
-    default => nanos - (nanos % NANOS_PER_SECOND)
+    case _ => nanos - (nanos % NANOS_PER_SECOND)
   end
 end;
 
@@ -216,7 +216,7 @@ end;
 fn truncate_minutes(nanos) with
   match nanos < 0 of
     case true => (nanos - NANOS_PER_MINUTE) - (nanos % NANOS_PER_MINUTE)
-    default => nanos - (nanos % NANOS_PER_MINUTE)
+    case _ => nanos - (nanos % NANOS_PER_MINUTE)
   end
 end;
 
@@ -232,7 +232,7 @@ end;
 fn truncate_hours(nanos) with
   match nanos < 0 of
     case true => (nanos - NANOS_PER_HOUR) - (nanos % NANOS_PER_HOUR)
-    default => nanos - (nanos % NANOS_PER_HOUR)
+    case _ => nanos - (nanos % NANOS_PER_HOUR)
   end
 end;
 
@@ -248,7 +248,7 @@ end;
 fn truncate_days(nanos) with
   match nanos < 0 of
     case true => (nanos - NANOS_PER_DAY) - (nanos % NANOS_PER_DAY)
-    default => nanos - (nanos % NANOS_PER_DAY)
+    case _ => nanos - (nanos % NANOS_PER_DAY)
   end
 end;
 

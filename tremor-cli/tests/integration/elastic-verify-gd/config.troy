@@ -17,7 +17,7 @@ flow
       let $correlation = event.snot;
       match event of
         case %{present doc_id} => let $elastic["_id"] = event.doc_id
-        default => null
+        case _ => null
       end;
       event
     end;

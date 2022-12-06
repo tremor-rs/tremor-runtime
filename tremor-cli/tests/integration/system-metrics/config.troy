@@ -68,7 +68,7 @@ flow
           present sink_in
         } => state
         # initialize state
-        default => {
+        case _ => {
           "source_out": 0,   # source port `out`
           "source_err": 0,   # source port `err`
           "pipeline_in": 0,  # pipeline port `in`
@@ -88,14 +88,14 @@ flow
           let state.source_err = matched.fields.count
         case matched = %{ tags ~= %{ `connector` == "main1::out_here", port == "in" }, fields ~= %{ present count } } => 
           let state.sink_in = matched.fields.count
-        default => null
+        case _ => null
       end;
 
       # exit if we have at least 10 events
       match state of
         case %{ source_out >= 10, source_err == 0, pipeline_in >= 10, pipeline_in >= 10, sink_in >= 10} =>
           emit {"EXIT": "NOW"} => "exit"
-        default =>
+        case _ =>
           emit state => "out"
       end
     end;

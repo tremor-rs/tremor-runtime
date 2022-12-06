@@ -1,4 +1,4 @@
 match event of
   case rp = %{ meta ~= grok |%{IP:client} %{WORD:method} %{URIPATHPARAM:request} %{NUMBER:bytes} %{NUMBER:duration}| } => rp
-  default => "no match"
+  case _ => "no match"
 end

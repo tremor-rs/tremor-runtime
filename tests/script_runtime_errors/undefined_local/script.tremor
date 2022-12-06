@@ -2,6 +2,6 @@
 # so we will get a runtime error when trying to access it
 match true of
   case false => let missing_var = true
-  default => null
+  case _ => null
 end;
 missing_var

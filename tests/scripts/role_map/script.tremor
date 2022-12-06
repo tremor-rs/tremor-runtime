@@ -6,7 +6,7 @@ const MAP = {
 fn role_map(r) with
   match present MAP[r] of
     case true => MAP[r]
-    default => false
+    case _ => false
   end
 end;
 

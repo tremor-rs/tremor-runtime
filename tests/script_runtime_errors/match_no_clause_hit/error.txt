@@ -3,4 +3,4 @@ Error:
     2 |   case false => true
     3 | end
       | ^^^ A match expression executed but no clause matched
-      |     NOTE: Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.
+      |     NOTE: Consider adding a `case _ => null` clause at the end of your match or validate full coverage beforehand.

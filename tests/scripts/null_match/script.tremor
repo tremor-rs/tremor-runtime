@@ -1,4 +1,4 @@
 match event of
   case null => "is null"
-  default => "is set"
+  case _ => "is set"
 end

@@ -42,9 +42,9 @@ flow
           match event["num"] % 2 of
             case 0 =>
               let $elastic["_id"] = "#{event["num"]}"
-            default => null
+            case _ => null
           end
-        default => null
+        case _ => null
       end;
       # payload
       emit {"doc": event, "doc_as_upsert": true};

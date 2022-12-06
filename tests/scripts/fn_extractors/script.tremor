@@ -4,7 +4,7 @@ fn snottify(s) of
   case ("badger") => "snot badger, hell yea!"
   case (~ json||) => let s.snot = true; s
   case (s) when type::is_string(s) => "snot #{s}"
-  default => "snot caller, you can't snottify that!"
+  case _ => "snot caller, you can't snottify that!"
 end;
 
 snottify(event)

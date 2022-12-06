@@ -106,7 +106,7 @@ fn to_string(severity_number) with
     case FATAL1  => "FATAL2"
     case FATAL2  => "FATAL3"
     case FATAL3  => "FATAL4"
-    default => "Unsupported severity code"
+    case _ => "Unsupported severity code"
   end
 end;
 

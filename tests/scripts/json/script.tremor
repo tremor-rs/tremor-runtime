@@ -1,4 +1,4 @@
 emit match event of
   case foo = %{test ~= json|| } => foo["test"]
-  default => "ko"
+  case _ => "ko"
 end;

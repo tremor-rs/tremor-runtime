@@ -3,7 +3,7 @@
         fn is_put_exit(payload, meta) with
             let meta_ok = match meta of
               case %{kv ~= %{op == "put", ok == string::into_binary("exit")}} => true
-              default => false
+              case _ => false
             end;
             meta_ok and payload == "exit"
         end;

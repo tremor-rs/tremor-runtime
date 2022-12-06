@@ -209,7 +209,7 @@ fn test_match_eq() -> Result<()> {
             case %{ absent y, snot == "badger", superhero ~= %{absent name}} => "snot"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
             case ~ json|| => "json"
-            default => null
+            case _ => null
         end);
         (match x of
             case "literal string" => "string"
@@ -220,7 +220,7 @@ fn test_match_eq() -> Result<()> {
             case %{ absent y, snot == "badger", superhero ~= %{absent name}} => "snot"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
             case ~ json|| => "json"
-            default => null
+            case _ => null
         end)
         "#,
         true,
@@ -246,7 +246,7 @@ fn test_match_eq_2() -> Result<()> {
             case %[] => "empty_array"
             case %[ %{ present x } ] => "complex"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
-            default => null
+            case _ => null
         end);
         (match x of
             case "literal string" => "string"
@@ -263,7 +263,7 @@ fn test_match_eq_2() -> Result<()> {
             case %[] => "empty_array"
             case %[ %{ present x } ] => "complex"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
-            default => null
+            case _ => null
         end)
         "#,
         true,
@@ -289,7 +289,7 @@ fn test_match_not_eq() -> Result<()> {
             case %{ snot == 1 } => "argh"
             case %{ snot == 2 } => "argh"
             case %{ snot == 3 } => "argh"
-            default => null
+            case _ => null
         end);
         (match x of
             case "literal string" => "string"
@@ -304,7 +304,7 @@ fn test_match_not_eq() -> Result<()> {
             case %{ snot == 1 } => "argh"
             case %{ snot == 2 } => "argh"
             case %{ snot == 3 } => "argh"
-            default => "not_null"
+            case _ => "not_null"
         end)
         "#,
         false,
@@ -643,7 +643,7 @@ fn recur() {
 fn clause_group() {
     let pc = PredicateClause {
         mid: NodeMeta::dummy(),
-        pattern: Pattern::Default,
+        pattern: Pattern::DoNotCare,
         guard: None,
         exprs: vec![],
         last_expr: imut_expr(),

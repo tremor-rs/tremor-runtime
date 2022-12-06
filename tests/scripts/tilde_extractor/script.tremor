@@ -1,4 +1,4 @@
 match event of
   case ~ json|| => "ok"
-  default => "error"
+  case _ => "error"
 end

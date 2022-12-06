@@ -5,7 +5,7 @@ script
   let event.timestamp = system::ingest_ns();
   match event.timestamp > (system::ingest_ns() + (3600 * 1000000000)) of
       case true => emit => "out"
-      default => let output_port = "out"
+      case _ => let output_port = "out"
   end;
 
   match event of

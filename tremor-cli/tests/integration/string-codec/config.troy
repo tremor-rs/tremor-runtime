@@ -17,7 +17,7 @@ flow
       let in = {"message": event};
       let event =  match in of
         case r = %{ message ~= dissect|%{first} %{last}| } => r.message
-        default => drop
+        case _ => drop
       end;
       event
     end;

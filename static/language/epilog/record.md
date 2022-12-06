@@ -35,7 +35,7 @@ fn is_good_record(r) with
     case extract=%{ present flag, list-of-bool ~= %[] } 
       when list_of_bool(extract["list-of-bool"]) => 
        let valid = true
-    default => 
+    case _ => 
       let valid = false
   end;
   valid

@@ -1,16 +1,16 @@
 select {
   "event": event,
-  "correlation": match $ of case %{ present correlation } => $correlation default => null end
+  "correlation": match $ of case %{ present correlation } => $correlation case _ => null end
 } from in where
   match event of
     case %{ exit == true } => false
-    default => true
+    case _ => true
   end
 into out/ok;
 
 select {"exit": 0, "delay": 1000} from in where
   match event of
     case %{exit == true } => true
-    default => false
+    case _ => false
   end
 into out/exit;

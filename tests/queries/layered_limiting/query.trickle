@@ -6,7 +6,7 @@ script
   let $class = "default";
   let $dimensions = match record::contains(event, "application") of
     case true => event.application
-    default =>  null
+    case _ =>  null
   end;
   let $rate = 5;
   event;
@@ -17,7 +17,7 @@ script
   use std::record;
   match record::contains(event, "host") of
     case true => let $dimensions = event.host
-    default => null
+    case _ => null
   end;
   let $rate = 1;
   event;

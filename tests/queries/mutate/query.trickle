@@ -5,7 +5,7 @@ script
   match event of
     case %{ short_message ~= glob|*INFO*| } => let event.tremor.class = "info"; let $class = "info"; let $rate = 2
     case %{ short_message ~= glob|*ERROR*| } =>  let $class = "error"; let $rate = 3
-    default => let $m = event.short_message
+    case _ => let $m = event.short_message
   end;
   event
 end;

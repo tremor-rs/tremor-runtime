@@ -6,7 +6,7 @@ script
   match state of
     case null =>
       let state = {"count": args.seed}
-    default =>
+    case _ =>
       let state.count = state.count + 1
   end;
 

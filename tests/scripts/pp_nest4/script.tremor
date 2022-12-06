@@ -2,5 +2,5 @@ use foo8:: bar;
 
 match event of
   case {} => "snot {bar::snot}"
-  default => "ko"
+  case _ => "ko"
 end;

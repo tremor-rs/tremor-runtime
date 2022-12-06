@@ -1,4 +1,4 @@
 match event of
   case foo = %{ test ~= datetime|%Y-%m-%d %H:%M| } => foo
-  default => "ko"
+  case _ => "ko"
 end;

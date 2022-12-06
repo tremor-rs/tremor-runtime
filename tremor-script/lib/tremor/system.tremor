@@ -29,7 +29,7 @@ intrinsic fn ingest_ns() as system::ingest_ns;
 ## >   case "tremor" => "default"
 ## >   # Instance names can be customized by users
 ## >   # TREMOR_PATH=/path/to/lib tremor -i "bob" ...
-## >   default => "changed by user"
+## >   case _ => "changed by user"
 ## > end
 ## > ```
 ##

@@ -147,7 +147,7 @@ script
       case r = %{ present log_level } when array::contains(["DEBUG", "INFO", "WARN", "ERROR", "FATAL"], r.log_level) => {}
       case r = %{ short_message ~= re|(\\d+\\s)*(?P<log_level>DEBUG\|INFO\|WARN\|ERROR\|FATAL)(_LOG_MESSAGE)| } => r.short_message
       # default to INFO
-      default => {"log_level": "INFO"}
+      case _ => {"log_level": "INFO"}
     end
   end;
 
@@ -156,7 +156,7 @@ script
 
   match event of
     case r = %{wf_host_ip ~= dissect|%{wf_host_ip}:%{wf_host_port}|} => let event.wf_host_ip = r.wf_host_ip.wf_host_ip
-    default => null # wf_host_port was already been set no need to update it
+    case _ => null # wf_host_port was already been set no need to update it
   end;
 
   # set defaults;
@@ -936,7 +936,7 @@ script
     case %{application == "inventory"} => supply_chain_services_fields
     case %{application == "liteship"} => supply_chain_services_fields
     case %{application == "solrcloud"} => solr_fields
-    default => valid_fields
+    case _ => valid_fields
   end;
 
   let slush = {};
@@ -951,7 +951,7 @@ script
           case %{e == t} => null
           case %{e == "date", t == "string"} => null
           case %{e == "ip", v ~= cidr ||} => null
-          default => let event = patch event of erase k end, let slush[k] = v
+          case _ => let event = patch event of erase k end, let slush[k] = v
         end
       case (k, v) => null
   end;
@@ -960,7 +960,7 @@ script
 
   match string::len(slush) > 10000 of
     case true => let event.slush = string::substr(slush, 0, 10000)
-    default => null
+    case _ => null
   end;
 
   # We dont' have the time function yet as we need to collect examples and see what functions are needed
