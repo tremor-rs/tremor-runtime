@@ -12,7 +12,7 @@ match string::split(event, "/") of
   case %("api", _, "badger", ...) => 2 # An array with first value 'api', and 3rd value 'badger'
   case %("") => 3 # An array with an empty string literal value
   case %("badger", "snot") => 4 The two element array with 1st element "badger", and 2nd element "snot"
-  default => string::split(event, "/")
+  case _ => string::split(event, "/")
 end
 ```
 

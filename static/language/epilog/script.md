@@ -79,7 +79,7 @@ The `drop` keyword halts processing by discarding the current event.
 # Propagate events marked as important and convert them to system alerts
 match event of
   case %{ present important } => { "alert": event.message }
-  default => drop
+  case _ => drop
 end;
 ```
 

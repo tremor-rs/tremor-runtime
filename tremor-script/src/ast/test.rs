@@ -191,7 +191,7 @@ fn replace_last_shadow_use() {
     };
     let pc = PredicateClause {
         mid: NodeMeta::dummy(),
-        pattern: Pattern::Default,
+        pattern: Pattern::DoNotCare,
         guard: None,
         exprs: vec![],
         last_expr: expr.clone(),

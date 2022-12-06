@@ -13,7 +13,7 @@ flow
             match event of
                 case %{ short_message ~= glob|*info*|  } => emit => "info"
                 case %{ short_message ~= glob|*ERROR*| } => emit => "error"
-                default => drop
+                case _ => drop
             end
         end;
 
@@ -123,7 +123,7 @@ flow
                     let $class = "error"; 
                     let $rate = 100; 
                     emit
-                default => drop
+                case _ => drop
             end;
             # Since we use 'emit' in the previous rules we know that only events that didn't match another
             # rule will arrive here. We're setting class and rate here to 'defaut' and

@@ -1,4 +1,4 @@
 match event of
    case foo  = %{ test ~= kv|| } => foo.test
-  default => "ko"
+  case _ => "ko"
 end

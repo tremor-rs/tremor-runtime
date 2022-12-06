@@ -1,4 +1,4 @@
 match [event] of
   case %[ 0 ] => true
-  default => false
+  case _ => false
 end;

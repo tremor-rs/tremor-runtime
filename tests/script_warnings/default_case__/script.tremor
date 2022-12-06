@@ -1,3 +1,0 @@
-match event of
-  default => event
-end

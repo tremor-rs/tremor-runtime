@@ -68,7 +68,6 @@ test_cases!(
     // INSERT
     record_perf,
     array_perf,
-    default_case__,
     nanotime,
     lower_case_const,
     recordpattern_absence_and_extractor,

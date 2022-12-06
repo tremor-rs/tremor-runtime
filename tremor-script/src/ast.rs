@@ -1047,7 +1047,7 @@ impl_expr_no_lt!(TestExpr);
 pub enum DefaultCase<Ex: Expression> {
     /// No default case
     None,
-    /// Null default case (default => null)
+    /// Null default case (case _ => null)
     Null,
     /// Many expressions
     Many {
@@ -1577,14 +1577,11 @@ pub enum Pattern<'script> {
     Extract(Box<TestExpr>),
     /// Don't care condition
     DoNotCare,
-    /// Gates if no other pattern matches
-    Default,
 }
 
 impl<'script> Pattern<'script> {
     fn is_default(&self) -> bool {
-        matches!(self, Pattern::Default)
-            || matches!(self, Pattern::DoNotCare)
+        matches!(self, Pattern::DoNotCare)
             || if let Pattern::Assign(AssignPattern { pattern, .. }) = self {
                 pattern.as_ref() == &Pattern::DoNotCare
             } else {

@@ -49,14 +49,14 @@ flow
         where 
             match event of
               case %{ batch == true } => false
-              default => true
+              case _ => true
             end
         into out;
         select event from add_kafka_meta 
         where 
             match event of 
               case %{ batch == true } => true 
-              default => false 
+              case _ => false 
             end 
         into batch;
         select event from add_kafka_meta/err into err;

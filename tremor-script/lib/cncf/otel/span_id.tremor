@@ -41,6 +41,6 @@ fn is_valid(span_id) of
     # Array representation
     case(span_id) when type::is_array(span_id) =>
       { "array": array::len(arr) == 8 and span_id != [ 0, 0, 0, 0, 0, 0, 0, 0], "value": span_id }
-    default =>
+    case _ =>
       {}
 end

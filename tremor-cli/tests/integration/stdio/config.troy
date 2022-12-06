@@ -21,7 +21,7 @@ flow
       match event of
         case "event for stderr" => emit event => "err"
         case "exit" => emit event => "exit"
-        default => emit event => "out"
+        case _ => emit event => "out"
       end;
     end;
     create script route;

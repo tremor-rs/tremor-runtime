@@ -2,7 +2,7 @@ define script error
 script
   match event.snot of
     case 1 => drop
-    default => event.snot
+    case _ => event.snot
   end
 end;
 

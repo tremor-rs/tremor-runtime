@@ -2,12 +2,12 @@
 
 let bare_cidr = match event of
   case rp = %{ bare ~= cidr|| } => rp
-  default => {}
+  case _ => {}
 end;
 
 let pinned_cidr = match event of
   case rp = %{ pinned ~= cidr|10.22.0.0/24| } => rp
-  default => {}
+  case _ => {}
 end;
 
 merge bare_cidr of pinned_cidr end

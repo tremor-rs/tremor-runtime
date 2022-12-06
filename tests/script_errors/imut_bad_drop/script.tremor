@@ -1,4 +1,4 @@
 match "dont-care" of
   case "dont-care" when drop
-  default => "ouch"
+  case _ => "ouch"
 end

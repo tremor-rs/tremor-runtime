@@ -1,4 +1,4 @@
 Error: 
     1 | event >
-      |       ^ Found the token `>` but expected one of `!=`, `%`, `&`, `)`, `*`, `+`, `,`, `-`, `.`, `.`, `/`, `:`, `;`, `<`, `<<`, `<=`, `=`, `==`, `=>`, `>`, `>=`, `>>`, `>>>`, `[`, `]`, `^`, `and`, `case`, `default`, `end`, `of`, `or`, `when`, `xor`, `}`
+      |       ^ Found the token `>` but expected one of `!=`, `%`, `&`, `)`, `*`, `+`, `,`, `-`, `.`, `.`, `/`, `:`, `;`, `<`, `<<`, `<=`, `=`, `==`, `=>`, `>`, `>=`, `>>`, `>>>`, `[`, `]`, `^`, `and`, `case`, `end`, `of`, `or`, `when`, `xor`, `}`
       |         NOTE: Did you mean to use `>`?

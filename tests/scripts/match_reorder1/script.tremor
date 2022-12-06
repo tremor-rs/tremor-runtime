@@ -10,7 +10,7 @@ let event = match event of
   case 9 => {"k": "nine"}
   case 10 => {"k": "ten"}
   case 11 => {"k": "eleven"}
-  default => {"k": event}
+  case _ => {"k": event}
 end;
 
 match event of
@@ -24,7 +24,7 @@ match event of
   case %{k == 7} => let event = 7
   case %{k == 8} => let event = 8
   case %{present k} => let event = event.k
-  default => null
+  case _ => null
 end;
 
 let event = {"k": match event of
@@ -42,7 +42,7 @@ let event = {"k": match event of
   case ~ re|four| => 4
   case 8 => "eight"
   case "nine" => 9
-  default => event
+  case _ => event
 end};
 
 let a = match event of 
@@ -57,7 +57,7 @@ let a = match event of
   case a = _ => match a.k of
       case 4 => a.k
       case 5 => "five"
-      default => a.k
+      case _ => a.k
     end
 end;
 
@@ -69,16 +69,16 @@ let event = match match event of
   case %{k == 3} => "three"
   case %{k ~= glob|*six|} => 6
   case %{k ~= glob|eight*|} => 8
-  default => event.k
+  case _ => event.k
 end of
   case a = _ => match a of
       case 4 => a
       case 5 => "five"
-      default => a
+      case _ => a
     end
 end;
 
 match a of
   case event => event
-  default => "snot: #{a}"
+  case _ => "snot: #{a}"
 end

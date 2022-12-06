@@ -2,7 +2,7 @@
 ```tremor
 fn fib_(a, b, n) of
   case (a, b, n) when n > 0 => recur(b, a + b, n - 1)
-  default => a
+  case _ => a
 end;
 
 fn fib(n) with

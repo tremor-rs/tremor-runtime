@@ -17,7 +17,7 @@ State can be written through via a `let` operation
 ```tremor
 let state = match state of
   case null => { "count": 1 }
-  default => { "count"": state.count + 1 }
+  case _ => { "count"": state.count + 1 }
 end;
 ```
 

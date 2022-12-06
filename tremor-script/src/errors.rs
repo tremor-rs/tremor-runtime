@@ -397,7 +397,7 @@ impl ErrorKind {
 
             NoEventReferencesAllowed(_, _) => Some("Here you operate in the whole window, not a single event. You need to wrap this reference in an aggregate function (e.g. aggr::win::last(...)) or use it in the group by clause of this query.".to_owned()),
 
-            NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
+            NoClauseHit(_) => Some("Consider adding a `case _ => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
 
             InvalidDefinitionalWithParam(_, _, _, _, available_params) => if available_params.is_empty() {

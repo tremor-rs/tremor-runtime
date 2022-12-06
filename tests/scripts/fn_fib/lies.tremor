@@ -1,4 +1,4 @@
-fn fib_(n) of default => snot end;
+fn fib_(n) of _ => snot end;
 
 # Import the `fib.tremor` module from the TREMOR_PATH
 use fib as lies;

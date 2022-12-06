@@ -26,7 +26,7 @@
 ## > # Statements of the general form
 ## >  match event of
 ## >    case %{ absent host } => let event.host = system::hostname()
-## >    default => event.host
+## >    case _ => event.host
 ## >  end;
 ## >
 ## > # Can now be written more tersely as:

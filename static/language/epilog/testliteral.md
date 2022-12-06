@@ -4,7 +4,7 @@
 let example = { "snot": "{\"snot\": \"badger\"" };
 match example of
   case extraction=%{ snot ~= json|| } => extraction.snot
-  default => "no match"
+  case _ => "no match"
 end;
 ```
 
@@ -20,7 +20,7 @@ When executed this will result in:
 let example = { "snot": "eyJzbm90IjogImJhZGdlciJ9Cg==" };
 match example of
   case extraction=%{ snot ~= base64|| } => extraction.snot
-  default => "no match"
+  case _ => "no match"
 end;
 ```
 
@@ -40,9 +40,9 @@ match example of
   case decoded = %{ snot ~= base64|| } =>
     match { "snot": decoded.snot } of
       case json = %{ snot ~= json|| } => json.snot.snot
-      default => "no match - json"
+      case _ => "no match - json"
     end
-  default => "no match - base64"
+  case _ => "no match - base64"
 end;
 
 ```

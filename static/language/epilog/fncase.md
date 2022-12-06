@@ -12,7 +12,7 @@ fn snottify(s) of
   # Matches any literal string
   case (s) when type::is_string(s) => "snot #{s}"
   # Matches, everything else
-  default => "snot caller, you can't snottify that!"
+  case _ => "snot caller, you can't snottify that!"
 end;
 ```
 

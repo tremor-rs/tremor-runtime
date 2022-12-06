@@ -771,7 +771,7 @@ impl<'script> Upable<'script> for MatchFnDefnRaw<'script> {
         let patterns = patterns
             .into_iter()
             .map(|mut c: PredicateClauseRaw<_>| {
-                if c.pattern != PatternRaw::Default {
+                if c.pattern != PatternRaw::DoNotCare {
                     let args = self.args.iter().enumerate();
                     let mut exprs: Vec<_> = args
                         .map(|(i, root)| {
@@ -1371,14 +1371,12 @@ pub enum PatternRaw<'script> {
     Extract(TestExprRaw),
     /// we're forced to make this pub because of lalrpop
     DoNotCare,
-    /// we're forced to make this pub because of lalrpop
-    Default,
 }
 
 impl<'script> Upable<'script> for PatternRaw<'script> {
     type Target = Pattern<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PatternRaw::{Array, Assign, Default, DoNotCare, Expr, Extract, Record, Tuple};
+        use PatternRaw::{Array, Assign, DoNotCare, Expr, Extract, Record, Tuple};
         Ok(match self {
             //Predicate(pp) => Pattern::Predicate(pp.up(helper)?),
             Record(rp) => Pattern::Record(rp.up(helper)?),
@@ -1388,7 +1386,6 @@ impl<'script> Upable<'script> for PatternRaw<'script> {
             Assign(ap) => Pattern::Assign(ap.up(helper)?),
             Extract(e) => Pattern::Extract(Box::new(e.up(helper)?)),
             DoNotCare => Pattern::DoNotCare,
-            Default => Pattern::Default,
         })
     }
 }
@@ -2088,9 +2085,7 @@ fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
 }
 
 const NO_DFLT: &str = "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.";
-const MULT_DFLT: &str =
-    "Any but the first `default` / `case _` statement are unreachable and will be ignored.";
-const DFLT: &str = "using `case _ =>` is the prefered style over `default =>`.";
+const MULT_DFLT: &str = "Any but the first `case _` statement are unreachable and will be ignored.";
 
 // Checks for warnings in match arms
 fn check_patterns<Ex>(patterns: &[PredicateClause<Ex>], mid: &NodeMeta, helper: &mut Helper)
@@ -2113,17 +2108,6 @@ where
     if !seen_default {
         helper.warn_with_scope(mid.range, &NO_DFLT, warning::Class::Behaviour);
     };
-
-    for pattern in patterns {
-        if pattern.pattern == Pattern::Default {
-            helper.warn(
-                mid.range,
-                pattern.extent(),
-                &DFLT,
-                warning::Class::Consistency,
-            );
-        }
-    }
 }
 
 impl<'script, Ex> Upable<'script> for MatchRaw<'script, Ex>
@@ -2143,7 +2127,7 @@ where
 
         // If the last statement is a global default we can simply remove it
         let default = if let Some(PredicateClause {
-            pattern: Pattern::Default,
+            pattern: Pattern::DoNotCare,
             guard: None,
             exprs,
             last_expr,

@@ -3,7 +3,7 @@ Warning(behaviour):
     2 |   case true => true
     3 |   case _ => true
     4 |   case _ => false
-      |   ^^^^^^^^^^^^^^^ Any but the first `default` / `case _` statement are unreachable and will be ignored.
+      |   ^^^^^^^^^^^^^^^ Any but the first `case _` statement are unreachable and will be ignored.
     5 |   case _ => "snot"
     6 | end end
 Warning(behaviour): 
@@ -12,5 +12,5 @@ Warning(behaviour):
     3 |   case _ => true
     4 |   case _ => false
     5 |   case _ => "snot"
-      |   ^^^^^^^^^^^^^^^^ Any but the first `default` / `case _` statement are unreachable and will be ignored.
+      |   ^^^^^^^^^^^^^^^^ Any but the first `case _` statement are unreachable and will be ignored.
     6 | end end
