@@ -1,8 +1,7 @@
 define flow dns
 flow
   use integration;
-  use tremor::connectors;
-  use tremor::pipelines;
+  use tremor::{connectors, pipelines};
 
   create connector input from integration::read_file;
   create connector output from integration::write_file;

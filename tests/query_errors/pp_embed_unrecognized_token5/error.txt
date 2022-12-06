@@ -3,6 +3,6 @@ Error:
     2 | script
     3 |   use foo::bar as use;
       |                   ^^^ Found the token `use` but expected `<ident>`
-      |                       NOTE: It looks like you tried to use the 'use' as a ident, consider quoting it as `use` to make it an identifier.
+      |                       NOTE: It looks like you tried to use the 'use' as an ident, consider quoting it as `use` to make it an identifier.
     4 |   event
     5 | end;

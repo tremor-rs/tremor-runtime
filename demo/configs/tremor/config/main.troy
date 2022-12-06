@@ -208,8 +208,7 @@ end;
 
 define flow metrics
 flow
-    use tremor::connectors;
-    use tremor::pipelines;
+    use tremor::{connectors, pipelines};
 
     define pipeline enrich
     pipeline

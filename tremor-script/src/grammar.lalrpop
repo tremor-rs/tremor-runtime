@@ -102,8 +102,30 @@ ConfigDirective: (IdentRaw<'input>, ImutExprRaw<'input>) = {
 }
 
 Use: UseRaw = {
-    <start:@L> "use" <module:ModularTarget> <end:@L>  => UseRaw{module, alias: None, mid: NodeMeta::new_box(start, end)},
-    <start:@L> "use" <module:ModularTarget> "as" <alias:Ident> <end:@L> => UseRaw{module, alias: Some(alias.to_string()), mid: NodeMeta::new_box(start, end)},
+    <start:@L> "use" <modules:UseTarget> <end:@L>  => UseRaw{modules,  mid: NodeMeta::new_box(start, end)},
+}
+
+/// Module target
+UseTarget: Vec<(NodeId, Option<String>)> = {
+    <target:MaybeAliased> => vec![(NodeId::from(target.0), target.1.map(|a|a.to_string()))],
+    <m:ModPath> "::" <target:MaybeAliased> => vec![(NodeId{id: target.0.to_string(), module: m.iter().map(ToString::to_string).collect()}, target.1.map(|a|a.to_string()))],
+    <m:ModPath> "::" "{" <targets:TargetList> "}" => {
+        let module: Vec<String> = m.iter().map(ToString::to_string).collect();
+        targets.into_iter().map(|(target, alias)| (NodeId{id: target.to_string(), module: module.clone()}, alias.map(|a|a.to_string()))).collect()
+    },
+}
+
+TargetList: Vec<(IdentRaw<'input>, Option<IdentRaw<'input>>)> = {
+    <target:MaybeAliased> => vec![target],
+    <target:MaybeAliased> "," <list:TargetList> => {
+        let mut list = list;
+        list.insert(0, target);
+        list
+    },
+}
+MaybeAliased: (IdentRaw<'input>, Option<IdentRaw<'input>>) = {
+    <target:Ident> => (target, None),
+    <target:Ident> "as" <alias:Ident> => (target, Some(alias)),
 }
 
 

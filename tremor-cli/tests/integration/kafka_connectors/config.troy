@@ -1,158 +1,155 @@
 define flow kafka_produce
 flow
+  use tremor::{connectors, pipelines};
+  use integration;
 
-    use tremor::connectors;
-    use tremor::pipelines;
-    use integration;
+  define connector producer from kafka_producer
+  with
+    metrics_interval_s = 1,
+    reconnect = {
+      "retry": {
+        "interval_ms": 3000,
+        "max_retries": 10
+      }
+    },
+    codec = "json",
+    config = {
+      "brokers": [
+        "127.0.0.1:9092",
+      ],
+      "topic": "tremor_test",
+      "key": "snot"
+    }
+  end;
 
-    define connector producer from kafka_producer
+  define pipeline produce
+  pipeline
+    use std::time::nanos;
+
+    define script add_kafka_meta
+    script
+      let $kafka_producer = event.meta;
+      emit event["event"]
+    end;
+    create script add_kafka_meta;
+
+    define operator batch from generic::batch
     with
-        metrics_interval_s = 1,
-        reconnect = {
-            "retry": {
-                "interval_ms": 3000,
-                "max_retries": 10
-            }
-        },
-        codec = "json",
-        config = {
-            "brokers": [
-                "127.0.0.1:9092",
-            ],
-            "topic": "tremor_test",
-            "key": "snot"
-        }
+      count = 2,
+      timeout = nanos::from_seconds(1)
     end;
+    create operator batch;
 
-    define pipeline produce
-    pipeline
-        use std::time::nanos;
-
-        define script add_kafka_meta
-        script
-            let $kafka_producer = event.meta;
-            emit event["event"]
-        end;
-        create script add_kafka_meta;
-
-        define operator batch from generic::batch
-        with
-            count = 2,
-            timeout = nanos::from_seconds(1)
-        end;
-        create operator batch;
-
-        select event from in into add_kafka_meta;
+    select event from in into add_kafka_meta;
 
 
-        select event from add_kafka_meta 
-        where 
-            match event of
-              case %{ batch == true } => false
-              case _ => true
-            end
-        into out;
-        select event from add_kafka_meta 
-        where 
-            match event of 
-              case %{ batch == true } => true 
-              case _ => false 
-            end 
-        into batch;
-        select event from add_kafka_meta/err into err;
+    select event from add_kafka_meta 
+    where 
+      match event of
+        case %{ batch == true } => false
+        case _ => true
+      end
+    into out;
+    select event from add_kafka_meta 
+    where 
+      match event of 
+        case %{ batch == true } => true 
+        case _ => false 
+      end 
+    into batch;
+    select event from add_kafka_meta/err into err;
 
-        select event from batch/err into err;
-        select event from batch into out;
-    end;
-    
-    
-    create connector read_file from integration::read_file;
-    create connector producer;
-    create connector stderr from connectors::console;
+    select event from batch/err into err;
+    select event from batch into out;
+  end;
 
-    create pipeline passthrough from pipelines::passthrough;
-    create pipeline produce from produce;
 
-    connect /connector/read_file to /pipeline/produce;
-    connect /connector/read_file/err to /pipeline/passthrough;
-    connect /pipeline/produce/out to /connector/producer;
-    connect /pipeline/produce/err to /connector/stderr/stderr;
-    connect /pipeline/passthrough to /connector/stderr/stderr;
+  create connector read_file from integration::read_file;
+  create connector producer;
+  create connector stderr from connectors::console;
+
+  create pipeline passthrough from pipelines::passthrough;
+  create pipeline produce from produce;
+
+  connect /connector/read_file to /pipeline/produce;
+  connect /connector/read_file/err to /pipeline/passthrough;
+  connect /pipeline/produce/out to /connector/producer;
+  connect /pipeline/produce/err to /connector/stderr/stderr;
+  connect /pipeline/passthrough to /connector/stderr/stderr;
 
 end;
 
 define flow kafka_consume
 flow
-    use tremor::connectors;
-    use tremor::pipelines;
-    use integration;
+  use tremor::{connectors, pipelines};
+  use integration;
 
-    define connector consumer from kafka_consumer
-    with
-        metrics_interval_s = 1,
-        reconnect = {
-                "retry": {
-                    "interval_ms": 3000,
-                    "max_retries": 10
-                }
-            },
-        codec = "json",
-        config = {
-                "brokers": [
-                    "127.0.0.1:9092"
-                ],
-                "group_id": "test1",
-                "topics": [
-                    "tremor_test"
-                ],
-                "mode": {
-                    "custom": {
-                        "retry_failed_events": false,
-                        "rdkafka_options": {
-                            "enable.auto.commit": "false",
-                            "auto.offset.reset": "beginning",
-                            "debug": "consumer"
-                        }
-                    }
-                }
+  define connector consumer from kafka_consumer
+  with
+    metrics_interval_s = 1,
+    reconnect = {
+        "retry": {
+          "interval_ms": 3000,
+          "max_retries": 10
+        }
+      },
+    codec = "json",
+    config = {
+        "brokers": [
+          "127.0.0.1:9092"
+        ],
+        "group_id": "test1",
+        "topics": [
+          "tremor_test"
+        ],
+        "mode": {
+          "custom": {
+            "retry_failed_events": false,
+            "rdkafka_options": {
+              "enable.auto.commit": "false",
+              "auto.offset.reset": "beginning",
+              "debug": "consumer"
             }
+          }
+        }
+      }
+  end;
+
+  define pipeline consume
+  into out, exit, err
+  pipeline
+    define script clean_kafka_meta
+    script
+      use std::string;
+      let $kafka_consumer.key = string::from_utf8_lossy($kafka_consumer.key);
+      let $kafka_consumer.timestamp = null;
+      event
     end;
+    create script clean_kafka_meta;
 
-    define pipeline consume
-    into out, exit, err
-    pipeline
-        define script clean_kafka_meta
-        script
-            use std::string;
-            let $kafka_consumer.key = string::from_utf8_lossy($kafka_consumer.key);
-            let $kafka_consumer.timestamp = null;
-            event
-        end;
-        create script clean_kafka_meta;
+    select event from in into clean_kafka_meta;
+    select {"event": event, "meta": $} from clean_kafka_meta where event != "exit" into out;
+    select event from clean_kafka_meta where event == "exit" into exit;
+    select event from clean_kafka_meta/err into err;
+  end;
+  
+  create connector exit from integration::exit;
+  create connector write_file from integration::write_file;
+  create connector consumer;
+  create connector stderr from connectors::console;
 
-        select event from in into clean_kafka_meta;
-        select {"event": event, "meta": $} from clean_kafka_meta where event != "exit" into out;
-        select event from clean_kafka_meta where event == "exit" into exit;
-        select event from clean_kafka_meta/err into err;
-    end;
-    
-    create connector exit from integration::exit;
-    create connector write_file from integration::write_file;
-    create connector consumer;
-    create connector stderr from connectors::console;
+  create pipeline consume;
+  create pipeline passthrough from pipelines::passthrough;
 
-    create pipeline consume;
-    create pipeline passthrough from pipelines::passthrough;
+  # main logic
+  connect /connector/consumer to /pipeline/consume;
+  connect /pipeline/consume/out to /connector/write_file;
+  connect /pipeline/consume/exit to /connector/exit;
 
-    # main logic
-    connect /connector/consumer to /pipeline/consume;
-    connect /pipeline/consume/out to /connector/write_file;
-    connect /pipeline/consume/exit to /connector/exit;
-
-    # debugging
-    connect /connector/consumer/err to /pipeline/passthrough;
-    connect /pipeline/consume/err to /connector/stderr/stderr;
-    connect /pipeline/passthrough to /connector/stderr/stderr;
+  # debugging
+  connect /connector/consumer/err to /pipeline/passthrough;
+  connect /pipeline/consume/err to /connector/stderr/stderr;
+  connect /pipeline/passthrough to /connector/stderr/stderr;
 end;
 
 deploy flow kafka_produce;

@@ -1,21 +1,23 @@
-use std::array;
-use std::base64;
-use std::binary;
-use std::datetime;
-use std::float;
-use std::integer;
-use std::json;
-use std::math;
-use std::path;
-use std::random;
-use std::range;
-use std::re;
-use std::record;
-use std::string;
-use std::test;
+use std::{
+  array,
+  base64,
+  binary,
+  datetime,
+  float,
+  integer,
+  json,
+  math,
+  path,
+  random,
+  range,
+  re,
+  record,
+  string,
+  test,
+  type,
+  url
+};
 use std::time::nanos;
-use std::type;
-use std::url;
 use tremor::system;
 
 fn as_string(arr) with

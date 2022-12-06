@@ -2,6 +2,7 @@ Error:
     1 | define script snot
     2 | script
     3 |   use foo :: :; bar;
-      |              ^ Found the token `:` but expected `<ident>`
+      |              ^ Found the token `:` but expected one of `<ident>`, `{`
+      |                NOTE: Did you mean to use `{`?
     4 | end;
-    5 |
+    5 | 

@@ -1,8 +1,7 @@
 define flow main
 flow
   use integration;
-  use tremor::pipelines;
-  use tremor::connectors;
+  use tremor::{connectors, pipelines};
 
   create connector in from integration::read_file;
   create connector out from integration::write_file;
