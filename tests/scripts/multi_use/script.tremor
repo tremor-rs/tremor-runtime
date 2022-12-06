@@ -1,0 +1,3 @@
+use std::{string as s, integer};
+
+integer::parse(s::format("{}", event));

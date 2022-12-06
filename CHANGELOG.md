@@ -7,6 +7,7 @@
 * Warning types: now warnings can specify what they are about (performance, behaviour, etc.)
 * New warnings for consistency, behaviour and performance
 * Functions now can create warnings
+* Allow grouping of use with `use std::{m1, m2}`
 
 ### Breaking Changes
 * **all** std library constants are now uppercase

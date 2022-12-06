@@ -183,17 +183,19 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 Ok(None)
             }
             StmtRaw::PipelineCreate(stmt) => Ok(Some(Stmt::PipelineCreate(stmt.up(helper)?))),
-            StmtRaw::Use(UseRaw { alias, module, mid }) => {
-                let range = mid.range;
-                let module_id = Manager::load(&module).map_err(|err| match err {
-                    Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                        ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                        state,
-                    ),
-                    _ => err,
-                })?;
-                let alias = alias.unwrap_or_else(|| module.id.clone());
-                helper.scope().add_module_alias(alias, module_id);
+            StmtRaw::Use(UseRaw { modules, mid }) => {
+                for (module, alias) in modules {
+                    let range = mid.range;
+                    let module_id = Manager::load(&module).map_err(|err| match err {
+                        Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
+                            ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
+                            state,
+                        ),
+                        _ => err,
+                    })?;
+                    let alias = alias.unwrap_or_else(|| module.id.clone());
+                    helper.scope().add_module_alias(alias, module_id);
+                }
                 Ok(None)
             }
         }

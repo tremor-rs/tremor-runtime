@@ -258,22 +258,25 @@ impl Module {
 
         for s in raw.stmts {
             match s {
-                ModuleStmtRaw::Use(UseRaw {
-                    alias,
-                    module,
-                    mid: meta,
-                }) => match Manager::load_(&module, ids) {
-                    Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
-                        return Err(Error(ErrorKind::CyclicUse(meta.range, meta.range, uses), o));
+                ModuleStmtRaw::Use(UseRaw { modules, mid: meta }) => {
+                    for (module, alias) in modules {
+                        match Manager::load_(&module, ids) {
+                            Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
+                                return Err(Error(
+                                    ErrorKind::CyclicUse(meta.range, meta.range, uses),
+                                    o,
+                                ));
+                            }
+                            Err(e) => {
+                                return Err(e);
+                            }
+                            Ok(mod_idx) => {
+                                let alias = alias.unwrap_or_else(|| module.id.clone());
+                                helper.scope().add_module_alias(alias, mod_idx);
+                            }
+                        }
                     }
-                    Err(e) => {
-                        return Err(e);
-                    }
-                    Ok(mod_idx) => {
-                        let alias = alias.unwrap_or_else(|| module.id.clone());
-                        helper.scope().add_module_alias(alias, mod_idx);
-                    }
-                },
+                }
                 ModuleStmtRaw::Flow(e) => {
                     let e = e.up(&mut helper)?;
                     helper.scope.insert_flow(e)?;

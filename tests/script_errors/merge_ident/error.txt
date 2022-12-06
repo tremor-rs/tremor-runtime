@@ -1,6 +1,6 @@
 Error: 
     1 | let merge = event;
       |     ^^^^^ Found the token `merge` but expected one of `$`, `(`, `<ident>`, `[`, `args`, `event`, `group`, `state`, `window`, `{`
-      |           NOTE: It looks like you tried to use the 'merge' as a ident, consider quoting it as `merge` to make it an identifier.
+      |           NOTE: It looks like you tried to use the 'merge' as an ident, consider quoting it as `merge` to make it an identifier.
     2 | 
     3 | merge

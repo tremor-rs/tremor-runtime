@@ -54,8 +54,7 @@ use super::{
 
 #[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct UseRaw {
-    pub alias: Option<String>,
-    pub module: NodeId,
+    pub modules: Vec<(NodeId, Option<String>)>,
     pub(crate) mid: Box<NodeMeta>,
 }
 impl_expr_no_lt!(UseRaw);
@@ -88,16 +87,18 @@ impl<'script> ScriptRaw<'script> {
         for e in self.exprs {
             let range = e.meta().range;
             match e {
-                TopLevelExprRaw::Use(UseRaw { alias, module, .. }) => {
-                    let mid = Manager::load(&module).map_err(|err| match err {
-                        Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                            ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                            state,
-                        ),
-                        _ => err,
-                    })?;
-                    let alias = alias.unwrap_or_else(|| module.id.clone());
-                    helper.scope().add_module_alias(alias, mid);
+                TopLevelExprRaw::Use(UseRaw { modules, .. }) => {
+                    for (module, alias) in modules {
+                        let mid = Manager::load(&module).map_err(|err| match err {
+                            Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
+                                ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
+                                state,
+                            ),
+                            _ => err,
+                        })?;
+                        let alias = alias.unwrap_or_else(|| module.id.clone());
+                        helper.scope().add_module_alias(alias, mid);
+                    }
                 }
                 TopLevelExprRaw::Const(const_raw) => {
                     let c = const_raw.up(helper)?;

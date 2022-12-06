@@ -1,5 +1,4 @@
-use std::string;
-use std::re;
+use std::{string, re};
 use tremor::system;
 
 re::replace(

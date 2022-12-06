@@ -118,18 +118,20 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
     type Target = Option<DeployStmt<'script>>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
-            DeployStmtRaw::Use(UseRaw { alias, module, mid }) => {
-                let range = mid.range;
-                let module_id = Manager::load(&module).map_err(|err| match err {
-                    Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                        ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                        state,
-                    ),
-                    _ => err,
-                })?;
+            DeployStmtRaw::Use(UseRaw { modules, mid }) => {
+                for (module, alias) in modules {
+                    let range = mid.range;
+                    let module_id = Manager::load(&module).map_err(|err| match err {
+                        Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
+                            ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
+                            state,
+                        ),
+                        _ => err,
+                    })?;
 
-                let alias = alias.unwrap_or_else(|| module.id.clone());
-                helper.scope().add_module_alias(alias, module_id);
+                    let alias = alias.unwrap_or_else(|| module.id.clone());
+                    helper.scope().add_module_alias(alias, module_id);
+                }
                 Ok(None)
             }
             DeployStmtRaw::FlowDefinition(stmt) => {
@@ -314,17 +316,19 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         let mut creates = Vec::new();
         for stmt in self.stmts {
             match stmt {
-                FlowStmtRaw::Use(UseRaw { alias, module, mid }) => {
-                    let range = mid.range;
-                    let module_id = Manager::load(&module).map_err(|err| match err {
-                        Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                            ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                            state,
-                        ),
-                        _ => err,
-                    })?;
-                    let alias = alias.unwrap_or_else(|| module.id.clone());
-                    helper.scope().add_module_alias(alias, module_id);
+                FlowStmtRaw::Use(UseRaw { modules, mid }) => {
+                    for (module, alias) in modules {
+                        let range = mid.range;
+                        let module_id = Manager::load(&module).map_err(|err| match err {
+                            Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
+                                ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
+                                state,
+                            ),
+                            _ => err,
+                        })?;
+                        let alias = alias.unwrap_or_else(|| module.id.clone());
+                        helper.scope().add_module_alias(alias, module_id);
+                    }
                 }
                 FlowStmtRaw::ConnectorDefinition(stmt) => {
                     let stmt = stmt.up(helper)?;

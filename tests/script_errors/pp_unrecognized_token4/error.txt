@@ -1,3 +1,4 @@
 Error: 
     1 | use foo :: :; bar;
-      |            ^ Found the token `:` but expected `<ident>`
+      |            ^ Found the token `:` but expected one of `<ident>`, `{`
+      |              NOTE: Did you mean to use `{`?

@@ -1,8 +1,7 @@
 define flow server
 flow
   use integration;
-  use tremor::pipelines;
-  use tremor::connectors;
+  use tremor::{connectors, pipelines};
 
   define connector http_server from http_server
   with
@@ -45,8 +44,7 @@ end;
 define flow client
 flow
   use integration;
-  use tremor::pipelines;
-  use tremor::connectors;
+  use tremor::{connectors, pipelines};
 
   define connector http_client from http_client
   with

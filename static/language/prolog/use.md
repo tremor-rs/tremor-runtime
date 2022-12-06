@@ -2,6 +2,8 @@ Imports definitions from an external source for use in the current source file.
 
 The contents of a source file form a module.
 
+Multime modules that share a common root can be combined into a single use clause by using `use some::root::{m1, m2}`
+
 ### TREMOR_PATH
 
 The `TREMOR_PATH` environment path variable is a `:` delimited set of paths.

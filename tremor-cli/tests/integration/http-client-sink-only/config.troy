@@ -1,8 +1,7 @@
 define flow echo_server
 flow
   use integration;
-  use tremor::pipelines;
-  use tremor::connectors;
+  use tremor::{connectors, pipelines};
 
   define connector http_server from http_server
   with
