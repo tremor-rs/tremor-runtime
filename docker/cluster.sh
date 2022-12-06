@@ -14,7 +14,13 @@ fi
 
 if [ -z ${DATA_DIR+x} ]
 then
-    TREMOR_DIR="/data"
+    echo "DATA_DIR is not set, defaulting to /data"
+    DATA_DIR="/data"
+fi
+
+if [ ! -d "${DATA_DIR}"  ]
+then
+    mkdir -p "${DATA_DIR}"
 fi
 
 if [ -z ${TREMOR_DIR+x} ]
@@ -29,19 +35,28 @@ fi
 
 if [ -z ${RPC_IP+x} ]
 then
-    echo "RPC_IP is not set"
-    return 1
+    echo "RPC_IP is not set, defaulting to ${POD_IP}:9000"
+    RPC_IP="${POD_IP}:9000"
 fi
 
 if [ -z ${API_IP+x} ]
 then
-    echo "API_IP is not set"
-    return 1
+    echo "API_IP is not set, defaulting to ${POD_IP}:8000"
+    API_IP="${POD_IP}:8000"
 fi
 
-if [ -z ${JOIN+x} ]
+if [ ! -z ${WORKER+x} ]
 then
-    exec /usr/bin/tini /tremor -- bootstrap --remove-on-sigterm --db-dir "${DATA_DIR}" --rpc "${RPC_IP}" --api "${API_IP}"
+    ARGS="--remove-on-sigterm --passive"
+fi
+
+# tremor-0.tremor.default.svc.cluster.local
+# export MY_NODE_NAME='minikube'
+# export MY_POD_NAME='tremor-0'
+# export MY_POD_NAMESPACE='default'
+if [ ${TREMOR_SEED} = "${MY_POD_NAME}.tremor.${MY_POD_NAMESPACE}.svc.cluster.local" ]
+then
+    exec /usr/bin/tini /tremor -- cluster bootstrap --db-dir "${DATA_DIR}" --rpc "${RPC_IP}" --api "${API_IP}" ${ARGS}
 else
-    exec /usr/bin/tini /tremor -- start --remove-on-sigterm --db-dir "${DATA_DIR}" --rpc "${RPC_IP}" --api "${API_IP}" --join "${JOIN}"
+    exec /usr/bin/tini /tremor -- cluster start --db-dir "${DATA_DIR}" --rpc "${RPC_IP}" --api "${API_IP}" --join "${TREMOR_SEED}:8000" ${ARGS}
 fi

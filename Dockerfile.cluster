@@ -41,8 +41,11 @@ COPY tremor-cli /app/tremor-cli
 COPY .git /app/.git
 
 RUN cat /proc/cpuinfo
-RUN cargo build --release -p tremor-cli --verbose
-RUN strip target/release/tremor
+
+# RUN cargo build --release -p tremor-cli --verbose
+# RUN strip target/release/tremor
+RUN cargo build -p tremor-cli --verbose
+RUN strip target/debug/tremor
 
 FROM debian:bullseye-slim
 
@@ -56,7 +59,8 @@ RUN apt-get update \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/tremor /tremor
+#COPY --from=builder /app/target/release/tremor /tremor
+COPY --from=builder /app/target/debug/tremor /tremor
 
 # stdlib
 RUN mkdir -p /usr/share/tremor/lib
