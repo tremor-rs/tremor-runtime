@@ -1,0 +1,5 @@
+use std::{integer::{unsigned, signed}, string};
+match [unsigned::MAX, string::format("{}", signed::MAX)] of
+  case %(18446744073709551615, "9223372036854775807") => event
+  case _ => null
+end

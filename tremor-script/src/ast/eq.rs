@@ -18,9 +18,9 @@ use super::{
     ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, Bytes, BytesPart, ClauseGroup,
     ClausePreCondition, Comprehension, ComprehensionCase, DefaultCase, EventPath, ExprPath,
     Expression, Field, ImutExpr, Invocable, Invoke, InvokeAggr, List, Literal, LocalPath, Match,
-    Merge, MetadataPath, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern,
-    Record, RecordPattern, Recur, ReservedPath, Segment, StatePath, StrLitElement, StringLit,
-    TestExpr, TuplePattern, UnaryExpr,
+    Merge, MetadataPath, NodeId, Patch, PatchOperation, Path, Pattern, PredicateClause,
+    PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Segment, StatePath,
+    StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
 };
 
 /// some special kind of equivalence between expressions
@@ -155,9 +155,15 @@ impl<'script> AstEq for StrLitElement<'script> {
 
 impl<'script> AstEq for Invoke<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.node_id.eq(&other.node_id)
+        self.node_id.ast_eq(&other.node_id)
             && self.invocable.ast_eq(&other.invocable)
             && self.args.ast_eq(&other.args)
+    }
+}
+
+impl AstEq for NodeId {
+    fn ast_eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.module == other.module
     }
 }
 

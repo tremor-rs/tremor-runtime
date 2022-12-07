@@ -12,16 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
-
-use crate::registry::registry;
-use crate::{ast::BinOpKind, errors::Result};
+use super::*;
 use crate::{
-    ast::{ClauseGroup, Expr},
+    ast::{eq::AstEq, BinOpKind, ClauseGroup, Expr},
+    errors::Result,
+    registry::registry,
     NodeMeta,
 };
-
-use super::*;
+use std::collections::BTreeMap;
 
 /// tests the ast equality of the two last `ImutExprInt` in the given script
 fn test_ast_eq(script: &str, check_equality: bool) -> Result<()> {
