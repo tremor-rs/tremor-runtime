@@ -31,9 +31,7 @@ use crate::{
         Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
         UnaryOpKind,
     },
-    errors::{
-        err_generic, error_generic, error_missing_effector, Error, Kind as ErrorKind, Result,
-    },
+    errors::{err_generic, error_generic, error_missing_effector, Kind as ErrorKind, Result},
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
     prelude::*,
     tilde::Extractor,
@@ -85,17 +83,10 @@ impl<'script> ScriptRaw<'script> {
         let mut exprs = vec![];
 
         for e in self.exprs {
-            let range = e.meta().range;
             match e {
                 TopLevelExprRaw::Use(UseRaw { modules, .. }) => {
                     for (module, alias) in modules {
-                        let mid = Manager::load(&module).map_err(|err| match err {
-                            Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                                ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                                state,
-                            ),
-                            _ => err,
-                        })?;
+                        let mid = Manager::load(&module)?;
                         let alias = alias.unwrap_or_else(|| module.id.clone());
                         helper.scope().add_module_alias(alias, mid);
                     }
@@ -1678,10 +1669,10 @@ impl<'script> Upable<'script> for PathRaw<'script> {
             Local(p) => {
                 // Handle local constants
                 if helper.is_const_path(&p) {
-                    let id = p.root.id;
-                    let c: crate::ast::Const =
-                        helper.get(&NodeId::from(&id))?.ok_or("invalid constant")?;
-                    let mid = p.mid.box_with_name(&id);
+                    let c: crate::ast::Const = helper
+                        .get(&NodeId::from(&p.root))?
+                        .ok_or("invalid constant")?;
+                    let mid = p.mid.box_with_name(&p.root);
                     let var = helper.register_shadow_from_mid(&mid);
                     Path::Expr(ExprPath {
                         expr: Box::new(ImutExpr::literal(c.mid, c.value)),
@@ -1835,6 +1826,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
         let node_id = NodeId {
             module: self.module.iter().map(ToString::to_string).collect(),
             id: id.to_string(),
+            mid: mid.clone(),
         };
 
         let c: Const = helper.get(&node_id)?.ok_or_else(|| {
@@ -2239,6 +2231,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
         let node_id = NodeId {
             id: self.fun,
             module: self.module,
+            mid: self.mid.clone(),
         };
         let inner = self.mid.range;
         let outer = inner.expand_lines(3);

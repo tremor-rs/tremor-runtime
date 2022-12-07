@@ -29,7 +29,7 @@ use crate::{
 #[macro_export]
 macro_rules! impl_expr_exraw {
     ($name:ident) => {
-        impl<'script, Ex> BaseExpr for $name<'script, Ex>
+        impl<'script, Ex> $crate::ast::base_expr::BaseExpr for $name<'script, Ex>
         where
             <Ex as Upable<'script>>::Target: Expression + 'script,
             Ex: ExpressionRaw<'script> + 'script,
@@ -46,7 +46,7 @@ macro_rules! impl_expr_exraw {
 #[macro_export]
 macro_rules! impl_expr_no_lt {
     ($name:ident) => {
-        impl BaseExpr for $name {
+        impl $crate::ast::base_expr::BaseExpr for $name {
             fn meta(&self) -> &$crate::ast::NodeMeta {
                 &self.mid
             }
@@ -59,7 +59,7 @@ macro_rules! impl_expr_no_lt {
 #[macro_export]
 macro_rules! impl_expr {
     ($name:ident) => {
-        impl<'script> BaseExpr for $name<'script> {
+        impl<'script> $crate::ast::base_expr::BaseExpr for $name<'script> {
             fn meta(&self) -> &NodeMeta {
                 &self.mid
             }
@@ -72,7 +72,9 @@ macro_rules! impl_expr {
 #[macro_export]
 macro_rules! impl_expr_ex {
     ($name:ident) => {
-        impl<'script, Ex: Expression + 'script> BaseExpr for $name<'script, Ex> {
+        impl<'script, Ex: Expression + 'script> $crate::ast::base_expr::BaseExpr
+            for $name<'script, Ex>
+        {
             fn meta(&self) -> &NodeMeta {
                 &self.mid
             }

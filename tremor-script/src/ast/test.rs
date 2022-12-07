@@ -100,6 +100,7 @@ fn as_invoke() {
         node_id: NodeId {
             module: Vec::new(),
             id: "fun".to_string(),
+            mid: NodeMeta::dummy(),
         },
         invocable,
         args: Vec::new(),
@@ -119,6 +120,7 @@ fn as_invoke() {
         node_id: NodeId {
             module: Vec::new(),
             id: "fun".to_string(),
+            mid: NodeMeta::dummy(),
         },
         invocable: invocable2,
         args: Vec::new(),

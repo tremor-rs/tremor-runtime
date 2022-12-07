@@ -588,7 +588,7 @@ error_chain! {
             description("Bad arity for function")
                 display("Bad arity for function {}::{}/{:?} but was called with {} arguments", m, f, a, calling_a)
         }
-        MissingModule(expr: Span, inner: Span, m: String, suggestion: Option<(usize, String)>) {
+        MissingModule(outer: Span, inner: Span, m: String, suggestion: Option<(usize, String)>) {
             description("Call to undefined module")
                 display("Call to undefined module {}", m)
         }
