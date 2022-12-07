@@ -35,12 +35,11 @@ use crate::ast::{
     },
     Ident,
 };
-use crate::errors::{error_generic, Error};
+use crate::errors::error_generic;
 use crate::{ast::optimizer::Optimizer, prelude::Ranged};
 use crate::{ast::NodeMeta, impl_expr};
 use crate::{
     ast::{raw::UseRaw, Consts},
-    errors::Kind as ErrorKind,
     impl_expr_no_lt,
     module::Manager,
 };
@@ -183,16 +182,9 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 Ok(None)
             }
             StmtRaw::PipelineCreate(stmt) => Ok(Some(Stmt::PipelineCreate(stmt.up(helper)?))),
-            StmtRaw::Use(UseRaw { modules, mid }) => {
+            StmtRaw::Use(UseRaw { modules, .. }) => {
                 for (module, alias) in modules {
-                    let range = mid.range;
-                    let module_id = Manager::load(&module).map_err(|err| match err {
-                        Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                            ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                            state,
-                        ),
-                        _ => err,
-                    })?;
+                    let module_id = Manager::load(&module)?;
                     let alias = alias.unwrap_or_else(|| module.id.clone());
                     helper.scope().add_module_alias(alias, module_id);
                 }

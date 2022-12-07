@@ -108,10 +108,10 @@ Use: UseRaw = {
 /// Module target
 UseTarget: Vec<(NodeId, Option<String>)> = {
     <target:MaybeAliased> => vec![(NodeId::from(target.0), target.1.map(|a|a.to_string()))],
-    <m:ModPath> "::" <target:MaybeAliased> => vec![(NodeId{id: target.0.to_string(), module: m.iter().map(ToString::to_string).collect()}, target.1.map(|a|a.to_string()))],
-    <m:ModPath> "::" "{" <targets:TargetList> "}" => {
+    <start:@L> <m:ModPath> "::" <target:MaybeAliased> <end:@L> => vec![(NodeId{id: target.0.to_string(), module: m.iter().map(ToString::to_string).collect(),  mid: NodeMeta::new_box(start, end)}, target.1.map(|a|a.to_string()))],
+    <start:@L> <m:ModPath> "::" "{" <targets:TargetList> "}" <end:@L> => {
         let module: Vec<String> = m.iter().map(ToString::to_string).collect();
-        targets.into_iter().map(|(target, alias)| (NodeId{id: target.to_string(), module: module.clone()}, alias.map(|a|a.to_string()))).collect()
+        targets.into_iter().map(|(target, alias)| (NodeId{id: target.to_string(), module: module.clone(),  mid: NodeMeta::new_box(start, end)}, alias.map(|a|a.to_string()))).collect()
     },
 }
 
@@ -207,7 +207,7 @@ WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
 /// Module target
 ModularTarget: NodeId = {
     <Ident> => NodeId::from(<>),
-    <m:ModPath> "::" <target:Ident> => NodeId{id: target.to_string(), module: m.iter().map(ToString::to_string).collect()},
+    <start:@L> <m:ModPath> "::" <target:Ident> <end:@L> => NodeId{id: target.to_string(), module: m.iter().map(ToString::to_string).collect(),  mid: NodeMeta::new_box(start, end)},
 }
 
   

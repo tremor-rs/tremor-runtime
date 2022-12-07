@@ -1,5 +1,5 @@
 Error: 
     1 | use snot;
-      | ^^^^^^^^ Module `snot` not found or not readable error in module path: 
+      |     ^^^^ Module `snot` not found or not readable error in module path: 
                          - tests/flow_errors/module_not_found/
                          - tremor-script/lib

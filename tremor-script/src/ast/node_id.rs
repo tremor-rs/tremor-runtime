@@ -1,7 +1,3 @@
-use std::fmt::Display;
-
-use super::raw::IdentRaw;
-
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,43 +12,42 @@ use super::raw::IdentRaw;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::raw::IdentRaw;
+use crate::{impl_expr_no_lt, NodeMeta};
+use std::fmt::Display;
+
 /// Identifies a node in the AST.
-#[derive(Clone, Debug, PartialEq, Serialize, Hash, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize, Hash, Eq)]
 pub struct NodeId {
     /// The ID of the Node
     pub(crate) id: String,
     /// The module of the Node
     pub(crate) module: Vec<String>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-
-impl<T: ToString> From<&T> for NodeId {
-    fn from(id: &T) -> Self {
-        Self {
-            id: id.to_string(),
-            module: vec![],
-        }
-    }
-}
+impl_expr_no_lt!(NodeId);
 
 impl<'script> From<IdentRaw<'script>> for NodeId {
     fn from(id: IdentRaw<'script>) -> Self {
         Self {
             id: id.id.to_string(),
             module: vec![],
+            mid: id.mid,
+        }
+    }
+}
+
+impl<'script> From<&IdentRaw<'script>> for NodeId {
+    fn from(id: &IdentRaw<'script>) -> Self {
+        Self {
+            id: id.id.to_string(),
+            module: vec![],
+            mid: id.mid.clone(),
         }
     }
 }
 
 impl NodeId {
-    /// Create a new `NodeId` from an ID and Module list.
-    #[must_use]
-    pub fn new<T: ToString + ?Sized>(id: &T, module: &[String]) -> Self {
-        Self {
-            id: id.to_string(),
-            module: module.to_vec(),
-        }
-    }
-
     /// The node's id.
     #[must_use]
     pub fn id(&self) -> &str {
@@ -120,15 +115,26 @@ macro_rules! impl_fqn {
 
 #[cfg(test)]
 mod test {
+    use crate::NodeMeta;
+
     use super::NodeId;
 
     #[test]
     fn fqn() {
-        let no_module = NodeId::new(&"foo", &[]);
+        let no_module = NodeId {
+            id: "foo".into(),
+            module: vec![],
+            mid: NodeMeta::dummy(),
+        };
+
         assert_eq!(no_module.fqn(), "foo");
         assert!(no_module.module().is_empty());
 
-        let with_module = NodeId::new(&"foo", &["bar".to_string(), "baz".to_string()]);
+        let with_module = NodeId {
+            id: "foo".into(),
+            module: vec!["bar".to_string(), "baz".to_string()],
+            mid: NodeMeta::dummy(),
+        };
         assert_eq!(with_module.fqn(), "bar::baz::foo");
         assert_eq!(with_module.module(), &["bar", "baz"]);
 

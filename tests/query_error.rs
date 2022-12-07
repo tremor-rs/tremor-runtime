@@ -61,9 +61,9 @@ macro_rules! test_cases {
                     let err = err.trim();
                     let re = Regex::new(err)?;
 
-                    if let Err(e) = s {
-                        println!("{} ~ {}", err, format!("{}", e));
-                        assert!(re.is_match(&format!("{}", e)));
+                    if let Err(got) = s {
+                        println!("{}", got);
+                        assert!(re.is_match(&format!("{}", got)));
                     } else {
                         println!("Expected error, but got succeess");
                         assert!(false);

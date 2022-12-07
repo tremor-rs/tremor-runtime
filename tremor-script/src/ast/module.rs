@@ -15,6 +15,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
+    base_expr::Ranged,
     deploy::raw::{ConnectorDefinitionRaw, FlowDefinitionRaw},
     docs::{Docs, ModDoc},
     query::raw::{
@@ -455,8 +456,8 @@ impl Manager {
 
         let p = path.resolve_id(node_id).ok_or_else(|| {
             crate::errors::ErrorKind::ModuleNotFound(
-                Span::yolo(),
-                Span::yolo(),
+                node_id.extent().expand_lines(2),
+                node_id.extent(),
                 node_id.fqn(),
                 path.mounts.clone(),
             )
@@ -519,10 +520,12 @@ mod test {
         let id1 = Manager::load(&NodeId {
             id: "twice".to_string(),
             module: vec!["loading".into()],
+            mid: NodeMeta::dummy(),
         })?;
         let id2 = Manager::load(&NodeId {
             id: "twice".to_string(),
             module: vec!["loading".into()],
+            mid: NodeMeta::dummy(),
         })?;
         assert_eq!(id1, id2);
         Ok(())
@@ -533,6 +536,7 @@ mod test {
         Manager::load(&NodeId {
             id: "outside".to_string(),
             module: vec![],
+            mid: NodeMeta::dummy(),
         })?;
         Ok(())
     }
@@ -543,6 +547,7 @@ mod test {
         Manager::load(&NodeId {
             id: "string".to_string(),
             module: vec!["std".to_string()],
+            mid: NodeMeta::dummy(),
         })?;
         Ok(())
     }
