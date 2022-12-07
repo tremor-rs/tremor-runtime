@@ -110,19 +110,42 @@ UseTarget: Vec<(NodeId, Option<String>)> = {
     <target:MaybeAliased> => vec![(NodeId::from(target.0), target.1.map(|a|a.to_string()))],
     <start:@L> <m:ModPath> "::" <target:MaybeAliased> <end:@L> => vec![(NodeId{id: target.0.to_string(), module: m.iter().map(ToString::to_string).collect(),  mid: NodeMeta::new_box(start, end)}, target.1.map(|a|a.to_string()))],
     <start:@L> <m:ModPath> "::" "{" <targets:TargetList> "}" <end:@L> => {
-        let module: Vec<String> = m.iter().map(ToString::to_string).collect();
-        targets.into_iter().map(|(target, alias)| (NodeId{id: target.to_string(), module: module.clone(),  mid: NodeMeta::new_box(start, end)}, alias.map(|a|a.to_string()))).collect()
+        targets.into_iter().map(|(target, alias)| {
+            let (id, module) = if let Some((id, suffix)) = target.split_last() {
+                (id.to_string(), m.iter().chain(suffix.iter()).map(ToString::to_string).collect())
+            } else {
+                unreachable!("the use target is guaranteed to have at least one element")
+            };
+            (NodeId{id, module,  mid: NodeMeta::new_box(start, end)}, alias.map(|a|a.to_string()))
+        }).collect()
     },
 }
 
-TargetList: Vec<(IdentRaw<'input>, Option<IdentRaw<'input>>)> = {
-    <target:MaybeAliased> => vec![target],
-    <target:MaybeAliased> "," <list:TargetList> => {
+TargetList: Vec<(Vec<IdentRaw<'input>>, Option<IdentRaw<'input>>)> = {
+    <target:TargetElement> => target,
+    <target:TargetElement> "," <list:TargetList> => {
         let mut list = list;
-        list.insert(0, target);
+        let mut target = target;
+        list.append(&mut target);
         list
     },
 }
+TargetElement: Vec<(Vec<IdentRaw<'input>>, Option<IdentRaw<'input>>)> = {
+    <target:MaybeAliased> => vec![(vec![target.0], target.1)],
+    <m:ModPath> "::" <target:MaybeAliased> => {
+        let mut m = m;
+        m.push(target.0);
+        vec![(m, target.1)]
+    },
+    <m:ModPath> "::" "{" <targets:TargetList> "}" => {
+        targets.into_iter().map(|(mut target, alias)| {
+            let mut m = m.clone();
+            m.append(&mut target);
+            (m, alias)
+        }).collect()
+    },
+}
+
 MaybeAliased: (IdentRaw<'input>, Option<IdentRaw<'input>>) = {
     <target:Ident> => (target, None),
     <target:Ident> "as" <alias:Ident> => (target, Some(alias)),
