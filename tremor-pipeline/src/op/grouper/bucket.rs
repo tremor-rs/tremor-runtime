@@ -12,54 +12,66 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Dimension based grouping with sliding windows
+//! Bucket will perform a sliding window rate limiting based on event metadata. Limits are applied for every `$class`. In a `$class` each `$dimensions` is allowed to pass `$rate` messages per second.
 //!
-//! grouper is configured with a number of buckets and their alloted
-//! throughput on a time basis.
+//! This operator does not support configuration.
 //!
-//! Messages are not combined by key and the allotment is applied in a sliding
-//! window fashion with a window granularity (a default of 10ms).
+//! This operator preserves event metadata.
 //!
-//! There is no 'magical' default bucket but one can be configured if desired
-//! along with a default rule.
+//! **Metadata Variables**:
 //!
-//! ## Configuration
+//! - `$class` - The class of an event. (String)
+//! - `$rate` - Allowed events per second per class/dimension (Number)
+//! - (Optional) `$dimensions` - The dimensions of the event. (Any)
+//! - (Optional)`$cardinality` - the maximum number of dimensions kept track of at the same time (Number, default: `1000`)
 //!
-//! See [Config](struct.Config.html) for details.
+//! **Outputs**:
 //!
-//! ## Outputs
+//! - `out`
+//! - `error` - Unprocessable events for example if `$class` or `$rate` are not set.
+//! - `overflow` - Events that exceed the rate defined for them
 //!
-//! The 1st additional output is used to route data that was decided to
-//! be discarded to.
+//! **Example**:
 //!
-//! # Example
-//!
-//! ```yaml
-//! - grouper::bucket:
-//!     class1: # 1k messages per seconds on second granularity
-//!       rate: 1000
-//!     class2: # 500 messages per seconds on 10 second granularity
-//!       rate: 5000
-//!       time_range: 10000
+//! ```tremor
+//! define operator group from grouper::bucket;
 //! ```
 //!
-//! ## Pseudocode
+//! **Metrics**:
 //!
-//! ```pseudocode
-//! for e in events {
-//!   if let bucket = buckets.get(e.classification) {
-//!      dimension = bucket.keys.map(|key| e.data.get(key));
-//!      if let window bucket.windows(dimension) {
-//!        if window.inc() { pass } else { drop }
-//!      } else {
-//!        bucket.windows(dimension) = Window::new(bucket.limit)
-//!        if bucket.windows(dimension).inc() { pass } else { drop }
-//!      }
-//!   } else {
-//!     return drop
-//!   }
+//! The bucket operator generates additional metrics. For each class the following two statistics are generated (as an example):
+//!
+//! ```json
+//! {"measurement":"bucketing",
+//!  "tags":{
+//!    "action":"pass",
+//!    "class":"test",
+//!    "direction":"output",
+//!    "node":"bucketing",
+//!    "pipeline":"main",
+//!    "port":"out"
+//!  },
+//!  "fields":{"count":93},
+//!  "timestamp":1553012903452340000
+//! }
+//! {"measurement":"bucketing",
+//!  "tags":{
+//!    "action":"overflow",
+//!    "class":"test",
+//!    "direction":"output",
+//!    "node":"bucketing",
+//!    "pipeline":"main",
+//!    "port":"out"
+//!  },
+//!  "fields":{"count":127},
+//!  "timestamp":1553012903452340000
 //! }
 //! ```
+//!
+//! This tells us the following, up until this measurement was published in the class `test`:
+//!
+//! - (`pass`) Passed 93 events
+//! - (`overflow`) Marked 127 events as overflow due to not fitting in the limit
 
 use std::num::NonZeroUsize;
 

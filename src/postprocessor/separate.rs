@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Postprocessor appending a configured `separator` to each byte array it processes.
-//! The separator defaults to `\n`, line-break.
+//! Appends the separation character at the end of each event's byte stream, the default character is '\n' (newline). It can be overwritten with the `separator` option.
+//!
+//! | Option      | Description                                            | Required | Default Value |
+//! |-------------|--------------------------------------------------------|----------|---------------|
+//! | `separator` | The separator to append after each event's byte stream | no       | `\n`          |
 
 use super::Postprocessor;
 use crate::errors::{Kind as ErrorKind, Result};

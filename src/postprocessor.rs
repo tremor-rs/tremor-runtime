@@ -12,21 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub(crate) mod base64;
 mod chunk;
-mod compress;
-mod gelf;
+pub(crate) mod compress;
+pub(crate) mod gelf_chunking;
+pub(crate) mod ingest_ns;
+pub(crate) mod length_prefixed;
 pub(crate) mod separate;
+pub(crate) mod textual_length_prefixed;
 
 use crate::config::Postprocessor as PostprocessorConfig;
 use crate::errors::Result;
-use byteorder::{BigEndian, WriteBytesExt};
-pub(crate) use gelf::Gelf;
 use std::default::Default;
 use tremor_common::time::nanotime;
 /// Set of Postprocessors
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
-pub(crate) use compress::Compress;
-use std::{io::Write, mem, str};
+use std::{mem, str};
 
 trait PostprocessorState {}
 /// Postprocessor trait
@@ -61,13 +62,17 @@ pub trait Postprocessor: Send + Sync {
 pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
         "chunk" => Ok(Box::new(chunk::Chunk::from_config(config.config.as_ref())?)),
-        "compress" => Ok(Box::new(Compress::from_config(config.config.as_ref())?)),
+        "compress" => Ok(Box::new(compress::Compress::from_config(
+            config.config.as_ref(),
+        )?)),
         "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
-        "base64" => Ok(Box::new(Base64::default())),
-        "ingest-ns" => Ok(Box::new(AttachIngresTs {})),
-        "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
-        "gelf-chunking" => Ok(Box::new(Gelf::default())),
-        "textual-length-prefix" => Ok(Box::new(TextualLength::default())),
+        "base64" => Ok(Box::new(base64::Base64::default())),
+        "ingest-ns" => Ok(Box::new(ingest_ns::IngestNs {})),
+        "length-prefixed" => Ok(Box::new(length_prefixed::LengthPrefixed::default())),
+        "gelf-chunking" => Ok(Box::new(gelf_chunking::Gelf::default())),
+        "textual-length-prefixed" => Ok(Box::new(
+            textual_length_prefixed::TextualLengthPrefixed::default(),
+        )),
         name => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
 }
@@ -159,66 +164,6 @@ pub fn finish(postprocessors: &mut [Box<dyn Postprocessor>], alias: &str) -> Res
     }
 }
 
-#[derive(Default)]
-pub(crate) struct Base64 {}
-impl Postprocessor for Base64 {
-    fn name(&self) -> &str {
-        "base64"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(vec![base64::encode(data).as_bytes().to_vec()])
-    }
-}
-
-pub(crate) struct AttachIngresTs {}
-impl Postprocessor for AttachIngresTs {
-    fn name(&self) -> &str {
-        "attach-ingress-ts"
-    }
-
-    fn process(&mut self, ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        let mut res = Vec::with_capacity(data.len() + 8);
-        res.write_u64::<BigEndian>(ingres_ns)?;
-        res.write_all(data)?;
-
-        Ok(vec![res])
-    }
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct LengthPrefix {}
-impl Postprocessor for LengthPrefix {
-    fn name(&self) -> &str {
-        "length-prefix"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        let mut res = Vec::with_capacity(data.len() + 8);
-        res.write_u64::<BigEndian>(data.len() as u64)?;
-        res.write_all(data)?;
-        Ok(vec![res])
-    }
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct TextualLength {}
-impl Postprocessor for TextualLength {
-    fn name(&self) -> &str {
-        "textual-length-prefix"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        let size = data.len();
-        let mut digits: Vec<u8> = size.to_string().into_bytes();
-        let mut res = Vec::with_capacity(digits.len() + 1 + size);
-        res.append(&mut digits);
-        res.push(32);
-        res.write_all(data)?;
-        Ok(vec![res])
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -231,7 +176,7 @@ mod test {
         "gelf-chunking",
         "ingest-ns",
         "length-prefixed",
-        "textual-length-prefix",
+        "textual-length-prefixed",
     ];
     const COMPRESSION: [&str; 6] = ["gzip", "zlib", "xz2", "snappy", "lz4", "zstd"];
 
@@ -260,7 +205,7 @@ mod test {
 
     #[test]
     fn base64() -> Result<()> {
-        let mut post = Base64 {};
+        let mut post = base64::Base64 {};
         let data: [u8; 0] = [];
 
         assert_eq!(Ok(vec![vec![]]), post.process(0, 0, &data));
@@ -275,7 +220,7 @@ mod test {
 
     #[test]
     fn textual_length_prefix_postp() -> Result<()> {
-        let mut post = TextualLength {};
+        let mut post = textual_length_prefixed::TextualLengthPrefixed {};
         let data = vec![1_u8, 2, 3];
         let encoded = post.process(42, 23, &data)?.pop().unwrap_or_default();
         assert_eq!("3 \u{1}\u{2}\u{3}", str::from_utf8(&encoded)?);
