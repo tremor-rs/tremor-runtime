@@ -54,6 +54,7 @@ use crate::{
         raw::{BytesDataType, Endian},
     },
     errors::{err_generic, error_no_locals, Kind as ErrorKind, Result},
+    extractor::Extractor,
     impl_expr, impl_expr_ex, impl_expr_no_lt,
     interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
     lexer::Span,
@@ -61,9 +62,7 @@ use crate::{
     prelude::*,
     registry::{CustomFn, FResult, TremorAggrFnWrapper, TremorFnWrapper},
     script::Return,
-    stry,
-    tilde::Extractor,
-    KnownKey, Value,
+    stry, KnownKey, Value,
 };
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;

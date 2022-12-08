@@ -25,7 +25,7 @@
 // Service Check
 // _sc|<NAME>|<STATUS>|d:<TIMESTAMP>|h:<HOSTNAME>|#<TAG_KEY_1>:<TAG_VALUE_1>,<TAG_2>|m:<SERVICE_CHECK_MESSAGE>
 
-//! The `dogstatsd` codec supports the [Datadog DogStatsD v1.2 protocol](https://docs.datadoghq.com/developers/dogstatsd/datagram_shell).
+//! The `dogstatsd` codec supports the [Datadog `DogStatsD` v1.2 protocol](https://docs.datadoghq.com/developers/dogstatsd/datagram_shell).
 //!
 //! The format is similar to the `statsd` format, but also includes events and service checks.
 //!

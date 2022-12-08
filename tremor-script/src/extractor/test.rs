@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::ExtractorResult::{Match, MatchNull, NoMatch};
+use super::Result::{Match, MatchNull, NoMatch};
 use super::*;
 use crate::Value;
 use halfbrown::hashmap;
@@ -296,7 +296,7 @@ fn test_datetime_extractor() {
 }
 
 #[test]
-fn opt_glob() -> Result<(), ExtractorError> {
+fn opt_glob() -> StdResult<(), Error> {
     assert_eq!(
         Extractor::new("glob", "snot*")?,
         Extractor::Prefix("snot".into())
@@ -313,7 +313,7 @@ fn opt_glob() -> Result<(), ExtractorError> {
 }
 
 #[test]
-fn text_exclusive_glob() -> Result<(), ExtractorError> {
+fn text_exclusive_glob() -> StdResult<(), Error> {
     let e = Extractor::new("glob", "snot*")?;
     assert!(!e.is_exclusive_to(&Value::from("snot")));
     assert!(!e.is_exclusive_to(&Value::from("snot badger")));
@@ -333,7 +333,7 @@ fn text_exclusive_glob() -> Result<(), ExtractorError> {
 }
 
 #[test]
-fn text_exclusive_re() -> Result<(), ExtractorError> {
+fn text_exclusive_re() -> StdResult<(), Error> {
     let e = Extractor::new("re", "^snot.*badger$")?;
     assert!(e.is_exclusive_to(&Value::from("snot")));
     assert!(e.is_exclusive_to(&Value::from("badger snot")));
@@ -349,7 +349,7 @@ fn text_exclusive_re() -> Result<(), ExtractorError> {
 }
 
 #[test]
-fn text_exclusive_base64() -> Result<(), ExtractorError> {
+fn text_exclusive_base64() -> StdResult<(), Error> {
     let e = Extractor::new("base64", "")?;
     assert!(e.is_exclusive_to(&Value::from("sn!ot")));
     assert!(e.is_exclusive_to(&Value::from("badger snot")));
@@ -359,7 +359,7 @@ fn text_exclusive_base64() -> Result<(), ExtractorError> {
 }
 
 #[test]
-fn text_exclusive_kv() -> Result<(), ExtractorError> {
+fn text_exclusive_kv() -> StdResult<(), Error> {
     let e = Extractor::new("kv", "")?;
     assert!(e.is_exclusive_to(&Value::from("sn!ot")));
     assert!(e.is_exclusive_to(&Value::from("badger snot")));
@@ -369,7 +369,7 @@ fn text_exclusive_kv() -> Result<(), ExtractorError> {
 }
 
 #[test]
-fn text_exclusive_json() -> Result<(), ExtractorError> {
+fn text_exclusive_json() -> StdResult<(), Error> {
     let e = Extractor::new("json", "")?;
     assert!(e.is_exclusive_to(&Value::from("\"sn!ot")));
     assert!(e.is_exclusive_to(&Value::from("{badger snot")));
@@ -379,7 +379,7 @@ fn text_exclusive_json() -> Result<(), ExtractorError> {
 }
 
 #[test]
-fn text_exclusive_dissect() -> Result<(), ExtractorError> {
+fn text_exclusive_dissect() -> StdResult<(), Error> {
     let e = Extractor::new("dissect", "snot%{name}")?;
     assert!(!e.is_exclusive_to(&Value::from("snot")));
     assert!(!e.is_exclusive_to(&Value::from("snot badger")));
@@ -388,7 +388,7 @@ fn text_exclusive_dissect() -> Result<(), ExtractorError> {
 }
 
 #[test]
-fn text_exclusive_grok() -> Result<(), ExtractorError> {
+fn text_exclusive_grok() -> StdResult<(), Error> {
     let e = Extractor::new("grok", "%{NUMBER:duration}")?;
     assert!(e.is_exclusive_to(&Value::from("snot")));
     assert!(!e.is_exclusive_to(&Value::from("snot 123 badger")));
@@ -397,7 +397,7 @@ fn text_exclusive_grok() -> Result<(), ExtractorError> {
 }
 
 #[test]
-fn text_exclusive_cidr() -> Result<(), ExtractorError> {
+fn text_exclusive_cidr() -> StdResult<(), Error> {
     let e = Extractor::new("cidr", "")?;
     assert!(!e.is_exclusive_to(&Value::from("1")));
     assert!(!e.is_exclusive_to(&Value::from("127.0.0.1")));
@@ -406,7 +406,7 @@ fn text_exclusive_cidr() -> Result<(), ExtractorError> {
     Ok(())
 }
 #[test]
-fn text_exclusive_influx() -> Result<(), ExtractorError> {
+fn text_exclusive_influx() -> StdResult<(), Error> {
     let e = Extractor::new("influx", "")?;
     assert!(!e.is_exclusive_to(&Value::from(
         "weather,location=us-midwest temperature=82 1465839830100400200"
@@ -418,50 +418,11 @@ fn text_exclusive_influx() -> Result<(), ExtractorError> {
 }
 
 #[test]
-fn text_exclusive_datetime() -> Result<(), ExtractorError> {
+fn text_exclusive_datetime() -> StdResult<(), Error> {
     let e = Extractor::new("datetime", "%Y-%m-%d %H:%M:%S")?;
     assert!(!e.is_exclusive_to(&Value::from("2019-06-20 00:00:00")));
     assert!(e.is_exclusive_to(&Value::from("snot")));
     assert!(e.is_exclusive_to(&Value::from("123")));
     assert!(e.is_exclusive_to(&Value::from("2019-06-20 00:00:71")));
     Ok(())
-}
-
-#[test]
-fn test_parse_ipv4_fast() {
-    assert_eq!(parse_ipv4_fast("snot"), None);
-
-    assert_eq!(parse_ipv4_fast("0no"), None);
-    assert_eq!(parse_ipv4_fast("0."), None);
-    assert_eq!(parse_ipv4_fast("0"), IpCidr::from_str("0.0.0.0/32").ok());
-    assert_eq!(parse_ipv4_fast("0/24"), IpCidr::from_str("0.0.0.0/24").ok());
-
-    assert_eq!(parse_ipv4_fast("1.2no"), None);
-    assert_eq!(parse_ipv4_fast("1.2."), None);
-    assert_eq!(parse_ipv4_fast("1.2"), IpCidr::from_str("1.0.0.2/32").ok());
-    assert_eq!(
-        parse_ipv4_fast("1.2/24"),
-        IpCidr::from_str("1.0.0.2/24").ok()
-    );
-
-    assert_eq!(parse_ipv4_fast("1.2.3no"), None);
-    assert_eq!(parse_ipv4_fast("1.2.3."), None);
-    assert_eq!(
-        parse_ipv4_fast("1.2.3"),
-        IpCidr::from_str("1.2.0.3/32").ok()
-    );
-    assert_eq!(
-        parse_ipv4_fast("1.2.3/24"),
-        IpCidr::from_str("1.2.0.3/24").ok()
-    );
-    assert_eq!(parse_ipv4_fast("1.2.3.4no"), None);
-    assert_eq!(parse_ipv4_fast("1.2.3.4."), None);
-    assert_eq!(
-        parse_ipv4_fast("1.2.3.4"),
-        IpCidr::from_str("1.2.3.4/32").ok()
-    );
-    assert_eq!(
-        parse_ipv4_fast("1.2.3.4/24"),
-        IpCidr::from_str("1.2.3.4/24").ok()
-    );
 }

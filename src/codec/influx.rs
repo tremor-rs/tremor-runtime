@@ -22,7 +22,7 @@
 //! weather,location=us-midwest temperature=82 1465839830100400200
 //! ```
 //!
-//! The equivalent tremor value representation::
+//! The equivalent tremor value representation:
 //!
 //! ```json
 //! {
