@@ -12,8 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//!Decompresses a data stream. It is assumed that each message reaching the decompressor is a complete compressed entity.
+//!
+//!The compression algorithm is detected automatically from the supported formats. If it can't be detected, the assumption is that the data was decompressed and will be sent on. Errors then can be transparently handled in the codec.
+//!
+//!Supported formats:
+//!
+//!## gzip
+//!
+//!Decompress GZ compressed payload.
+//!
+//!## lz4
+//!
+//!Decompress Lz4 compressed payload.
+//!
+//!## snappy
+//!
+//!Decompress framed snappy compressed payload (does not support raw snappy).
+//!
+//!## xz
+//!
+//!Decompress Xz2 (7z) compressed payload.
+//!
+//!## xz2
+//!
+//!Decompress xz and LZMA compressed payload.
+//!
+//!## zstd
+//!
+//!Decompress [Zstandard](https://datatracker.ietf.org/doc/html/rfc8878) compressed payload.
+//!
+//!## zlib
+//!
+//!Decompress Zlib (deflate) compressed payload.
+
 use super::Preprocessor;
-use crate::errors::Result;
+use crate::Result;
 use simd_json::ValueAccess;
 use std::io::{self, Read};
 use tremor_script::Value;
@@ -195,9 +229,9 @@ impl Preprocessor for Decompress {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::postprocessor::Postprocessor;
-    use crate::preprocessor::Preprocessor;
+    use crate::postprocessor::{self as post, Postprocessor};
     use tremor_value::literal;
+
     fn decode_magic(data: &[u8]) -> &'static str {
         match data.get(0..6) {
             Some(&[0x1f, 0x8b, _, _, _, _]) => "gzip",
@@ -213,7 +247,7 @@ mod test {
     fn assert_simple_symmetric(internal: &[u8], algo: &str) -> Result<()> {
         let config = literal!({ "algorithm": algo });
         let mut pre = super::Decompress::from_config(Some(&config))?;
-        let mut post = crate::postprocessor::Compress::from_config(Some(&config))?;
+        let mut post = post::compress::Compress::from_config(Some(&config))?;
 
         // Fake ingest_ns and egress_ns
         let mut ingest_ns = 0_u64;
@@ -240,7 +274,7 @@ mod test {
         let mut pre = super::Decompress::from_config(Some(&config_pre))?;
 
         let config_post = literal!({ "algorithm": algo });
-        let mut post = crate::postprocessor::Compress::from_config(Some(&config_post))?;
+        let mut post = post::compress::Compress::from_config(Some(&config_post))?;
 
         // Fake ingest_ns and egress_ns
         let mut ingest_ns = 0_u64;

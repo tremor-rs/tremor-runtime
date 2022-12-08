@@ -64,19 +64,20 @@ force:
 
 ###############################################################################
 
-docs: library-doc lalrpop-doc
-	-cp tremor-script/docs/library/index.md docs/library
+docs: stdlib-doc lalrpop-doc
+	-make -C docs
+	-cp tremor-script/docs/library/index.md docs/stdlib
 
-library-doc:
-	-rm -rf docs
-	-mkdir -p docs/library
-	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs/library
+stdlib-doc:
+	-rm -rf docs/stdlib
+	-mkdir -p docs/stdlib
+	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs/stdlib
 
 lalrpop-docgen:
-	-git clone https://github.com/licenser/lalrpop lalrpop-docgen
-	cd lalrpop-docgen && git checkout docgen
+	-git clone --depth 1 --branch=docgen https://github.com/licenser/lalrpop lalrpop-docgen
 
 lalrpop-doc: lalrpop-docgen
+	-rm -rf docs/language
 	-mkdir docs/language
 	cd lalrpop-docgen && cargo build --all
 	lalrpop-docgen/target/debug/lalrpop-docgen \
@@ -121,7 +122,7 @@ pdf-doc: lalrpop-doc
 	  --highlight-style=tango --include-in-header ../chapter.tex \
 	  language.md language/full.md language/EBNF.md \
 	  -o pdf/tremor-langauge-reference.pdf
-	cd docs/library && \
+	cd docs/stdlib && \
 	pandoc --toc -f gfm \
 	  --pdf-engine xelatex  \
 	  --variable mainfont="Helvetica" \

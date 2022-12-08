@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod base64;
 mod decompress;
-pub(crate) mod gelf;
+pub(crate) mod gelf_chunking;
+mod ingest_ns;
+mod length_prefixed;
+mod remove_empty;
 pub(crate) mod separate;
+mod textual_length_prefixed;
 
-use crate::config::Preprocessor as PreprocessorConfig;
-use crate::connectors::Alias;
-use crate::errors::{Error, Result};
-use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use bytes::{buf::Buf, BytesMut};
+use crate::{config::Preprocessor as PreprocessorConfig, connectors::Alias, errors::Result};
 use std::str;
 
 //pub type Lines = lines::Lines;
@@ -56,19 +57,20 @@ pub trait Preprocessor: Sync + Send {
 /// # Errors
 ///
 ///   * Errors if the preprocessor is not known
-
 pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preprocessor>> {
     match config.name.as_str() {
-        "separate" => Ok(Box::new(Separate::from_config(&config.config)?)),
-        "base64" => Ok(Box::new(Base64::default())),
+        "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
+        "base64" => Ok(Box::new(base64::Base64::default())),
         "decompress" => Ok(Box::new(decompress::Decompress::from_config(
             config.config.as_ref(),
         )?)),
-        "remove-empty" => Ok(Box::new(FilterEmpty::default())),
-        "gelf-chunking" => Ok(Box::new(gelf::Gelf::default())),
-        "ingest-ns" => Ok(Box::new(ExtractIngestTs {})),
-        "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
-        "textual-length-prefix" => Ok(Box::new(TextualLength::default())),
+        "remove-empty" => Ok(Box::new(remove_empty::RemoveEmpty::default())),
+        "gelf-chunking" => Ok(Box::new(gelf_chunking::GelfChunking::default())),
+        "ingest-ns" => Ok(Box::new(ingest_ns::ExtractIngestTs {})),
+        "length-prefixed" => Ok(Box::new(length_prefixed::LengthPrefixed::default())),
+        "textual-length-prefixed" => Ok(Box::new(
+            textual_length_prefixed::TextualLengthPrefixed::default(),
+        )),
         name => Err(format!("Preprocessor '{}' not found.", name).into()),
     }
 }
@@ -163,147 +165,16 @@ pub fn finish(preprocessors: &mut [Box<dyn Preprocessor>], alias: &Alias) -> Res
     }
 }
 
-pub(crate) use separate::Separate;
-
-#[derive(Default, Debug, Clone)]
-pub(crate) struct FilterEmpty {}
-
-impl Preprocessor for FilterEmpty {
-    fn name(&self) -> &str {
-        "remove-empty"
-    }
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        if data.is_empty() {
-            Ok(vec![])
-        } else {
-            Ok(vec![data.to_vec()])
-        }
-    }
-}
-
-#[derive(Clone, Default, Debug)]
-pub(crate) struct ExtractIngestTs {}
-impl Preprocessor for ExtractIngestTs {
-    fn name(&self) -> &str {
-        "ingest-ts"
-    }
-
-    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use std::io::Cursor;
-        if let Some(d) = data.get(8..) {
-            *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
-            Ok(vec![d.to_vec()])
-        } else {
-            Err(Error::from("Extract Ingest Ts Preprocessor: < 8 byte"))
-        }
-    }
-}
-
-#[derive(Clone, Default, Debug)]
-pub(crate) struct Base64 {}
-impl Preprocessor for Base64 {
-    fn name(&self) -> &str {
-        "base64"
-    }
-
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(vec![base64::decode(data)?])
-    }
-}
-
-#[derive(Clone, Default, Debug)]
-pub(crate) struct LengthPrefix {
-    len: Option<usize>,
-    buffer: BytesMut,
-}
-impl Preprocessor for LengthPrefix {
-    fn name(&self) -> &str {
-        "length-prefix"
-    }
-
-    #[allow(clippy::cast_possible_truncation)]
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        self.buffer.extend(data);
-
-        let mut res = Vec::new();
-        loop {
-            if let Some(l) = self.len {
-                if self.buffer.len() >= l {
-                    let mut part = self.buffer.split_off(l);
-                    std::mem::swap(&mut part, &mut self.buffer);
-                    res.push(part.to_vec());
-                    self.len = None;
-                } else {
-                    break;
-                }
-            }
-            if self.buffer.len() > 8 {
-                self.len = Some(BigEndian::read_u64(&self.buffer) as usize);
-                self.buffer.advance(8);
-            } else {
-                break;
-            }
-        }
-        Ok(res)
-    }
-}
-#[derive(Clone, Default, Debug)]
-pub(crate) struct TextualLength {
-    len: Option<usize>,
-    buffer: BytesMut,
-}
-impl Preprocessor for TextualLength {
-    fn name(&self) -> &str {
-        "textual-length-prefix"
-    }
-
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        self.buffer.extend(data);
-
-        let mut res = Vec::new();
-        loop {
-            if let Some(l) = self.len {
-                if self.buffer.len() >= l {
-                    let mut part = self.buffer.split_off(l);
-                    std::mem::swap(&mut part, &mut self.buffer);
-                    res.push(part.to_vec());
-                    self.len = None;
-                } else {
-                    break;
-                }
-            }
-
-            // find the whitespace
-            if let Some((i, _c)) = self
-                .buffer
-                .iter()
-                .enumerate()
-                .find(|(_i, c)| c.is_ascii_whitespace())
-            {
-                let mut buf = self.buffer.split_off(i);
-                std::mem::swap(&mut buf, &mut self.buffer);
-                // parse the textual length
-                let l = str::from_utf8(&buf)?;
-                self.len = Some(l.parse::<u32>()? as usize);
-                self.buffer.advance(1); // advance beyond the whitespace delimiter
-            } else {
-                // no whitespace found
-                break;
-            }
-        }
-        Ok(res)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::postprocessor::{self as post, separate::Separate as SeparatePost, Postprocessor};
-    use crate::preprocessor::{self as pre, separate::Separate, Preprocessor};
+    use crate::Result;
+
     #[test]
     fn ingest_ts() -> Result<()> {
-        let mut pre_p = pre::ExtractIngestTs {};
-        let mut post_p = post::AttachIngresTs {};
+        let mut pre_p = ingest_ns::ExtractIngestTs {};
+        let mut post_p = post::ingest_ns::IngestNs {};
 
         let data = vec![1_u8, 2, 3];
 
@@ -367,7 +238,7 @@ mod test {
     proptest! {
         #[test]
         fn textual_length_prefix_prop((lengths, datas) in multiple_textual_lengths(5)) {
-            let mut pre_p = pre::TextualLength::default();
+            let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
             let mut in_ns = 0_u64;
             let res: Vec<Vec<u8>> = datas.into_iter().flat_map(|data| {
                 pre_p.process(&mut in_ns, data.as_bytes()).unwrap_or_default()
@@ -381,8 +252,8 @@ mod test {
         #[test]
         fn textual_length_pre_post(length in 1..100_usize) {
             let data = vec![1_u8; length];
-            let mut pre_p = pre::TextualLength::default();
-            let mut post_p = post::TextualLength::default();
+            let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
+            let mut post_p = post::textual_length_prefixed::TextualLengthPrefixed::default();
             let encoded = post_p.process(0, 0, &data).unwrap_or_default().pop().unwrap_or_default();
             let mut in_ns = 0_u64;
             let mut res = pre_p.process(&mut in_ns, &encoded).unwrap_or_default();
@@ -402,7 +273,7 @@ mod test {
             " \'�2\u{4269b}",
         ];
         let lengths: Vec<usize> = vec![24, 36, 60, 9];
-        let mut pre_p = pre::TextualLength::default();
+        let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
         let mut in_ns = 0_u64;
         let res: Vec<Vec<u8>> = datas
             .into_iter()
@@ -420,7 +291,7 @@ mod test {
 
     #[test]
     fn textual_length_prefix() {
-        let mut pre_p = pre::TextualLength::default();
+        let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
         let data = textual_prefix(42);
         let mut in_ns = 0_u64;
         let mut res = pre_p
@@ -434,8 +305,8 @@ mod test {
     #[test]
     fn empty_textual_prefix() {
         let data = ("").as_bytes();
-        let mut pre_p = pre::TextualLength::default();
-        let mut post_p = post::TextualLength::default();
+        let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
+        let mut post_p = post::textual_length_prefixed::TextualLengthPrefixed::default();
         let mut in_ns = 0_u64;
         let res = pre_p.process(&mut in_ns, data).unwrap_or_default();
         assert_eq!(0, res.len());
@@ -457,8 +328,8 @@ mod test {
     fn length_prefix() -> Result<()> {
         let mut it = 0;
 
-        let pre_p = pre::LengthPrefix::default();
-        let mut post_p = post::LengthPrefix::default();
+        let pre_p = length_prefixed::LengthPrefixed::default();
+        let mut post_p = post::length_prefixed::LengthPrefixed::default();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
@@ -488,7 +359,7 @@ mod test {
         "gelf-chunking",
         "ingest-ns",
         "length-prefixed",
-        "textual-length-prefix",
+        "textual-length-prefixed",
     ];
 
     #[test]
@@ -502,14 +373,14 @@ mod test {
 
     #[test]
     fn test_filter_empty() {
-        let mut pre = FilterEmpty::default();
+        let mut pre = remove_empty::RemoveEmpty::default();
         assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[]));
         assert_eq!(Ok(vec![]), pre.finish(None));
     }
 
     #[test]
     fn test_filter_null() {
-        let mut pre = FilterEmpty::default();
+        let mut pre = remove_empty::RemoveEmpty::default();
         assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[]));
         assert_eq!(Ok(vec![]), pre.finish(None));
     }
@@ -521,7 +392,7 @@ mod test {
         let out = "snot".as_bytes();
 
         let mut post = SeparatePost::default();
-        let mut pre = Separate::default();
+        let mut pre = separate::Separate::default();
 
         let mut ingest_ns = 0_u64;
         let egress_ns = 1_u64;
@@ -547,7 +418,7 @@ mod test {
     #[test]
     fn test_separate_buffered() -> Result<()> {
         let input = "snot\nbadger\nwombat\ncapybara\nquagga".as_bytes();
-        let mut pre = Separate::new(b'\n', 1000, true);
+        let mut pre = separate::Separate::new(b'\n', 1000, true);
         let mut ingest_ns = 0_u64;
         let mut res = pre.process(&mut ingest_ns, input)?;
         let splitted = input
@@ -564,8 +435,7 @@ mod test {
     macro_rules! assert_separate_no_buffer {
         ($inbound:expr, $outbound1:expr, $outbound2:expr, $case_number:expr, $separator:expr) => {
             let mut ingest_ns = 0_u64;
-            let r = crate::preprocessor::Separate::new($separator, 0, false)
-                .process(&mut ingest_ns, $inbound);
+            let r = separate::Separate::new($separator, 0, false).process(&mut ingest_ns, $inbound);
 
             let out = &r?;
             // Assert preprocessor output is as expected
@@ -630,8 +500,8 @@ mod test {
         let int = "snot badger".as_bytes();
         let enc = "c25vdCBiYWRnZXI=".as_bytes();
 
-        let mut pre = crate::preprocessor::Base64::default();
-        let mut post = crate::postprocessor::Base64::default();
+        let mut pre = base64::Base64::default();
+        let mut post = post::base64::Base64::default();
 
         // Fake ingest_ns and egress_ns
         let mut ingest_ns = 0_u64;
