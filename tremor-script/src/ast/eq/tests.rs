@@ -475,7 +475,7 @@ fn predicate_pattern() {
             mid: NodeMeta::dummy(),
             id: "id".into(),
             test: "test".into(),
-            extractor: crate::tilde::Extractor::Json,
+            extractor: crate::extractor::Extractor::Json,
         }),
     }
     .ast_eq(&PredicatePattern::TildeEq {
@@ -486,7 +486,7 @@ fn predicate_pattern() {
             mid: NodeMeta::dummy(),
             id: "id".into(),
             test: "test".into(),
-            extractor: crate::tilde::Extractor::Json,
+            extractor: crate::extractor::Extractor::Json,
         }),
     }));
     assert!(PredicatePattern::Bin {

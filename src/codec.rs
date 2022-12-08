@@ -108,7 +108,7 @@ impl Debug for dyn Codec {
 pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
     match config.name.as_str() {
         "json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
-        "json-sorted" => Ok(Box::new(json::Json::<json::Sorted>::default())),
+        "json-sorted" => Ok(Box::new(json::Json::<json_sorted::Sorted>::default())),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
         "influx" => Ok(Box::new(influx::Influx {})),
         "binflux" => Ok(Box::new(binflux::BInflux {})),

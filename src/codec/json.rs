@@ -12,26 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The `influx` codec supports the [influx line protocol](https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/).
+//! The `json` codec supports the Javascript Object Notation format.
 //!
-//! ## Example
+//! Specification: [JSON](https://json.org).
 //!
-//! A single line of data in influx line protocol format:
+//! Deserialization supports minified and fat JSON. Duplicate keys are not preserved, consecutive duplicate keys overwrite previous ones.
 //!
-//! ```text
-//! weather,location=us-midwest temperature=82 1465839830100400200
-//! ```
-//!
-//! The equivalent tremor value representation::
-//!
-//! ```json
-//! {
-//!   "measurement": "weather",
-//!   "tags": { "location": "us-midwest" },
-//!   "fields": { "temperature": 82.0 },
-//!   "timestamp": 1465839830100400200
-//! }
-//! ```
+//! Serialization supports minified JSON only.
 
 use std::{cmp::max, marker::PhantomData};
 
@@ -166,7 +153,7 @@ mod test {
     fn test_json_codec_sorted() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
 
-        let mut codec = Json::<Sorted>::default();
+        let mut codec = Json::<crate::codec::json_sorted::Sorted>::default();
 
         let mut as_raw = codec.encode(&seed)?;
         assert!(codec.decode(as_raw.as_mut_slice(), 0)?.is_some());
@@ -205,7 +192,7 @@ mod test {
     #[test]
     fn duplicate_keys_sorted() -> Result<()> {
         let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
-        let mut codec = Json::<Sorted>::default();
+        let mut codec = Json::<crate::codec::json_sorted::Sorted>::default();
         let res = codec.decode(input.as_mut_slice(), 0)?;
         assert_eq!(Some(literal!({"key": 2})), res); // duplicate keys are deduplicated with last-key-wins strategy
         let value = res.expect("No value");

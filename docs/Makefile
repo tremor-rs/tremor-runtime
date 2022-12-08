@@ -11,3 +11,6 @@ postprocessor-docs:
 
 codec-docs: 
 	scripts/codecs.sh
+
+extractor-docs: 
+	scripts/extractors.sh
