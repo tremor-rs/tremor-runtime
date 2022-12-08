@@ -24,10 +24,10 @@ use openraft::{
         AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest,
         InstallSnapshotResponse, VoteRequest, VoteResponse,
     },
-    RaftNetwork,
+    AnyError, RaftNetwork,
 };
 use std::sync::Arc;
-use tarpc::context;
+use tarpc::{client::RpcError, context};
 
 #[derive(Clone, Debug)]
 pub struct Network {
@@ -76,21 +76,51 @@ impl Network {
         };
         Ok(client)
     }
+
+    fn drop_client(&self, target: NodeId) {
+        self.pool.remove(&target);
+    }
+
+    fn handle_response<T>(
+        &self,
+        target: NodeId,
+        response: Result<Result<T, AnyError>, RpcError>,
+    ) -> anyhow::Result<T> {
+        match response {
+            Ok(res) => res.map_err(|e| e.into()),
+            Err(e @ RpcError::Disconnected) => {
+                self.drop_client(target);
+                error!("Client disconnected from node {target}");
+                Err(e.into())
+            }
+            Err(e @ RpcError::DeadlineExceeded) => {
+                // no need to drop the client here
+                // TODO: implement some form of backoff
+                error!("Request against node {target} timed out");
+                Err(e.into())
+            }
+            Err(e @ RpcError::Server(server_error)) => {
+                self.drop_client(target); // TODO necessary here?
+                error!("Server error from node {target}: {}", server_error.detail);
+                Err(e.into())
+            }
+        }
+    }
 }
 
 #[async_trait]
 impl RaftNetwork<TremorRequest> for Network {
+    // the raft engine will retry upon network failures
+    // so all we need to do is to drop the client if need be to trigger a reconnect
+    // it would be nice to have some kind of backoff, but this might halt the raft engine
+    // and might lead to some nasty timeouts
     async fn send_append_entries(
         &self,
         target: NodeId,
         rpc: AppendEntriesRequest<TremorRequest>,
     ) -> anyhow::Result<AppendEntriesResponse> {
-        // FIXME: implement reconnects
-        Ok(self
-            .ensure_client(target)
-            .await?
-            .append(context::current(), rpc)
-            .await??)
+        let client = self.ensure_client(target).await?;
+        self.handle_response(target, client.append(context::current(), rpc).await)
     }
 
     async fn send_install_snapshot(
@@ -98,20 +128,12 @@ impl RaftNetwork<TremorRequest> for Network {
         target: NodeId,
         rpc: InstallSnapshotRequest,
     ) -> anyhow::Result<InstallSnapshotResponse> {
-        // FIXME: implement reconnects
-        Ok(self
-            .ensure_client(target)
-            .await?
-            .snapshot(context::current(), rpc)
-            .await??)
+        let client = self.ensure_client(target).await?;
+        self.handle_response(target, client.snapshot(context::current(), rpc).await)
     }
 
     async fn send_vote(&self, target: NodeId, rpc: VoteRequest) -> anyhow::Result<VoteResponse> {
-        // FIXME: implement reconnects
-        Ok(self
-            .ensure_client(target)
-            .await?
-            .vote(context::current(), rpc)
-            .await??)
+        let client = self.ensure_client(target).await?;
+        self.handle_response(target, client.vote(context::current(), roc).await)
     }
 }
