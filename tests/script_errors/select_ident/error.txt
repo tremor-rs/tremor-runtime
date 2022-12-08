@@ -1,6 +1,6 @@
 Error: 
     1 | let select = event;
       |     ^^^^^^ Found the token `select` but expected one of `$`, `(`, `<ident>`, `[`, `args`, `event`, `group`, `state`, `window`, `{`
-      |            NOTE: It looks like you tried to use the 'select' as an ident, consider quoting it as `select` to make it an identifier.
+      |            NOTE: It looks like you tried to use 'select' as an ident, consider quoting it as `select` to make it an identifier.
     2 | 
     3 | select
