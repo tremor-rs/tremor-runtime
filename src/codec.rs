@@ -24,6 +24,7 @@ pub(crate) mod csv;
 pub(crate) mod dogstatsd;
 pub(crate) mod influx;
 pub(crate) mod json;
+pub(crate) mod json_sorted;
 pub(crate) mod msgpack;
 pub(crate) mod null;
 pub(crate) mod statsd;

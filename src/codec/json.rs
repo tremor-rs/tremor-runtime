@@ -12,6 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! The `influx` codec supports the [influx line protocol](https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/).
+//!
+//! ## Example
+//!
+//! A single line of data in influx line protocol format:
+//!
+//! ```text
+//! weather,location=us-midwest temperature=82 1465839830100400200
+//! ```
+//!
+//! The equivalent tremor value representation::
+//!
+//! ```json
+//! {
+//!   "measurement": "weather",
+//!   "tags": { "location": "us-midwest" },
+//!   "fields": { "temperature": 82.0 },
+//!   "timestamp": 1465839830100400200
+//! }
+//! ```
+
 use std::{cmp::max, marker::PhantomData};
 
 use super::prelude::*;
@@ -28,12 +49,6 @@ pub trait Sorting: Sync + Send + Copy + Clone + 'static {
 pub struct Unsorted {}
 impl Sorting for Unsorted {
     const SORTED: bool = false;
-}
-/// Sorted
-#[derive(Clone, Copy, Debug)]
-pub struct Sorted {}
-impl Sorting for Sorted {
-    const SORTED: bool = true;
 }
 
 pub struct Json<S: Sorting> {

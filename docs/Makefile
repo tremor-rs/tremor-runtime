@@ -1,5 +1,4 @@
-
-all: operator-docs preprocessor-docs postprocessor-docs
+all: operator-docs preprocessor-docs postprocessor-docs codec-docs
 
 operator-docs: 
 	scripts/operators.sh
@@ -9,3 +8,6 @@ preprocessor-docs:
 
 postprocessor-docs: 
 	scripts/postprocessors.sh
+
+codec-docs: 
+	scripts/codecs.sh
