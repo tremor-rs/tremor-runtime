@@ -18,7 +18,7 @@ use crate::{
     raft::{
         api, app,
         network::{raft, Raft as TarPCRaftService},
-        store::Store,
+        store::{NodesRequest, Store, TremorRequest, TremorResponse},
         ClusterError, ClusterResult, Network, NodeId,
     },
     system::{Runtime, ShutdownMode, WorldConfig},
@@ -40,8 +40,6 @@ use tarpc::{
     server::{self, Channel},
     tokio_serde::formats::Json,
 };
-
-use super::store::{TremorRequest, TremorResponse};
 
 #[derive(Clone, Debug)]
 pub struct ClusterNodeKillSwitch {
@@ -359,7 +357,9 @@ impl Node {
         // this is critical
         // FIXME: debug_assert that node_id remains 0
         match raft
-            .client_write(TremorRequest::AddNode { addr: addr.clone() })
+            .client_write(TremorRequest::Nodes(NodesRequest::AddNode {
+                addr: addr.clone(),
+            }))
             .await
         {
             Ok(r) => {

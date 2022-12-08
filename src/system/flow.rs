@@ -578,7 +578,7 @@ impl RunningFlow {
                             // We didn't connect yet, though, so we do not realize if config is broken just yet
                             log_error!(
                                 reply_tx.send(Ok(())).await,
-                                "{prefix} Error sending StateChagnge response: {e}"
+                                "{prefix} Error sending StateChange response: {e}"
                             );
                             info!("{prefix} Paused.");
                         }

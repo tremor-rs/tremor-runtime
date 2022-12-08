@@ -22,12 +22,12 @@ use crate::raft::{
     },
     NodeId,
 };
+use halfbrown::HashMap;
 use openraft::{LogId, RaftMetrics};
 use reqwest::Method;
 use reqwest::{redirect::Policy, Client};
 use serde::{de::DeserializeOwned, Serialize};
 use simd_json::OwnedValue;
-use std::collections::HashMap;
 
 type ClientResult<T> = std::result::Result<T, Error>;
 
@@ -82,15 +82,24 @@ impl Tremor {
         }
         // FYI: 307 redirects are followed here with a default redirect limit of 10
         // if we target a non-leader, it will return with a 307 and redirect us to the leader
-        let resp = request.send().await?.error_for_status()?;
-        let result: Resp = resp.json().await?;
-        if log::log_enabled!(log::Level::Debug) {
-            if let Ok(json) = serde_json::to_string_pretty(&result) {
-                debug!("<<< client recv reply from {target_url}: {json}",);
+        let resp = request.send().await?;
+        if resp.status().is_success() {
+            let result: Resp = resp.json().await?;
+            if log::log_enabled!(log::Level::Debug) {
+                if let Ok(json) = serde_json::to_string_pretty(&result) {
+                    debug!("<<< client recv reply from {target_url}: {json}",);
+                }
             }
+            Ok(result)
+        } else {
+            let err = resp.error_for_status_ref().expect_err("FIXME");
+            error!(
+                "Received {} with body: {}",
+                resp.status(),
+                resp.text().await?
+            );
+            Err(Error::HTTP(err))
         }
-
-        Ok(result)
     }
 }
 
@@ -300,7 +309,7 @@ impl Tremor {
     /// # Errors
     /// if the api call fails
     pub async fn remove_learner(&self, id: &NodeId) -> ClientResult<NodeId> {
-        self.api_req::<(), NodeId>(&format!("cluster/learners/{id}"), Method::POST, None)
+        self.api_req::<(), NodeId>(&format!("cluster/learners/{id}"), Method::DELETE, None)
             .await
     }
 
@@ -324,7 +333,7 @@ impl Tremor {
     /// # Errors
     /// if the api call fails
     pub async fn demote_voter(&self, id: &NodeId) -> ClientResult<Option<NodeId>> {
-        self.api_req::<(), Option<NodeId>>(&format!("cluster/voters/{id}"), Method::PUT, None)
+        self.api_req::<(), Option<NodeId>>(&format!("cluster/voters/{id}"), Method::DELETE, None)
             .await
     }
 

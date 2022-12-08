@@ -34,9 +34,10 @@ use crate::{
     FN_REGISTRY,
 };
 use beef::Cow;
+use halfbrown::HashMap;
 use sha2::Digest;
 use std::{
-    collections::{btree_map::Entry, BTreeMap, HashMap},
+    collections::{btree_map::Entry, BTreeMap},
     fmt::Debug,
     path::PathBuf,
 };

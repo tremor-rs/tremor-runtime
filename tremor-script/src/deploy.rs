@@ -20,7 +20,8 @@ use crate::{
     lexer::{self, Lexer},
     prelude::*,
 };
-use std::collections::{BTreeSet, HashMap};
+use halfbrown::HashMap;
+use std::collections::BTreeSet;
 
 /// A tremor deployment ( troy)
 #[derive(Debug, Clone)]

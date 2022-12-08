@@ -12,20 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use halfbrown::HashMap;
 use tide::{http::StatusCode, Request, Route};
 
 use crate::raft::{
     api::{wrapp, APIError, APIResult, ToAPIResult},
     app,
     node::Addr,
-    store::TremorRequest,
+    store::{NodesRequest, TremorRequest},
 };
 use openraft::{error::LearnerNotFound, LogId, NodeId, RaftMetrics};
 use std::sync::Arc;
 
 pub(crate) fn install_rest_endpoints(app: &mut Route<Arc<app::Tremor>>) {
     let mut cluster = app.at("/cluster");
-    cluster.at("/nodes").post(wrapp(add_node));
+    cluster
+        .at("/nodes")
+        .post(wrapp(add_node))
+        .get(wrapp(get_nodes));
     cluster.at("nodes/:node_id").delete(wrapp(remove_node));
     cluster
         .at("/learners/:node_id")
@@ -40,10 +44,28 @@ pub(crate) fn install_rest_endpoints(app: &mut Route<Arc<app::Tremor>>) {
     cluster.at("/metrics").get(wrapp(metrics));
 }
 
+/// Get a list of all currently known nodes (be it learner, leader, voter etc.)
+async fn get_nodes(req: Request<Arc<app::Tremor>>) -> APIResult<HashMap<NodeId, Addr>> {
+    let state = req.state();
+    state.raft.client_read().await.to_api_result(&req).await?;
+
+    let nodes = state
+        .store
+        .state_machine
+        .read()
+        .await
+        .nodes
+        .get_nodes()
+        .clone();
+    Ok(nodes)
+}
+
 /// Make a node known to cluster by putting it onto the cluster state
 ///
 /// This is a precondition for the node being added as learner and promoted to voter
 async fn add_node(mut req: Request<Arc<app::Tremor>>) -> APIResult<NodeId> {
+    // FIXME: returns 500 if not the leader
+    // FIXME: better client errors
     let addr: Addr = req.body_json().await?;
     let state = req.state();
 
@@ -58,7 +80,8 @@ async fn add_node(mut req: Request<Arc<app::Tremor>>) -> APIResult<NodeId> {
         .state_machine
         .read()
         .await
-        .get_node_id(&addr)
+        .nodes
+        .find_node_id(&addr)
         .copied();
     if let Some(existing_node_id) = maybe_existing_node_id {
         Ok(existing_node_id)
@@ -70,7 +93,9 @@ async fn add_node(mut req: Request<Arc<app::Tremor>>) -> APIResult<NodeId> {
         debug!("node {addr} not yet known to cluster");
         let response = state
             .raft
-            .client_write(TremorRequest::AddNode { addr: addr.clone() })
+            .client_write(TremorRequest::Nodes(NodesRequest::AddNode {
+                addr: addr.clone(),
+            }))
             .await
             .to_api_result(&req)
             .await?;
@@ -105,7 +130,7 @@ async fn remove_node(req: Request<Arc<app::Tremor>>) -> APIResult<()> {
     // remove the node metadata from the state machine
     req.state()
         .raft
-        .client_write(TremorRequest::RemoveNode { node_id })
+        .client_write(TremorRequest::Nodes(NodesRequest::RemoveNode { node_id }))
         .await
         .to_api_result(&req)
         .await?;
@@ -131,6 +156,7 @@ async fn add_learner(req: Request<Arc<app::Tremor>>) -> APIResult<Option<LogId>>
         .state_machine
         .read()
         .await
+        .nodes
         .get_node(node_id)
         .is_none()
     {
@@ -173,7 +199,7 @@ async fn promote_voter(req: Request<Arc<app::Tremor>>) -> APIResult<Option<NodeI
     let mut new_membership_config = {
         let sm = state.store.state_machine.read().await;
         // check if node is known to the state machine (has been added as learner previously)
-        if sm.get_node(node_id).is_none() {
+        if sm.nodes.get_node(node_id).is_none() {
             return Err(APIError::HTTP {
                 status: StatusCode::NotFound,
                 message: format!("Node {node_id} is not known to the cluster yet."),
@@ -216,7 +242,7 @@ async fn demote_voter(req: Request<Arc<app::Tremor>>) -> APIResult<Option<NodeId
     let mut new_membership_config = {
         let sm = state.store.state_machine.read().await;
         // check if node is known to the state machine (has been added as learner previously)
-        if sm.get_node(node_id).is_none() {
+        if sm.nodes.get_node(node_id).is_none() {
             return Err(APIError::ChangeMembership(
                 openraft::error::ChangeMembershipError::LearnerNotFound(LearnerNotFound {
                     node_id,

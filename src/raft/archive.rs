@@ -16,7 +16,6 @@ use crate::errors::Result;
 use async_std::path::PathBuf;
 use sha2::{Digest, Sha256};
 use simd_json::OwnedValue;
-use std::collections::HashMap;
 use std::{collections::BTreeSet, io::Read};
 use tar::{Archive, Header};
 use tokio::io::AsyncWriteExt;
@@ -275,7 +274,7 @@ pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> 
     let aggr_reg = tremor_script::registry::aggr();
 
     let deploy = Deploy::parse_with_cache(&main, &*FN_REGISTRY.read()?, &aggr_reg, &modules)?;
-    let mut aids = modules.into_values().collect::<Vec<_>>();
+    let mut aids = modules.values().copied().collect::<Vec<_>>();
     aids.push(deploy.aid);
     Ok((app, deploy, aids))
 }

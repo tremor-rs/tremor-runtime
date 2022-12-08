@@ -18,23 +18,22 @@ use crate::{
         app,
         archive::{get_app, TremorAppDef},
         store::{
-            AppId, FlowId, FlowInstance, InstanceId, Instances, StateApp, TremorInstanceState,
-            TremorRequest, TremorResponse, TremorStart,
+            AppId, AppsRequest as AppsCmd, FlowId, FlowInstance, InstanceId, Instances, StateApp,
+            TremorInstanceState, TremorRequest, TremorResponse, TremorStart,
         },
     },
 };
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use halfbrown::HashMap;
+use std::{fmt::Display, sync::Arc};
 use tide::Route;
 
 pub(crate) fn install_rest_endpoints(parent: &mut Route<Arc<app::Tremor>>) {
     let mut apps_endpoint = parent.at("/apps");
     apps_endpoint.post(wrapp(install_app)).get(wrapp(list));
-    apps_endpoint.at("/apps/:app").delete(wrapp(uninstall_app));
+    apps_endpoint.at("/:app").delete(wrapp(uninstall_app));
+    apps_endpoint.at("/:app/flows/:flow").post(wrapp(start));
     apps_endpoint
-        .at("/apps/:app/flows/:flow")
-        .post(wrapp(start));
-    apps_endpoint
-        .at("/apps/:app/instances/:instance")
+        .at("/:app/instances/:instance")
         .post(wrapp(manage_instance))
         .delete(wrapp(stop_instance));
 }
@@ -45,14 +44,14 @@ async fn install_app(mut req: APIRequest) -> APIResult<AppId> {
     let app_id = app.name().clone();
     {
         let sm = req.state().store.state_machine.read().await;
-        if sm.apps.get(&app.name).is_some() {
+        if sm.apps.get_app(&app.name).is_some() {
             return Err(AppError::AlreadyInstalled(app.name).into());
         }
     }
-    let request = TremorRequest::InstallApp {
+    let request = TremorRequest::Apps(AppsCmd::InstallApp {
         app,
         file: file.clone(),
-    };
+    });
     req.state()
         .raft
         .client_write(request)
@@ -66,22 +65,20 @@ async fn uninstall_app(req: APIRequest) -> APIResult<TremorResponse> {
     let app_id = AppId(req.param("app")?.to_string());
     {
         let sm = req.state().store.state_machine.read().await;
-        if let Some(app) = sm.apps.get(&app_id) {
-            if !app.instances.is_empty() {
-                return Err(AppError::HasInstances(
-                    app_id,
-                    app.instances.keys().cloned().collect(),
-                )
-                .into());
+        if let Some(instances) = sm.apps.get_instances(&app_id) {
+            if !instances.is_empty() {
+                return Err(
+                    AppError::HasInstances(app_id, instances.keys().cloned().collect()).into(),
+                );
             }
         } else {
             return Err(AppError::AppNotFound(app_id).into());
         }
     }
-    let request = TremorRequest::UninstallApp {
+    let request = TremorRequest::Apps(AppsCmd::UninstallApp {
         app: app_id.clone(),
         force: false,
-    };
+    });
     req.state()
         .raft
         .client_write(request)
@@ -157,7 +154,7 @@ async fn list(req: APIRequest) -> APIResult<HashMap<AppId, AppState>> {
     let state_machine = req.state().store.state_machine.read().await;
     let apps: HashMap<_, _> = state_machine
         .apps
-        .iter()
+        .list()
         .map(|(k, v)| (k.clone(), AppState::from(v)))
         .collect();
     Ok(apps)
@@ -172,7 +169,7 @@ async fn start(mut req: APIRequest) -> APIResult<InstanceId> {
 
     {
         let sm = req.state().store.state_machine.read().await;
-        if let Some(app) = sm.apps.get(&app_name) {
+        if let Some(app) = sm.apps.get_app(&app_name) {
             if app.instances.contains_key(&body.instance) {
                 return Err(AppError::InstanceAlreadyExists(app_name, body.instance).into());
             }
@@ -193,14 +190,14 @@ async fn start(mut req: APIRequest) -> APIResult<InstanceId> {
             return Err(AppError::AppNotFound(app_name).into());
         }
     }
-    let request = TremorRequest::Deploy {
+    let request = TremorRequest::Apps(AppsCmd::Deploy {
         app: app_name.clone(),
         flow: flow_name.clone(),
         instance: body.instance.clone(),
         config: body.config.clone(),
         // FIXME: make this a parameter
         state: body.state(),
-    };
+    });
     req.state()
         .raft
         .client_write(request)
@@ -241,7 +238,7 @@ async fn manage_instance(mut req: APIRequest) -> APIResult<InstanceId> {
     // handled
     {
         let sm = req.state().store.state_machine.read().await;
-        if let Some(app) = sm.apps.get(&app_id) {
+        if let Some(app) = sm.apps.get_app(&app_id) {
             if !app.instances.contains_key(&instance_id) {
                 return Err(AppError::InstanceNotFound(app_id, instance_id).into());
             }
@@ -254,11 +251,11 @@ async fn manage_instance(mut req: APIRequest) -> APIResult<InstanceId> {
         TremorInstanceState::Resume => IntendedState::Running,
     };
 
-    let request = TremorRequest::InstanceStateChange {
+    let request = TremorRequest::Apps(AppsCmd::InstanceStateChange {
         app: app_id.clone(),
         instance: instance_id.clone(),
         state,
-    };
+    });
     req.state()
         .raft
         .client_write(request)
@@ -273,7 +270,7 @@ async fn stop_instance(req: APIRequest) -> APIResult<InstanceId> {
     let instance_id = InstanceId(req.param("instance")?.to_string());
     {
         let sm = req.state().store.state_machine.read().await;
-        if let Some(app) = sm.apps.get(&app_id) {
+        if let Some(app) = sm.apps.get_app(&app_id) {
             if !app.instances.contains_key(&instance_id) {
                 return Err(AppError::InstanceNotFound(app_id, instance_id).into());
             }
@@ -281,10 +278,10 @@ async fn stop_instance(req: APIRequest) -> APIResult<InstanceId> {
             return Err(AppError::AppNotFound(app_id).into());
         }
     }
-    let request = TremorRequest::Undeploy {
+    let request = TremorRequest::Apps(AppsCmd::Undeploy {
         app: app_id.clone(),
         instance: instance_id.clone(),
-    };
+    });
     req.state()
         .raft
         .client_write(request)

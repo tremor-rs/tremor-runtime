@@ -15,9 +15,10 @@
 use crate::cli::Doc;
 use crate::errors::{Error, Result};
 use crate::util::visit_path_str;
+use halfbrown::HashMap;
+use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::{collections::HashMap, ffi::OsStr};
 use tremor_script::module::{Id, Module};
 use tremor_script::{arena::Arena, ast::NodeId};
 

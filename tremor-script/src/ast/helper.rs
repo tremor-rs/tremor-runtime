@@ -29,7 +29,7 @@ use crate::{
     NodeMeta,
 };
 use beef::Cow;
-use std::collections::HashMap;
+use halfbrown::HashMap;
 use std::{collections::BTreeSet, mem};
 
 /// A scope

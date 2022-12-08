@@ -149,7 +149,7 @@ pub enum APIError {
     /// We need to send this API request to the leader_url
     ForwardToLeader {
         node_id: NodeId,
-        // TODO: full URL, not only addr
+        // full URL, not only addr
         leader_url: String,
     },
     /// HTTP related error
@@ -242,10 +242,12 @@ where
     Err(if let Some(leader_id) = e.leader_id {
         let state_machine = req.state().store.state_machine.read().await;
         // we can only forward to the leader if we have the node in our state machine
-        if let Some(leader_addr) = state_machine.get_node(leader_id) {
-            let mut leader_url = url::Url::parse(leader_addr.api())?;
+        if let Some(leader_addr) = state_machine.nodes.get_node(leader_id) {
+            let mut leader_url =
+                url::Url::parse(&format!("{}://{}", req.url().scheme(), leader_addr.api()))?;
             leader_url.set_path(req.url().path());
             leader_url.set_query(req.url().query());
+            debug!("Forwarding to leader: {leader_url}");
             // we don't care about fragment
 
             APIError::ForwardToLeader {
@@ -253,7 +255,7 @@ where
                 leader_url: leader_url.to_string(),
             }
         } else {
-            APIError::Other("Leader {leader_id} not known".to_string())
+            APIError::Other(format!("Leader {leader_id} not known"))
         }
     } else {
         APIError::Other("No leader available".to_string())
@@ -283,10 +285,12 @@ impl From<APIError> for Response {
         let mut builder = Response::builder(status);
         if let APIError::ForwardToLeader { leader_url, .. } = &e {
             builder = builder.header(LOCATION, leader_url);
+            builder.build()
+        } else {
+            builder
+                .body(Body::from_json(&e).expect("Serialization should work"))
+                .build()
         }
-        builder
-            .body(Body::from_json(&e).expect("Serialization should work"))
-            .build()
     }
 }
 

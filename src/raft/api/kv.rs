@@ -53,7 +53,7 @@ async fn write(mut req: APIRequest) -> APIResult<String> {
 async fn read(mut req: APIRequest) -> APIResult<TremorResponse> {
     let key: String = req.body_json().await?;
     let state_machine = req.state().store.state_machine.read().await;
-    let value = state_machine.get(&key)?;
+    let value = state_machine.kv.get(&key)?;
     Ok(TremorResponse { value })
 }
 
@@ -64,6 +64,12 @@ async fn consistent_read(mut req: APIRequest) -> APIResult<TremorResponse> {
     // this will fail if we are not a leader
     state.raft.client_read().await.to_api_result(&req).await?;
     // here we are safe to read
-    let value = state.store.state_machine.read().await.get(key.as_str())?;
+    let value = state
+        .store
+        .state_machine
+        .read()
+        .await
+        .kv
+        .get(key.as_str())?;
     Ok(TremorResponse { value })
 }

@@ -49,8 +49,8 @@ impl Network {
     async fn new_client(&self, target: NodeId) -> anyhow::Result<RaftClient> {
         let sm = self.store.state_machine.read().await;
         let addr = sm
-            .known_nodes
-            .get(&target)
+            .nodes
+            .get_node(target)
             .ok_or_else(|| anyhow::anyhow!(format!("Node {target} not known to the cluster")))?;
         let transport = tarpc::serde_transport::tcp::connect(
             addr.rpc(),

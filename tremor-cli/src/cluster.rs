@@ -18,11 +18,12 @@ use crate::{
 };
 use async_std::{io::ReadExt, stream::StreamExt, task};
 
+use halfbrown::HashMap;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::low_level::signal_name;
 use signal_hook_async_std::Signals;
 use simd_json::OwnedValue;
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 use tremor_common::asy::file;
 use tremor_runtime::{
     raft::{

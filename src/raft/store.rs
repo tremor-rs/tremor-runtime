@@ -14,8 +14,8 @@
 
 mod statemachine;
 
-pub use self::statemachine::{AppId, FlowId, InstanceId};
-pub(crate) use self::statemachine::{FlowInstance, Instances, StateApp};
+pub use self::statemachine::apps::{AppId, FlowId, InstanceId};
+pub(crate) use self::statemachine::apps::{FlowInstance, Instances, StateApp};
 use self::statemachine::{SerializableTremorStateMachine, TremorStateMachine};
 use crate::{
     errors::Error as RuntimeError,
@@ -25,6 +25,7 @@ use crate::{
 };
 use async_std::sync::RwLock;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use halfbrown::HashMap;
 use openraft::{
     async_trait::async_trait,
     storage::{LogState, Snapshot},
@@ -36,7 +37,6 @@ use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Direction, FlushOptions, Opt
 use serde::{Deserialize, Serialize};
 use simd_json::OwnedValue;
 use std::{
-    collections::HashMap,
     error::Error as StdError,
     fmt::{Debug, Display, Formatter},
     io::Cursor,
@@ -48,22 +48,27 @@ use std::{
 
 use super::node::Addr;
 
-/**
- * Here you will set the types of request that will interact with the raft nodes.
- * For example the `Set` will be used to write data (key and value) to the raft database.
- * The `AddNode` will append a new node to the current existing shared list of nodes.
- * You will want to add any request that can write data in all nodes here.
- */
+/// Kv Operation
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum TremorRequest {
+pub enum KvRequest {
     /// Set a key to the provided value in the cluster state
     Set { key: String, value: String },
+}
+
+/// Operations on the nodes known to the cluster
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum NodesRequest {
     /// Add the given node to the cluster and store its metadata (only addr for now)
     /// This command should be committed before a learner is added to the cluster, so the leader can contact it via its `addr`.
     AddNode { addr: Addr },
     /// Remove Node with the given `node_id`
     /// This command should be committed after removing a learner from the cluster.
     RemoveNode { node_id: NodeId },
+}
+
+/// Operations on apps and their instances
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum AppsRequest {
     /// extract archive, parse sources, save sources in arena, put app into state machine
     InstallApp { app: TremorAppDef, file: Vec<u8> },
     /// delete from statemachine, delete sources from arena
@@ -90,6 +95,20 @@ pub enum TremorRequest {
         instance: InstanceId,
         state: IntendedState,
     },
+}
+
+/**
+ * Here you will set the types of request that will interact with the raft nodes.
+ * For example the `Set` will be used to write data (key and value) to the raft database.
+ * The `AddNode` will append a new node to the current existing shared list of nodes.
+ * You will want to add any request that can write data in all nodes here.
+ */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TremorRequest {
+    /// KV operation
+    Kv(KvRequest),
+    Nodes(NodesRequest),
+    Apps(AppsRequest),
 }
 
 impl AppData for TremorRequest {}
@@ -126,10 +145,10 @@ pub struct TremorSet {
 
 impl From<TremorSet> for TremorRequest {
     fn from(set: TremorSet) -> Self {
-        TremorRequest::Set {
+        TremorRequest::Kv(KvRequest::Set {
             key: set.key,
             value: set.value,
-        }
+        })
     }
 }
 
@@ -141,7 +160,7 @@ impl From<TremorSet> for TremorRequest {
  * TODO: `SHould` we explain how to create multiple `AppDataResponse`?
  *
  */
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct TremorResponse {
     pub value: Option<String>,
 }
@@ -541,7 +560,7 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
         &self,
         entries: &[&Entry<TremorRequest>],
     ) -> StorageResult<Vec<TremorResponse>> {
-        debug!("apply_to_state_machine {entries:?}");
+        //debug!("apply_to_state_machine {entries:?}");
         let mut result = Vec::with_capacity(entries.len());
 
         let mut sm = self.state_machine.write().await;
