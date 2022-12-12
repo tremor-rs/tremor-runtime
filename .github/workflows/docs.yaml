@@ -1,0 +1,12 @@
+name: Trigger Docs Build
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke docs build
+        run: curl -X POST -d {} https://api.netlify.com/build_hooks/{{ secrets.NETLIFY_HOOK }} 
