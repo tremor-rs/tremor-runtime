@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The `binary` codec marshalls raw binary data data as a tremor bytes literal value.
+//! The `binary` codec marshalls raw binary data data as a tremor `bytes` literal value.
 //!
-//! ## Considerations
-//!
-//! Binary values are always network ( big ) endian
+//! When data isn't already represented as `bytes` it will be encoded as JSON document.
 
 use super::prelude::*;
 

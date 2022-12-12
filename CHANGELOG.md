@@ -12,7 +12,7 @@
 ### Breaking Changes
 * **all** std library constants are now uppercase
 * Remove `default` in `match of` and `fn of` and standardize on `case _`
-* `textual-length-prefix` pre and postprocessor are now named `textual-length-prefixed` for consistnecy in naming
+* `textual-length-prefix` pre and postprocessor are now named `textual-length-prefixed` for consistency in naming
 
 ## [0.13.0-rc.10]
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The `json-sorted` codec supports the Javascript Object Notation format with a consistent sort order.
+//! The `json-sorted` codec supports the Javascript Object Notation format with a consistent sort order of object keys.
 //!
 //! Specification: [JSON](https://json.org).
 //!

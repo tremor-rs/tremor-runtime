@@ -9,12 +9,12 @@ Each [connector](../connectors) can be configured with a `codec`.
 
 ## Usage
 
-If you expect [`JSON`](https://www.json.org/) data from a TCP connection, you need to configure the `json` codec.
+If you expect [`JSON`](https://www.json.org/) data from a UDP connection, you need to configure the `json` codec.
 
 Example:
 
 ```tremor
-define connector tcp_example from tcp_server
+define connector udp_example from udp_server
 with
     codec = "json",
     config = {
@@ -24,13 +24,15 @@ end;
 ```
 
 
-This `tcp_example` connector is configured to expect [`JSON`](https://www.json.org/) data from each accepted TCP connection. It expects 1 JSON document after the next without a single byte separating them.
+This `udp_example` connector is configured to expect exactly one [`JSON`](https://www.json.org/) document for each UDP Datagram with no leading or tailing bytes
 
 ### Codecs and Preprocessors
 
 If you expect line-delimited [`JSON`](https://www.json.org/) instead, with 1 document per line, you need to add a [preprocessor](../preprocessors) that separates the wire data by newline and feeds each line to the codec.
 
 Preprocessors perform various kinds of preprocessing on the wire data, e.g. splitting data by some separator or decompressing data, and multiple can be configured to operate in a chain. The result of this chain, one or multiple chunks of binary data, is passed on to the codec.
+
+This can be done elegantly with the TCP connector instead.
 
 Example:
 
