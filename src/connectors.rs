@@ -27,7 +27,7 @@ pub(crate) mod utils;
 
 mod google;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use self::metrics::{SinkReporter, SourceReporter};
 use self::sink::{SinkAddr, SinkContext, SinkMsg};

@@ -112,12 +112,12 @@ trait RaftStateMachine<Ser: Serialize + Deserialize<'static>, Cmd> {
 
 #[derive(Debug, Clone)]
 pub(crate) struct TremorStateMachine {
-    /// Application data.
-    pub db: Arc<rocksdb::DB>,
     /// sub-statemachine for nodes known to the cluster
     pub(crate) nodes: nodes::NodesStateMachine,
     pub(crate) kv: kv::KvStateMachine,
     pub(crate) apps: apps::AppsStateMachine,
+
+    pub db: Arc<rocksdb::DB>,
 }
 
 /// DB Helpers

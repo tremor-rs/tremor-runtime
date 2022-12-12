@@ -5,6 +5,9 @@ pub mod network;
 pub mod node;
 pub mod store;
 
+#[cfg(test)]
+mod test;
+
 use api::client::Error;
 use network::raft_network_impl::Network;
 pub use openraft::NodeId;
@@ -25,21 +28,6 @@ pub fn config() -> ClusterResult<Config> {
         ..Default::default()
     };
     Ok(config.validate()?)
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
-pub struct TremorNode {
-    pub api_addr: String,
-    rpc_addr: String,
-}
-impl Display for TremorNode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "TremorNode {{ api: {}, rpc: {} }}",
-            self.api_addr, self.rpc_addr
-        )
-    }
 }
 
 pub type Tremor = Raft<TremorRequest, TremorResponse, Network, store::Store>;

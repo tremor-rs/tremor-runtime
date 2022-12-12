@@ -16,7 +16,10 @@ use crate::errors::Result;
 use async_std::path::PathBuf;
 use sha2::{Digest, Sha256};
 use simd_json::OwnedValue;
-use std::{collections::BTreeSet, io::Read};
+use std::{
+    collections::{BTreeSet, HashMap},
+    io::Read,
+};
 use tar::{Archive, Header};
 use tokio::io::AsyncWriteExt;
 use tremor_common::{asy::file, base64};

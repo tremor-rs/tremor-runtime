@@ -25,7 +25,6 @@ use crate::{
 };
 use async_std::sync::RwLock;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use halfbrown::HashMap;
 use openraft::{
     async_trait::async_trait,
     storage::{LogState, Snapshot},
@@ -82,7 +81,7 @@ pub enum AppsRequest {
         app: AppId,
         flow: FlowId,
         instance: InstanceId,
-        config: HashMap<String, OwnedValue>,
+        config: std::collections::HashMap<String, OwnedValue>,
         state: IntendedState,
     },
 
@@ -116,7 +115,7 @@ impl AppData for TremorRequest {}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct TremorStart {
     pub(crate) instance: InstanceId,
-    pub(crate) config: HashMap<String, OwnedValue>,
+    pub(crate) config: std::collections::HashMap<String, OwnedValue>,
     pub(crate) running: bool,
 }
 impl TremorStart {
@@ -177,9 +176,10 @@ pub struct TremorSnapshot {
 
 #[derive(Debug)]
 pub struct Store {
-    db: Arc<rocksdb::DB>,
     /// The Raft state machine.
     pub(crate) state_machine: RwLock<TremorStateMachine>,
+    // the database
+    db: Arc<rocksdb::DB>,
 }
 type StorageResult<T> = Result<T, StorageError>;
 
@@ -345,7 +345,7 @@ impl GetCfHandle for rocksdb::DB {
 }
 
 impl Store {
-    fn flush(&self) -> Result<(), Error> {
+    pub(crate) fn flush(&self) -> Result<(), Error> {
         self.db.flush_wal(true)?;
         let mut opts = FlushOptions::default();
         opts.set_wait(true);
@@ -742,10 +742,13 @@ impl Store {
     ///
     /// This function is safe and never cleans up or resets the current state,
     /// but creates a new db if there is none.
-    fn init_db<P: AsRef<Path>>(db_path: P) -> Result<DB, ClusterError> {
+    pub(crate) fn init_db<P: AsRef<Path>>(db_path: P) -> Result<DB, ClusterError> {
         let mut db_opts = Options::default();
         db_opts.create_missing_column_families(true);
         db_opts.create_if_missing(true);
+        db_opts.set_log_level(rocksdb::LogLevel::Fatal); // avoid info logs getting in our way of debugging
+        db_opts.set_stats_dump_period_sec(0);
+        db_opts.set_stats_persist_period_sec(0);
 
         let cf_iter = Self::COLUMN_FAMILIES
             .into_iter()

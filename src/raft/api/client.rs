@@ -187,7 +187,7 @@ impl Tremor {
         app: &AppId,
         flow: &FlowId,
         instance: &InstanceId,
-        config: HashMap<String, OwnedValue>,
+        config: std::collections::HashMap<String, OwnedValue>,
         running: bool,
     ) -> ClientResult<InstanceId> {
         let req = TremorStart {

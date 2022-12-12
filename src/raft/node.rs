@@ -25,7 +25,6 @@ use crate::{
 };
 use async_std::{
     channel::{bounded, Sender},
-    net::ToSocketAddrs,
     task::{self, JoinHandle},
 };
 use futures::{future, prelude::*};
@@ -92,6 +91,7 @@ impl Running {
         let http_api_addr = server_state.addr.api().to_string();
         let mut http_api_server = tide::Server::with_state(server_state.clone());
         api::install_rest_endpoints(&mut http_api_server);
+
         let run_handle = task::spawn(async move {
             let mut tcp_future = Box::pin(
                 listener
@@ -239,7 +239,7 @@ impl Node {
     /// # Errors
     /// if the store does not exist, is not properly initialized
     pub async fn load_from_store(
-        db_dir: impl AsRef<Path> + ToSocketAddrs,
+        db_dir: impl AsRef<Path>,
         raft_config: Config,
     ) -> ClusterResult<Running> {
         let world_config = WorldConfig::default(); // TODO: make configurable

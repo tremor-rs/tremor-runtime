@@ -87,7 +87,7 @@ impl Network {
         response: Result<Result<T, AnyError>, RpcError>,
     ) -> anyhow::Result<T> {
         match response {
-            Ok(res) => res.map_err(|e| e.into()),
+            Ok(res) => res.map_err(Into::into),
             Err(e @ RpcError::Disconnected) => {
                 self.drop_client(target);
                 error!("Client disconnected from node {target}");
@@ -99,9 +99,9 @@ impl Network {
                 error!("Request against node {target} timed out");
                 Err(e.into())
             }
-            Err(e @ RpcError::Server(server_error)) => {
+            Err(e @ RpcError::Server(_)) => {
                 self.drop_client(target); // TODO necessary here?
-                error!("Server error from node {target}: {}", server_error.detail);
+                error!("Server error from node {target}: {e}");
                 Err(e.into())
             }
         }
@@ -134,6 +134,6 @@ impl RaftNetwork<TremorRequest> for Network {
 
     async fn send_vote(&self, target: NodeId, rpc: VoteRequest) -> anyhow::Result<VoteResponse> {
         let client = self.ensure_client(target).await?;
-        self.handle_response(target, client.vote(context::current(), roc).await)
+        self.handle_response(target, client.vote(context::current(), rpc).await)
     }
 }

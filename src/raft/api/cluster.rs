@@ -275,7 +275,7 @@ async fn demote_voter(req: Request<Arc<app::Tremor>>) -> APIResult<Option<NodeId
     Ok(value)
 }
 
-/// Get the latest metrics of the cluster
+/// Get the latest metrics of the cluster (from the viewpoint of the targeted node)
 #[allow(clippy::unused_async)]
 async fn metrics(req: Request<Arc<app::Tremor>>) -> APIResult<RaftMetrics> {
     Ok(req.state().raft.metrics().borrow().clone())

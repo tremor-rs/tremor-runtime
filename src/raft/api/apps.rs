@@ -23,7 +23,7 @@ use crate::{
         },
     },
 };
-use halfbrown::HashMap;
+use std::collections::HashMap;
 use std::{fmt::Display, sync::Arc};
 use tide::Route;
 
