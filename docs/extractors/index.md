@@ -44,4 +44,4 @@ match { "superman" = "message_key: ruler: batman" } of
 end;
 ```
 
-This will result in unintended behaviour because `present` will return the original string instead of the record extracted by grok.
+This will result in unintended behaviour because `present` will return the original string instead of the record extracted by gr
