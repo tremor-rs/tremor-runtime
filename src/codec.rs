@@ -30,6 +30,7 @@ pub(crate) mod null;
 pub(crate) mod statsd;
 pub(crate) mod string;
 pub(crate) mod syslog;
+pub(crate) mod tremor;
 pub(crate) mod yaml;
 
 mod prelude {
@@ -107,19 +108,20 @@ impl Debug for dyn Codec {
 ///  * if the codec doesn't exist
 pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
     match config.name.as_str() {
-        "json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
-        "json-sorted" => Ok(Box::new(json::Json::<json_sorted::Sorted>::default())),
-        "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
-        "influx" => Ok(Box::new(influx::Influx {})),
-        "binflux" => Ok(Box::new(binflux::BInflux {})),
-        "null" => Ok(Box::new(null::Null {})),
-        "string" => Ok(Box::new(string::String {})),
-        "statsd" => Ok(Box::new(statsd::StatsD {})),
-        "dogstatsd" => Ok(Box::new(dogstatsd::DogStatsD {})),
-        "yaml" => Ok(Box::new(yaml::Yaml {})),
         "binary" => Ok(Box::new(binary::Binary {})),
-        "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
+        "binflux" => Ok(Box::new(binflux::BInflux {})),
         "csv" => Ok(Box::new(csv::Csv {})),
+        "dogstatsd" => Ok(Box::new(dogstatsd::DogStatsD {})),
+        "influx" => Ok(Box::new(influx::Influx {})),
+        "json-sorted" => Ok(Box::new(json::Json::<json_sorted::Sorted>::default())),
+        "json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
+        "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
+        "null" => Ok(Box::new(null::Null {})),
+        "statsd" => Ok(Box::new(statsd::StatsD {})),
+        "string" => Ok(Box::new(string::String {})),
+        "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
+        "tremor" => Ok(Box::new(tremor::Tremor {})),
+        "yaml" => Ok(Box::new(yaml::Yaml {})),
         s => Err(ErrorKind::CodecNotFound(s.into()).into()),
     }
 }
@@ -129,17 +131,18 @@ mod test {
 
     #[test]
     fn lookup() {
-        assert!(super::resolve(&"json".into()).is_ok());
-        assert!(super::resolve(&"json-sorted".into()).is_ok());
-        assert!(super::resolve(&"msgpack".into()).is_ok());
-        assert!(super::resolve(&"influx".into()).is_ok());
         assert!(super::resolve(&"binflux".into()).is_ok());
-        assert!(super::resolve(&"null".into()).is_ok());
-        assert!(super::resolve(&"string".into()).is_ok());
-        assert!(super::resolve(&"statsd".into()).is_ok());
         assert!(super::resolve(&"dogstatsd".into()).is_ok());
-        assert!(super::resolve(&"yaml".into()).is_ok());
+        assert!(super::resolve(&"influx".into()).is_ok());
+        assert!(super::resolve(&"json-sorted".into()).is_ok());
+        assert!(super::resolve(&"json".into()).is_ok());
+        assert!(super::resolve(&"msgpack".into()).is_ok());
+        assert!(super::resolve(&"null".into()).is_ok());
+        assert!(super::resolve(&"statsd".into()).is_ok());
+        assert!(super::resolve(&"string".into()).is_ok());
         assert!(super::resolve(&"syslog".into()).is_ok());
+        assert!(super::resolve(&"tremor".into()).is_ok());
+        assert!(super::resolve(&"yaml".into()).is_ok());
         assert!(super::resolve(&"snot".into()).is_err(),);
     }
 }
