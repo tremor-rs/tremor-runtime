@@ -8,6 +8,7 @@
 * New warnings for consistency, behaviour and performance
 * Functions now can create warnings
 * Allow grouping of use with `use std::{m1, m2}`
+* Add `tremor` codec for tremor to tremor communication
 
 ### Breaking Changes
 * **all** std library constants are now uppercase

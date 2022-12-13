@@ -202,6 +202,7 @@ error_chain! {
         InvalidMetadataValue(tonic::metadata::errors::InvalidMetadataValue);
         Lexical(lexical::Error);
         SimdUtf8(simdutf8::basic::Utf8Error);
+        TremorCodec(crate::codec::tremor::Error);
     }
 
     errors {

@@ -1,0 +1,17 @@
+
+define flow main
+flow
+  use tremor::pipelines;
+  use bench;
+  create connector bench from bench::bench
+  with
+    file = "data.tremor.xz",
+    codec = "tremor",
+    base64 = true
+  end;
+  create pipeline main from pipelines::passthrough;
+
+  connect /connector/bench to /pipeline/main;
+  connect /pipeline/main to /connector/bench;
+end;
+deploy flow main;

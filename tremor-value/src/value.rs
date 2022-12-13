@@ -95,14 +95,24 @@ impl<'value> Eq for Value<'value> {}
 impl<'value> Value<'value> {
     /// Creates an empty array value
     #[must_use]
-    pub const fn array() -> Self {
+    pub const fn array() -> Value<'static> {
         Value::Array(vec![])
     }
 
-    /// Creates an empty array value
+    /// Creates a constant null value
     #[must_use]
-    pub const fn const_null() -> Self {
+    pub const fn const_null() -> Value<'static> {
         Value::Static(StaticNode::Null)
+    }
+    /// Creates a constant true value
+    #[must_use]
+    pub const fn const_true() -> Value<'static> {
+        Value::Static(StaticNode::Bool(true))
+    }
+    /// Creates a constant false value
+    #[must_use]
+    pub const fn const_false() -> Value<'static> {
+        Value::Static(StaticNode::Bool(false))
     }
 }
 
