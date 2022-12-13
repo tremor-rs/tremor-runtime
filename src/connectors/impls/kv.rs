@@ -281,7 +281,7 @@ impl KvSink {
             Ok(Value::null())
         }
     }
-    fn encode(&self, v: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, v: &Value) -> Result<Vec<u8>> {
         self.codec.encode(v)
     }
     fn execute(
@@ -295,21 +295,29 @@ impl KvSink {
             Command::Get { key } => self
                 .decode(self.db.get(&key)?, ingest_ns)
                 .map(|v| oks(op_name, key, v)),
-            Command::Put { key } => self
-                .decode(self.db.insert(&key, self.encode(value)?)?, ingest_ns)
-                .map(|_old_value| oks(op_name, key, value.clone_static())), // return the new value
-            Command::Swap { key } => self
-                .decode(self.db.insert(&key, self.encode(value)?)?, ingest_ns)
-                .map(|old_value| oks(op_name, key, old_value)), // return the old value
+            Command::Put { key } => {
+                // return the new value
+                let value_vec = self.encode(value)?;
+                let v = self.db.insert(&key, value_vec)?;
+                self.decode(v, ingest_ns)
+                    .map(|_old_value| oks(op_name, key, value.clone_static()))
+            }
+            Command::Swap { key } => {
+                // return the old value
+                let value = self.encode(value)?;
+                let v = self.db.insert(&key, value)?;
+                self.decode(v, ingest_ns)
+                    .map(|old_value| oks(op_name, key, old_value))
+            }
             Command::Delete { key } => self
                 .decode(self.db.remove(&key)?, ingest_ns)
                 .map(|v| oks(op_name, key, v)),
             Command::Cas { key, old } => {
-                if let Err(CompareAndSwapError { current, proposed }) = self.db.compare_and_swap(
-                    &key,
-                    old.map(|v| self.encode(v)).transpose()?,
-                    Some(self.encode(value)?),
-                )? {
+                let vec = self.encode(value)?;
+                let old = old.map(|v| self.encode(v)).transpose()?;
+                if let Err(CompareAndSwapError { current, proposed }) =
+                    self.db.compare_and_swap(&key, old, Some(vec))?
+                {
                     Err(format!(
                         "CAS error: expected {} but found {}.",
                         self.decode(proposed, ingest_ns)?,

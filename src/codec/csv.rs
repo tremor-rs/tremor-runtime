@@ -75,7 +75,7 @@ impl Codec for Csv {
         Ok(Some(Value::Array(fields)))
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         if let Some(values) = data.as_array() {
             let fields: Vec<String> = values.iter().map(ToString::to_string).collect();
 
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_can_encode_csv() {
-        let codec = Csv {};
+        let mut codec = Csv {};
         let data = literal!(["a", "b", "c", 123]);
 
         let result = codec.encode(&data).unwrap_or_default();

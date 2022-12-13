@@ -56,7 +56,7 @@ impl Codec for Influx {
         })
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         Ok(influx::encode(data)?)
     }
 
@@ -93,7 +93,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200_i64
         });
 
-        let codec = Influx {};
+        let mut codec = Influx {};
 
         let encoded = codec.encode(&s).expect("failed to encode");
 

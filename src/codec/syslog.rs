@@ -328,7 +328,7 @@ where
         Ok(Some(decoded))
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         let protocol = match (data.get_str("protocol"), data.get_u32("protocol_version")) {
             (Some("RFC3164"), _) => Ok(Protocol::RFC3164),
             (Some("RFC5424"), Some(version)) => Ok(Protocol::RFC5424(version)),
@@ -507,7 +507,7 @@ mod test {
 
     #[test]
     fn encode_invalid_facility() {
-        let codec = test_codec();
+        let mut codec = test_codec();
         let msg = literal!({
             "severity": "notice",
             "facility": "snot",
@@ -521,7 +521,7 @@ mod test {
 
     #[test]
     fn encode_invalid_severity() {
-        let codec = test_codec();
+        let mut codec = test_codec();
         let msg = literal!({
             "severity": "snot",
             "facility": "local4",
@@ -535,7 +535,7 @@ mod test {
 
     #[test]
     fn encode_rfc5424_missing_version() {
-        let codec = test_codec();
+        let mut codec = test_codec();
         let msg = literal!({
             "severity": "debug",
             "facility": "local5",
@@ -548,7 +548,7 @@ mod test {
 
     #[test]
     fn encode_missing_protocol() {
-        let codec = test_codec();
+        let mut codec = test_codec();
         let msg = literal!({
             "severity": "notice",
             "facility": "local6",
@@ -561,7 +561,7 @@ mod test {
 
     #[test]
     fn encode_invalid_protocol() {
-        let codec = test_codec();
+        let mut codec = test_codec();
         let msg = literal!({
             "severity": "notice",
             "facility": "local7",
@@ -574,7 +574,7 @@ mod test {
 
     #[test]
     fn encode_empty_rfc3164() -> Result<()> {
-        let codec = test_codec();
+        let mut codec = test_codec();
         let msg = Value::from(simd_json::json!({
             "severity": "notice",
             "facility": "local4",
@@ -641,7 +641,7 @@ mod test {
     #[test]
     fn errors() -> Result<()> {
         let mut o = Value::object();
-        let codec = test_codec();
+        let mut codec = test_codec();
         assert_eq!(
             codec
                 .encode(&o)

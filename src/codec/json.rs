@@ -92,7 +92,7 @@ impl<S: Sorting> Codec for Json<S> {
         .map(Some)
         .map_err(Error::from)
     }
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         if S::SORTED {
             Ok(sorted_serialize(data)?.into_bytes())
         } else {
@@ -101,7 +101,7 @@ impl<S: Sorting> Codec for Json<S> {
             Ok(v)
         }
     }
-    fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
+    fn encode_into(&mut self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
         data.write(dst)?;
         Ok(())
     }
@@ -164,7 +164,7 @@ mod test {
     #[test]
     fn encode_into() -> Result<()> {
         let value = literal!({"snot": ["badger", null, false, 1.5, 42]});
-        let codec: Box<dyn Codec> = Box::new(Json::<Unsorted>::default());
+        let mut codec: Box<dyn Codec> = Box::new(Json::<Unsorted>::default());
         println!("{codec} {codec:?}"); // for coverage
 
         let mut buf = vec![];

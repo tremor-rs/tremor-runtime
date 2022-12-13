@@ -31,7 +31,7 @@ impl Codec for Null {
     ) -> Result<Option<Value<'input>>> {
         Ok(Some(Value::null()))
     }
-    fn encode(&self, _data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, _data: &Value) -> Result<Vec<u8>> {
         Ok(vec![])
     }
 
