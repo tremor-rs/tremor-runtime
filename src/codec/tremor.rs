@@ -186,7 +186,7 @@ impl Tremor {
     }
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
-    fn write_len_type<E: ByteOrder>(t: u8, len: usize, w: &mut impl Write) -> Result<()> {
+    fn write_type_and_len<E: ByteOrder>(t: u8, len: usize, w: &mut impl Write) -> Result<()> {
         w.write_u8(t)?;
         w.write_u64::<E>(len as u64)?;
         Ok(())
