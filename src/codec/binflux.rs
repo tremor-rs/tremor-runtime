@@ -208,7 +208,7 @@ impl Codec for BInflux {
         Self::decode(data).map(Some)
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         Self::encode(data)
     }
 
@@ -223,7 +223,7 @@ mod test {
     #[test]
     fn errors() {
         let mut o = Value::object();
-        let c = BInflux::default();
+        let mut c = BInflux::default();
         assert_eq!(
             c.encode(&o)
                 .err()

@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The Tremor codec is meant for high performance interfacing between tremor instances
+//! The Tremor codec is meant for high performance interfacing between tremor instances.
+//!
+//! The codec is a binary format not meant to be
 
 use std::{
     fmt,
@@ -25,8 +27,10 @@ use byteorder::{ByteOrder, NetworkEndian, ReadBytesExt, WriteBytesExt};
 use halfbrown::HashMap;
 use simd_json::StaticNode;
 
-#[derive(Clone)]
-pub struct Tremor {}
+#[derive(Clone, Default, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Tremor {
+    max_buf_size: usize,
+}
 
 type DefaultByteOrder = NetworkEndian;
 
@@ -58,18 +62,18 @@ impl Tremor {
     const BYTES: u8 = 7;
     const ARRAY: u8 = 8;
     const OBJECT: u8 = 9;
-    const VERSION: u32 = 0;
+    const VERSION: u16 = 0;
     fn decode(data: &[u8]) -> Result<Value> {
         let mut cursor = Cursor::new(data);
-        let version = cursor.read_u32::<NetworkEndian>()?;
+        let version = cursor.read_u16::<NetworkEndian>()?;
         match version {
-            0 => Self::decode_0::<DefaultByteOrder>(data.get(4..).ok_or(Error::InvalidData)?)
+            0 => Self::decode_0::<DefaultByteOrder>(data.get(2..).ok_or(Error::InvalidData)?)
                 .map(|v| v.0),
             _ => Err(Error::InvalidVersion.into()),
         }
     }
     fn encode(value: &Value, w: &mut impl Write) -> Result<()> {
-        w.write_u32::<NetworkEndian>(Self::VERSION)?;
+        w.write_u16::<NetworkEndian>(Self::VERSION)?;
         Self::encode_::<DefaultByteOrder>(value, w)
     }
     #[inline]
@@ -194,21 +198,21 @@ impl Tremor {
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
     fn write_string<E: ByteOrder>(s: &str, w: &mut impl Write) -> Result<()> {
-        Self::write_len_type::<E>(Self::STRING, s.len(), w)?;
+        Self::write_type_and_len::<E>(Self::STRING, s.len(), w)?;
         w.write_all(s.as_bytes())?;
         Ok(())
     }
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
     fn write_bytes<E: ByteOrder>(b: &[u8], w: &mut impl Write) -> Result<()> {
-        Self::write_len_type::<E>(Self::BYTES, b.len(), w)?;
+        Self::write_type_and_len::<E>(Self::BYTES, b.len(), w)?;
         w.write_all(b)?;
         Ok(())
     }
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
     fn write_array<E: ByteOrder>(a: &[Value], w: &mut impl Write) -> Result<()> {
-        Self::write_len_type::<E>(Self::ARRAY, a.len(), w)?;
+        Self::write_type_and_len::<E>(Self::ARRAY, a.len(), w)?;
         for v in a {
             Tremor::encode_::<E>(v, w)?;
         }
@@ -219,7 +223,7 @@ impl Tremor {
         o: &HashMap<Cow<'_, str>, Value>,
         w: &mut impl Write,
     ) -> Result<()> {
-        Self::write_len_type::<E>(Self::OBJECT, o.len(), w)?;
+        Self::write_type_and_len::<E>(Self::OBJECT, o.len(), w)?;
         for (k, v) in o.iter() {
             w.write_u64::<E>(k.len() as u64)?;
             w.write_all(k.as_bytes())?;
@@ -256,17 +260,21 @@ impl Codec for Tremor {
         Tremor::decode(data).map(Some)
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
-        let mut dst = Vec::with_capacity(512);
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+        let mut dst = Vec::with_capacity(self.max_buf_size);
         Self::encode(data, &mut dst)?;
+        if dst.len() > self.max_buf_size {
+            self.max_buf_size = dst.len();
+        }
         Ok(dst)
     }
-    fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
+
+    fn encode_into(&mut self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
         Self::encode(data, dst)
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
-        Box::new(self.clone())
+        Box::new(*self)
     }
 }
 

@@ -70,14 +70,14 @@ pub trait Codec: Send + Sync {
     ///
     /// # Errors
     ///  * If the encoding fails
-    fn encode(&self, data: &Value) -> Result<Vec<u8>>;
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>>;
 
     /// Encodes into an existing buffer
     ///
     /// # Errors
     ///  * when we can't write encode to the given vector
 
-    fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
+    fn encode_into(&mut self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
         let mut res = self.encode(data)?;
         std::mem::swap(&mut res, dst);
         Ok(())
@@ -120,7 +120,7 @@ pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
         "statsd" => Ok(Box::new(statsd::StatsD {})),
         "string" => Ok(Box::new(string::String {})),
         "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
-        "tremor" => Ok(Box::new(tremor::Tremor {})),
+        "tremor" => Ok(Box::new(tremor::Tremor::default())),
         "yaml" => Ok(Box::new(yaml::Yaml {})),
         s => Err(ErrorKind::CodecNotFound(s.into()).into()),
     }

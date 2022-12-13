@@ -38,7 +38,7 @@ impl Codec for Cbor {
         //.map_err(|e| format!("{}", e).into())
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         let mut res = Vec::with_capacity(128);
         ciborium::ser::into_writer(data, &mut res).map_err(|e| Error::from(format!("{}", e)))?;
         Ok(res)

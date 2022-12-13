@@ -67,7 +67,7 @@ impl Codec for StatsD {
         decode(data, ingest_ns).map(Some)
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         encode(data)
     }
 

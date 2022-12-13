@@ -39,7 +39,7 @@ impl Codec for Binary {
         Ok(Some(Value::Bytes(data.into())))
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         if let Some(s) = data.as_str() {
             Ok(s.as_bytes().to_vec())
         } else if let Value::Bytes(b) = data {
