@@ -10,7 +10,11 @@
 * Allow grouping of use with `use std::{m1, m2}`
 * Add `tremor` codec for tremor to tremor communication
 
+### Fixes
+* Fix google pub sub default api endpoint
+
 ### Breaking Changes
+
 * **all** std library constants are now uppercase
 * Remove `default` in `match of` and `fn of` and standardize on `case _`
 * `textual-length-prefix` pre and postprocessor are now named `textual-length-prefixed` for consistency in naming
