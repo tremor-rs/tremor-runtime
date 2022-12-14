@@ -6,6 +6,7 @@
 ### * [origin](origin.md) - functions providing access to onramp origin data
 ### * [pipelines](pipelines.md) - default pipelines
 ### * [system](system.md) - functions related to the running system
+### * [system](logging.md) - logging functions
 
 use tremor::chash;
 use tremor::connectors;
@@ -13,3 +14,4 @@ use tremor::mime;
 use tremor::origin;
 use tremor::pipelines;
 use tremor::system;
+use tremor::logging;
