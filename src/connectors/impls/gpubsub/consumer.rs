@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::{AuthInterceptor, TokenProvider};
-
+use crate::connectors::google::TremorGoogleAuthz;
 use crate::connectors::prelude::*;
 use crate::connectors::utils::url::HttpsDefaults;
 use async_std::channel::{Receiver, Sender};
@@ -22,21 +21,24 @@ use async_std::sync::RwLock;
 use async_std::task;
 use async_std::task::JoinHandle;
 use beef::generic::Cow;
-use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{
+use google_api_proto::google::pubsub::v1::subscriber_client::SubscriberClient;
+use google_api_proto::google::pubsub::v1::{
     GetSubscriptionRequest, PubsubMessage, ReceivedMessage, StreamingPullRequest,
 };
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tonic::codegen::InterceptedService;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig};
+use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::{Code, Status};
 use tremor_common::blue_green_hashmap::BlueGreenHashMap;
 use tremor_pipeline::ConfigImpl;
+
+//
+// NOTE This code now depends on a different protocol buffers and tonic library
+// that in turn introduce a different GCP auth mechanism
+//
 
 // controlling retries upon gpubsub returning `Unavailable` from StreamingPull
 // this in on purpose not exposed via config as this should remain an internal thing
@@ -63,11 +65,7 @@ fn default_ack_deadline() -> u64 {
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
-#[cfg(all(test, feature = "gcp-integration"))]
-type GSubWithTokenProvider = GSub<crate::connectors::google::tests::TestTokenProvider>;
-
-#[cfg(not(all(test, feature = "gcp-integration")))]
-type GSubWithTokenProvider = GSub<crate::connectors::google::GouthTokenProvider>;
+type GSubWithTokenProvider = GSub;
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
@@ -90,24 +88,22 @@ impl ConnectorBuilder for Builder {
             config,
             url,
             client_id,
-            _phantom: PhantomData::default(),
         }))
     }
 }
 
-struct GSub<T> {
+struct GSub {
     config: Config,
     url: Url<HttpsDefaults>,
     client_id: String,
-    _phantom: PhantomData<T>,
 }
 
-type PubSubClient<T> = SubscriberClient<InterceptedService<Channel, AuthInterceptor<T>>>;
+type PubSubClient = SubscriberClient<TremorGoogleAuthz>;
 type AsyncTaskMessage = Result<(u64, PubsubMessage)>;
 
-struct GSubSource<T: TokenProvider> {
+struct GSubSource {
     config: Config,
-    client: Option<PubSubClient<T>>,
+    client: Option<PubSubClient>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
     ack_sender: Option<Sender<u64>>,
     task_handle: Option<JoinHandle<()>>,
@@ -115,7 +111,7 @@ struct GSubSource<T: TokenProvider> {
     client_id: String,
 }
 
-impl<T: TokenProvider> GSubSource<T> {
+impl GSubSource {
     pub fn new(config: Config, url: Url<HttpsDefaults>, client_id: String) -> Self {
         GSubSource {
             config,
@@ -129,8 +125,8 @@ impl<T: TokenProvider> GSubSource<T> {
     }
 }
 
-async fn consumer_task<T: TokenProvider>(
-    mut client: PubSubClient<T>,
+async fn consumer_task(
+    mut client: PubSubClient,
     ctx: SourceContext,
     client_id: String,
     sender: Sender<AsyncTaskMessage>,
@@ -244,7 +240,7 @@ fn pubsub_metadata(
     id: String,
     ordering_key: String,
     publish_time: Option<Duration>,
-    attributes: HashMap<String, String>,
+    attributes: BTreeMap<String, String>,
 ) -> Value<'static> {
     let mut attributes_value = Value::object_with_capacity(attributes.len());
     for (name, value) in attributes {
@@ -263,13 +259,13 @@ fn pubsub_metadata(
 }
 
 #[async_trait::async_trait]
-impl<T: TokenProvider + 'static> Source for GSubSource<T> {
+impl Source for GSubSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.url.scheme() == "https" {
             let tls_config = ClientTlsConfig::new()
-                .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
+                // TODO FIXME .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
                 .domain_name(
                     self.url
                         .host_str()
@@ -286,12 +282,7 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
             task_handle.cancel().await;
         }
 
-        let mut client = SubscriberClient::with_interceptor(
-            channel.clone(),
-            AuthInterceptor {
-                token_provider: T::default(),
-            },
-        );
+        let mut client = SubscriberClient::new(TremorGoogleAuthz::new(channel.clone()).await?);
         // check that the subscription exists
         let res = client
             .get_subscription(GetSubscriptionRequest {
@@ -345,7 +336,7 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
 
         Ok(SourceReply::Data {
             origin_uri: EventOriginUri::default(),
-            data: pubsub_message.data,
+            data: pubsub_message.data.into(),
             meta: Some(pubsub_metadata(
                 pubsub_message.message_id,
                 pubsub_message.ordering_key,
@@ -386,13 +377,13 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: TokenProvider + 'static> Connector for GSub<T> {
+impl Connector for GSub {
     async fn create_source(
         &mut self,
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = GSubSource::<T>::new(
+        let source = GSubSource::new(
             self.config.clone(),
             self.url.clone(),
             self.client_id.clone(),

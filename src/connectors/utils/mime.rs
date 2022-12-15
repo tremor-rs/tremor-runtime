@@ -109,6 +109,7 @@ impl Default for MimeCodecMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn get_mime_type() {
         let map = MimeCodecMap::default();

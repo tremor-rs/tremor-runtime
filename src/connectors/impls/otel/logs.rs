@@ -15,16 +15,22 @@
 #![allow(dead_code)]
 
 use super::{
-    common::{self, instrumentation_library_to_pb, maybe_instrumentation_library_to_json, EMPTY},
+    common::{self},
     id,
     resource::{self, resource_to_pb},
 };
-use crate::connectors::utils::pb;
+use crate::connectors::{
+    impls::otel::common::{key_value_list_to_json, maybe_instrumentation_scope_to_json},
+    utils::pb,
+};
 use crate::errors::Result;
+use simd_json::ValueAccess;
 
 use tremor_otelapis::opentelemetry::proto::{
     collector::logs::v1::ExportLogsServiceRequest,
-    logs::v1::{InstrumentationLibraryLogs, LogRecord, ResourceLogs},
+    common::v1::InstrumentationScope,
+    logs::v1::{LogRecord, ResourceLogs, ScopeLogs},
+    resource::v1::Resource,
 };
 use tremor_value::{literal, prelude::*, Value};
 
@@ -53,43 +59,45 @@ fn affirm_severity_number_valid(severity_number: i32) -> Result<i32> {
     }
 }
 
-fn log_record_to_json(log: LogRecord) -> Result<Value<'static>> {
-    Ok(literal!({
-        "name": log.name,
-        "time_unix_nano": log.time_unix_nano,
-        "severity_number": affirm_severity_number_valid(log.severity_number)?,
-        "severity_text": log.severity_text.to_string(),
-        "flags": affirm_traceflags_valid(log.flags)?,
-        "span_id": id::hex_span_id_to_json(&log.span_id),
-        "trace_id": id::hex_trace_id_to_json(&log.trace_id),
-        "attributes": common::key_value_list_to_json(log.attributes),
-        "dropped_attributes_count": log.dropped_attributes_count,
-        "body": common::maybe_any_value_to_json(log.body),
-    }))
-}
-pub(crate) fn instrumentation_library_logs_to_json(
-    pb: Vec<InstrumentationLibraryLogs>,
-) -> Result<Value<'static>> {
-    pb.into_iter()
-        .map(|data| {
-            let logs = data
-                .logs
-                .into_iter()
-                .map(log_record_to_json)
-                .collect::<Result<Value>>()?;
+fn scope_log_to_json(log: ScopeLogs) -> Result<Value<'static>> {
+    let mut scope_json = literal!({
+        "log_records": log_records_to_json(log.log_records),
+        "schema_url": log.schema_url.clone()
+    });
+    if let Some(scope) = maybe_instrumentation_scope_to_json(log.scope) {
+        scope_json.insert("scope", scope.clone())?;
+    }
 
-            let mut e = literal!({ "logs": logs, "schema_url": data.schema_url });
-            if let Some(il) = data.instrumentation_library {
-                let il = maybe_instrumentation_library_to_json(il);
-                e.try_insert("instrumentation_library", il);
-            }
-            Ok(e)
-        })
-        .collect()
+    Ok(scope_json)
+}
+
+pub(crate) fn scope_logs_to_json(log: Vec<ScopeLogs>) -> Result<Vec<Value<'static>>> {
+    log.into_iter().map(scope_log_to_json).collect()
+}
+
+pub(crate) fn log_record_to_json(pb: LogRecord) -> Value<'static> {
+    literal!({
+        "observed_time_unix_nano": pb.observed_time_unix_nano,
+        "time_unix_nano": pb.time_unix_nano,
+        "severity_number": pb.severity_number,
+        "severity_text": pb.severity_text,
+        "body": common::maybe_any_value_to_json(pb.body),
+        "flags": pb.flags,
+        "span_id": id::hex_span_id_to_json(&pb.span_id),
+        "trace_id": id::hex_trace_id_to_json(&pb.trace_id),
+        "attributes": key_value_list_to_json(pb.attributes),
+        "dropped_attributes_count": pb.dropped_attributes_count,
+    })
+}
+
+pub(crate) fn log_records_to_json(log: Vec<LogRecord>) -> Vec<Value<'static>> {
+    log.into_iter().map(log_record_to_json).collect()
 }
 
 pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord> {
     Ok(LogRecord {
+        observed_time_unix_nano: pb::maybe_int_to_pbu64(log.get("observed_time_unix_nano"))
+            .unwrap_or_default(),
         // value of 0 indicates unknown or missing timestamp
         time_unix_nano: pb::maybe_int_to_pbu64(log.get("time_unix_nano")).unwrap_or_default(),
 
@@ -100,8 +108,6 @@ pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord> {
             .unwrap_or_default(),
         // defined as optional - fallback to an empty string
         severity_text: pb::maybe_string_to_pb(log.get("severity_text")).unwrap_or_default(),
-        // name is defined as optional - fallback to empty string
-        name: pb::maybe_string_to_pb(log.get("name")).unwrap_or_default(),
         body: log.get("body").map(common::any_value_to_pb),
         flags: affirm_traceflags_valid(
             pb::maybe_int_to_pbu32(log.get("flags")).unwrap_or_default(),
@@ -115,50 +121,16 @@ pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord> {
     })
 }
 
-pub(crate) fn maybe_instrumentation_library_logs_to_pb(
-    data: Option<&Value<'_>>,
-) -> Result<Vec<InstrumentationLibraryLogs>> {
-    data.as_array()
-        .ok_or("Invalid json mapping for InstrumentationLibraryLogs")?
-        .iter()
-        .filter_map(Value::as_object)
-        .map(|ill| {
-            let logs = ill
-                .get("logs")
-                .and_then(Value::as_array)
-                .unwrap_or(&EMPTY)
-                .iter()
-                .map(log_record_to_pb)
-                .collect::<Result<Vec<_>>>()?;
-
-            Ok(InstrumentationLibraryLogs {
-                schema_url: ill
-                    .get("schema_url")
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string)
-                    .unwrap_or_default(),
-                instrumentation_library: ill
-                    .get("instrumentation_library")
-                    .map(instrumentation_library_to_pb)
-                    .transpose()?,
-                logs,
-            })
-        })
-        .collect()
-}
-
 pub(crate) fn resource_logs_to_json(request: ExportLogsServiceRequest) -> Result<Value<'static>> {
     let logs = request
         .resource_logs
         .into_iter()
         .map(|log| {
-            let ill = instrumentation_library_logs_to_json(log.instrumentation_library_logs)?;
-
-            let mut base =
-                literal!({ "instrumentation_library_logs": ill, "schema_url": log.schema_url});
+            let mut base = literal!({ "schema_url": log.schema_url});
             if let Some(r) = log.resource {
                 base.try_insert("resource", resource::resource_to_json(r));
             };
+            base.try_insert("scope_logs", scope_logs_to_json(log.scope_logs)?);
             Ok(base)
         })
         .collect::<Result<Vec<_>>>()?;
@@ -166,90 +138,95 @@ pub(crate) fn resource_logs_to_json(request: ExportLogsServiceRequest) -> Result
     Ok(literal!({ "logs": logs }))
 }
 
+pub(crate) fn scope_to_pb(json: &Value<'_>) -> Result<InstrumentationScope> {
+    let _json = json
+        .as_object()
+        .ok_or("Invalid json mapping for InstrumentationScope")?;
+    Ok(InstrumentationScope {
+        name: pb::maybe_string_to_pb(json.get("name")).unwrap_or_default(),
+        version: pb::maybe_string_to_pb(json.get("version")).unwrap_or_default(),
+        attributes: Vec::new(),
+        dropped_attributes_count: 0u32,
+    })
+}
+
+pub(crate) fn log_records_to_pb(json: Option<&Value<'_>>) -> Result<Vec<LogRecord>> {
+    if let Some(json) = json {
+        json.as_array()
+            .ok_or("Invalid json mapping for [LogRecord, ...]")?
+            .iter()
+            .map(log_record_to_pb)
+            .collect()
+    } else {
+        Ok(vec![])
+    }
+}
+
+pub(crate) fn scope_logs_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ScopeLogs>> {
+    if let Some(json) = json {
+        json.as_array()
+            .ok_or("Invalid json mapping for ScopeLogs")?
+            .iter()
+            .filter_map(Value::as_object)
+            .map(|item| {
+                Ok(ScopeLogs {
+                    scope: item.get("scope").map(scope_to_pb).transpose()?,
+                    log_records: log_records_to_pb(item.get("log_records"))?,
+                    schema_url: item
+                        .get("schema_url")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                })
+            })
+            .collect()
+    } else {
+        Ok(vec![])
+    }
+}
+
+pub(crate) fn resources_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Resource>> {
+    if let Some(json) = json {
+        json.as_array()
+            .ok_or("Invalid json mapping for [Resource,...]")?
+            .iter()
+            .map(resource_to_pb)
+            .collect()
+    } else {
+        Ok(vec![])
+    }
+}
+
 pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>> {
     json.get_array("logs")
         .ok_or("Missing `logs` array")?
         .iter()
-        .filter_map(Value::as_object)
         .map(|data| {
             Ok(ResourceLogs {
                 schema_url: data
                     .get("schema_url")
                     .map(ToString::to_string)
                     .unwrap_or_default(),
-                instrumentation_library_logs: maybe_instrumentation_library_logs_to_pb(
-                    data.get("instrumentation_library_logs"),
-                )?,
-                resource: data.get("resource").map(resource_to_pb).transpose()?,
+                resource: match data.get("resource") {
+                    Some(resource) => Some(resource_to_pb(resource)?),
+                    None => None,
+                },
+                scope_logs: scope_logs_to_pb(data.get("scope_logs"))?,
             })
         })
         .collect()
 }
 
 #[cfg(test)]
+#[allow(clippy::unnecessary_wraps)] // Don't error highlight this in tests - we do not care
 mod tests {
     use tremor_otelapis::opentelemetry::proto::{
-        common::v1::{any_value, AnyValue, InstrumentationLibrary},
+        common::v1::{any_value, AnyValue},
         resource::v1::Resource,
     };
     use tremor_script::utils::sorted_serialize;
 
     use super::*;
-
-    #[test]
-    fn instrumentation_library_logs() -> Result<()> {
-        let nanos = tremor_common::time::nanotime();
-        let span_id_pb = id::random_span_id_bytes(nanos);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
-        let trace_id_json = id::random_trace_id_value(nanos);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
-
-        let pb = vec![InstrumentationLibraryLogs {
-            schema_url: "schema_url".into(),
-            instrumentation_library: Some(InstrumentationLibrary {
-                name: "name".into(),
-                version: "v0.1.2".into(),
-            }), // TODO For now its an error for this to be None - may need to revisit
-            logs: vec![LogRecord {
-                time_unix_nano: 0,
-                severity_number: 9,
-                severity_text: "INFO".into(),
-                name: "test".into(),
-                body: Some(AnyValue {
-                    value: Some(any_value::Value::StringValue("snot".into())),
-                }), // TODO For now its an error for this to be None - may need to revisit
-                attributes: vec![],
-                dropped_attributes_count: 100,
-                flags: 128,
-                span_id: span_id_pb.clone(),
-                trace_id: trace_id_pb,
-            }],
-        }];
-        let json = instrumentation_library_logs_to_json(pb.clone())?;
-        let back_again = maybe_instrumentation_library_logs_to_pb(Some(&json))?;
-        let expected: Value = literal!([{
-            "instrumentation_library": { "name": "name", "version": "v0.1.2" },
-            "schema_url": "schema_url",
-            "logs": [
-                { "severity_number": 9,
-                  "flags": 128,
-                  "span_id": span_id_json,
-                  "trace_id": trace_id_json,
-                  "dropped_attributes_count": 100,
-                  "time_unix_nano": 0,
-                  "severity_text": "INFO",
-                  "name": "test",
-                  "attributes": {},
-                  "body": "snot"
-                }
-            ]
-        }]);
-
-        assert_eq!(expected, json);
-        assert_eq!(pb, back_again);
-
-        Ok(())
-    }
 
     #[test]
     fn resource_logs() -> Result<()> {
@@ -266,17 +243,19 @@ mod tests {
                     attributes: vec![],
                     dropped_attributes_count: 8,
                 }),
-                instrumentation_library_logs: vec![InstrumentationLibraryLogs {
+                scope_logs: vec![ScopeLogs {
                     schema_url: "schema_url".into(),
-                    instrumentation_library: Some(InstrumentationLibrary {
-                        name: "name".into(),
-                        version: "v0.1.2".into(),
-                    }), // TODO For now its an error for this to be None - may need to revisit
-                    logs: vec![LogRecord {
+                    scope: Some(InstrumentationScope {
+                        name: "snot".to_string(),
+                        version: "v1.2.3.4".to_string(),
+                        attributes: vec![],
+                        dropped_attributes_count: 0,
+                    }),
+                    log_records: vec![LogRecord {
+                        observed_time_unix_nano: 0,
                         time_unix_nano: 0,
                         severity_number: 9,
                         severity_text: "INFO".into(),
-                        name: "test".into(),
                         body: Some(AnyValue {
                             value: Some(any_value::Value::StringValue("snot".into())),
                         }), // TODO For now its an error for this to be None - may need to revisit
@@ -292,30 +271,34 @@ mod tests {
         let json = resource_logs_to_json(pb.clone())?;
         let back_again = resource_logs_to_pb(&json)?;
         let expected: Value = literal!({
-            "logs": [
-                {
-                    "resource": { "attributes": {}, "dropped_attributes_count": 8 },
+            "logs": [{
+                "resource": {
+                    "attributes": {},
+                    "dropped_attributes_count": 8
+                },
+                "schema_url": "schema_url",
+                "scope_logs":[{
+                    "log_records": [{
+                        "attributes": {},
+                        "body": "snot",
+                        "dropped_attributes_count": 100,
+                        "flags": 128,
+                        "observed_time_unix_nano": 0,
+                        "severity_number": 9,
+                        "severity_text": "INFO",
+                        "span_id": span_id_json,
+                        "time_unix_nano": 0,
+                        "trace_id": trace_id_json,
+                    }],
                     "schema_url": "schema_url",
-                    "instrumentation_library_logs": [
-                        {
-                            "instrumentation_library": { "name": "name", "version": "v0.1.2" },
-                            "schema_url": "schema_url",
-                            "logs": [{
-                                "severity_number": 9,
-                                "flags": 128,
-                                "span_id": span_id_json,
-                                "trace_id": trace_id_json,
-                                "dropped_attributes_count": 100,
-                                "time_unix_nano": 0,
-                                "severity_text": "INFO",
-                                "name": "test",
-                                "attributes": {},
-                                "body": "snot"
-                            }]
-                        }
-                    ]
-                }
-            ]
+                    "scope": {
+                        "attributes": {},
+                        "dropped_attributes_count": 0,
+                        "name": "snot",
+                        "version": "v1.2.3.4"
+                    }
+                }]
+            }]
         });
 
         assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
@@ -339,25 +322,27 @@ mod tests {
                     attributes: vec![],
                     dropped_attributes_count: 8,
                 }),
-                instrumentation_library_logs: vec![InstrumentationLibraryLogs {
-                    schema_url: "schema_url".into(),
-                    instrumentation_library: Some(InstrumentationLibrary {
-                        name: "name".into(),
-                        version: "v0.1.2".into(),
-                    }), // TODO For now its an error for this to be None - may need to revisit
-                    logs: vec![LogRecord {
+                scope_logs: vec![ScopeLogs {
+                    schema_url: "schema_url2".to_string(),
+                    scope: Some(InstrumentationScope {
+                        name: "name".to_string(),
+                        version: "v1.2.3.4".to_string(),
+                        attributes: vec![],
+                        dropped_attributes_count: 0,
+                    }),
+                    log_records: vec![LogRecord {
                         time_unix_nano: 0,
-                        severity_number: 0,
-                        severity_text: String::new(),
-                        name: "test".into(),
+                        observed_time_unix_nano: 0,
+                        flags: 0,
                         body: Some(AnyValue {
                             value: Some(any_value::Value::StringValue("snot".into())),
-                        }), // TODO For now its an error for this to be None - may need to revisit
+                        }),
                         attributes: vec![],
-                        dropped_attributes_count: 100,
-                        flags: 128,
+                        dropped_attributes_count: 0,
+                        severity_number: 0,
+                        severity_text: "not scarey".to_string(),
                         span_id: span_id_pb.clone(),
-                        trace_id: trace_id_pb,
+                        trace_id: trace_id_pb.clone(),
                     }],
                 }],
             }],
@@ -365,30 +350,34 @@ mod tests {
         let json = resource_logs_to_json(pb.clone())?;
         let back_again = resource_logs_to_pb(&json)?;
         let expected: Value = literal!({
-            "logs": [
-                {
-                    "resource": { "attributes": {}, "dropped_attributes_count": 8 },
-                    "schema_url": "schema_url",
-                    "instrumentation_library_logs": [
-                        {
-                            "instrumentation_library": { "name": "name", "version": "v0.1.2" },
-                            "schema_url": "schema_url",
-                            "logs": [{
-                                "severity_number": 0,
-                                "flags": 128,
-                                "span_id": span_id_json,
-                                "trace_id": trace_id_json,
-                                "dropped_attributes_count": 100,
-                                "time_unix_nano": 0,
-                                "severity_text": "",
-                                "name": "test",
-                                "attributes": {},
-                                "body": "snot"
-                            }]
-                        }
-                    ]
-                }
-            ]
+            "logs": [{
+                "resource": {
+                      "attributes": {},
+                      "dropped_attributes_count": 8
+                    },
+                "schema_url": "schema_url",
+                "scope_logs": [{
+                    "log_records": [{
+                        "attributes": {},
+                        "body": "snot",
+                        "dropped_attributes_count": 0,
+                        "flags": 0,
+                        "observed_time_unix_nano": 0,
+                        "severity_number": 0,
+                        "severity_text": "not scarey",
+                        "span_id": span_id_json,
+                        "time_unix_nano": 0,
+                        "trace_id": trace_id_json,
+                    }],
+                    "scope":{
+                        "attributes": {},
+                        "dropped_attributes_count": 0,
+                        "name": "name",
+                        "version": "v1.2.3.4"
+                    },
+                    "schema_url": "schema_url2",
+                }]
+            }]
         });
 
         assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
@@ -401,49 +390,30 @@ mod tests {
     fn minimal_logs() {
         let log = literal!({"logs": [
                 {
-                    "instrumentation_library_logs": [
-                    ],
+                    "scope_logs": [],
                     "schema_url": ""
                 }
             ]
         });
         assert_eq!(
             Ok(vec![ResourceLogs {
-                instrumentation_library_logs: vec![],
                 resource: None,
-                schema_url: String::new()
+                schema_url: String::from(""),
+                scope_logs: vec![],
             }]),
             resource_logs_to_pb(&log)
         );
     }
 
     #[test]
-    fn minimal_instrumentation_library_logs() {
-        let ill = literal!([
-            {
-                "logs": [],
-                "schema_url": ""
-            }
-        ]);
-        assert_eq!(
-            Ok(vec![InstrumentationLibraryLogs {
-                instrumentation_library: None,
-                logs: vec![],
-                schema_url: String::new()
-            }]),
-            maybe_instrumentation_library_logs_to_pb(Some(&ill))
-        );
-    }
-
-    #[test]
-    fn minimal_log_record() {
+    fn minimal_log_record() -> Result<()> {
         let lr = literal!({});
         assert_eq!(
             Ok(LogRecord {
+                observed_time_unix_nano: 0,
                 time_unix_nano: 0,
                 severity_number: 0,
                 severity_text: String::new(),
-                name: String::new(),
                 body: None,
                 attributes: vec![],
                 dropped_attributes_count: 0,

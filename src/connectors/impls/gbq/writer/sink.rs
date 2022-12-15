@@ -12,65 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::ChannelFactory;
-use crate::connectors::{
-    google::{AuthInterceptor, TokenProvider},
-    impls::gbq::writer::Config,
-    prelude::*,
-};
-use async_std::prelude::{FutureExt, StreamExt};
+use crate::connectors::google::TremorGoogleAuthz;
+use crate::connectors::impls::gbq::writer::Config;
+use crate::connectors::prelude::*;
+use async_std::prelude::FutureExt;
+use async_std::stream::StreamExt;
+use bytes::Bytes;
 use futures::stream;
-use googapis::google::cloud::bigquery::storage::v1::append_rows_request::Rows;
-use googapis::google::cloud::bigquery::storage::v1::{
-    append_rows_request::{self, ProtoData},
-    append_rows_response::{AppendResult, Response},
-    big_query_write_client::BigQueryWriteClient,
-    table_field_schema::{self, Type as TableType},
-    write_stream, AppendRowsRequest, CreateWriteStreamRequest, ProtoRows, ProtoSchema,
-    TableFieldSchema, WriteStream,
+use google_api_proto::google::cloud::bigquery::storage::v1::append_rows_request::ProtoData;
+use google_api_proto::google::cloud::bigquery::storage::v1::big_query_write_client::BigQueryWriteClient;
+use google_api_proto::google::cloud::bigquery::storage::v1::table_field_schema::Type as TableType;
+use google_api_proto::google::cloud::bigquery::storage::v1::write_stream::WriteMode;
+use google_api_proto::google::cloud::bigquery::storage::v1::{
+    append_rows_request, table_field_schema, write_stream, AppendRowsRequest,
+    CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream,
 };
 use prost::encoding::WireType;
 use prost::Message;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
-use std::collections::hash_map::Entry;
-use std::marker::PhantomData;
-use std::{collections::HashMap, time::Duration};
-use tonic::{
-    codegen::InterceptedService,
-    transport::{Certificate, Channel, ClientTlsConfig},
-};
+use std::collections::HashMap;
+use std::time::Duration;
+use tonic::transport::{Channel, ClientTlsConfig};
 
-pub(crate) struct TonicChannelFactory;
+//
+// NOTE This code now depends on a different protocol buffers and tonic library
+// that in turn introduce a different GCP auth mechanism
+//
 
-#[async_trait::async_trait]
-impl ChannelFactory<Channel> for TonicChannelFactory {
-    async fn make_channel(&self, connect_timeout: Duration) -> Result<Channel> {
-        let tls_config = ClientTlsConfig::new()
-            .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
-            .domain_name("bigquerystorage.googleapis.com");
-
-        Ok(
-            Channel::from_static("https://bigquerystorage.googleapis.com")
-                .connect_timeout(connect_timeout)
-                .tls_config(tls_config)?
-                .connect()
-                .await?,
-        )
-    }
-}
-
-struct ConnectedWriteStream {
-    name: String,
-    mapping: JsonToProtobufMapping,
-}
-
-pub(crate) struct GbqSink<
-    T: TokenProvider,
-    TChannel: GbqChannel<TChannelError>,
-    TChannelError: GbqChannelError,
-> {
-    client: Option<BigQueryWriteClient<InterceptedService<TChannel, AuthInterceptor<T>>>>,
-    write_streams: HashMap<String, ConnectedWriteStream>,
+pub(crate) struct GbqSink {
+    client: Option<BigQueryWriteClient<TremorGoogleAuthz>>,
+    write_stream: Option<WriteStream>,
+    mapping: Option<JsonToProtobufMapping>,
     config: Config,
     channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
     _error_phantom: PhantomData<TChannelError>,
@@ -292,7 +264,7 @@ impl JsonToProtobufMapping {
         }
     }
 
-    pub fn map(&self, value: &Value) -> Result<Vec<u8>> {
+    pub fn map(&self, value: &Value) -> Result<Bytes> {
         if let Some(obj) = value.as_object() {
             let mut result = Vec::with_capacity(obj.len());
 
@@ -302,7 +274,7 @@ impl JsonToProtobufMapping {
                 }
             }
 
-            return Ok(result);
+            return Ok(result.into());
         }
 
         Err(ErrorKind::BigQueryTypeMismatch("object", value.value_type()).into())
@@ -312,13 +284,8 @@ impl JsonToProtobufMapping {
         &self.descriptor
     }
 }
-impl<T: TokenProvider, TChannel: GbqChannel<TChannelError>, TChannelError: GbqChannelError>
-    GbqSink<T, TChannel, TChannelError>
-{
-    pub fn new(
-        config: Config,
-        channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
-    ) -> Self {
+impl GbqSink {
+    pub fn new(config: Config) -> Self {
         Self {
             client: None,
             write_streams: HashMap::new(),
@@ -330,14 +297,7 @@ impl<T: TokenProvider, TChannel: GbqChannel<TChannelError>, TChannelError: GbqCh
 }
 
 #[async_trait::async_trait]
-impl<
-        T: TokenProvider + 'static,
-        TChannel: GbqChannel<TChannelError> + 'static,
-        TChannelError: GbqChannelError,
-    > Sink for GbqSink<T, TChannel, TChannelError>
-where
-    TChannel::Future: Send,
-{
+impl Sink for GbqSink {
     async fn on_event(
         &mut self,
         _input: &str,
@@ -439,17 +399,45 @@ where
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         info!("{ctx} Connecting to BigQuery");
 
-        let channel = self
-            .channel_factory
-            .make_channel(Duration::from_nanos(self.config.connect_timeout))
+        let tls_config = ClientTlsConfig::new().domain_name("bigquerystorage.googleapis.com");
+
+        let channel = Channel::from_static("https://bigquerystorage.googleapis.com")
+            .connect_timeout(Duration::from_nanos(self.config.connect_timeout))
+            .tls_config(tls_config)?
+            .connect()
             .await?;
 
-        let client = BigQueryWriteClient::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token_provider: T::default(),
-            },
+        let mut client = BigQueryWriteClient::new(TremorGoogleAuthz::new(channel).await?);
+
+        let write_stream = client
+            .create_write_stream(CreateWriteStreamRequest {
+                parent: self.config.table_id.clone(),
+                write_stream: Some(WriteStream {
+                    // The stream name here will be ignored and a generated value will be set in the response
+                    name: "".to_string(),
+                    r#type: i32::from(write_stream::Type::Committed),
+                    create_time: None,
+                    commit_time: None,
+                    table_schema: None,
+                    location: "".to_string(), // Should be a valid region TODO FIXME
+                    write_mode: WriteMode::Insert.into(),
+                }),
+            })
+            .await?
+            .into_inner();
+
+        let mapping = JsonToProtobufMapping::new(
+            &write_stream
+                .table_schema
+                .as_ref()
+                .ok_or(ErrorKind::GbqSinkFailed("Table schema was not provided"))?
+                .clone()
+                .fields,
+            ctx,
         );
+
+        self.mapping = Some(mapping);
+        self.write_stream = Some(write_stream);
         self.client = Some(client);
 
         Ok(true)
@@ -680,25 +668,7 @@ mod test {
     use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
-    use crate::connectors::{
-        google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
-    };
-    use bytes::Bytes;
-    use futures::future::Ready;
-    use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
-    use googapis::google::cloud::bigquery::storage::v1::{
-        append_rows_response, AppendRowsResponse, TableSchema,
-    };
-    use googapis::google::rpc::Status;
-    use http::{HeaderMap, HeaderValue};
-    use prost::Message;
-    use std::collections::VecDeque;
-    use std::fmt::{Display, Formatter};
-    use std::sync::{Arc, RwLock};
-    use std::task::Poll;
-    use tonic::body::BoxBody;
-    use tonic::codegen::Service;
-    use tremor_common::ids::SinkId;
+    use google_api_proto::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
     use value_trait::StaticNode;
 
     struct HardcodedChannelFactory {
@@ -1397,58 +1367,16 @@ mod test {
     }
 
     #[async_std::test]
-    async fn on_event_fails_if_client_is_not_conected() -> Result<()> {
+    async fn on_event_fails_if_client_is_not_connected() -> Result<()> {
         let (rx, _tx) = async_std::channel::unbounded();
         let config = Config::new(&literal!({
             "table_id": "doesnotmatter",
-            "connect_timeout": 1_000_000,
-            "request_timeout": 1_000_000
-        }))?;
+            "connect_timeout": 1000000,
+            "request_timeout": 1000000
+        }))
+        .unwrap();
 
-        let mut sink =
-            GbqSink::<TestTokenProvider, _, _>::new(config, Box::new(TonicChannelFactory));
-
-        let result = sink
-            .on_event(
-                "",
-                Event::signal_tick(),
-                &SinkContext {
-                    uid: SinkId::default(),
-                    alias: Alias::new("flow", "connector"),
-                    connector_type: ConnectorType::default(),
-                    quiescence_beacon: QuiescenceBeacon::default(),
-                    notifier: ConnectionLostNotifier::new(rx),
-                },
-                &mut EventSerializer::new(
-                    None,
-                    CodecReq::Structured,
-                    vec![],
-                    &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
-                )?,
-                0,
-            )
-            .await;
-
-        assert!(result.is_err());
-        Ok(())
-    }
-
-    #[async_std::test]
-    async fn on_event_fails_if_write_stream_is_not_conected() -> Result<()> {
-        let (rx, _tx) = async_std::channel::unbounded();
-        let config = Config::new(&literal!({
-            "table_id": "doesnotmatter",
-            "connect_timeout": 1_000_000,
-            "request_timeout": 1_000_000
-        }))?;
-
-        let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
-            config,
-            Box::new(HardcodedChannelFactory {
-                channel: Channel::from_static("http://example.com").connect_lazy(),
-            }),
-        );
+        let mut sink = GbqSink::new(config);
 
         let result = sink
             .on_event(

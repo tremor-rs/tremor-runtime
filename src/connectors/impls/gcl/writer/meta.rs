@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use googapis::google::logging::{
+use google_api_proto::google::logging::{
     r#type::HttpRequest,
-    v2::{LogEntryOperation, LogEntrySourceLocation},
+    v2::{LogEntryOperation, LogEntrySourceLocation, LogSplit},
 };
 use tremor_value::Value;
 use value_trait::ValueAccess;
@@ -28,6 +28,7 @@ pub(crate) fn insert_id(meta: Option<&Value>) -> String {
     get_or_default(meta, "insert_id")
 }
 
+#[allow(clippy::cast_possible_wrap)] // casting seconds to u64 here is safe
 pub(crate) fn http_request(meta: Option<&Value>) -> Option<HttpRequest> {
     // Override for a specific per event trace
     let meta = meta?;
@@ -69,7 +70,14 @@ pub(crate) fn http_request(meta: Option<&Value>) -> Option<HttpRequest> {
             .to_string(),
         latency: match http_request.get("latency").as_u64().unwrap_or(0) {
             0 => None,
-            otherwise => Some(std::time::Duration::from_nanos(otherwise).into()),
+            otherwise => {
+                let mut duration = prost_types::Duration {
+                    seconds: otherwise as i64 / 1_000_000_000i64,
+                    nanos: (otherwise % 1_000_000_000) as i32,
+                };
+                duration.normalize();
+                Some(duration)
+            }
         },
         cache_lookup: http_request.get("cache_lookup").as_bool().unwrap_or(false),
         cache_hit: http_request.get("cache_hit").as_bool().unwrap_or(false),
@@ -138,14 +146,29 @@ pub(crate) fn source_location(meta: Option<&Value>) -> Option<LogEntrySourceLoca
     None
 }
 
+pub(crate) fn split(meta: Option<&Value>) -> Option<LogSplit> {
+    let has_meta = meta?;
+
+    if let Some(split) = has_meta.get("split") {
+        return Some(LogSplit {
+            uid: split.get("uid").as_str().unwrap_or("").to_string(),
+            index: split.get("line").as_i32().unwrap_or(0),
+            total_splits: split.get("total_splits").as_i32().unwrap_or(0),
+        });
+    }
+
+    // Otherwise, None as mapping is optional
+    None
+}
+
 #[cfg(test)]
 mod test {
     use super::super::Config;
     use super::*;
 
     use crate::connectors::impls::gcl::writer::default_log_severity;
-    use googapis::google::logging::r#type::LogSeverity;
-    use std::collections::HashMap as StdHashMap;
+    use google_api_proto::google::logging::r#type::LogSeverity;
+    use std::collections::BTreeMap;
     use tremor_pipeline::ConfigImpl;
     use tremor_value::literal;
     use tremor_value::structurize;
@@ -161,7 +184,7 @@ mod test {
         assert_eq!(1_000_000_000, config.connect_timeout);
         assert_eq!(10_000_000_000, config.request_timeout);
         assert_eq!(LogSeverity::Default as i32, config.default_severity);
-        assert_eq!(std::collections::HashMap::new(), config.labels);
+        assert_eq!(std::collections::BTreeMap::new(), config.labels);
 
         Ok(())
     }
@@ -177,7 +200,7 @@ mod test {
         );
         assert_eq!(String::new(), insert_id(Some(&meta)));
         assert_eq!(None, http_request(Some(&meta)));
-        assert_eq!(StdHashMap::new(), Config::labels(Some(&meta)));
+        assert_eq!(BTreeMap::new(), Config::labels(Some(&meta)));
         assert_eq!(None, operation(Some(&meta)));
         assert_eq!(String::new(), trace(Some(&meta)));
         assert_eq!(String::new(), span_id(Some(&meta)));
@@ -319,7 +342,7 @@ mod test {
         //      Common labels are sent once per batch of events
         //      Metadata override ( per event ) labels are per event
         //      So, although odd, this test is as intended
-        assert_eq!(StdHashMap::new(), Config::labels(None));
+        assert_eq!(BTreeMap::new(), Config::labels(None));
 
         let ok_config = Config::new(&literal!({ "labels": { "snot": "badger" } }))?;
         assert_eq!(1, ok_config.labels.len());
@@ -420,6 +443,26 @@ mod test {
                 function: "badger".to_string()
             }),
             sl
+        );
+    }
+
+    #[test]
+    fn log_splits() {
+        let meta = literal!({
+            "split": {
+                "uid": "snot",
+                "index": 0,
+                "total_splits": 5,
+            }
+        });
+        let split = split(Some(&meta));
+        assert_eq!(
+            Some(LogSplit {
+                uid: "snot".to_string(),
+                index: 0,
+                total_splits: 5
+            }),
+            split
         );
     }
 }

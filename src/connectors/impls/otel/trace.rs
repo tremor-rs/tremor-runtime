@@ -15,36 +15,36 @@
 #![allow(dead_code)]
 
 use super::{
-    common::{self, EMPTY},
+    common::{self, maybe_instrumentation_scope_to_pb, EMPTY},
     id,
     resource::{self, resource_to_pb},
 };
-use crate::connectors::utils::pb::{
-    maybe_int_to_pbi32, maybe_int_to_pbu32, maybe_int_to_pbu64, maybe_string_to_pb,
+use crate::connectors::{
+    impls::otel::common::maybe_instrumentation_scope_to_json,
+    utils::pb::{maybe_int_to_pbi32, maybe_int_to_pbu32, maybe_int_to_pbu64, maybe_string_to_pb},
 };
 use crate::errors::Result;
 use simd_json::Mutable;
+use tremor_otelapis::opentelemetry::proto::trace::v1::ScopeSpans;
 use tremor_value::literal;
 
 use tremor_otelapis::opentelemetry::proto::{
     collector::trace::v1::ExportTraceServiceRequest,
     trace::v1::{
         span::{Event, Link},
-        InstrumentationLibrarySpans, ResourceSpans, Span, Status,
+        ResourceSpans, Span, Status,
     },
 };
 
 use tremor_value::Value;
 use value_trait::ValueAccess;
 
-#[allow(deprecated)]
 pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {
     data.map_or_else(
-        || literal!({ "code": 0, "deprecated_code": 0, "message": "status code unset" }),
+        || literal!({ "code": 0, "message": "status code unset" }),
         |data| {
             literal!({
                 "code": data.code,
-                "deprecated_code": data.deprecated_code,
                 "message": data.message
             })
         },
@@ -119,11 +119,8 @@ pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>> {
         .as_object()
         .ok_or("Unable to map json value to pb trace status")?;
 
-    // This is generated code in the pb stub code deriving from otel proto files
-    #[allow(deprecated)]
     Ok(Some(Status {
         code: maybe_int_to_pbi32(json.get("code"))?,
-        deprecated_code: maybe_int_to_pbi32(json.get("deprecated_code"))?,
         message: maybe_string_to_pb(json.get("message"))?,
     }))
 }
@@ -172,29 +169,21 @@ pub(crate) fn span_to_pb(span: &Value<'_>) -> Result<Span> {
     })
 }
 
-pub(crate) fn instrumentation_library_spans_to_json(
-    data: Vec<InstrumentationLibrarySpans>,
-) -> Value<'static> {
-    let mut json: Vec<Value> = Vec::with_capacity(data.len());
-    for data in data {
-        let spans: Value = data.spans.into_iter().map(span_to_json).collect();
-
-        let mut e = literal!({ "spans": spans, "schema_url": data.schema_url });
-        if let Some(il) = data.instrumentation_library {
-            let il = common::maybe_instrumentation_library_to_json(il);
-            e.try_insert("instrumentation_library", il);
-        }
-        json.push(e);
-    }
-
-    Value::from(json)
+pub(crate) fn scope_spans_to_json(data: Vec<ScopeSpans>) -> Vec<Value<'static>> {
+    data.into_iter()
+        .map(|pb| {
+            literal!({
+                "schema_url": pb.schema_url,
+                "scope": maybe_instrumentation_scope_to_json(pb.scope),
+                "spans": pb.spans.into_iter().map(span_to_json).collect::<Vec<Value>>(),
+            })
+        })
+        .collect()
 }
 
-pub(crate) fn instrumentation_library_spans_to_pb(
-    data: Option<&Value<'_>>,
-) -> Result<Vec<InstrumentationLibrarySpans>> {
+pub(crate) fn scope_spans_to_pb(data: Option<&Value<'_>>) -> Result<Vec<ScopeSpans>> {
     data.as_array()
-        .ok_or("Invalid json mapping for InstrumentationLibrarySpans")?
+        .ok_or("Invalid json mapping for ScopeSpans")?
         .iter()
         .filter_map(Value::as_object)
         .map(|data| {
@@ -206,54 +195,50 @@ pub(crate) fn instrumentation_library_spans_to_pb(
                 .map(span_to_pb)
                 .collect::<Result<_>>()?;
 
-            Ok(InstrumentationLibrarySpans {
-                instrumentation_library: data
-                    .get("instrumentation_library")
-                    .map(common::instrumentation_library_to_pb)
-                    .transpose()?,
+            Ok(ScopeSpans {
                 schema_url: data
                     .get("schema_url")
                     .map(ToString::to_string)
                     .unwrap_or_default(),
                 spans,
+                scope: maybe_instrumentation_scope_to_pb(data.get("scope"))?,
             })
         })
         .collect()
 }
 
-pub(crate) fn resource_spans_to_json(request: ExportTraceServiceRequest) -> Value<'static> {
-    let json: Value = request
+pub(crate) fn resource_spans_to_json(request: ExportTraceServiceRequest) -> Result<Value<'static>> {
+    let json: Result<Vec<Value<'static>>> = request
         .resource_spans
         .into_iter()
         .map(|span| {
-            let ill = instrumentation_library_spans_to_json(span.instrumentation_library_spans);
-            let mut base =
-                literal!({ "instrumentation_library_spans": ill, "schema_url": span.schema_url });
+            let mut base = literal!({
+                    "schema_url": span.schema_url,
+            });
             if let Some(r) = span.resource {
                 base.try_insert("resource", resource::resource_to_json(r));
             };
-            base
+            base.try_insert("scope_spans", scope_spans_to_json(span.scope_spans));
+            Ok(base)
         })
         .collect();
 
-    literal!({ "trace": json })
+    Ok(literal!({ "trace": Value::Array(json?) }))
 }
 
-pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceSpans>> {
+pub(crate) fn resource_spans_to_pb(json: &Value<'_>) -> Result<Vec<ResourceSpans>> {
     json.get_array("trace")
         .ok_or("Invalid json mapping for otel trace message - cannot convert to pb")?
         .iter()
         .filter_map(Value::as_object)
         .map(|json| {
             Ok(ResourceSpans {
-                instrumentation_library_spans: instrumentation_library_spans_to_pb(
-                    json.get("instrumentation_library_spans"),
-                )?,
                 schema_url: json
                     .get("schema_url")
                     .map(ToString::to_string)
                     .unwrap_or_default(),
                 resource: json.get("resource").map(resource_to_pb).transpose()?,
+                scope_spans: scope_spans_to_pb(json.get("scope_spans"))?,
             })
         })
         .collect()
@@ -263,25 +248,21 @@ pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Resou
 mod tests {
     use std::time::Duration;
 
-    use tremor_otelapis::opentelemetry::proto::{
-        common::v1::InstrumentationLibrary, resource::v1::Resource,
-    };
+    use tremor_otelapis::opentelemetry::proto::common::v1::InstrumentationScope;
+    use tremor_otelapis::opentelemetry::proto::resource::v1::Resource;
     use tremor_script::utils::sorted_serialize;
 
     use super::*;
 
     #[test]
-    #[allow(deprecated)]
     fn status() -> Result<()> {
         let pb = Status {
-            deprecated_code: 0,
             message: "everything is snot".into(),
             code: 1,
         };
         let json = status_to_json(Some(pb.clone()));
         let back_again = status_to_pb(Some(&json))?;
-        let expected: Value =
-            literal!({"deprecated_code": 0, "message": "everything is snot", "code": 1});
+        let expected: Value = literal!({"message": "everything is snot", "code": 1});
 
         assert_eq!(expected, json);
         assert_eq!(Some(pb), back_again);
@@ -289,10 +270,8 @@ mod tests {
         // None
         let json = status_to_json(None);
         let back_again = status_to_pb(Some(&json))?;
-        let expected: Value =
-            literal!({"deprecated_code": 0, "message": "status code unset", "code": 0});
+        let expected: Value = literal!({"message": "status code unset", "code": 0});
         let pb = Status {
-            deprecated_code: 0,
             message: "status code unset".into(),
             code: 0,
         };
@@ -380,83 +359,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
-    fn instrument_library_spans() -> Result<()> {
-        let nanotime = tremor_common::time::nanotime();
-        let parent_span_id_json = id::random_span_id_value(nanotime);
-        let parent_span_id_pb = id::test::json_span_id_to_pb(Some(&parent_span_id_json))?;
-        let span_id_pb = id::random_span_id_bytes(nanotime);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
-        let trace_id_json = id::random_trace_id_value(nanotime);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
-
-        let pb = vec![InstrumentationLibrarySpans {
-            schema_url: "schema_url".into(),
-            instrumentation_library: Some(InstrumentationLibrary {
-                name: "name".into(),
-                version: "v0.1.2".into(),
-            }), // TODO For now its an error for this to be None - may need to revisit
-            spans: vec![Span {
-                start_time_unix_nano: 0,
-                end_time_unix_nano: 0,
-                name: "test".into(),
-                attributes: vec![],
-                dropped_attributes_count: 100,
-                trace_state: "snot:badger".into(),
-                parent_span_id: parent_span_id_pb,
-                span_id: span_id_pb.clone(),
-                trace_id: trace_id_pb,
-                kind: 0,
-                status: Some(Status {
-                    code: 0,
-                    deprecated_code: 0,
-                    message: "woot".into(),
-                }),
-                events: vec![],
-                dropped_events_count: 11,
-                links: vec![],
-                dropped_links_count: 13,
-            }],
-        }];
-        let json = instrumentation_library_spans_to_json(pb.clone());
-        let back_again = instrumentation_library_spans_to_pb(Some(&json))?;
-        let expected: Value = literal!([{
-            "instrumentation_library": { "name": "name", "version": "v0.1.2" },
-            "schema_url": "schema_url",
-            "spans": [{
-                  "start_time_unix_nano": 0,
-                  "end_time_unix_nano": 0,
-                  "name": "test",
-                  "dropped_attributes_count": 100,
-                  "attributes": {},
-                  "trace_state": "snot:badger",
-                  "parent_span_id": parent_span_id_json,
-                  "span_id": span_id_json,
-                  "trace_id": trace_id_json,
-                  "kind": 0,
-                  "status": {
-                      "code": 0,
-                      "deprecated_code": 0,
-                      "message": "woot"
-                  },
-                  "events": [],
-                  "links": [],
-                  "dropped_events_count": 11,
-                  "dropped_links_count": 13,
-                }
-            ]
-        }]);
-
-        assert_eq!(expected, json);
-        assert_eq!(pb, back_again);
-
-        let invalid = instrumentation_library_spans_to_pb(Some(&literal!("snot")));
-        assert!(invalid.is_err());
-
-        Ok(())
-    }
-
-    #[test]
     fn resource_spans() -> Result<()> {
         let nanotime = tremor_common::time::nanotime();
         let parent_span_id_json = id::random_span_id_value(nanotime);
@@ -466,7 +368,6 @@ mod tests {
         let trace_id_json = id::random_trace_id_value(nanotime);
         let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
 
-        #[allow(deprecated)]
         let pb = ExportTraceServiceRequest {
             resource_spans: vec![ResourceSpans {
                 schema_url: "schema_url".into(),
@@ -474,12 +375,13 @@ mod tests {
                     attributes: vec![],
                     dropped_attributes_count: 8,
                 }),
-                instrumentation_library_spans: vec![InstrumentationLibrarySpans {
-                    schema_url: "schema_url".into(),
-                    instrumentation_library: Some(InstrumentationLibrary {
-                        name: "name".into(),
-                        version: "v0.1.2".into(),
-                    }), // TODO For now its an error for this to be None - may need to revisit
+                scope_spans: vec![ScopeSpans {
+                    scope: Some(InstrumentationScope {
+                        name: "snot".to_string(),
+                        version: "v1.2.3.4".to_string(),
+                        attributes: vec![],
+                        dropped_attributes_count: 0,
+                    }),
                     spans: vec![Span {
                         start_time_unix_nano: 0,
                         end_time_unix_nano: 0,
@@ -493,7 +395,6 @@ mod tests {
                         kind: 0,
                         status: Some(Status {
                             code: 0,
-                            deprecated_code: 0,
                             message: "woot".into(),
                         }),
                         events: vec![],
@@ -501,22 +402,23 @@ mod tests {
                         links: vec![],
                         dropped_links_count: 13,
                     }],
+                    schema_url: "schema_url".to_string(),
                 }],
             }],
         };
-        let json = resource_spans_to_json(pb.clone());
-        let back_again = resource_spans_to_pb(Some(&json))?;
+        let json = resource_spans_to_json(pb.clone())?;
+        let back_again = resource_spans_to_pb(&json)?;
         let expected: Value = literal!({
             "trace": [
                 {
                     "resource": { "attributes": {}, "dropped_attributes_count": 8 },
                     "schema_url": "schema_url",
-                    "instrumentation_library_spans": [{
-                        "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+                    "scope_spans": [{
                         "schema_url": "schema_url",
+                        "scope":{"attributes":{},"dropped_attributes_count":0,"name":"snot","version":"v1.2.3.4"},
                         "spans": [{
-                            "start_time_unix_nano": 0,
-                            "end_time_unix_nano": 0,
+                            "start_time_unix_nano": 0u64,
+                            "end_time_unix_nano": 0u64,
                             "name": "test",
                             "dropped_attributes_count": 100,
                             "attributes": {},
@@ -527,7 +429,6 @@ mod tests {
                             "kind": 0,
                             "status": {
                                 "code": 0,
-                                "deprecated_code": 0,
                                 "message": "woot"
                             },
                             "events": [],
@@ -544,7 +445,7 @@ mod tests {
         assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
         assert_eq!(pb.resource_spans, back_again);
 
-        let invalid = resource_spans_to_pb(Some(&literal!("snot")));
+        let invalid = resource_spans_to_pb(&literal!("snot"));
         assert!(invalid.is_err());
 
         Ok(())
@@ -555,7 +456,7 @@ mod tests {
         let resource_spans = literal!({
             "trace": [
                 {
-                    "instrumentation_library_spans": [],
+                    "scope_spans": [],
                     "schema_url": "schema_url"
                 }
             ]
@@ -563,31 +464,15 @@ mod tests {
         assert_eq!(
             Ok(vec![ResourceSpans {
                 resource: None,
-                instrumentation_library_spans: vec![],
+                // instrumentation_library_spans: vec![],
+                scope_spans: vec![],
                 schema_url: "schema_url".to_string()
             }]),
-            resource_spans_to_pb(Some(&resource_spans))
+            resource_spans_to_pb(&resource_spans)
         );
     }
 
     #[test]
-    fn minimal_instrumentation_library_spans() {
-        let ils = literal!([{
-            "spans": [],
-            "schema_url": "schema_url"
-        }]);
-        assert_eq!(
-            Ok(vec![InstrumentationLibrarySpans {
-                instrumentation_library: None,
-                spans: vec![],
-                schema_url: "schema_url".to_string()
-            }]),
-            instrumentation_library_spans_to_pb(Some(&ils))
-        );
-    }
-
-    #[test]
-    #[allow(clippy::cast_possible_truncation)]
     fn minimal_span() {
         let span = literal!({
             // hex encoded strings

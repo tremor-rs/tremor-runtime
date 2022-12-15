@@ -17,18 +17,20 @@ use super::{
     logs, metrics, trace,
 };
 use crate::connectors::prelude::*;
-use tonic::transport::Channel as TonicChannel;
 use tonic::transport::Endpoint as TonicEndpoint;
-use tremor_otelapis::opentelemetry::proto::collector::{
-    logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
-    metrics::v1::{metrics_service_client::MetricsServiceClient, ExportMetricsServiceRequest},
-    trace::v1::{trace_service_client::TraceServiceClient, ExportTraceServiceRequest},
+use tonic::{codegen::CompressionEncoding, transport::Channel as TonicChannel};
+use tremor_otelapis::{
+    common::FallibleOtelResponse,
+    opentelemetry::proto::collector::{
+        logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
+        metrics::v1::{metrics_service_client::MetricsServiceClient, ExportMetricsServiceRequest},
+        trace::v1::{trace_service_client::TraceServiceClient, ExportTraceServiceRequest},
+    },
 };
 
 const CONNECTOR_TYPE: &str = "otel_client";
 
 // TODO Consider concurrency cap?
-
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
@@ -49,10 +51,10 @@ pub(crate) struct Config {
 }
 
 impl ConfigImpl for Config {}
+
 /// The `OpenTelemetry` client connector
 pub(crate) struct Client {
     config: Config,
-    origin_uri: EventOriginUri,
 }
 
 // #[cfg_attr(coverage, no_coverage)]
@@ -79,14 +81,7 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
-        let origin_uri = EventOriginUri {
-            scheme: "tremor-otel-client".to_string(),
-            host: config.url.host_or_local().to_string(),
-            port: config.url.port(),
-            path: vec![],
-        };
-
-        Ok(Box::new(Client { config, origin_uri }))
+        Ok(Box::new(Client { config }))
     }
 }
 
@@ -109,7 +104,6 @@ impl Connector for Client {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = OtelSink {
-            origin_uri: self.origin_uri.clone(),
             config: self.config.clone(),
             remote: None,
         };
@@ -117,11 +111,28 @@ impl Connector for Client {
     }
 }
 
-#[allow(dead_code)]
 struct OtelSink {
-    origin_uri: EventOriginUri,
     config: Config,
     remote: Option<RemoteOpenTelemetryEndpoint>,
+}
+
+fn handle_fallible_otel_response<T>(
+    response: std::result::Result<tonic::Response<T>, tonic::Status>,
+) -> Option<Error>
+where
+    FallibleOtelResponse: std::convert::From<T>,
+{
+    match response {
+        Ok(response) => {
+            let partial: FallibleOtelResponse = response.into_inner().into();
+            if partial.is_ok() {
+                None
+            } else {
+                Some(partial.error_message.into()) // FIXME make this a nice hygienic error ( omits counts etc... )
+            }
+        }
+        Err(e) => Some(e.into()),
+    }
 }
 
 #[async_trait::async_trait()]
@@ -139,9 +150,15 @@ impl Sink for OtelSink {
 
         let (logs_client, metrics_client, trace_client) = match self.config.compression {
             Compression::Gzip => (
-                logs_client.accept_gzip().send_gzip(),
-                metrics_client.accept_gzip().send_gzip(),
-                trace_client.accept_gzip().send_gzip(),
+                logs_client
+                    .send_compressed(CompressionEncoding::Gzip)
+                    .accept_compressed(CompressionEncoding::Gzip),
+                metrics_client
+                    .send_compressed(CompressionEncoding::Gzip)
+                    .accept_compressed(CompressionEncoding::Gzip),
+                trace_client
+                    .send_compressed(CompressionEncoding::Gzip)
+                    .accept_compressed(CompressionEncoding::Gzip),
             ),
             Compression::None => (logs_client, metrics_client, trace_client),
         };
@@ -164,14 +181,14 @@ impl Sink for OtelSink {
     ) -> Result<SinkReply> {
         if let Some(remote) = &mut self.remote {
             for value in event.value_iter() {
-                let err = if self.config.metrics && value.contains_key("metrics") {
+                let err: Option<Error> = if self.config.metrics && value.contains_key("metrics") {
                     let request = ExportMetricsServiceRequest {
                         resource_metrics: ctx.bail_err(
                             metrics::resource_metrics_to_pb(Some(value)),
                             "Error converting payload to otel metrics",
                         )?,
                     };
-                    remote.metrics_client.export(request).await.err()
+                    handle_fallible_otel_response(remote.metrics_client.export(request).await)
                 } else if self.config.logs && value.contains_key("logs") {
                     let request = ExportLogsServiceRequest {
                         resource_logs: ctx.bail_err(
@@ -179,15 +196,15 @@ impl Sink for OtelSink {
                             "Error converting payload to otel logs",
                         )?,
                     };
-                    remote.logs_client.export(request).await.err()
+                    handle_fallible_otel_response(remote.logs_client.export(request).await)
                 } else if self.config.trace && value.contains_key("trace") {
                     let request = ExportTraceServiceRequest {
                         resource_spans: ctx.bail_err(
-                            trace::resource_spans_to_pb(Some(value)),
+                            trace::resource_spans_to_pb(value),
                             "Error converting payload to otel span",
                         )?,
                     };
-                    remote.trace_client.export(request).await.err()
+                    handle_fallible_otel_response(remote.trace_client.export(request).await)
                 } else {
                     warn!("{ctx} Invalid or disabled otel payload: {value}");
                     None

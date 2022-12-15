@@ -14,53 +14,45 @@
 
 use super::meta;
 
-use crate::connectors::google::{AuthInterceptor, ChannelFactory, TokenProvider};
+use crate::connectors::google::{MockServiceRpcCall, TremorGoogleAuthz};
 use crate::connectors::impls::gcl::writer::Config;
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::pb;
 use async_std::channel::Sender;
 use async_std::prelude::FutureExt;
-use googapis::google::logging::v2::log_entry::Payload;
-use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
-use googapis::google::logging::v2::{LogEntry, WriteLogEntriesRequest};
+use google_api_proto::google::logging::v2::log_entry::Payload;
+use google_api_proto::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
+use google_api_proto::google::logging::v2::{LogEntry, WriteLogEntriesRequest};
 use prost_types::Timestamp;
 use std::time::Duration;
-use tonic::codegen::InterceptedService;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig};
+use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::Code;
 use tremor_common::time::nanotime;
 
-pub(crate) struct TonicChannelFactory;
+//
+// NOTE This code now depends on a different protocol buffers and tonic library
+// that in turn introduce a different GCP auth mechanism
+//
 
-#[async_trait::async_trait]
-impl ChannelFactory<Channel> for TonicChannelFactory {
-    async fn make_channel(&self, connect_timeout: Duration) -> Result<Channel> {
-        let tls_config = ClientTlsConfig::new()
-            .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
-            .domain_name("logging.googleapis.com");
+async fn make_tonic_channel(connect_timeout: Duration) -> Result<TremorGoogleAuthz> {
+    let tls_config = ClientTlsConfig::new().domain_name("logging.googleapis.com");
 
-        Ok(Channel::from_static("https://logging.googleapis.com")
-            .connect_timeout(connect_timeout)
-            .tls_config(tls_config)?
-            .connect()
-            .await?)
-    }
+    let raw_channel = Channel::from_static("https://logging.googleapis.com")
+        .connect_timeout(connect_timeout)
+        .tls_config(tls_config)?
+        .connect()
+        .await?;
+
+    TremorGoogleAuthz::new(raw_channel).await
 }
 
-pub(crate) struct GclSink<T, TChannel>
-where
-    T: TokenProvider + Clone,
-    TChannel: tonic::codegen::Service<
-            http::Request<tonic::body::BoxBody>,
-            Response = http::Response<tonic::transport::Body>,
-        > + Clone,
-{
-    client: Option<LoggingServiceV2Client<InterceptedService<TChannel, AuthInterceptor<T>>>>,
+pub(crate) struct GclSink {
+    client: Option<LoggingServiceV2Client<TremorGoogleAuthz>>,
     config: Config,
     concurrency_cap: ConcurrencyCap,
     reply_tx: Sender<AsyncSinkReply>,
-    channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
+    mock_logic: Option<MockServiceRpcCall>,
 }
 
 fn value_to_log_entry(
@@ -84,24 +76,27 @@ fn value_to_log_entry(
         trace_sampled: meta::trace_sampled(meta)?,
         source_location: meta::source_location(meta),
         payload: Some(Payload::JsonPayload(pb::value_to_prost_struct(data)?)),
+        split: meta::split(meta),
     })
 }
 
-impl<
-        T: TokenProvider + Clone,
-        TChannel: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::transport::Body>,
-                Error = TChannelError,
-            > + Send
-            + Clone,
-        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>>,
-    > GclSink<T, TChannel>
-{
-    pub fn new(
+impl GclSink {
+    pub fn new(config: Config, reply_tx: Sender<AsyncSinkReply>) -> Self {
+        let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
+        Self {
+            client: None,
+            config,
+            concurrency_cap,
+            reply_tx,
+            mock_logic: None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn new_mock(
         config: Config,
         reply_tx: Sender<AsyncSinkReply>,
-        channel_factory: impl ChannelFactory<TChannel> + Send + Sync + 'static,
+        mock_logic: MockServiceRpcCall,
     ) -> Self {
         let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
         Self {
@@ -109,26 +104,13 @@ impl<
             config,
             concurrency_cap,
             reply_tx,
-            channel_factory: Box::new(channel_factory),
+            mock_logic: Some(mock_logic),
         }
     }
 }
 
 #[async_trait::async_trait]
-impl<
-        T: TokenProvider + Clone + 'static,
-        TChannel: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::transport::Body>,
-                Error = TChannelError,
-            > + Send
-            + Clone
-            + 'static,
-        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
-    > Sink for GclSink<T, TChannel>
-where
-    TChannel::Future: Send,
-{
+impl Sink for GclSink {
     async fn on_event(
         &mut self,
         _input: &str,
@@ -219,20 +201,23 @@ where
     }
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        info!("{} Connecting to Google Cloud Logging", ctx);
-        let channel = self
-            .channel_factory
-            .make_channel(Duration::from_nanos(self.config.connect_timeout))
-            .await?;
+        match self.mock_logic {
+            Some(logic) => {
+                info!("{} Mocking connection to Google Cloud Logging", ctx);
+                self.client = Some(LoggingServiceV2Client::new(
+                    TremorGoogleAuthz::new_mock(logic).await?,
+                ));
+            }
+            None => {
+                info!("{} Connecting to Google Cloud Logging", ctx);
+                let channel =
+                    make_tonic_channel(Duration::from_nanos(self.config.connect_timeout)).await?;
 
-        let client = LoggingServiceV2Client::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token_provider: T::default(),
-            },
-        );
+                let client = LoggingServiceV2Client::new(channel);
 
-        self.client = Some(client);
+                self.client = Some(client);
+            }
+        }
 
         Ok(true)
     }
@@ -258,63 +243,34 @@ mod test {
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
     use async_std::channel::bounded;
-    use bytes::Bytes;
-    use futures::future::Ready;
-    use googapis::google::logging::r#type::LogSeverity;
-    use googapis::google::logging::v2::WriteLogEntriesResponse;
+    use futures::executor::block_on;
+    use google_api_proto::google::logging::{r#type::LogSeverity, v2::WriteLogEntriesResponse};
     use http::{HeaderMap, HeaderValue};
-    use http_body::Body;
-    use prost::Message;
-    use std::task::Poll;
-    use std::{
-        collections::HashMap,
-        fmt::{Debug, Display, Formatter},
-    };
-    use tonic::body::BoxBody;
-    use tonic::codegen::Service;
-    use tremor_common::ids::SinkId;
     use tremor_pipeline::CbAction::Trigger;
     use tremor_pipeline::EventId;
     use tremor_value::{literal, structurize};
 
-    #[derive(Debug)]
-    enum MockServiceError {}
-
-    impl Display for MockServiceError {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            write!(f, "MockServiceError")
-        }
-    }
-
-    impl std::error::Error for MockServiceError {}
-
-    struct MockChannelFactory;
-
-    #[async_trait::async_trait]
-    impl ChannelFactory<MockService> for MockChannelFactory {
-        async fn make_channel(&self, _connect_timeout: Duration) -> Result<MockService> {
-            Ok(MockService {})
-        }
-    }
-
-    #[derive(Clone)]
-    struct MockService {}
-
-    impl Service<http::Request<BoxBody>> for MockService {
-        type Response = http::Response<tonic::transport::Body>;
-        type Error = MockServiceError;
-        type Future =
-            Ready<std::result::Result<http::Response<tonic::transport::Body>, MockServiceError>>;
-
-        fn poll_ready(
-            &mut self,
-            _cx: &mut std::task::Context<'_>,
-        ) -> Poll<std::result::Result<(), Self::Error>> {
-            Poll::Ready(Ok(()))
-        }
-
-        #[allow(clippy::unwrap_used, clippy::cast_possible_truncation)] // We don't control the return type here
-        fn call(&mut self, _request: http::Request<BoxBody>) -> Self::Future {
+    #[async_std::test]
+    async fn on_event_can_send_an_event() -> Result<()> {
+        let (tx, rx) = bounded(10);
+        let (connection_lost_tx, _connection_lost_rx) = bounded(10);
+        let config = Config {
+            log_name: None,
+            resource: None,
+            partial_success: false,
+            dry_run: false,
+            connect_timeout: 0,
+            request_timeout: 0,
+            default_severity: 0,
+            labels: Default::default(),
+            concurrency: 0,
+        };
+        let mut sink = GclSink::new_mock(config, tx, |_req| {
+            // TODO As mock logic implementations become common, convenience functions
+            // should be refactored/extracted as appropriate.
+            use bytes::Bytes;
+            use http_body::Body;
+            use prost::Message;
             let mut buffer = vec![];
 
             WriteLogEntriesResponse {}
@@ -324,7 +280,7 @@ mod test {
             let body = http_body::Full::new(body);
             let body = http_body::combinators::BoxBody::new(body).map_err(|err| match err {});
             let mut response = tonic::body::BoxBody::new(body);
-            let (mut tx, body) = tonic::transport::Body::channel();
+            let (mut tx, body2) = tonic::transport::Body::channel();
             let jh = async_std::task::spawn(async move {
                 let response = response.data().await.unwrap().unwrap();
                 let len: [u8; 4] = (response.len() as u32).to_ne_bytes();
@@ -340,33 +296,12 @@ mod test {
                 tx.send_trailers(trailers).await.unwrap();
             });
             async_std::task::spawn_blocking(|| jh);
-
-            let response = http::Response::new(body);
-
-            futures::future::ready(Ok(response))
-        }
-    }
-
-    #[async_std::test]
-    async fn on_event_can_send_an_event() -> Result<()> {
-        let (tx, rx) = bounded(10);
-        let (connection_lost_tx, _connection_lost_rx) = bounded(10);
-
-        let mut sink = GclSink::<TestTokenProvider, _>::new(
-            Config {
-                log_name: None,
-                resource: None,
-                partial_success: false,
-                dry_run: false,
-                connect_timeout: 0,
-                request_timeout: 0,
-                default_severity: 0,
-                labels: HashMap::default(),
-                concurrency: 0,
-            },
-            tx,
-            MockChannelFactory,
-        );
+            let body: Bytes = block_on(async { hyper::body::to_bytes(body2).await.unwrap() });
+            let body = http_body::Full::new(body);
+            let body = http_body::combinators::BoxBody::new(body).map_err(|err| match err {});
+            let response = tonic::body::BoxBody::new(body);
+            http::Response::new(response)
+        });
         let sink_context = SinkContext {
             uid: SinkId::default(),
             alias: Alias::new("a", "b"),
@@ -454,7 +389,7 @@ mod test {
             "connect_timeout": 1_000_000
         }))?;
 
-        let mut sink = GclSink::<TestTokenProvider, _>::new(config, reply_tx, MockChannelFactory);
+        let mut sink = GclSink::new(config, reply_tx);
 
         let result = sink
             .on_event(

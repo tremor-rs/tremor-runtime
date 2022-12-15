@@ -19,7 +19,7 @@ use super::{
 use crate::connectors::prelude::*;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::task::JoinHandle;
-use tonic::transport::Server as GrpcServer;
+use tonic::{codegen::CompressionEncoding, transport::Server as GrpcServer};
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
 use tremor_otelapis::opentelemetry::proto::collector::{
     logs::v1::logs_service_server::LogsServiceServer,
@@ -53,8 +53,6 @@ impl ConfigImpl for Config {}
 /// The `OpenTelemetry` client connector
 pub(crate) struct Server {
     config: Config,
-    #[allow(dead_code)]
-    id: String,
     origin_uri: EventOriginUri,
     accept_task: Option<JoinHandle<Result<()>>>,
     tx: Sender<OpenTelemetryEvents>,
@@ -79,7 +77,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &Alias,
+        _id: &Alias,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
@@ -93,7 +91,6 @@ impl ConnectorBuilder for Builder {
         let (tx, rx) = bounded(128);
         Ok(Box::new(Server {
             config: Config::new(config)?,
-            id: id.to_string(),
             origin_uri,
             accept_task: None,
             tx,
@@ -161,13 +158,13 @@ impl Source for OtelSource {
     async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
         let (data, remote) = match self.rx.recv().await? {
             OpenTelemetryEvents::Metrics(metrics, remote) if self.config.metrics => {
-                (metrics::resource_metrics_to_json(metrics), remote)
+                (metrics::resource_metrics_to_json(metrics)?, remote)
             }
             OpenTelemetryEvents::Logs(logs, remote) if self.config.logs => {
                 (logs::resource_logs_to_json(logs)?, remote)
             }
             OpenTelemetryEvents::Trace(traces, remote) if self.config.trace => {
-                (trace::resource_spans_to_json(traces), remote)
+                (trace::resource_spans_to_json(traces)?, remote)
             }
             _ => {
                 warn!("{ctx} Source received event when support is disabled. Dropping.");
@@ -211,9 +208,15 @@ impl Server {
         // set the compression on the server.
         let (trace_server, logs_server, metrics_server) = match &self.config.compression {
             Compression::Gzip => (
-                trace_server.accept_gzip().send_gzip(),
-                logs_server.accept_gzip().send_gzip(),
-                metrics_server.accept_gzip().send_gzip(),
+                trace_server
+                    .send_compressed(CompressionEncoding::Gzip)
+                    .accept_compressed(CompressionEncoding::Gzip),
+                logs_server
+                    .send_compressed(CompressionEncoding::Gzip)
+                    .accept_compressed(CompressionEncoding::Gzip),
+                metrics_server
+                    .send_compressed(CompressionEncoding::Gzip)
+                    .accept_compressed(CompressionEncoding::Gzip),
             ),
 
             Compression::None => (trace_server, logs_server, metrics_server),
@@ -232,8 +235,7 @@ impl Server {
 
 #[cfg(test)]
 mod tests {
-    use super::*; // use env_logger;
-                  // use http_types::Method;
+    use super::*;
 
     #[async_std::test]
     async fn otel_client_builder() -> Result<()> {

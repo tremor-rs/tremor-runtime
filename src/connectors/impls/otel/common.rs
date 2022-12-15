@@ -16,11 +16,13 @@
 
 use crate::connectors::utils::{pb, url};
 use crate::errors::Result;
+use beef::Cow;
+use halfbrown::HashMap;
 use simd_json::Builder;
 use tremor_otelapis::opentelemetry::proto::common::v1::{
-    any_value, AnyValue, ArrayValue, InstrumentationLibrary, KeyValue, KeyValueList, StringKeyValue,
+    any_value, AnyValue, ArrayValue, InstrumentationScope, KeyValue, KeyValueList,
 };
-use tremor_value::{literal, StaticNode, Value};
+use tremor_value::{StaticNode, Value};
 use value_trait::ValueAccess;
 
 pub(crate) struct OtelDefaults;
@@ -52,7 +54,6 @@ pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {
         Some(Inner::DoubleValue(v)) => v.into(),
         Some(Inner::ArrayValue(v)) => v.values.into_iter().map(any_value_to_json).collect(),
         Some(Inner::KvlistValue(v)) => {
-            // let mut record = HashMap::with_capacity(v.values.len());
             v.values
                 .into_iter()
                 .map(|e| {
@@ -62,8 +63,6 @@ pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {
                     )
                 })
                 .collect()
-
-            // Value::from(record)
         }
         Some(Inner::BytesValue(b)) => Value::Bytes(b.into()),
         None => Value::null(),
@@ -119,32 +118,91 @@ pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
     }
 }
 
+pub(crate) fn maybe_instrumentation_scope_to_json(
+    pb: Option<InstrumentationScope>,
+) -> Option<Value<'static>> {
+    if let Some(pb) = pb {
+        return Some(literal!({
+            "name": pb.name.clone(),
+            "version": pb.version.clone(),
+            "attributes": key_value_list_to_json(pb.attributes),
+            "dropped_attributes_count": 0
+        }));
+    }
+
+    None
+}
+
+pub(crate) fn maybe_instrumentation_scope_to_pb(
+    data: Option<&Value<'_>>,
+) -> Result<Option<InstrumentationScope>> {
+    if let Some(data) = data {
+        let name = data
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let version = data
+            .get("version")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let attributes = maybe_key_value_list_to_pb(data.get("attributes"))?;
+        let dropped_attributes_count =
+            pb::maybe_int_to_pbu32(data.get("dropped_attributes_count")).unwrap_or_default();
+        Ok(Some(InstrumentationScope {
+            name,
+            version,
+            attributes,
+            dropped_attributes_count,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
 pub(crate) fn maybe_any_value_to_json(pb: Option<AnyValue>) -> Option<Value<'static>> {
     pb.map(any_value_to_json)
 }
 
-pub(crate) fn string_key_value_to_json(pb: Vec<StringKeyValue>) -> Value<'static> {
+pub(crate) fn string_key_value_to_json(pb: Vec<KeyValue>) -> Value<'static> {
+    // REFACTOR whack as string_key_value was deprecated-removed
     pb.into_iter()
-        .map(|StringKeyValue { key, value }| (key, value))
+        .map(|KeyValue { key, value }| (key, maybe_any_value_to_json(value)))
         .collect()
 }
 
-pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<StringKeyValue>> {
+pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<KeyValue>> {
+    // REFACTOR whack as string_key_value was deprecated-removed
     data.as_object()
         .ok_or("Unable to map json to Vec<StringKeyValue> pb")?
         .iter()
         .map(|(key, value)| {
             let key = key.to_string();
-            let value = pb::maybe_string_to_pb(Some(value))?;
-            Ok(StringKeyValue { key, value })
+            let value = any_value_to_pb(value);
+            Ok(KeyValue {
+                key,
+                value: Some(value),
+            })
         })
         .collect()
 }
 
 pub(crate) fn key_value_list_to_json(pb: Vec<KeyValue>) -> Value<'static> {
-    pb.into_iter()
-        .map(|KeyValue { key, value }| (key, maybe_any_value_to_json(value)))
-        .collect()
+    let kv: HashMap<Cow<str>, Value<'_>> = pb
+        .into_iter()
+        .filter_map(|e| match e {
+            KeyValue {
+                key,
+                value: Some(value),
+            } => {
+                let k = Cow::owned(key);
+                Some((k, any_value_to_json(value)))
+            }
+            KeyValue { .. } => None,
+        })
+        .collect();
+    Value::Object(Box::new(kv))
 }
 
 pub(crate) fn maybe_key_value_list_to_pb(data: Option<&Value<'_>>) -> Result<Vec<KeyValue>> {
@@ -154,7 +212,7 @@ pub(crate) fn maybe_key_value_list_to_pb(data: Option<&Value<'_>>) -> Result<Vec
     Ok(obj_key_value_list_to_pb(obj))
 }
 
-pub(crate) fn get_attributes_or_labes(data: &Value) -> Result<Vec<KeyValue>> {
+pub(crate) fn get_attributes(data: &Value) -> Result<Vec<KeyValue>> {
     match (data.get_object("attributes"), data.get_object("labels")) {
         (None, None) => Err("missing field `attributes`".into()),
         (Some(a), None) | (None, Some(a)) => Ok(obj_key_value_list_to_pb(a)),
@@ -176,25 +234,13 @@ pub(crate) fn obj_key_value_list_to_pb(data: &tremor_value::Object<'_>) -> Vec<K
         .collect()
 }
 
-pub(crate) fn maybe_instrumentation_library_to_json(il: InstrumentationLibrary) -> Value<'static> {
-    literal!({
-        "name": il.name,
-        "version": il.version,
-    })
-}
-
-pub(crate) fn instrumentation_library_to_pb(data: &Value<'_>) -> Result<InstrumentationLibrary> {
-    Ok(InstrumentationLibrary {
-        name: pb::maybe_string_to_pb((*data).get("name"))?,
-        version: pb::maybe_string_to_pb((*data).get("version"))?,
-    })
-}
-
 #[cfg(test)]
+#[allow(clippy::unnecessary_wraps)]
 mod tests {
     #![allow(clippy::float_cmp)]
     use simd_json::prelude::*;
     use tremor_otelapis::opentelemetry::proto::common::v1::{ArrayValue, KeyValueList};
+    use tremor_script::literal;
 
     use super::*;
 
@@ -375,9 +421,9 @@ mod tests {
 
     #[test]
     fn string_key_value_list() -> Result<()> {
-        let pb = vec![StringKeyValue {
+        let pb = vec![KeyValue {
             key: "snot".into(),
-            value: "badger".into(),
+            value: Some(any_value_to_pb(&literal!("badger"))),
         }];
         let json = string_key_value_to_json(pb.clone());
         let back_again = string_key_value_to_pb(Some(&json))?;
@@ -388,16 +434,24 @@ mod tests {
     }
 
     #[test]
-    fn instrumentation_library() -> Result<()> {
-        let pb = InstrumentationLibrary {
+    fn instrumentation_scope() -> Result<()> {
+        use any_value::Value as Inner;
+        let pb = InstrumentationScope {
             name: "name".into(),
             version: "v0.1.2".into(),
+            attributes: vec![KeyValue {
+                key: "snot".to_string(),
+                value: Some(AnyValue {
+                    value: Some(Inner::StringValue("badger".to_string())),
+                }),
+            }],
+            dropped_attributes_count: 0,
         };
-        let json = maybe_instrumentation_library_to_json(pb.clone());
-        let back_again = instrumentation_library_to_pb(&json)?;
-        let expected: Value = literal!({"name": "name", "version": "v0.1.2"});
-        assert_eq!(expected, json);
-        assert_eq!(pb, back_again);
+        let json = maybe_instrumentation_scope_to_json(Some(pb.clone()));
+        let back_again = maybe_instrumentation_scope_to_pb(json.as_ref())?;
+        let expected: Value = literal!({"name": "name", "version": "v0.1.2", "attributes": { "snot": "badger" }, "dropped_attributes_count": 0});
+        assert_eq!(Some(expected), json);
+        assert_eq!(Some(pb), back_again);
         Ok(())
     }
 }

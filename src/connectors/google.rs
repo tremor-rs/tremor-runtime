@@ -12,288 +12,259 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::{
+    fmt::{Display, Formatter},
+    task::Poll,
+};
+
 use crate::errors::Result;
-use gouth::Token;
-use std::sync::Arc;
-use std::time::Duration;
-use tonic::metadata::MetadataValue;
-use tonic::service::Interceptor;
-use tonic::{Request, Status};
+use async_std::pin::Pin;
+use futures::future::Either;
+use futures::Future;
+use futures::FutureExt;
+use google_authz::GoogleAuthz;
+use http_body::combinators::UnsyncBoxBody;
+use http_body::Body;
+use tonic::transport::Channel;
+use tower::Service;
 
-#[async_trait::async_trait]
-pub(crate) trait ChannelFactory<
-    TChannel: tonic::codegen::Service<
-            http::Request<tonic::body::BoxBody>,
-            Response = http::Response<tonic::transport::Body>,
-        > + Clone,
->
-{
-    async fn make_channel(&self, connect_timeout: Duration) -> Result<TChannel>;
+#[derive(Debug)]
+pub(crate) enum TremorTonicServiceError {
+    HyperError(hyper::Error),
+    TonicStatus(tonic::Status),
+    TonicTransportError(tonic::transport::Error),
+    GoogleCredentialsError(google_authz::CredentialsError),
+    GoogleAuthError(google_authz::AuthError),
 }
 
-pub trait TokenProvider: Clone + Default + Send {
-    fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status>;
-}
+// NOTE Channel is an UnsyncBoxBody internally rather than a tonic::transport::Body
+// NOTE tonic::transport::Body is an alias for a hyper::Body
+// NOTE All leak into the publcic API for tonic - we wrap the distictions way here
+// NOTE to avoid leaking the details of the underlying transport and to enable
+// NOTE flexible mock testing of any Google gRPC API that uses the same auth in tremor
+type TonicInternalBodyType = UnsyncBoxBody<bytes::Bytes, tonic::Status>;
 
-pub struct GouthTokenProvider {
-    pub(crate) gouth_token: Option<Token>,
-}
-
-impl Clone for GouthTokenProvider {
-    fn clone(&self) -> Self {
-        Self { gouth_token: None }
+impl Display for TremorTonicServiceError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::HyperError(ref err) => write!(f, "Hyper error: {}", err),
+            Self::TonicStatus(ref status) => write!(f, "Tonic error: {}", status),
+            Self::TonicTransportError(ref err) => write!(f, "Tonic transport error: {}", err),
+            Self::GoogleAuthError(ref err) => write!(f, "Google Auth error: {}", err),
+            Self::GoogleCredentialsError(ref err) => write!(f, "Google Credentials error: {}", err),
+        }
     }
 }
 
-impl Default for GouthTokenProvider {
-    fn default() -> Self {
-        Self::new()
+impl From<hyper::Error> for TremorTonicServiceError {
+    fn from(other: hyper::Error) -> Self {
+        Self::HyperError(other)
     }
 }
 
-impl GouthTokenProvider {
-    pub fn new() -> Self {
-        GouthTokenProvider { gouth_token: None }
+impl From<google_authz::CredentialsError> for TremorTonicServiceError {
+    fn from(other: google_authz::CredentialsError) -> Self {
+        Self::GoogleCredentialsError(other)
     }
 }
 
-impl TokenProvider for GouthTokenProvider {
-    fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
-        let token = if let Some(ref token) = self.gouth_token {
-            token
-        } else {
-            let new_token =
-                Token::new().map_err(|_| Status::unavailable("Failed to read Google Token"))?;
+impl From<google_authz::AuthError> for TremorTonicServiceError {
+    fn from(other: google_authz::AuthError) -> Self {
+        Self::GoogleAuthError(other)
+    }
+}
 
-            self.gouth_token.get_or_insert(new_token)
-        };
+impl From<tonic::Status> for TremorTonicServiceError {
+    fn from(other: tonic::Status) -> Self {
+        Self::TonicStatus(other)
+    }
+}
 
-        token.header_value().map_err(|e| {
-            Status::unavailable(format!("Failed to read the Google Token header value: {e}"))
-        })
+impl From<google_authz::Error<tonic::transport::Error>> for TremorTonicServiceError {
+    fn from(other: google_authz::Error<tonic::transport::Error>) -> Self {
+        match other {
+            google_authz::Error::Service(err) => Self::TonicTransportError(err),
+            google_authz::Error::GoogleAuthz(err) => Self::GoogleAuthError(err),
+        }
+    }
+}
+
+impl From<tonic::transport::Error> for TremorTonicServiceError {
+    fn from(other: tonic::transport::Error) -> Self {
+        Self::TonicTransportError(other)
+    }
+}
+
+pub(crate) type MockServiceRpcCall =
+    fn(http::Request<TonicInternalBodyType>) -> http::Response<TonicInternalBodyType>;
+
+#[derive(Clone)]
+pub(crate) struct TonicMockService {
+    delegate: MockServiceRpcCall,
+}
+
+impl TonicMockService {
+    pub(crate) fn new(delegate: MockServiceRpcCall) -> Self {
+        Self { delegate }
+    }
+}
+
+impl std::error::Error for TremorTonicServiceError {}
+
+impl Service<http::Request<TonicInternalBodyType>> for TonicMockService {
+    type Response = http::Response<TonicInternalBodyType>;
+    type Error = TremorTonicServiceError;
+    type Future = Pin<
+        Box<
+            dyn Future<
+                    Output = std::result::Result<
+                        http::Response<TonicInternalBodyType>,
+                        TremorTonicServiceError,
+                    >,
+                > + Send,
+        >,
+    >;
+
+    fn poll_ready(
+        &mut self,
+        _cx: &mut std::task::Context<'_>,
+    ) -> Poll<std::result::Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, request: http::Request<TonicInternalBodyType>) -> Self::Future {
+        let response = (self.delegate)(request);
+        futures::future::ok(response).boxed()
     }
 }
 
 #[derive(Clone)]
-pub(crate) struct AuthInterceptor<T>
-where
-    T: TokenProvider,
-{
-    pub token_provider: T,
+pub(crate) enum TremorGoogleAuthz {
+    Code(GoogleAuthz<Channel>),
+    Test(TonicMockService),
 }
 
-impl<T> Interceptor for AuthInterceptor<T>
-where
-    T: TokenProvider,
-{
-    fn call(&mut self, mut request: Request<()>) -> ::std::result::Result<Request<()>, Status> {
-        let header_value = self.token_provider.get_token()?;
-        let metadata_value = match MetadataValue::from_str(header_value.as_str()) {
-            Ok(val) => val,
-            Err(e) => {
-                error!("Failed to get token: {}", e);
+// Hoist google-authz errors so we have a common service error whether
+// mock testing or in production code for gRPC GCP connectors.
+fn map_poll_err<T>(
+    result: Poll<std::result::Result<T, google_authz::Error<tonic::transport::Error>>>,
+) -> Poll<std::result::Result<T, TremorTonicServiceError>> {
+    match result {
+        Poll::Ready(Err(google_authz::Error::GoogleAuthz(err))) => Poll::Ready(Err(err.into())),
+        Poll::Ready(Err(err @ google_authz::Error::Service(_))) => Poll::Ready(Err(err.into())),
+        Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),
+        Poll::Pending => Poll::Pending,
+    }
+}
 
-                return Err(Status::unavailable(
-                    "Failed to retrieve authentication token.",
-                ));
+type TonicResponseFuture = futures::future::MapErr<
+    tonic::transport::channel::ResponseFuture,
+    fn(tonic::transport::Error) -> google_authz::Error<tonic::transport::Error>,
+>;
+type HttpResponseFuture = std::future::Ready<
+    std::result::Result<
+        http::Response<tonic::transport::Body>,
+        google_authz::Error<tonic::transport::Error>,
+    >,
+>;
+type NormalizedResponse =
+    std::result::Result<http::Response<TonicInternalBodyType>, TremorTonicServiceError>;
+
+async fn map_ready_err(
+    result: Either<TonicResponseFuture, HttpResponseFuture>,
+) -> NormalizedResponse {
+    match result.await {
+        Err(google_authz::Error::GoogleAuthz(err)) => Err(err.into()),
+        Err(err @ google_authz::Error::Service(_)) => Err(err.into()),
+        Ok(response) => {
+            let (_parts, body) = response.into_parts();
+            let body = hyper::body::to_bytes(body).await?;
+            let body = http_body::Full::new(body);
+            let body = http_body::combinators::BoxBody::new(body).map_err(|err| match err {});
+            let body = tonic::body::BoxBody::new(body);
+            Ok(http::Response::new(body))
+        }
+    }
+}
+
+impl Service<http::Request<TonicInternalBodyType>> for TremorGoogleAuthz {
+    type Response = http::Response<TonicInternalBodyType>;
+    type Error = TremorTonicServiceError;
+    type Future = Pin<
+        Box<
+            dyn Future<
+                    Output = std::result::Result<
+                        http::Response<TonicInternalBodyType>,
+                        TremorTonicServiceError,
+                    >,
+                > + Send,
+        >,
+    >;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<std::result::Result<(), Self::Error>> {
+        match self {
+            Self::Code(authz) => map_poll_err(authz.poll_ready(cx)),
+            Self::Test(authz) => authz.poll_ready(cx),
+        }
+    }
+
+    fn call(&mut self, req: http::Request<TonicInternalBodyType>) -> Self::Future {
+        match self {
+            Self::Code(authz) => {
+                let result = authz.call(req);
+                Box::pin(map_ready_err(result))
             }
-        };
-        request
-            .metadata_mut()
-            .insert("authorization", metadata_value);
+            Self::Test(authz) => authz.call(req),
+        }
+    }
+}
 
-        Ok(request)
+impl TremorGoogleAuthz {
+    // Create a new live or production channel to a GCP gRPC service.
+    pub async fn new(transport: Channel) -> Result<Self> {
+        let transport_channel = GoogleAuthz::new(transport).await;
+        Ok(Self::Code(transport_channel))
+    }
+
+    // Create a new mock channel to a GCP gRPC service
+    pub async fn new_mock(logic: MockServiceRpcCall) -> Result<Self> {
+        Ok(Self::Test(TonicMockService::new(logic)))
     }
 }
 
 #[cfg(test)]
-#[cfg(feature = "gcp-integration")]
 pub(crate) mod tests {
+
     use super::*;
-    use crate::{
-        connectors::utils::EnvHelper,
-        errors::{Error, Result},
-    };
-    use std::io::Write;
 
-    #[derive(Clone)]
-    pub struct TestTokenProvider {
-        token: Arc<String>,
+    fn fake_body(content: Vec<u8>) -> TonicInternalBodyType {
+        let body = bytes::Bytes::from(content);
+        let body = http_body::Full::new(body);
+        let body = http_body::combinators::BoxBody::new(body).map_err(|err| match err {});
+        tonic::body::BoxBody::new(body)
     }
 
-    impl Default for TestTokenProvider {
-        fn default() -> Self {
-            Self::new()
-        }
+    fn empty_body() -> TonicInternalBodyType {
+        fake_body(vec![])
     }
 
-    impl TestTokenProvider {
-        pub fn new() -> Self {
-            Self {
-                token: Arc::new(String::new()),
-            }
-        }
-
-        pub fn new_with_token(token: Arc<String>) -> Self {
-            Self { token }
-        }
-    }
-
-    impl TokenProvider for TestTokenProvider {
-        fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
-            Ok(self.token.clone())
-        }
-    }
-
-    #[derive(serde::Serialize, serde::Deserialize)]
-    struct ServiceAccount {
-        client_email: String,
-        private_key_id: String,
-        private_key: String,
-        token_uri: String,
-    }
-
-    #[derive(serde::Serialize, serde::Deserialize)]
-    struct TokenResponse {
-        token_type: String,
-        access_token: String,
-        expires_in: u64,
-    }
-
-    /// Some random generated private key that isn't used anywhere else
-    const PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC/SZoFm3528gDJ
-vMQBeTGm6dohSfqstFoYYVtGEDGnt9GwkjbJcnIAIiON+Qw7wV5v24UFJKQ8Eg/q
-Jf8bF0PT6yvSW+cof/94OgGz/PyPwrHVGniEy2Wbe1qYkDaQfxDzyPP5hKetmoof
-FF8u1IyJYdduxBm80eYG/JVYhn85ycV4zVUWPzuF7BmBmK4n1DX8HlD3qQWtVtiP
-DCQ1H7pKSn6nDLlQtv6zEx5gnfnVIC/G2hB414FqTxkwLI5ae5njOeh9aFzTzD5Y
-hifcPqjs91fJ4tO4/VfesyrOWOowAIil7ZaWNd6CsljiC0iqt15oohBKbFz/wGSv
-DxTiavvRAgMBAAECggEAAT9Rd/IxLPhItu5z7ovthE7eK2oZ1OjFKKEKSq0eDpLe
-7p8sqJVTA65O6ItXjNRm0WU1tOU6nyJBnjXnhLP0lYWhG5Lm8W23Cv/n1TzHIdUN
-bbWpoQYMttEv87KgpHV4dRQaB5LzOMLUxHCdauCbo2UZSRSrk7HG5ZDdx9eMR1Wg
-vkhk3S70dyheO804BwSkvpxCbjcgg2ILRn5EacL0uU7GNxGQUCInNK2LTN0gUSKg
-qLITAE2CE0cwcs6DzPgHk3M78AlTILDYbKmOIB3FPImTY88crR9OMvqDbraKTvwb
-sS2M5gWOO0LDOeXVuIxG9j0J3hxxSY6aGHJRt+d5BQKBgQDLQ3Ri6OXirtd2gxZv
-FY65lHQd+LMrWO2R31zv2aif+XoJRh5PXM5kN5Cz6eFp/z2E5DWa1ubF4nPSBc3S
-fW96LGwnBLOIOccxJ6wdfLY+sw/U2PEDhUP5Z0NxHr4x0AOxfQTrEmnSyx6oE04Q
-rXtqpiCg8pP+za6Hx1ZWFx1YxQKBgQDw6rbv+Wadz+bnuOYWyy7GUv7ZXVWup1gU
-IoZgR5h6ZMNyFpK2NlzLOctzttkWdoV9fn4ux6T3kBWrJdbd9WkCGom2SX6b3PqH
-evcZ73RvbuHVjtm9nHov9eqU+pcz8Se3NZVEhsov1FWboBE5E+i1qO0jiOaJRFEm
-aIlaK9gPnQKBgDkmx0PETlb1aDm3VAh53D6L4jZHJkGK6Il6b0w1O/d3EvwmjgEs
-jA+bnAEqQqomDSsfa38U66A6MuybmyqTAFQux14VMVGdRUep6vgDh86LVGk5clLW
-Fq26fjkBNuMUpOUzzL032S9e00jY3LtNvATZnxUB/+DF/kvJHZppN2QtAoGAB/7S
-KW6ugChJMoGJaVI+8CgK+y3EzTISk0B+Ey3tGorDjcLABboSJFB7txBnbf5q+bo7
-99N6XxjyDycHVYByhrZYwar4v7V6vwpOrxaqV5RnfE3sXgWWbIcNzPnwELI9LjBi
-Ds8mYKX8XVjXmXxWqci8bgR6Gi4hP1QS0uJHnmUCgYEAiDbOiUed1gL1yogrTG4w
-r+S/aL2pt/xBNz9Dw+cZnqnZHWDuewU8UCO6mrupM8MXEAfRnzxyUX8b7Yk/AoFo
-sEUlZGvHmBh8nBk/7LJVlVcVRWQeQ1kg6b+m6thwRz6HsKIvExpNYbVkzqxbeJW3
-PX8efvDMhv16QqDFF0k80d0=
------END PRIVATE KEY-----";
-
+    // NOTE We have a public github based CI/CD pipeline for non cloud provider specific protocols
+    // NOTE and we have a CNCF equinix env for benchmarks and cloud provider agnostic tests
+    // NOTE so we use mock tests where emulators/simulators are not available at this time
     #[async_std::test]
-    async fn gouth_token() -> Result<()> {
-        let mut file = tempfile::NamedTempFile::new()?;
-
-        let port = crate::connectors::tests::free_port::find_free_tcp_port().await?;
-        let sa = ServiceAccount {
-            client_email: "snot@tremor.rs".to_string(),
-            private_key_id: "badger".to_string(),
-            private_key: PRIVATE_KEY.to_string(),
-            token_uri: format!("http://127.0.0.1:{port}/"),
-        };
-        let sa_str = simd_json::serde::to_string_pretty(&sa)?;
-        file.as_file_mut().write_all(sa_str.as_bytes())?;
-        let path = file.into_temp_path();
-        let path_str = path.to_string_lossy().to_string();
-        let mut env = EnvHelper::new();
-        env.set_var("GOOGLE_APPLICATION_CREDENTIALS", &path_str);
-
-        let mut provider = GouthTokenProvider::default();
-        assert!(provider.get_token().is_err());
-
-        let mut server = tide::new();
-        server.at("/").post(|_| async {
-            Ok(simd_json::serde::to_string_pretty(&TokenResponse {
-                token_type: "snot".to_string(),
-                access_token: "access_token".to_string(),
-                expires_in: 100_000_000,
-            })?)
-        });
-        let server_handle = async_std::task::spawn(async move {
-            server.listen(format!("127.0.0.1:{port}")).await?;
-            Ok::<(), Error>(())
-        });
-        let token = provider.get_token()?;
-        assert_eq!(token.as_str(), "snot access_token");
-
-        server_handle.cancel().await;
-
-        // token is cached, no need to call again
-        let token = provider.get_token()?;
-        assert_eq!(token.as_str(), "snot access_token");
-
-        Ok(())
-    }
-
-    #[test]
-    fn appease_the_coverage_gods() {
-        let provider = GouthTokenProvider::default();
-        let mut provider = provider;
-        assert!(provider.get_token().is_err());
-
-        let provider = FailingTokenProvider::default();
-        let mut provider = provider;
-        assert!(provider.get_token().is_err());
-    }
-
-    #[test]
-    fn interceptor_can_add_the_auth_header() -> Result<()> {
-        let mut interceptor = AuthInterceptor {
-            token_provider: TestTokenProvider::new_with_token(Arc::new("test".to_string())),
-        };
-        let request = Request::new(());
-
-        let result = interceptor.call(request)?;
-
-        assert!(result
-            .metadata()
-            .get("authorization")
-            .map(|m| m == "test")
-            .unwrap_or_default());
-        Ok(())
-    }
-
-    #[derive(Clone, Default)]
-    struct FailingTokenProvider {}
-
-    impl TokenProvider for FailingTokenProvider {
-        fn get_token(&mut self) -> std::result::Result<Arc<String>, Status> {
-            Err(Status::unavailable("boo"))
+    async fn appease_the_coverage_gods() -> Result<()> {
+        let mut mock = TremorGoogleAuthz::new_mock(|_| http::Response::new(empty_body())).await?;
+        let actual = mock.call(http::Request::new(empty_body())).await;
+        if let Ok(actual) = actual {
+            let actual = hyper::body::to_bytes(actual).await?;
+            let expected = hyper::body::to_bytes(empty_body()).await?;
+            assert_eq!(actual, expected);
+        } else {
+            return Err("snot".into());
         }
-    }
-
-    #[test]
-    fn interceptor_will_pass_token_error() {
-        let mut interceptor = AuthInterceptor {
-            token_provider: FailingTokenProvider {},
-        };
-        let request = Request::new(());
-
-        let result = interceptor.call(request);
-
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn interceptor_fails_on_invalid_token_value() {
-        let mut interceptor = AuthInterceptor {
-            // control characters (ASCII < 32) are not allowed
-            token_provider: TestTokenProvider::new_with_token(Arc::new("\r\n".into())),
-        };
-        let request = Request::new(());
-
-        let result = interceptor.call(request);
-
-        assert!(result.is_err());
+        Ok(())
     }
 }

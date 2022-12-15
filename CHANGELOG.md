@@ -90,7 +90,12 @@
 ## [0.13.0-rc.3]
 
 ### New features
-
+- Otel rebased to v19 specification version and deprecated v18 features removed. Breaking change.
+- GCL, GBQ, G Pub/Sub and Otel based on new tonic/protobuf. No change to GCS ( REST based - goauth in use )
+- Replace `gouth` with `google-authz` for all gRPC/tonic connectivity - refactor GCP gRPC mock testing capability
+- Replace `googapis` 0.6 with `google-api-proto` 1.236.0 for all GCP gRPC/tonic connectivity
+- Upgrade tonic from 0.6.1 to 0.8.2  -> Common tonic needed across Otel + GCP gRPC connectors
+- Upgrade prost from 0.9.0 to 0.11.0 -> HashMap -> BTreeMap for maps/records
 - Add `dogstatsd` codec for Datadog DogStasD implementation
 - Add `compression` field in `otel` connectors for compression support on payloads.
 
@@ -100,6 +105,7 @@
 
 ### Breaking Changes
 
+- Upgrade OpenTelemetry from v0.17 to v0.19 specification compliance
 - Remove `$elastic._type` field from `elastic` connector response events
 
 ## [0.13.0-rc.2]

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::{AuthInterceptor, TokenProvider};
+use crate::connectors::google::TremorGoogleAuthz;
 use crate::connectors::prelude::{
     Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
     SinkManagerBuilder, SinkReply, Url,
@@ -25,13 +25,11 @@ use crate::connectors::{
 };
 use crate::errors::Result;
 use async_std::prelude::FutureExt;
-use googapis::google::pubsub::v1::publisher_client::PublisherClient;
-use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
-use std::collections::HashMap;
-use std::marker::PhantomData;
+use google_api_proto::google::pubsub::v1::publisher_client::PublisherClient;
+use google_api_proto::google::pubsub::v1::{PublishRequest, PubsubMessage};
+use std::collections::BTreeMap;
 use std::time::Duration;
-use tonic::codegen::InterceptedService;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig};
+use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::Code;
 use tremor_pipeline::{ConfigImpl, Event};
 use tremor_value::Value;
@@ -54,12 +52,7 @@ impl ConfigImpl for Config {}
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
 
-#[cfg(all(test, feature = "gcp-integration"))]
-type GpubConnectorWithTokenProvider =
-    GpubConnector<crate::connectors::google::tests::TestTokenProvider>;
-
-#[cfg(not(all(test, feature = "gcp-integration")))]
-type GpubConnectorWithTokenProvider = GpubConnector<crate::connectors::google::GouthTokenProvider>;
+type GpubConnectorWithTokenProvider = GpubConnector;
 
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
@@ -76,26 +69,22 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
-        Ok(Box::new(GpubConnectorWithTokenProvider {
-            config,
-            _phantom: PhantomData::default(),
-        }))
+        Ok(Box::new(GpubConnectorWithTokenProvider { config }))
     }
 }
 
-struct GpubConnector<T> {
+struct GpubConnector {
     config: Config,
-    _phantom: PhantomData<T>,
 }
 
 #[async_trait::async_trait()]
-impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
+impl Connector for GpubConnector {
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GpubSink::<T> {
+        let sink = GpubSink {
             config: self.config.clone(),
             hostname: self
                 .config
@@ -122,21 +111,21 @@ impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
     }
 }
 
-struct GpubSink<T: TokenProvider> {
+struct GpubSink {
     config: Config,
     hostname: String,
 
-    client: Option<PublisherClient<InterceptedService<Channel, AuthInterceptor<T>>>>,
+    client: Option<PublisherClient<TremorGoogleAuthz>>,
 }
 
 #[async_trait::async_trait()]
-impl<T: TokenProvider> Sink for GpubSink<T> {
+impl Sink for GpubSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.config.url.scheme() == "https" {
             let tls_config = ClientTlsConfig::new()
-                .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
+                // TODO FIXME .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
                 .domain_name(self.hostname.clone());
 
             channel = channel.tls_config(tls_config)?;
@@ -144,12 +133,7 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
 
         let channel = channel.connect().await?;
 
-        self.client = Some(PublisherClient::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token_provider: T::default(),
-            },
-        ));
+        self.client = Some(PublisherClient::new(TremorGoogleAuthz::new(channel).await?));
 
         Ok(true)
     }
@@ -178,8 +162,8 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
                     .map_or_else(String::new, ToString::to_string);
 
                 messages.push(PubsubMessage {
-                    data: payload,
-                    attributes: HashMap::new(),
+                    data: payload.into(),
+                    attributes: BTreeMap::new(),
                     // publish_time and message_id will be ignored in the request and set by server
                     message_id: String::new(),
                     publish_time: None,
@@ -240,11 +224,10 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
 #[cfg(feature = "gcp-integration")]
 mod tests {
     use super::*;
-    use crate::connectors::google::tests::TestTokenProvider;
 
     #[test]
     pub fn is_not_auto_ack() {
-        let sink = GpubSink::<TestTokenProvider> {
+        let sink = GpubSink {
             config: Config {
                 connect_timeout: 0,
                 request_timeout: 0,
@@ -260,7 +243,7 @@ mod tests {
 
     #[test]
     pub fn is_async() {
-        let sink = GpubSink::<TestTokenProvider> {
+        let sink = GpubSink {
             config: Config {
                 connect_timeout: 0,
                 request_timeout: 0,

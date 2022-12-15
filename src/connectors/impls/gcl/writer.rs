@@ -15,17 +15,15 @@
 pub(crate) mod meta;
 mod sink;
 
-use crate::connectors::google::GouthTokenProvider;
-use crate::connectors::impls::gcl::writer::sink::{GclSink, TonicChannelFactory};
+use crate::connectors::impls::gcl::writer::sink::GclSink;
 use crate::connectors::prelude::*;
 use crate::connectors::{Alias, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
 use crate::errors::Error;
-use googapis::google::api::MonitoredResource;
-use googapis::google::logging::r#type::LogSeverity;
+use google_api_proto::google::api::MonitoredResource;
+use google_api_proto::google::logging::r#type::LogSeverity;
 use serde::Deserialize;
 use simd_json::OwnedValue;
-use std::collections::HashMap;
-use tonic::transport::Channel;
+use std::collections::BTreeMap;
 use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
@@ -102,7 +100,7 @@ pub(crate) struct Config {
     /// This setting sets a default set of labels that can be overriden on a per event
     /// basis through metadata
     #[serde(default = "Default::default")]
-    pub labels: HashMap<String, String>,
+    pub labels: BTreeMap<String, String>,
 
     /// This settings sets an upper limit on the number of concurrent in flight requests
     /// that can be in progress simultaneously
@@ -169,8 +167,8 @@ impl Config {
         Ok(self.default_severity)
     }
 
-    pub(crate) fn labels(meta: Option<&Value>) -> HashMap<String, String> {
-        let mut labels = HashMap::new();
+    pub(crate) fn labels(meta: Option<&Value>) -> BTreeMap<String, String> {
+        let mut labels = BTreeMap::new();
 
         if let Some(has_meta) = meta.get_object("labels") {
             for (k, v) in has_meta.iter() {
@@ -197,8 +195,8 @@ fn value_to_monitored_resource(
                     let kind = from.get("type");
                     let kind = kind.as_str();
                     let maybe_labels = from.get("labels");
-                    let labels: HashMap<String, String> = match maybe_labels {
-                        None => HashMap::new(),
+                    let labels: BTreeMap<String, String> = match maybe_labels {
+                        None => BTreeMap::new(),
                         Some(labels) => labels
                             .as_object()
                             .ok_or_else(|| {
@@ -243,11 +241,7 @@ impl Connector for Gcl {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GclSink::<GouthTokenProvider, Channel>::new(
-            self.config.clone(),
-            builder.reply_tx(),
-            TonicChannelFactory,
-        );
+        let sink = GclSink::new(self.config.clone(), builder.reply_tx());
 
         builder.spawn(sink, sink_context).map(Some)
     }
