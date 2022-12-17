@@ -157,7 +157,7 @@ impl TremorFn for PluggableLoggingFm {
                 err => err,
             }
         } else {
-            Err(FunctionError::RuntimeError{mfa: this_mfa(), error: "expected 1st parameter to format to be a format specifier e.g. to print a number use `string::format(\"{}\", 1)`".to_string()})
+            Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("expected 1st parameter to format to be a format specifier e.g. to print a number use `logging::{}(\"{{}}\", 1)`", self.name)})
         }
     }
 
