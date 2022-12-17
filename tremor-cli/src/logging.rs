@@ -31,7 +31,7 @@ pub fn run() -> Result<()> {
     {
         Ok(config) => config,
         Err(_) => {
-            return Err("config could be built".into());
+            return Err("log4rs config could not be built".into());
         }
     };
 
