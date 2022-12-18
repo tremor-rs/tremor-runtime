@@ -1,42 +1,44 @@
 ### The logging module contains functions to structure the data received as an object containing a severity,
 ### an origin, an information message and the origin path.
-### e.g.:{"level":"INFO","args":"[Source::logging_flow::console] Starting...","origin":"Rust",
+### e.g.:{"level":"DEBUG","args":"[Source::logging_flow::console] Starting...","origin":"Rust",
 ### "path":"tremor_runtime::connectors::source","file":"src/connectors/source.rs","line":634}
 
-## Returns a `tremor object` with a severity INFO
+## Returns a `tremor object` with a severity DEBUG
 ##
 ## For example, when logging with several arguments to format in the logging message:
 ##
 ## > ```tremor
 ## > use tremor::logging;
-## > logging::info("Hello {}{}", "world", "!")
-## > # returns {"args":"Hello world!","file":"tremor-pipeline/src/logging.rs","level":"INFO","line":53,"origin":"Tremor","path":"tremor_pipeline::logging"}
+## > logging::debug("Hello {}{}", "world", "!")
+## > # returns {"args":"Hello world!","file":"tremor-pipeline/src/logging.rs","level":"DEBUG","line":53,"origin":"Tremor","path":"tremor_pipeline::logging"}
 ## > ```
 ##
 ## Another example when logging with a key-based formatting (named formatting):
 ##
 ## > ```tremor
 ## > use tremor::logging;
-## > logging::info("Hej {name}{symbol} I love your name {name}", {"symbol": "!", "name": "Rebecca"})
-## > # returns {"args":"Hej Rebecca! I love your name Rebecca","file":"tremor-pipeline/src/logging.rs","level":"INFO","line":53,"origin":"Tremor","path":"tremor_pipeline::logging"}
+## > logging::debug("Hej {name}{symbol} I love your name {name}", {"symbol": "!", "name": "Rebecca"})
+## > # returns {"args":"Hej Rebecca! I love your name Rebecca","file":"tremor-pipeline/src/logging.rs","level":"DEBUG","line":53,"origin":"Tremor","path":"tremor_pipeline::logging"}
 ## > ```
 ##
 ## See the guides for a more exhaustive list of other detailed exemples
 ##
-intrinsic fn info(...) as logging::info; 
-
-## Returns a log record with a call to the warning level log function inside Tremor
-##
-intrinsic fn warn(...) as logging::warn; 
+intrinsic fn debug(...) as logging::debug; 
 
 ## Returns a log record with a call to the error level log function inside Tremor
 ##
 intrinsic fn error(...) as logging::error;
 
+## Returns a log record with a call to the info level log function inside Tremor
+##
+intrinsic fn info(...) as logging::info; 
+
 ## Returns a log record with a call to the trace level log function inside Tremor
 ##
 intrinsic fn trace(...) as logging::trace;
 
-## Returns a log record with a call to the debug level log function inside Tremor
+## Returns a log record with a call to the warning level log function inside Tremor
 ##
-intrinsic fn debug(...) as logging::debug; 
+intrinsic fn warn(...) as logging::warn; 
+
+
