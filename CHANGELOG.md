@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+* Add a Logging connector
+
 ### New Features
 
 * Added new config `socket_options` to UDP, TCP and Websocket connectors to enable use of socket option `SO_REUSEPORT`
@@ -104,7 +106,6 @@
 - Add `gcl_writer` Google Cloud Platform Cloud Logging connector for writing log entries, with in-flight concurrency support.
 - Add reverse functions and tests for arrays and strings, add sort test for arrays
 - Add a ClickHouse connector
-- Add a Logging connector
 - Add a GCS streamer connector
 
 ### Fixes
