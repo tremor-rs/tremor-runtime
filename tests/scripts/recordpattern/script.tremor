@@ -3,5 +3,5 @@ match event of
   case %{ key == 42 } => 2
   case %{ key ~= %(42) } => 3
   case %{ key ~= %{key2 == 42} } => 4
-  default => "default"
+  case _ => "default"
 end

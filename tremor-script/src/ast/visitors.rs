@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub(crate) mod prelude;
+pub(crate) mod windows;
 use prelude::*;
 
 /// deployments
@@ -142,7 +143,7 @@ mod tests {
               case %{ a == 19 } => event.snot
               case %[42] => event.snake
               case a = %(42, _, ...) => let event = a
-              default => let a = 7; let b = 9; event + a + b
+              case _ => let a = 7; let b = 9; event + a + b
             end;
             match $meta.foo of
               case 1 => let event = a
@@ -161,7 +162,7 @@ mod tests {
                 case %[42, _, %{}] => event.snake
                 case a = %(42, ...) => a
                 case ~ re|snot| => b
-                default => event.snot
+                case _ => event.snot
               end
             );
         "#,

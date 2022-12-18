@@ -1,0 +1,10 @@
+Warning(performance): 
+    1 | use std::record;
+    2 | record::contains(event, "snot");
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `record::contains(the_record, the_key)` can be replaced by `present the_record[the_key]` for better performance
+    3 | record::combine(event, {"snot": "badger"});
+Warning(performance): 
+    1 | use std::record;
+    2 | record::contains(event, "snot");
+    3 | record::combine(event, {"snot": "badger"});
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `record::combine(one_record, two_record)` can be replaced by `merge one_record of two_record end` for better performance

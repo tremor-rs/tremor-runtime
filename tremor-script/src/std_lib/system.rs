@@ -17,7 +17,10 @@ use crate::tremor_fn;
 use tremor_common::time::nanotime;
 
 pub fn load(registry: &mut Registry) {
-    registry.insert(tremor_fn!(system|nanotime(_context) {
+    registry.insert(tremor_fn!(system|nanotime(_context)[
+      warning::Class::Performance,
+      "`nanotime` requires a call to the operating system's time subsystem for each invocation, using `ingest_ns` as an alternative where possible is preferable."
+    ] {
       Ok(Value::from(nanotime()))
     }));
 }

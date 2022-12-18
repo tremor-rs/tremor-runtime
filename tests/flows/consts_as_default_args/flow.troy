@@ -2,13 +2,13 @@ use consts;
 
 define flow test
 args
-  interval = consts::default_interval
+  interval = consts::DEFAULT_INTERVAL
 flow
   use other_consts;
 
   define connector metronome from metronome
   args
-    interval = other_consts::other_interval
+    interval = other_consts::OTHER_INTERVAL
   with
     config = {
       "interval": args.interval
@@ -19,13 +19,13 @@ flow
 
   define pipeline identity
   args
-    interval = other_consts::other_interval
+    interval = other_consts::OTHER_INTERVAL
   pipeline
     use inner_consts;
 
     define script with_args
     args
-      interval = inner_consts::inner_interval
+      interval = inner_consts::INNER_INTERVAL
     script
       args.interval
     end;

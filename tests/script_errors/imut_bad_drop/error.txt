@@ -2,6 +2,6 @@ Error:
     1 | match "dont-care" of
     2 |   case "dont-care" when drop
       |                         ^^^^ Found the token `drop` but expected one of `!`, `"`, `$`, `(`, `+`, `-`, `<<`, `<ident>`, `[`, `absent`, `args`, `bool`, `event`, `float`, `for`, `group`, `"""`, `int`, `match`, `merge`, `nil`, `not`, `patch`, `present`, `recur`, `state`, `window`, `{`
-      |                              NOTE: It looks like you tried to use the 'drop' as a ident, consider quoting it as `drop` to make it an identifier.
-    3 |   default => "ouch"
+      |                              NOTE: It looks like you tried to use 'drop' as an ident, consider quoting it as `drop` to make it an identifier.
+    3 |   case _ => "ouch"
     4 | end

@@ -1,8 +1,7 @@
 
 define flow main
 flow
-  use tremor::connectors;
-  use tremor::pipelines;
+  use tremor::{connectors, pipelines};
   use integration;
 
   define pipeline main

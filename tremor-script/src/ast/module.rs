@@ -15,9 +15,10 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
+    base_expr::Ranged,
     deploy::raw::{ConnectorDefinitionRaw, FlowDefinitionRaw},
     docs::{Docs, ModDoc},
-    helper::raw::{
+    query::raw::{
         OperatorDefinitionRaw, PipelineDefinitionRaw, ScriptDefinitionRaw, WindowDefinitionRaw,
     },
     raw::{AnyFnRaw, ConstRaw, IdentRaw, UseRaw},
@@ -258,22 +259,25 @@ impl Module {
 
         for s in raw.stmts {
             match s {
-                ModuleStmtRaw::Use(UseRaw {
-                    alias,
-                    module,
-                    mid: meta,
-                }) => match Manager::load_(&module, ids) {
-                    Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
-                        return Err(Error(ErrorKind::CyclicUse(meta.range, meta.range, uses), o));
+                ModuleStmtRaw::Use(UseRaw { modules, mid: meta }) => {
+                    for (module, alias) in modules {
+                        match Manager::load_(&module, ids) {
+                            Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
+                                return Err(Error(
+                                    ErrorKind::CyclicUse(meta.range, meta.range, uses),
+                                    o,
+                                ));
+                            }
+                            Err(e) => {
+                                return Err(e);
+                            }
+                            Ok(mod_idx) => {
+                                let alias = alias.unwrap_or_else(|| module.id.clone());
+                                helper.scope().add_module_alias(alias, mod_idx);
+                            }
+                        }
                     }
-                    Err(e) => {
-                        return Err(e);
-                    }
-                    Ok(mod_idx) => {
-                        let alias = alias.unwrap_or_else(|| module.id.clone());
-                        helper.scope().add_module_alias(alias, mod_idx);
-                    }
-                },
+                }
                 ModuleStmtRaw::Flow(e) => {
                     let e = e.up(&mut helper)?;
                     helper.scope.insert_flow(e)?;
@@ -452,8 +456,8 @@ impl Manager {
 
         let p = path.resolve_id(node_id).ok_or_else(|| {
             crate::errors::ErrorKind::ModuleNotFound(
-                Span::yolo(),
-                Span::yolo(),
+                node_id.extent().expand_lines(2),
+                node_id.extent(),
                 node_id.fqn(),
                 path.mounts.clone(),
             )
@@ -516,10 +520,12 @@ mod test {
         let id1 = Manager::load(&NodeId {
             id: "twice".to_string(),
             module: vec!["loading".into()],
+            mid: NodeMeta::dummy(),
         })?;
         let id2 = Manager::load(&NodeId {
             id: "twice".to_string(),
             module: vec!["loading".into()],
+            mid: NodeMeta::dummy(),
         })?;
         assert_eq!(id1, id2);
         Ok(())
@@ -530,6 +536,7 @@ mod test {
         Manager::load(&NodeId {
             id: "outside".to_string(),
             module: vec![],
+            mid: NodeMeta::dummy(),
         })?;
         Ok(())
     }
@@ -540,6 +547,7 @@ mod test {
         Manager::load(&NodeId {
             id: "string".to_string(),
             module: vec!["std".to_string()],
+            mid: NodeMeta::dummy(),
         })?;
         Ok(())
     }

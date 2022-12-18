@@ -4,7 +4,7 @@ script
 
   match event of
     case {} => "snot {snot}"
-    default => "ko"
+    case _ => "ko"
   end;
 end;
 

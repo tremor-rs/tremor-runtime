@@ -38,8 +38,7 @@ end;
 
 define flow source_only_client
 flow
-  use tremor::pipelines;
-  use tremor::connectors;
+  use tremor::{connectors, pipelines};
   use integration;
 
   define connector client from tcp_client

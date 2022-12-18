@@ -15,7 +15,7 @@
 pub(crate) mod raw;
 
 use super::{
-    error_generic, error_no_locals,
+    err_generic, error_no_locals,
     helper::Scope,
     node_id::NodeId,
     visitors::{ArgsRewriter, ConstFolder},
@@ -26,7 +26,7 @@ use super::{
 use super::{raw::BaseExpr, Consts};
 use crate::ast::optimizer::Optimizer;
 use crate::ast::Literal;
-use crate::{errors::err_generic, impl_expr};
+use crate::{errors::error_generic, impl_expr};
 use raw::WindowName;
 use simd_json::{Builder, Mutable, ValueAccess};
 
@@ -280,7 +280,7 @@ impl<'script> PipelineDefinition<'script> {
             }
         }
         if let Some(k) = args.as_object().and_then(|o| o.keys().next()) {
-            return error_generic(&create, &create, &format!("Unknown parameter {k}"));
+            return err_generic(&create, &create, &format!("Unknown parameter {k}"));
         }
         Optimizer::new(helper).walk_definitional_args(&mut params)?;
         let inner_args = params.render()?;
@@ -344,6 +344,10 @@ pub struct WindowDefinition<'script> {
     pub params: CreationalWith<'script>,
     /// The script of the window
     pub script: Option<Script<'script>>,
+    /// The script of the window during ticks
+    pub tick_script: Option<Script<'script>>,
+    /// initial state of the window
+    pub state: Option<Value<'script>>,
 }
 impl_expr!(WindowDefinition);
 
@@ -483,12 +487,12 @@ impl<'script> DefinitionalArgsWith<'script> {
             {
                 *arg_v = Some(v.clone());
             } else {
-                return error_generic(creational, k, &"Unknown key");
+                return err_generic(creational, k, &"Unknown key");
             }
         }
 
         if let Some((k, _)) = self.args.0.iter_mut().find(|(_, v)| v.is_none()) {
-            error_generic(creational, k, &"Missing key")
+            err_generic(creational, k, &"Missing key")
         } else {
             Ok(())
         }
@@ -559,13 +563,13 @@ impl<'script> DefinitionalArgs<'script> {
             {
                 *arg_v = Some(v.clone());
             } else {
-                return error_generic(creational, k, &format!("Unknown argument: {}", k.as_str()));
+                return err_generic(creational, k, &format!("Unknown argument: {}", k.as_str()));
             }
         }
 
         if let Some((k, _)) = self.args.0.iter_mut().find(|(_, v)| v.is_none()) {
             let k = k.clone();
-            error_generic(self, &k, &format!("Missing required argument: {}", k))
+            err_generic(self, &k, &format!("Missing required argument: {}", k))
         } else {
             Ok(())
         }
@@ -579,7 +583,7 @@ impl<'script> DefinitionalArgs<'script> {
         for (k, v) in &self.args.0 {
             let v = v
                 .as_ref()
-                .ok_or_else(|| err_generic(k, k, &"Required key not provided"))?
+                .ok_or_else(|| error_generic(k, k, &"Required key not provided"))?
                 .try_as_lit()?
                 .clone();
             res.try_insert(k.id.clone(), v);

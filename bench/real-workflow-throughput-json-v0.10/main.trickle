@@ -13,7 +13,7 @@ script
     case %{index_type == "syslog_app4"} => let $class = "syslog_app4", let $rate = 7500, let $dimensions = event.syslog_hostname
     case %{index_type == "syslog_app5"} => let $class = "syslog_app5", let $rate = 125, let $dimensions = event.syslog_hostname
     case %{index_type == "syslog_app6"} => let $class = "syslog_app6", let $rate = 3750, let $dimensions = event.syslog_hostname
-    default => let $class = "default", let $rate = 250
+    case _ => let $class = "default", let $rate = 250
   end;
   event
 end;

@@ -1,5 +1,5 @@
 match event of
   case %{ present key, key ~= re|snot| } => true
   case %{ key ~= re|snot|, present key } => true
-  default => true
+  case _ => true
 end

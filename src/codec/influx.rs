@@ -12,29 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # `InfluxDB` line protocol parser
+//! The `influx` codec supports the [influx line protocol](https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/).
 //!
-//! Parses the `InfluxDB` Line protocol into a nested data structure.
+//! ## Example
 //!
-//!
-//! The line
+//! A single line of data in influx line protocol format:
 //!
 //! ```text
 //! weather,location=us-midwest temperature=82 1465839830100400200
 //! ```
-//! will be translated to the nested structure:
+//!
+//! The equivalent tremor value representation:
 //!
 //! ```json
 //! {
-//!     "measurement": "weather",
-//!     "tags": {"location": "us-midwest"},
-//!     "fields": {"temperature": 82.0},
-//!     "timestamp": 1465839830100400200
+//!   "measurement": "weather",
+//!   "tags": { "location": "us-midwest" },
+//!   "fields": { "temperature": 82.0 },
+//!   "timestamp": 1465839830100400200
 //! }
 //! ```
-//! ## Configuration
-//!
-//! This operator takes no configuration
 
 use super::prelude::*;
 use std::str;

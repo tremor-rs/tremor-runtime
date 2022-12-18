@@ -14,7 +14,7 @@
 
 use crate::{
     arena::{self, Arena},
-    ast::{self, docs::Docs, helper::Warning, DeployStmt},
+    ast::{self, docs::Docs, warning::Warning, DeployStmt},
     errors::Result,
     highlighter::Highlighter,
     lexer::{self, Lexer},

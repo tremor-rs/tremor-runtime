@@ -305,7 +305,7 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
             Pattern::Extract(e) => {
                 self.walk_test_expr(e.as_mut())?;
             }
-            Pattern::DoNotCare | Pattern::Default => {}
+            Pattern::DoNotCare => {}
         }
         self.leave_match_pattern(pattern)
     }

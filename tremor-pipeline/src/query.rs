@@ -18,7 +18,7 @@ use crate::{
     op::{
         self,
         identity::PassthroughFactory,
-        prelude::{IN, OUT},
+        prelude::{trickle::window::TumblingOnState, IN, OUT},
         trickle::{operator::TrickleOperator, select::Select, simple_select::SimpleSelect, window},
     },
     ConfigGraph, Connection, ExecPortIndexMap, ExecutableGraph, NodeConfig, NodeKind, NodeMetrics,
@@ -45,7 +45,7 @@ use tremor_script::{
         WindowKind,
     },
     errors::{
-        err_generic, not_defined_err, query_node_duplicate_name_err,
+        error_generic, not_defined_err, query_node_duplicate_name_err,
         query_stream_duplicate_name_err, query_stream_not_defined_err,
     },
     highlighter::{Dumb, Highlighter},
@@ -111,18 +111,26 @@ pub(crate) fn window_defn_to_impl(d: &WindowDefinition<'static>) -> Result<windo
             match (
                 with.get(WindowDefinition::INTERVAL).and_then(Value::as_u64),
                 with.get(WindowDefinition::SIZE).and_then(Value::as_u64),
+                d.state.as_ref()
             ) {
-                (Some(interval), None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
+                (Some(interval), None, None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
                     interval, max_groups, script,
                 ))),
-                (None, Some(size)) => Ok(window::Impl::from(TumblingOnNumber::from_stmt(
+                (None, Some(size), None) => Ok(window::Impl::from(TumblingOnNumber::from_stmt(
                     size, max_groups, script,
                 ))),
-                (Some(_), Some(_)) => Err(Error::from(
-                    "Bad window configuration, only one of `size` or `interval` is allowed.",
+
+                (None, None, Some(state)) => {
+                    script.and_then(|w| w.script.as_ref())
+                    .map_or_else(
+                        || Err(Error::from("Script is required for `state` type windows")),
+                        |script| Ok(window::Impl::from(TumblingOnState::from_stmt(state.clone_static(), max_groups, script.clone(), d.tick_script.clone()))))
+                },
+                (None, None, None) => Err(Error::from(
+                    "Bad window configuration, either `size`, `interval`, or `state` is required.",
                 )),
-                (None, None) => Err(Error::from(
-                    "Bad window configuration, either `size` or `interval` is required.",
+                _ => Err(Error::from(
+                    "Bad window configuration, only one of `size`, `interval`, or `state` is allowed.",
                 )),
             }
         }
@@ -395,14 +403,14 @@ impl Query {
                             )
                             .is_some()
                         {
-                            return Err(Error::from(err_generic(
+                            return Err(Error::from(error_generic(
                                 &s.extent(),
                                 &s.extent(),
                                 &format!("Can't create the pipeline `{}` twice", s.alias),
                             )));
                         }
                     } else {
-                        return Err(Error::from(err_generic(
+                        return Err(Error::from(error_generic(
                             &s.extent(),
                             &s.extent(),
                             &format!("Unknown pipeline `{}`", s.target),
@@ -451,7 +459,7 @@ impl Query {
                     if let Some(state) = &defn.script.state {
                         state
                             .as_lit()
-                            .ok_or_else(|| err_generic(&e, state, &"state not constant"))?;
+                            .ok_or_else(|| error_generic(&e, state, &"state not constant"))?;
                     }
 
                     let mut h = Dumb::new();

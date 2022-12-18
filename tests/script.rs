@@ -159,6 +159,8 @@ test_cases!(
     empty_array_pattern,
     const_in_const_lookup,
     // INSERT
+    nested_use_with_path,
+    multi_use,
     for_comprehension_filter,
     drop,
     const_fn_tremor,

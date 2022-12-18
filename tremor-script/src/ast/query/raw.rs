@@ -22,21 +22,24 @@ use super::{
     ArgsExprs, CreationalWith, DefinitionalArgs, DefinitionalArgsWith, WithExprs,
 };
 use super::{
-    error_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, OperatorCreate,
+    err_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, OperatorCreate,
     OperatorDefinition, OperatorKind, PipelineCreate, PipelineDefinition, Query, Result,
     ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamCreate, Upable,
     WindowDefinition, WindowKind,
 };
+use crate::ast::{
+    node_id::NodeId,
+    visitors::{
+        windows::{NoEventAccess, OnlyMutState},
+        GroupByExprExtractor, TargetEventRef,
+    },
+    Ident,
+};
+use crate::errors::error_generic;
 use crate::{ast::optimizer::Optimizer, prelude::Ranged};
 use crate::{ast::NodeMeta, impl_expr};
 use crate::{
-    ast::{
-        node_id::NodeId,
-        raw::UseRaw,
-        visitors::{GroupByExprExtractor, TargetEventRef},
-        Consts, Ident,
-    },
-    errors::{Error, Kind as ErrorKind},
+    ast::{raw::UseRaw, Consts},
     impl_expr_no_lt,
     module::Manager,
 };
@@ -179,17 +182,12 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 Ok(None)
             }
             StmtRaw::PipelineCreate(stmt) => Ok(Some(Stmt::PipelineCreate(stmt.up(helper)?))),
-            StmtRaw::Use(UseRaw { alias, module, mid }) => {
-                let range = mid.range;
-                let module_id = Manager::load(&module).map_err(|err| match err {
-                    Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                        ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                        state,
-                    ),
-                    _ => err,
-                })?;
-                let alias = alias.unwrap_or_else(|| module.id.clone());
-                helper.scope().add_module_alias(alias, module_id);
+            StmtRaw::Use(UseRaw { modules, .. }) => {
+                for (module, alias) in modules {
+                    let module_id = Manager::load(&module)?;
+                    let alias = alias.unwrap_or_else(|| module.id.clone());
+                    helper.scope().add_module_alias(alias, module_id);
+                }
                 Ok(None)
             }
         }
@@ -276,7 +274,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
             if let StmtRaw::StreamStmt(stream_raw) = stmt {
                 if ports_set.contains(&stream_raw.id) {
                     let stream = stream_raw.clone().up(helper)?;
-                    return error_generic(&stream, &stream, &Self::STREAM_PORT_CONFILCT);
+                    return err_generic(&stream, &stream, &Self::STREAM_PORT_CONFILCT);
                 }
             }
         }
@@ -381,11 +379,9 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         let ex = self.extent();
         // Handle the content of the script in it's own module
         let state = self.state.up(helper)?;
-        helper.enter_scope();
         let mut script = self.script.up_script(helper)?;
         script.state = state;
         let mid = self.mid.box_with_name(&self.id);
-        helper.leave_scope()?;
         // Handle the params in the outside module
         let params = self.params;
         let params = params.up(helper)?;
@@ -394,11 +390,11 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         named_in.reverse(); // so we get nice errors
         for (n, script) in named_in {
             if &n == "in" {
-                return error_generic(&ex, &n, &"port `in` is reserved for the `script` section");
+                return err_generic(&ex, &n, &"port `in` is reserved for the `script` section");
             }
             let script = script.up_script(helper)?;
             if named.insert(n.clone().to_string(), script).is_some() {
-                return error_generic(&ex, &n, &"script port already defined");
+                return err_generic(&ex, &n, &"script port already defined");
             }
         }
 
@@ -445,24 +441,59 @@ pub struct WindowDefinitionRaw<'script> {
     // Yes it is odd that we use the `creational` here but windows are not crates
     // and defined like other constructs - perhaps we should revisit this?
     pub(crate) params: CreationalWithRaw<'script>,
+    pub(crate) named_script: Option<(IdentRaw<'script>, ScriptRaw<'script>)>,
     pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) mid: Box<NodeMeta>,
+    pub(crate) state: Option<ImutExprRaw<'script>>,
 }
 impl_expr!(WindowDefinitionRaw);
 
 impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
     type Target = WindowDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let maybe_script = self.script.map(|s| s.up_script(helper)).transpose()?;
+        let extent = self.extent();
+        let maybe_script = self
+            .script
+            .map(|s| -> Result<_> {
+                let mut s = s.up_script(helper)?;
+                for expr in &mut s.exprs {
+                    OnlyMutState::validate(expr).map_err(|e| error_generic(&extent, expr, &e))?;
+                }
+                Ok(s)
+            })
+            .transpose()?;
 
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
-
+        let tick_script = self
+            .named_script
+            .map(|(i, s)| {
+                if i == "tick" {
+                    let mut s = s.up_script(helper)?;
+                    for expr in &mut s.exprs {
+                        OnlyMutState::validate(expr)
+                            .map_err(|e| error_generic(&extent, expr, &e))?;
+                        NoEventAccess::validate(expr)
+                            .map_err(|e| error_generic(&extent, expr, &e))?;
+                    }
+                    Ok(s)
+                } else {
+                    err_generic(&extent, &i, &"Only `tick` scripts are supported by windows")
+                }
+            })
+            .transpose()?;
+        let state = self
+            .state
+            .up(helper)?
+            .map(|h| h.try_into_value(helper))
+            .transpose()?;
         let window_defn = WindowDefinition {
             mid: self.mid.box_with_name(&self.id),
             id: self.id,
             kind: self.kind,
             params: self.params.up(helper)?,
+            state,
+            tick_script,
             script: maybe_script,
         };
 

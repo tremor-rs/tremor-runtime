@@ -1,11 +1,11 @@
 let multi_cidr = match event of
   case rp = %{ multi_cidr ~= cidr|10.22.0.0/24, 10.22.1.0/24| } => rp
-  default => "no match"
+  case _ => "no match"
 end;
 
 let doesnt_match = match event of
   case rp = %{ doesnt_match ~= cidr|10.41.0.0/24, 11.41.0.0/24| } => rp
-  default => {"doesnt_match": "no match"}
+  case _ => {"doesnt_match": "no match"}
 end;
 
 merge doesnt_match of multi_cidr end

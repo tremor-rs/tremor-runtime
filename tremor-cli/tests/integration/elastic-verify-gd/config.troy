@@ -2,8 +2,7 @@ define flow main
 flow
   use std::time::nanos;
   use integration;
-  use tremor::pipelines;
-  use tremor::connectors;
+  use tremor::{connectors, pipelines};
 
   define pipeline main
   pipeline
@@ -17,7 +16,7 @@ flow
       let $correlation = event.snot;
       match event of
         case %{present doc_id} => let $elastic["_id"] = event.doc_id
-        default => null
+        case _ => null
       end;
       event
     end;

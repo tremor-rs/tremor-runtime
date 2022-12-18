@@ -10,7 +10,38 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License.
+// li
+
+#![allow(clippy::doc_markdown)] // we need thise for :::::note
+
+//! :::note
+//!     This operator is for debugging purposes only, and should not be used in production deployments.
+//! :::
+//!
+//! This operator generates a history entry in the event metadata underneath the field provided in the `name` config value. Data is pushed to the array as a Striong in the form: `"event: <op>(<event_id>)"`.
+//!
+//! This can be used as a tracepoint of events in a complex pipeline setup.
+//!
+//! This operator manipulates a section of the event metadata.
+//!
+//! **Configuration options**:
+//!
+//! - `op` - The operation name of this operator
+//! - `name` - The field to store the history on
+//!
+//! **Outputs**:
+//!
+//! - `out`
+//!
+//! **Example**:
+//!
+//! ```tremor
+//! define operator history from debug::history
+//! with
+//!   op = "my-checkpoint",
+//!   name = "event_history"
+//! end;
+//! ```
 
 use crate::op::prelude::*;
 use crate::ConfigImpl;

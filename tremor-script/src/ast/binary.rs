@@ -16,7 +16,7 @@ use super::{
     base_expr::Ranged,
     raw::{BytesDataType, Endian},
 };
-use crate::errors::{error_generic, Result};
+use crate::errors::{err_generic, Result};
 use crate::prelude::*;
 use crate::{stry, Value};
 use byteorder::{BigEndian, ByteOrder};
@@ -203,9 +203,8 @@ pub(crate) fn extend_bytes_from_value<'value, O: Ranged, I: Ranged>(
     bytes: &mut Vec<u8>,
     value: &Value<'value>,
 ) -> Result<()> {
-    let err = |e: &str, v: &Value| -> Result<()> {
-        error_generic(outer, inner, &format!("{}: {}", e, v))
-    };
+    let err =
+        |e: &str, v: &Value| -> Result<()> { err_generic(outer, inner, &format!("{}: {}", e, v)) };
 
     match data_type {
         BytesDataType::UnsignedInteger => value.as_u64().map_or_else(

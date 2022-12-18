@@ -39,16 +39,16 @@ flow
 					case %{level == "INFO" } => logging::info (event.msg)
 					case %{level == "TRACE"} => logging::trace(event.msg)
 					case %{level == "WARN" } => logging::warn (event.msg)
-					default => "exit"
+					case _ => "exit"
 				end
-			default              => # All formatting cases
+			case _               => # All formatting cases
 				match event of
 					case %{level == "DEBUG"} => logging::debug(event.msg, event.data)
 					case %{level == "ERROR"} => logging::error(event.msg, event.data)
 					case %{level == "INFO" } => logging::info (event.msg, event.data)
 					case %{level == "TRACE"} => logging::trace(event.msg, event.data)
 					case %{level == "WARN" } => logging::warn (event.msg, event.data)
-					default => "exit"
+					case _ => "exit"
 				end
 		end
 		from in into out;

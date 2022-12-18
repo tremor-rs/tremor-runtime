@@ -23,15 +23,16 @@ use serial_test::serial;
 use std::fs;
 use std::io::Read;
 use std::time::Duration;
-use tremor_common::{file, ids::OperatorIdGen};
-use tremor_pipeline::query::Query;
-use tremor_pipeline::ExecutableGraph;
-use tremor_pipeline::{Event, EventId};
-use tremor_pipeline::{PluggableLoggingAppender, LOGGING_CHANNEL};
-use tremor_runtime::system::ShutdownMode;
+use tremor_common::{file, ids::OperatorIdGen, ports::IN};
+use tremor_pipeline::{
+	query::Query,
+	EventOriginUri,Event, EventId,
+	ExecutableGraph,
+	PluggableLoggingAppender, LOGGING_CHANNEL
+};
 use tremor_runtime::{
     errors::*,
-    system::{World, WorldConfig},
+    system::{ShutdownMode, World, WorldConfig},
 };
 use tremor_script::module::Manager;
 use tremor_script::utils::*;
@@ -134,17 +135,26 @@ async fn query_test_config(contents: String, file: &str) -> Result<()> {
     let in_json = load_event_file(&in_file)?;
 
     let mut results = Vec::new();
-    for (id, json) in in_json.into_iter().enumerate() {
-        let event = Event {
-            id: EventId::new(0, 0, id as u64, id as u64),
-            data: json.clone_static().into(),
-            ingest_ns: id as u64,
-            ..Event::default()
-        };
-        let mut r = vec![];
-        pipeline.enqueue("in".into(), event, &mut r).await?;
-        results.append(&mut r);
-    }
+
+	let origin_uri = EventOriginUri {
+		scheme: "tremor".into(),
+		host: "localhost".into(),
+		port: None,
+		path: vec!["test".into()],
+	};
+
+	for (id, json) in in_json.into_iter().enumerate() {
+		let event = Event {
+			id: EventId::new(0, 0, id as u64, id as u64),
+			data: json.clone_static().into(),
+			ingest_ns: id as u64,
+			origin_uri: Some(origin_uri.clone()),
+			..Event::default()
+		};
+		let mut r = vec![];
+		pipeline.enqueue(IN, event, &mut r).await?;
+		results.append(&mut r);
+	}
 
     println!("Loading expected: \"{out_file}\"");
     let mut out_json = load_event_file(&out_file)?;
@@ -289,6 +299,7 @@ test_cases!(
     where_filter,
     window_by_two_scripted,
     window_by_two,
+    window_state_by_two,
     window_size_tilted,
     pp_win,
     pp_script,
@@ -311,6 +322,7 @@ test_cases!(
     args_nesting_redefine,
     pipeline_nested_pipeline,
     pipeline_passthrough,
+    window_state_by_two_vec,
     alias_script_params_overwrite,
     cardinality,
     window_mixed_2,

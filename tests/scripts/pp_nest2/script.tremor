@@ -1,6 +1,6 @@
 use foo6::bar::baz;
 
 match event of
-  case {} => "snot #{baz::snot}"
-  default => "ko"
+  case {} => "snot #{baz::SNOT}"
+  case _ => "ko"
 end;

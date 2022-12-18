@@ -1,5 +1,6 @@
 merge event of match true of
   case true => true
-  default => true
-  default => false
+  case _ => true
+  case _ => false
+  case _ => "snot"
 end end

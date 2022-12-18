@@ -9,7 +9,7 @@ license = "Apache-2.0"
 name = "tremor-runtime"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.9"
+version = "0.13.0-rc.10"
 rust-version = "1.62"
 
 [workspace]
@@ -21,9 +21,10 @@ members = [
   "tremor-influx",
   "tremor-pipeline",
   "tremor-script",
-  "tremor-script-nif",
   "tremor-value",
 ]
+default-members = ["tremor-cli"]
+exclude = ["tremor-script-nif"]
 
 [profile.release]
 debug = true
@@ -152,7 +153,7 @@ elasticsearch = { version = "=8.5.0-alpha.1", default-features = false, features
 ] }
 
 # ws
-async-tungstenite = { version = "0.18.0", features = [
+async-tungstenite = { version = "0.19.0", features = [
   "async-std-runtime",
   "async-tls",
 ] }

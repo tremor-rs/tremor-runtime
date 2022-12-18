@@ -22,8 +22,8 @@ flow
   connect /connector/metronome to /pipeline/identity;
   connect /pipeline/identity to /connector/exit;
 end;
-
+use std::time::nanos;
 deploy flow test
 with
-  ival = 1,
+  ival = nanos::from_millis(1),
 end;

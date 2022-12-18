@@ -1,5 +1,4 @@
-use std::array;
-use std::record;
+use std::{array, record};
 [
   [1][0],
   array::push([1], "snot")[1],

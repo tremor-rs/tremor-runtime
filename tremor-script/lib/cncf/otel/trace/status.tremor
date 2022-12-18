@@ -46,10 +46,10 @@ use cncf::otel::trace::status::code;
 
 ## Returns a success status code
 fn ok() with
-  { "code": code::ok, "deprecated_code": deprecated::ok, "message": "Ok" }
+  { "code": code::OK, "deprecated_code": deprecated::OK, "message": "Ok" }
 end;
 
 ## Returns an error status code, with user defined error messsage
 fn error(message) with
-  { "code": code::error, "deprecated_code": deprecated::unknown_error, "message": message }
+  { "code": code::ERROR, "deprecated_code": deprecated::UNKNOWN_ERROR, "message": message }
 end;

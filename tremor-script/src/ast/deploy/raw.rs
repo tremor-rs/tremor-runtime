@@ -16,7 +16,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
-    BaseExpr, ConnectStmt, ConnectorDefinition, CreateStmt, CreateTargetDefinition, DeployEndpoint,
+    ConnectStmt, ConnectorDefinition, CreateStmt, CreateTargetDefinition, DeployEndpoint,
     DeployFlow, FlowDefinition, Value,
 };
 use crate::ast::optimizer::Optimizer;
@@ -24,7 +24,7 @@ use crate::{
     ast::{
         base_expr::Ranged,
         docs::{FlowDoc, ModDoc},
-        error_generic,
+        err_generic,
         node_id::NodeId,
         query::raw::{
             ConfigRaw, CreationalWithRaw, DefinitionalArgsRaw, DefinitionalArgsWithRaw,
@@ -33,7 +33,7 @@ use crate::{
         raw::{IdentRaw, UseRaw},
         Deploy, DeployStmt, Helper, NodeMeta, Script, Upable,
     },
-    errors::{Error, Kind as ErrorKind, Result},
+    errors::{Kind as ErrorKind, Result},
     impl_expr,
     module::Manager,
     AggrType, EventContext, Return,
@@ -56,7 +56,7 @@ pub fn run_script<'script>(expr: &Script<'script>) -> Result<Value<'script>> {
 
     match expr.run(&ctx, AggrType::Emit, &mut event, &mut state, &mut meta) {
         Ok(Return::Emit { value, .. }) => Ok(value),
-        _otherwise => error_generic(
+        _otherwise => err_generic(
             expr,
             expr,
             &"Failed to evaluate script at compile time".to_string(),
@@ -118,18 +118,13 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
     type Target = Option<DeployStmt<'script>>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
-            DeployStmtRaw::Use(UseRaw { alias, module, mid }) => {
-                let range = mid.range;
-                let module_id = Manager::load(&module).map_err(|err| match err {
-                    Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                        ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                        state,
-                    ),
-                    _ => err,
-                })?;
+            DeployStmtRaw::Use(UseRaw { modules, .. }) => {
+                for (module, alias) in modules {
+                    let module_id = Manager::load(&module)?;
 
-                let alias = alias.unwrap_or_else(|| module.id.clone());
-                helper.scope().add_module_alias(alias, module_id);
+                    let alias = alias.unwrap_or_else(|| module.id.clone());
+                    helper.scope().add_module_alias(alias, module_id);
+                }
                 Ok(None)
             }
             DeployStmtRaw::FlowDefinition(stmt) => {
@@ -314,17 +309,12 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         let mut creates = Vec::new();
         for stmt in self.stmts {
             match stmt {
-                FlowStmtRaw::Use(UseRaw { alias, module, mid }) => {
-                    let range = mid.range;
-                    let module_id = Manager::load(&module).map_err(|err| match err {
-                        Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                            ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                            state,
-                        ),
-                        _ => err,
-                    })?;
-                    let alias = alias.unwrap_or_else(|| module.id.clone());
-                    helper.scope().add_module_alias(alias, module_id);
+                FlowStmtRaw::Use(UseRaw { modules, .. }) => {
+                    for (module, alias) in modules {
+                        let module_id = Manager::load(&module)?;
+                        let alias = alias.unwrap_or_else(|| module.id.clone());
+                        helper.scope().add_module_alias(alias, module_id);
+                    }
                 }
                 FlowStmtRaw::ConnectorDefinition(stmt) => {
                     let stmt = stmt.up(helper)?;

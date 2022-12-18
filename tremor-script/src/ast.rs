@@ -36,8 +36,12 @@ pub mod visitors;
 
 /// docs
 pub mod docs;
-/// collection of AST visitors
+
+/// collection of AST walkers (for impl'ing)
 pub mod walkers;
+
+/// Warnings
+pub mod warning;
 
 pub use self::helper::Helper;
 pub use self::node_id::{BaseRef, NodeId};
@@ -49,7 +53,8 @@ use crate::{
         eq::AstEq,
         raw::{BytesDataType, Endian},
     },
-    errors::{error_generic, error_no_locals, Kind as ErrorKind, Result},
+    errors::{err_generic, error_no_locals, Kind as ErrorKind, Result},
+    extractor::Extractor,
     impl_expr, impl_expr_ex, impl_expr_no_lt,
     interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
     lexer::Span,
@@ -57,9 +62,7 @@ use crate::{
     prelude::*,
     registry::{CustomFn, FResult, TremorAggrFnWrapper, TremorFnWrapper},
     script::Return,
-    stry,
-    tilde::Extractor,
-    KnownKey, Value,
+    stry, KnownKey, Value,
 };
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
@@ -283,6 +286,18 @@ pub struct Script<'script> {
     pub docs: docs::Docs,
 }
 impl_expr!(Script);
+
+impl Default for Script<'static> {
+    fn default() -> Self {
+        Self {
+            exprs: Vec::new(),
+            locals: 0,
+            docs: docs::Docs::default(),
+            mid: NodeMeta::new_box(Location::default(), Location::default()),
+            state: None,
+        }
+    }
+}
 
 impl<'script> Script<'script> {
     /// Runs the script and evaluates to a resulting event.
@@ -594,7 +609,7 @@ impl<'script> Expr<'script> {
             Ok(imut)
         } else {
             let e = self.extent();
-            error_generic(&e.expand_lines(2), self, &Self::NOT_IMUT)
+            err_generic(&e.expand_lines(2), self, &Self::NOT_IMUT)
         }
     }
 }
@@ -913,7 +928,7 @@ impl<'script> Invoke<'script> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// An invocable expression form
 pub enum Invocable<'script> {
     /// Reference to a builtin or intrinsic function
@@ -1031,7 +1046,7 @@ impl_expr_no_lt!(TestExpr);
 pub enum DefaultCase<Ex: Expression> {
     /// No default case
     None,
-    /// Null default case (default => null)
+    /// Null default case (case _ => null)
     Null,
     /// Many expressions
     Many {
@@ -1561,13 +1576,11 @@ pub enum Pattern<'script> {
     Extract(Box<TestExpr>),
     /// Don't care condition
     DoNotCare,
-    /// Gates if no other pattern matches
-    Default,
 }
+
 impl<'script> Pattern<'script> {
     fn is_default(&self) -> bool {
-        matches!(self, Pattern::Default)
-            || matches!(self, Pattern::DoNotCare)
+        matches!(self, Pattern::DoNotCare)
             || if let Pattern::Assign(AssignPattern { pattern, .. }) = self {
                 pattern.as_ref() == &Pattern::DoNotCare
             } else {

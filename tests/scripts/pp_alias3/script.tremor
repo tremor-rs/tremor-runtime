@@ -1,6 +1,6 @@
 use foo3:: bar ::baz    ::    mork  as    bork ;    
     
 match event of
-  case {} => "snot #{bork::snot}"
-  default => "ko"
+  case {} => "snot #{bork::SNOT}"
+  case _ => "ko"
 end;

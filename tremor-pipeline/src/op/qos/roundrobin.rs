@@ -12,17 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Round Robin backoff limiter
+//! Evenly distributes events over it's outputs. If a CB trigger event is received from an output this
+//! output is skipped until the circuit breaker is restored. If all outputs are triggered the operator
+//! itself triggers a CB event.
 //!
-//! ## Configuration
+//! This operator preserves event metadata.
 //!
-//! See [Config](struct.Config.html) for details.
+//! **Outputs**:
 //!
-//! ## Outputs
+//! - `*` (any named output is possible)
 //!
-//! Sends incoming events to the next open (not closed due to circuit breaker events) output
-//! determined by iterating through the list of outputs from the last one that has been used.
-//! If no open output was found, the event is sent via the output port `overflow`.
+//! **Example**:
+//!
+//! ```tremor
+//! define operator roundrobin from qos::roundrobin
+//! with
+//!   outputs = ["round", "robin", "outputs"]
+//! end;
+//! ```
 
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;

@@ -351,7 +351,7 @@ impl ErrorKind {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.start().absolute() == outer.start().absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
             UnrecognizedToken(_, _, t, _) if t == "##" => Some(format!("`{t}` is as doc comment, it needs to be followed by a statement, did you want to use `#` here?")),
             UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `;` in the prior statement".into()),
-            UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use the '{}' as a ident, consider quoting it as `{}` to make it an identifier.", t, t)),
+            UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use '{}' as an ident, consider quoting it as `{}` to make it an identifier.", t, t)),
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             UnrecognizedToken(_, _, key, options) => {
                 match best_hint(key, options, 3) {
@@ -397,7 +397,7 @@ impl ErrorKind {
 
             NoEventReferencesAllowed(_, _) => Some("Here you operate in the whole window, not a single event. You need to wrap this reference in an aggregate function (e.g. aggr::win::last(...)) or use it in the group by clause of this query.".to_owned()),
 
-            NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
+            NoClauseHit(_) => Some("Consider adding a `case _ => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
 
             InvalidDefinitionalWithParam(_, _, _, _, available_params) => if available_params.is_empty() {
@@ -588,7 +588,7 @@ error_chain! {
             description("Bad arity for function")
                 display("Bad arity for function {}::{}/{:?} but was called with {} arguments", m, f, a, calling_a)
         }
-        MissingModule(expr: Span, inner: Span, m: String, suggestion: Option<(usize, String)>) {
+        MissingModule(outer: Span, inner: Span, m: String, suggestion: Option<(usize, String)>) {
             description("Call to undefined module")
                 display("Call to undefined module {}", m)
         }
@@ -942,7 +942,7 @@ pub fn already_defined_err<S>(e: &S, what: &str) -> Error
 where
     S: BaseExpr + Ranged,
 {
-    err_generic(
+    error_generic(
         e,
         e,
         &format!(
@@ -956,7 +956,7 @@ pub fn not_defined_err<S>(e: &S, what: &str) -> Error
 where
     S: BaseExpr + Ranged,
 {
-    err_generic(
+    error_generic(
         e,
         e,
         &format!(
@@ -1046,15 +1046,15 @@ pub fn query_guard_not_bool_err<O: Ranged, I: Ranged>(stmt: &O, inner: &I, got: 
 /// We can still be polite in our error reports!
 /// # Errors
 /// The parameters transformed into a generic error
-pub fn error_generic<T, O: Ranged, I: Ranged, S: ToString>(
+pub fn err_generic<T, O: Ranged, I: Ranged, S: ToString>(
     outer: &O,
     inner: &I,
     error: &S,
 ) -> Result<T> {
-    Err(err_generic(outer, inner, error))
+    Err(error_generic(outer, inner, error))
 }
 
-pub fn err_generic<O: Ranged, I: Ranged, S: ToString>(outer: &O, inner: &I, error: &S) -> Error {
+pub fn error_generic<O: Ranged, I: Ranged, S: ToString>(outer: &O, inner: &I, error: &S) -> Error {
     ErrorKind::Generic(outer.extent(), inner.extent(), error.to_string()).into()
 }
 

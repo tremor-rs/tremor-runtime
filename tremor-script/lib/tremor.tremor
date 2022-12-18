@@ -7,6 +7,7 @@
 ### * [pipelines](pipelines.md) - default pipelines
 ### * [system](system.md) - functions related to the running system
 ### * [system](logging.md) - logging functions
+### * [windows](windows.md) - functions related to state based windows
 
 use tremor::chash;
 use tremor::connectors;
@@ -14,4 +15,5 @@ use tremor::mime;
 use tremor::origin;
 use tremor::pipelines;
 use tremor::system;
+use tremor::windows;
 use tremor::logging;

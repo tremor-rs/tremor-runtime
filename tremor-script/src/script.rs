@@ -18,7 +18,7 @@ use crate::{
     arena::{self, Arena},
     ast::{
         docs::Docs,
-        helper::{Warning, Warnings},
+        warning::{Warning, Warnings},
         Helper,
     },
     ctx::EventContext,

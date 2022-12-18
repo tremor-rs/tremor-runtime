@@ -1,0 +1,3 @@
+Error: 
+    5 |   [true]
+      |   ^^^^^^ An array as return value needs to be a two-element array of booleans with the form `[emit, include]`

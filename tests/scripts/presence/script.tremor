@@ -1,4 +1,4 @@
-const c = 7;
+const C = 7;
 let $data = { "exists": 1 };
 let e = "exists";
 let ne = "does't";
@@ -7,17 +7,17 @@ let good_idx = 1;
 let bad_idx = 42;
 
 {
-  "present": match { "superhero": "superman" } of case %{ present superhero } => "ok" default => "ko" end,
-  "absent": match { "human": "clark kent" } of case %{ absent superhero } => "ok" default => "ko" end,
-  "both-present": match { "superhero": "superman", "human": "clark kent" } of case %{ present superhero, present human } => "ok" default => "ko" end,
-  "both-present-nomatch": match {} of case %{ present superhero, present human } => "ko" default => "ok" end,
-  "both-absent": match {} of case %{ absent superhero, absent human } => "ok" default => "ko" end,
-  "both-absent-nomatch": match { "superhero": "superman", "human": "clark kent" } of case %{ absent superhero, absent human } => "ko" default => "ok" end,
-  "absent-kw-true": match absent $data.not_here of case true => "ok" default => "ko" end,
-  "absent-kw-false": match absent $data.exists of case true => "ko" default => "ok" end,
-  "present-kw-true": match present $data.not_here of case true => "ko" default => "ok" end,
-  "present-kw-false": match present $data.exists of case true => "ok" default => "ko" end,
-  "present-const": present c,
+  "present": match { "superhero": "superman" } of case %{ present superhero } => "ok" case _ => "ko" end,
+  "absent": match { "human": "clark kent" } of case %{ absent superhero } => "ok" case _ => "ko" end,
+  "both-present": match { "superhero": "superman", "human": "clark kent" } of case %{ present superhero, present human } => "ok" case _ => "ko" end,
+  "both-present-nomatch": match {} of case %{ present superhero, present human } => "ko" case _ => "ok" end,
+  "both-absent": match {} of case %{ absent superhero, absent human } => "ok" case _ => "ko" end,
+  "both-absent-nomatch": match { "superhero": "superman", "human": "clark kent" } of case %{ absent superhero, absent human } => "ko" case _ => "ok" end,
+  "absent-kw-true": match absent $data.not_here of case true => "ok" case _ => "ko" end,
+  "absent-kw-false": match absent $data.exists of case true => "ko" case _ => "ok" end,
+  "present-kw-true": match present $data.not_here of case true => "ko" case _ => "ok" end,
+  "present-kw-false": match present $data.exists of case true => "ok" case _ => "ko" end,
+  "present-const": present C,
   "present-local-not": present cake,
   "present-local": present $data,
   "present-local-nested1": present $data["exists"],

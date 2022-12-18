@@ -12,16 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
-
-use crate::registry::registry;
-use crate::{ast::BinOpKind, errors::Result};
+use super::*;
 use crate::{
-    ast::{ClauseGroup, Expr},
+    ast::{eq::AstEq, BinOpKind, ClauseGroup, Expr},
+    errors::Result,
+    registry::registry,
     NodeMeta,
 };
-
-use super::*;
+use std::collections::BTreeMap;
 
 /// tests the ast equality of the two last `ImutExprInt` in the given script
 fn test_ast_eq(script: &str, check_equality: bool) -> Result<()> {
@@ -209,7 +207,7 @@ fn test_match_eq() -> Result<()> {
             case %{ absent y, snot == "badger", superhero ~= %{absent name}} => "snot"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
             case ~ json|| => "json"
-            default => null
+            case _ => null
         end);
         (match x of
             case "literal string" => "string"
@@ -220,7 +218,7 @@ fn test_match_eq() -> Result<()> {
             case %{ absent y, snot == "badger", superhero ~= %{absent name}} => "snot"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
             case ~ json|| => "json"
-            default => null
+            case _ => null
         end)
         "#,
         true,
@@ -246,7 +244,7 @@ fn test_match_eq_2() -> Result<()> {
             case %[] => "empty_array"
             case %[ %{ present x } ] => "complex"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
-            default => null
+            case _ => null
         end);
         (match x of
             case "literal string" => "string"
@@ -263,7 +261,7 @@ fn test_match_eq_2() -> Result<()> {
             case %[] => "empty_array"
             case %[ %{ present x } ] => "complex"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
-            default => null
+            case _ => null
         end)
         "#,
         true,
@@ -289,7 +287,7 @@ fn test_match_not_eq() -> Result<()> {
             case %{ snot == 1 } => "argh"
             case %{ snot == 2 } => "argh"
             case %{ snot == 3 } => "argh"
-            default => null
+            case _ => null
         end);
         (match x of
             case "literal string" => "string"
@@ -304,7 +302,7 @@ fn test_match_not_eq() -> Result<()> {
             case %{ snot == 1 } => "argh"
             case %{ snot == 2 } => "argh"
             case %{ snot == 3 } => "argh"
-            default => "not_null"
+            case _ => "not_null"
         end)
         "#,
         false,
@@ -477,7 +475,7 @@ fn predicate_pattern() {
             mid: NodeMeta::dummy(),
             id: "id".into(),
             test: "test".into(),
-            extractor: crate::tilde::Extractor::Json,
+            extractor: crate::extractor::Extractor::Json,
         }),
     }
     .ast_eq(&PredicatePattern::TildeEq {
@@ -488,7 +486,7 @@ fn predicate_pattern() {
             mid: NodeMeta::dummy(),
             id: "id".into(),
             test: "test".into(),
-            extractor: crate::tilde::Extractor::Json,
+            extractor: crate::extractor::Extractor::Json,
         }),
     }));
     assert!(PredicatePattern::Bin {
@@ -643,7 +641,7 @@ fn recur() {
 fn clause_group() {
     let pc = PredicateClause {
         mid: NodeMeta::dummy(),
-        pattern: Pattern::Default,
+        pattern: Pattern::DoNotCare,
         guard: None,
         exprs: vec![],
         last_expr: imut_expr(),

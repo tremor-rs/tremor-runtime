@@ -1,8 +1,7 @@
 define flow server
 flow
   use integration;
-  use tremor::pipelines;
-  use tremor::connectors;
+  use tremor::{connectors, pipelines};
 
   define connector otel_server from otel_server
   with

@@ -1,4 +1,4 @@
 match event of
   case %[] => "array"
-  default => "else"
+  case _ => "else"
 end

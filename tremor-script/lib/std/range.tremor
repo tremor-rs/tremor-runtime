@@ -21,6 +21,6 @@ fn contains(r, n) with
   let len = array::len(r);
   match len of
     case 0 => false
-    default => r[0] <= n and r[len - 1] >= n
+    case _ => r[0] <= n and r[len - 1] >= n
   end
 end;

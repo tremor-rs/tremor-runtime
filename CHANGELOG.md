@@ -6,6 +6,21 @@
 
 ### New Features
 
+* Warning types: now warnings can specify what they are about (performance, behaviour, etc.)
+* New warnings for consistency, behaviour and performance
+* Functions now can create warnings
+* Allow grouping of use with `use std::{m1, m2}`
+
+### Breaking Changes
+* **all** std library constants are now uppercase
+* Remove `default` in `match of` and `fn of` and standardize on `case _`
+* `textual-length-prefix` pre and postprocessor are now named `textual-length-prefixed` for consistency in naming
+
+## [0.13.0-rc.10]
+
+### New Features
+
+* Added `state` type window where both tick and event can be handled in script form
 * Added new config `socket_options` to UDP, TCP and Websocket connectors to enable use of socket option `SO_REUSEPORT`
 * Added the `chunk` postprocessor for creating payloads as close to a configurable `max_bytes` as possible
 * Arithmetic expressions now error on overflows
@@ -15,11 +30,12 @@
 
 * Fix `udp_client` connector connecting to IPv6 hosts.
 * Fix `json` codec to deduplicate duplicate keys by using the last key in the JSON record.
+* Fix scoping for named scripts, they no longer polute/share the outer scope.
 
 ### Breaking Changes
 
 * Move `no_delay` config of `tcp_server` and `ws_server` to `socket_options.TCP_NODELAY`.
-* The HTTP connectors now work with the `mime_mapping` instead of `codec`
+* The HTTP connectors now work with the `mime_mapping` instead of `codec`.
 
 ## [0.13.0-rc.9]
 

@@ -16,7 +16,7 @@ processing. Sometimes cases can be incomplete without a `default` case and this
 is also supported.
 
 ```tremor
-    default => "If i'm not one of these things, I'm something else"
+    case _ => "If i'm not one of these things, I'm something else"
 end
 ```
 
@@ -43,7 +43,7 @@ And, tremor will issue a runtime error when a bad case is found:
     2 |   case true => "I believe you"
     3 | end;
       | ^^^ A match expression executed but no clause matched
-      |     NOTE: Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.
+      |     NOTE: Consider adding a `case _ => null` clause at the end of your match or validate full coverage beforehand.
 
 ```
 

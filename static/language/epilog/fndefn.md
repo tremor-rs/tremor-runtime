@@ -5,7 +5,7 @@ Functions defined with an `of` keyword in their signature use pattern matching a
 ```tremor
 fn fib_(a, b, n) of
   case (a, b, n) when n > 0 => recur(b, a + b, n - 1)
-  default => a
+  case _ => a
 end;
 ```
 
@@ -69,7 +69,7 @@ fn is_valid(trace_id) of
     # Array representation
     case(trace_id) when type::is_array(trace_id) =>
       { "kind": "array", "valid":  array::len(arr) == 16 and trace_id != [ 0, 0, 0, 0, 0, 0, 0, 0], "value": trace_id }
-    default =>
+    case _ =>
       false
 end
 ```

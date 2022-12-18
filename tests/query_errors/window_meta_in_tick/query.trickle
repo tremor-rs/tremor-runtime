@@ -1,0 +1,10 @@
+define window w from  tumbling
+state
+  null
+script from tick
+  $ + 1
+script
+  let state = event
+end;
+
+select event from in into out;

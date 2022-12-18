@@ -32,7 +32,7 @@ use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::{
     ast::{self, ConnectStmt, DeployFlow, Helper},
-    errors::{err_generic, not_defined_err},
+    errors::{error_generic, not_defined_err},
 };
 
 /// unique identifier of a flow instance within a tremor instance
@@ -300,7 +300,7 @@ async fn link(
             rx.recv()
                 .timeout(timeout)
                 .await??
-                .map_err(|e| err_generic(link, from, &e))?;
+                .map_err(|e| error_generic(link, from, &e))?;
         }
         ConnectStmt::PipelineToConnector { from, to, .. } => {
             let pipeline = pipelines.get(from.alias()).ok_or(format!(
@@ -330,7 +330,7 @@ async fn link(
             rx.recv()
                 .timeout(timeout)
                 .await??
-                .map_err(|e| err_generic(link, from, &e))?;
+                .map_err(|e| error_generic(link, from, &e))?;
 
             // then link the connector to the pipeline
 
@@ -345,7 +345,7 @@ async fn link(
             rx.recv()
                 .timeout(timeout)
                 .await??
-                .map_err(|e| err_generic(link, to, &e))?;
+                .map_err(|e| error_generic(link, to, &e))?;
         }
         ConnectStmt::PipelineToPipeline { from, to, .. } => {
             let from_pipeline = pipelines.get(from.alias()).ok_or(format!(
@@ -379,13 +379,13 @@ async fn link(
                 .recv()
                 .timeout(timeout)
                 .await??
-                .map_err(|e| err_generic(link, to, &e))?;
+                .map_err(|e| error_generic(link, to, &e))?;
             to_pipeline.send_mgmt(msg_to).await?;
             rx_to
                 .recv()
                 .timeout(timeout)
                 .await??
-                .map_err(|e| err_generic(link, from, &e))?;
+                .map_err(|e| error_generic(link, from, &e))?;
         }
     }
     Ok(())

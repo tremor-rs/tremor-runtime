@@ -61,9 +61,9 @@ macro_rules! test_cases {
                     let err = err.trim();
                     let re = Regex::new(err)?;
 
-                    if let Err(e) = s {
-                        println!("{} ~ {}", err, format!("{}", e));
-                        assert!(re.is_match(&format!("{}", e)));
+                    if let Err(got) = s {
+                        println!("{}", got);
+                        assert!(re.is_match(&format!("{}", got)));
                     } else {
                         println!("Expected error, but got succeess");
                         assert!(false);
@@ -124,6 +124,17 @@ test_cases!(
     pp_embed_unrecognized_token4,
     pp_embed_unrecognized_token5,
     // INSERT
+    window_mut_meta,
+    window_mut_event,
+    window_bad_script_from,
+    scope_window_script5,
+    scope_window_script4,
+    scope_window_script3,
+    scope_window_script2,
+    scope_window_script,
+    scope_named_scripts3,
+    scope_named_scripts2,
+    scope_named_scripts,
     state_not_static,
     script_in_port,
     script_duplicate_port,
@@ -141,6 +152,10 @@ test_cases!(
     pipeline_duplicate_define,
     pipeline_undefined,
     pipeline_unknown_param,
+    window_meta_in_tick,
+    window_event_in_tick,
+    window_mutate_meta,
+    window_mutate_event,
     duplicate_stream_name,
     window_both_settings,
     window_group_by_event_in_target,

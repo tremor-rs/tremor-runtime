@@ -1,0 +1,3 @@
+Error: 
+    5 |   "snot"
+      |   ^^^^^^ Window returned `"snot"` this can't be used as a window reply

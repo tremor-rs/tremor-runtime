@@ -1,7 +1,7 @@
-Warning: 
+Warning(behaviour): 
     1 | match true of
     2 |   case true => true
-    3 |   default => true
-    4 |   default => false
+    3 |   case _ => true
+    4 |   case _ => false
+      |   ^^^^^^^^^^^^^^^ Any but the first `case _` statement are unreachable and will be ignored.
     5 | end
-      | ^^^ A match statement with more then one default clause will never reach any but the first default clause.

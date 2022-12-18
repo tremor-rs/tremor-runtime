@@ -1,6 +1,6 @@
-const inside = 42;
-const linked = inside; 
+const INSIDE = 42;
+const LINKED = INSIDE; 
 
 fn f_inside() with
-  inside
+  INSIDE
 end;

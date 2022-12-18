@@ -1,4 +1,4 @@
 ### A foo module
 
 ## the badger constant
-const snot = "badger";
+const SNOT = "badger";

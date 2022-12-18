@@ -31,12 +31,10 @@ use crate::{
         Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
         UnaryOpKind,
     },
-    errors::{
-        err_generic, error_generic, error_missing_effector, Error, Kind as ErrorKind, Result,
-    },
+    errors::{err_generic, error_generic, error_missing_effector, Kind as ErrorKind, Result},
+    extractor::Extractor,
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
     prelude::*,
-    tilde::Extractor,
     KnownKey, Value,
 };
 pub use base_expr::BaseExpr;
@@ -49,13 +47,12 @@ use super::{
     base_expr::Ranged,
     docs::{FnDoc, ModDoc},
     module::Manager,
-    Const, NodeId, NodeMeta,
+    warning, Const, NodeId, NodeMeta,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct UseRaw {
-    pub alias: Option<String>,
-    pub module: NodeId,
+    pub modules: Vec<(NodeId, Option<String>)>,
     pub(crate) mid: Box<NodeMeta>,
 }
 impl_expr_no_lt!(UseRaw);
@@ -82,21 +79,17 @@ impl<'script> ScriptRaw<'script> {
         self,
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Script<'script>> {
+        helper.enter_scope();
         let mut exprs = vec![];
 
         for e in self.exprs {
-            let range = e.meta().range;
             match e {
-                TopLevelExprRaw::Use(UseRaw { alias, module, .. }) => {
-                    let mid = Manager::load(&module).map_err(|err| match err {
-                        Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
-                            ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
-                            state,
-                        ),
-                        _ => err,
-                    })?;
-                    let alias = alias.unwrap_or_else(|| module.id.clone());
-                    helper.scope().add_module_alias(alias, mid);
+                TopLevelExprRaw::Use(UseRaw { modules, .. }) => {
+                    for (module, alias) in modules {
+                        let mid = Manager::load(&module)?;
+                        let alias = alias.unwrap_or_else(|| module.id.clone());
+                        helper.scope().add_module_alias(alias, mid);
+                    }
                 }
                 TopLevelExprRaw::Const(const_raw) => {
                     let c = const_raw.up(helper)?;
@@ -150,7 +143,7 @@ impl<'script> ScriptRaw<'script> {
                 .doc
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         });
-
+        helper.leave_scope()?;
         Ok(Script {
             mid: self.mid,
             exprs,
@@ -215,7 +208,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
             }
             ["little", "signed", "integer"] => (BytesDataType::SignedInteger, Endian::Little),
             other => {
-                return Err(err_generic(
+                return Err(error_generic(
                     &self,
                     &self,
                     &format!("Not a valid data type: '{}'", other.join("-")),
@@ -224,7 +217,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
         };
         let bits = if let Some(bits) = self.bits {
             if bits == 0 || bits > 64 {
-                return Err(err_generic(
+                return Err(error_generic(
                     &self,
                     &self,
                     &format!("negative bits or bits > 64 are are not allowed: {}", bits),
@@ -317,6 +310,12 @@ impl<'script> IdentRaw<'script> {
 impl<'script> ToString for IdentRaw<'script> {
     fn to_string(&self) -> String {
         self.id.to_string()
+    }
+}
+
+impl<'script, 'str> PartialEq<&'str str> for IdentRaw<'script> {
+    fn eq(&self, other: &&'str str) -> bool {
+        self.id == *other
     }
 }
 
@@ -476,6 +475,13 @@ impl<'script> Upable<'script> for ConstRaw<'script> {
     type Target = Const<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        if self.name.to_uppercase() != self.name {
+            helper.warn_with_scope(
+                self.extent(),
+                &"const's are canonically written in UPPER_CASE",
+                warning::Class::Consistency,
+            );
+        }
         let expr = self.expr.up(helper)?;
         let value = expr.try_into_value(helper)?;
         helper.add_const_doc(&self.name, self.comment.clone(), value.value_type());
@@ -757,7 +763,7 @@ impl<'script> Upable<'script> for MatchFnDefnRaw<'script> {
         let patterns = patterns
             .into_iter()
             .map(|mut c: PredicateClauseRaw<_>| {
-                if c.pattern != PatternRaw::Default {
+                if c.pattern != PatternRaw::DoNotCare {
                     let args = self.args.iter().enumerate();
                     let mut exprs: Vec<_> = args
                         .map(|(i, root)| {
@@ -949,7 +955,7 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
         let arglen = self.exprs.len();
         if (helper.is_open && argc < arglen) || (!helper.is_open && argc != arglen) {
             let m = format!("Wrong number of arguments {argc} != {arglen}");
-            return error_generic(&self, &self, &m);
+            return err_generic(&self, &self, &m);
         }
         let exprs = self.exprs.up(helper)?.into_iter().collect();
         helper.possible_leaf = was_leaf;
@@ -1357,14 +1363,12 @@ pub enum PatternRaw<'script> {
     Extract(TestExprRaw),
     /// we're forced to make this pub because of lalrpop
     DoNotCare,
-    /// we're forced to make this pub because of lalrpop
-    Default,
 }
 
 impl<'script> Upable<'script> for PatternRaw<'script> {
     type Target = Pattern<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PatternRaw::{Array, Assign, Default, DoNotCare, Expr, Extract, Record, Tuple};
+        use PatternRaw::{Array, Assign, DoNotCare, Expr, Extract, Record, Tuple};
         Ok(match self {
             //Predicate(pp) => Pattern::Predicate(pp.up(helper)?),
             Record(rp) => Pattern::Record(rp.up(helper)?),
@@ -1374,7 +1378,6 @@ impl<'script> Upable<'script> for PatternRaw<'script> {
             Assign(ap) => Pattern::Assign(ap.up(helper)?),
             Extract(e) => Pattern::Extract(Box::new(e.up(helper)?)),
             DoNotCare => Pattern::DoNotCare,
-            Default => Pattern::Default,
         })
     }
 }
@@ -1522,9 +1525,10 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
             });
             if duplicated {
                 helper.warn(
-                    self.mid.range,
                     self.mid.range.expand_lines(2),
+                    self.mid.range,
                     &format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of the extractor.", present),
+                    warning::Class::Behaviour
                 );
             }
         }
@@ -1539,9 +1543,10 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
             });
             if duplicated {
                 helper.warn(
-                    self.mid.range,
                     self.mid.range.expand_lines(2),
+                    self.mid.range,
                     &format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
+                    warning::Class::Behaviour
                 );
             }
         }
@@ -1664,10 +1669,10 @@ impl<'script> Upable<'script> for PathRaw<'script> {
             Local(p) => {
                 // Handle local constants
                 if helper.is_const_path(&p) {
-                    let id = p.root.id;
-                    let c: crate::ast::Const =
-                        helper.get(&NodeId::from(&id))?.ok_or("invalid constant")?;
-                    let mid = p.mid.box_with_name(&id);
+                    let c: crate::ast::Const = helper
+                        .get(&NodeId::from(&p.root))?
+                        .ok_or("invalid constant")?;
+                    let mid = p.mid.box_with_name(&p.root);
                     let var = helper.register_shadow_from_mid(&mid);
                     Path::Expr(ExprPath {
                         expr: Box::new(ImutExpr::literal(c.mid, c.value)),
@@ -1821,11 +1826,12 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
         let node_id = NodeId {
             module: self.module.iter().map(ToString::to_string).collect(),
             id: id.to_string(),
+            mid: mid.clone(),
         };
 
         let c: Const = helper.get(&node_id)?.ok_or_else(|| {
             let msg = format!("The constant {node_id} (absolute path) is not defined.",);
-            err_generic(&mid.range, &mid.range, &msg)
+            error_generic(&mid.range, &mid.range, &msg)
         })?;
         let var = helper.register_shadow_from_mid(&mid);
 
@@ -2072,7 +2078,31 @@ fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
 }
 
 const NO_DFLT: &str = "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.";
-const MULT_DFLT: &str = "A match statement with more then one default clause will never reach any but the first default clause.";
+const MULT_DFLT: &str = "Any but the first `case _` statement are unreachable and will be ignored.";
+
+// Checks for warnings in match arms
+fn check_patterns<Ex>(patterns: &[PredicateClause<Ex>], mid: &NodeMeta, helper: &mut Helper)
+where
+    Ex: Expression,
+{
+    let mut seen_default = false;
+
+    for p in patterns
+        .iter()
+        .filter(|p| p.pattern.is_default() && p.guard.is_none())
+    {
+        if seen_default {
+            helper.warn(mid.range, p.extent(), &MULT_DFLT, warning::Class::Behaviour);
+        } else {
+            seen_default = true;
+        }
+    }
+
+    if !seen_default {
+        helper.warn_with_scope(mid.range, &NO_DFLT, warning::Class::Behaviour);
+    };
+}
+
 impl<'script, Ex> Upable<'script> for MatchRaw<'script, Ex>
 where
     <Ex as Upable<'script>>::Target: Expression + 'script,
@@ -2086,18 +2116,11 @@ where
             .map(|v| v.up(helper))
             .collect::<Result<_>>()?;
 
-        let defaults = patterns
-            .iter()
-            .filter(|p| p.pattern.is_default() && p.guard.is_none())
-            .count();
-        match defaults {
-            0 => helper.warn_with_scope(self.mid.range, &NO_DFLT),
-            x if x > 1 => helper.warn_with_scope(self.mid.range, &MULT_DFLT),
-            _ => (),
-        };
+        check_patterns(&patterns, &self.mid, helper);
+
         // If the last statement is a global default we can simply remove it
         let default = if let Some(PredicateClause {
-            pattern: Pattern::Default,
+            pattern: Pattern::DoNotCare,
             guard: None,
             exprs,
             last_expr,
@@ -2208,6 +2231,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
         let node_id = NodeId {
             id: self.fun,
             module: self.module,
+            mid: self.mid.clone(),
         };
         let inner = self.mid.range;
         let outer = inner.expand_lines(3);
@@ -2221,6 +2245,9 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                 .map_err(|e| e.into_err(&outer, &inner, Some(helper.reg)))?;
             let args = self.args.up(helper)?.into_iter().collect();
             let mf = node_id.fqn();
+            if let Some((class, warning)) = invocable.warning() {
+                helper.warn(outer, inner, &warning, class);
+            }
             Ok(Invoke {
                 mid: self.mid.box_with_name(&mf),
                 node_id,
@@ -2232,7 +2259,32 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
 
             // of the form: [mod, mod1, name] - where the list of idents is effectively a fully qualified resource name
             if let Some(f) = helper.get::<FnDefn>(&node_id)? {
+                if let [Expr::Imut(
+                    ImutExpr::Invoke(Invoke {
+                        invocable: Invocable::Intrinsic(invocable),
+                        ..
+                    })
+                    | ImutExpr::Invoke1(Invoke {
+                        invocable: Invocable::Intrinsic(invocable),
+                        ..
+                    })
+                    | ImutExpr::Invoke2(Invoke {
+                        invocable: Invocable::Intrinsic(invocable),
+                        ..
+                    })
+                    | ImutExpr::Invoke3(Invoke {
+                        invocable: Invocable::Intrinsic(invocable),
+                        ..
+                    }),
+                )] = f.body.as_slice()
+                {
+                    if let Some((class, warning)) = invocable.warning() {
+                        helper.warn(outer, inner, &warning, class);
+                    }
+                }
+
                 let invocable = Invocable::Tremor(f.into());
+
                 let args = self.args.up(helper)?.into_iter().collect();
                 Ok(Invoke {
                     mid: self.mid.box_with_name(&node_id.fqn()),
@@ -2304,8 +2356,8 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             )
             .into());
         }
-        if let Some(warning) = invocable.warning() {
-            helper.warn_with_scope(self.extent(), &warning);
+        if let Some((class, warning)) = invocable.warning() {
+            helper.warn_with_scope(self.extent(), &warning, class);
         }
         let aggr_id = helper.aggregates.len();
         let args = self.args.up(helper)?.into_iter().collect();

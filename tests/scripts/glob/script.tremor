@@ -1,4 +1,4 @@
 match event of
   case foo = %{ test ~= glob|INFO*| } => foo
-  default => "ko"
+  case _ => "ko"
 end;

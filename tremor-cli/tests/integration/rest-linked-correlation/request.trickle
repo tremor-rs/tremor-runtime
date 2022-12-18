@@ -5,7 +5,7 @@ script
       let $correlation = event.correlation,
       let $request.headers["x-correlation"] = event.correlation,
       let event = patch event of erase "correlation" end
-    default =>
+    case _ =>
       let $request.headers["x-correlation"] = "nope"
   end;
   event

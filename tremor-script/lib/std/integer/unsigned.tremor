@@ -1,7 +1,7 @@
 ##! Unsigned integer constants
 
 ## Max signed value
-const max = 18446744073709551615;
+const MAX = 18446744073709551615;
  
 ## Minimal signed value
-const min = 0;
+const MIN = 0;

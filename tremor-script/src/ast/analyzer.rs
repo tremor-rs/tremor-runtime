@@ -53,7 +53,7 @@ impl<'script, Ex: Expression + 'script> Costly for PredicateClause<'script, Ex> 
 impl<'script> Costly for Pattern<'script> {
     fn cost(&self) -> u64 {
         match self {
-            Pattern::DoNotCare | Pattern::Default => Cost::FREE,
+            Pattern::DoNotCare => Cost::FREE,
             Pattern::Expr(_) => Cost::CONST,
             Pattern::Record(r) => r.cost(),
             Pattern::Array(a) => a.cost(),

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::ast::{
-    helper::raw::WindowName, module::Content, CreationalWith, DefinitionalArgs, WithExpr,
+    module::Content, query::raw::WindowName, CreationalWith, DefinitionalArgs, WithExpr,
 };
 
 use super::super::visitors::prelude::*;
@@ -108,6 +108,9 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         stop!(self.visit_window_defn(defn), self.leave_window_defn(defn));
         self.walk_creational_with(&mut defn.params)?;
         if let Some(script) = defn.script.as_mut() {
+            self.walk_script(script)?;
+        }
+        if let Some(script) = defn.tick_script.as_mut() {
             self.walk_script(script)?;
         }
         self.leave_window_defn(defn)

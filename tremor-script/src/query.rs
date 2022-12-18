@@ -18,7 +18,7 @@ use crate::{arena, errors::Result};
 use crate::{arena::Arena, highlighter::Highlighter};
 use crate::{ast::base_expr::Ranged, prelude::*};
 use crate::{
-    ast::{self, helper::Warning},
+    ast::{self, warning::Warning},
     lexer::Lexer,
 };
 use std::collections::BTreeSet;

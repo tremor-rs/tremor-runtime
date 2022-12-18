@@ -1,0 +1,8 @@
+Error: 
+    1 | define window w from tumbling
+    2 | state
+    3 |   null
+    4 | script
+    5 |   let event = 42;
+      |       ^^^^^^^^^^ Can not assign to `event` here
+    6 | end;

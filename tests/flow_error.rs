@@ -43,7 +43,6 @@ macro_rules! test_cases {
                 let mut file = file::open(deploy_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                println!("{}", &contents);
 
                 println!("Loading error: {}", err_file);
                 let mut file = file::open(err_file)?;
@@ -53,6 +52,7 @@ macro_rules! test_cases {
                 match parse(&contents) {
                     Err(e) => {
                         let got = Dumb::error_to_string(&e)?;
+                        println!("{}", got);
                         assert_eq!(err.trim(), got.trim());
                     }
                     _ =>{

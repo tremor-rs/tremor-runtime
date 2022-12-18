@@ -1,7 +1,5 @@
 use std::test;
-use tremor::system;
-use tremor::origin;
-use tremor::chash;
+use tremor::{system, origin, chash};
 
 test::suite({
   "name": "Tremor system library tests",

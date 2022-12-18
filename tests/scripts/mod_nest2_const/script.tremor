@@ -2,11 +2,11 @@ use beep as boop;
 
 mod a with
   mod b with
-    const c = 42;
-    fn d() with c end;
+    const C = 42;
+    fn d() with C end;
   end;
   fn e() with
-    [b::c, b::d()]
+    [b::C, b::d()]
   end;
 end;
 

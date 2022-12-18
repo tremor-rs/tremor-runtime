@@ -1,0 +1,11 @@
+Warning(performance): 
+    1 | use std::array;
+    2 | array::push([], event);
+      | ^^^^^^^^^^^^^^^^^^^^^^ `array::push(the_array, element)` can be replaced by `the_array + [element]` for better performance
+    3 | array::concatenate([], [event]);
+
+Warning(performance): 
+    1 | use std::array;
+    2 | array::push([], event);
+    3 | array::concatenate([], [event]);
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `array::concatenate(one_array, two_array)` can be replaced by `one_array + two_array` for better performance

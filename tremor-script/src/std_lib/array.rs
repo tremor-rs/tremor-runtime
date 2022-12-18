@@ -43,7 +43,10 @@ pub fn load(registry: &mut Registry) {
                 }
             )
         }))
-        .insert(tremor_const_fn! (array|push(_context, _input, _value) {
+        .insert(tremor_const_fn! (array|push(_context, _input, _value)[
+            warning::Class::Performance,
+            "`array::push(the_array, element)` can be replaced by `the_array + [element]` for better performance"
+        ] {
             _input.as_array().map_or_else(
                 ||Err(FunctionError::BadType{mfa: mfa("array", "push", 2)}),
                 |input| {
@@ -96,7 +99,10 @@ pub fn load(registry: &mut Registry) {
                 Some(v.clone())
             }).collect::<Vec<_>>()))
         }))
-        .insert(tremor_const_fn!(array|concatenate(_context, _left: Array, _right: Array) {
+        .insert(tremor_const_fn!(array|concatenate(_context, _left: Array, _right: Array)[
+            warning::Class::Performance,
+            "`array::concatenate(one_array, two_array)` can be replaced by `one_array + two_array` for better performance"
+        ] {
             let output: Vec<Value> = [_left.as_slice(), _right.as_slice()].concat();
             Ok(Value::from(output))
         }));

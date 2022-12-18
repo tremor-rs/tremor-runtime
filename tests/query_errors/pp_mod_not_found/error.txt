@@ -2,7 +2,7 @@ Error:
     1 | define script snot
     2 | script
     3 |   use foo as foo;
-      |   ^^^^^^^^^^^^^^ Module `foo` not found or not readable error in module path: 
+      |       ^^^ Module `foo` not found or not readable error in module path: 
                          - tests/query_errors/pp_mod_not_found/
                          - tremor-script/lib
     4 | 

@@ -1,2 +1,2 @@
 use std::integer::unsigned;
-unsigned::max * 2;
+unsigned::MAX * 2;

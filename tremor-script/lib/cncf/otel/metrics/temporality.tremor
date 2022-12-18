@@ -15,7 +15,7 @@
 ## conforming implementation will set the temporality to one
 ## of the valid enumeration values.
 ##
-const unspecified = 0;
+const UNSPECIFIED = 0;
 
 ## > `DELTA` is an `AggregationTemporality` for a metric aggregator which reports
 ## > changes since last report time. Successive metrics contain aggregation of
@@ -42,7 +42,7 @@ const unspecified = 0;
 ## >      number of requests received over the interval of time t_0+1 to
 ## >      t_0+2 with a value of 2.
 ##
-const delta = 1;
+const DELTA = 1;
 
 ## >  `CUMULATIVE` is an AggregationTemporality for a metric aggregator which
 ## >  reports changes since a fixed start time. This means that current values
@@ -80,6 +80,6 @@ const delta = 1;
 ## >  systems that do not use start_time to determine when the aggregation
 ## >  value was reset (e.g. Prometheus).
 ##
-const cumulative = 2;
+const CUMULATIVE = 2;
 
 

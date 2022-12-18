@@ -1,6 +1,6 @@
 fn twofn(n) with
   2 * n
 end;
-const two = twofn(1);
+const TWO = twofn(1);
 
-event + two
+event + TWO

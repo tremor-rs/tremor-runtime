@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::select::execute_select_and_having;
 use crate::{Event, EventId, EventIdGenerator, OpMeta};
 use beef::Cow;
-use std::borrow::Cow as SCow;
+use std::{borrow::Cow as SCow, convert::TryFrom};
 use tremor_common::{ids::OperatorId, stry};
 use tremor_script::{
     self,
-    ast::{AggrSlice, Aggregates, Consts, RunConsts, Select, WindowDefinition},
-    errors::Result,
+    ast::{AggrSlice, Aggregates, Consts, RunConsts, Script, Select, WindowDefinition},
+    errors::{err_generic, error_generic, Result},
     interpreter::{Env, LocalStack},
     prelude::*,
     Value, NO_AGGRS,
 };
-
-use super::select::execute_select_and_having;
 
 pub(crate) struct SelectCtx<'run, 'script, 'local> {
     pub(crate) select: &'run Select<'script>,
@@ -200,7 +199,7 @@ impl GroupWindow {
         &mut self,
         ctx: &mut SelectCtx,
         consts: RunConsts,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         events: &mut Vec<(Cow<'static, str>, Event)>,
         prev: Option<(bool, &Aggregates<'static>)>,
         mut can_remove: bool,
@@ -333,7 +332,7 @@ impl Group {
         &mut self,
         mut ctx: SelectCtx,
         consts: &mut Consts,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         events: &mut Vec<(Cow<'static, str>, Event)>,
     ) -> Result<bool> {
         // Set the group value for the exeuction
@@ -365,13 +364,13 @@ impl Group {
 pub trait Trait: std::fmt::Debug {
     fn on_event(
         &mut self,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions>;
     /// handle a tick with the current time in nanoseconds as `ns` argument
-    fn on_tick(&mut self, _ns: u64) -> Actions {
-        Actions::all_false()
+    fn on_tick(&mut self, _ns: u64) -> Result<Actions> {
+        Ok(Actions::all_false())
     }
     /// maximum number of groups to keep around simultaneously
     /// a value of `u64::MAX` allows as much simultaneous groups as possible
@@ -394,8 +393,9 @@ impl Window {
 
 #[derive(Debug, Clone)]
 pub enum Impl {
-    TumblingCountBased(TumblingOnNumber),
-    TumblingTimeBased(TumblingOnTime),
+    Count(TumblingOnNumber),
+    Time(TumblingOnTime),
+    State(TumblingOnState),
 }
 
 impl Impl {
@@ -405,8 +405,9 @@ impl Impl {
 
     pub(crate) fn reset(&mut self) {
         match self {
-            Self::TumblingTimeBased(w) => w.reset(),
-            Self::TumblingCountBased(w) => w.reset(),
+            Self::Time(w) => w.reset(),
+            Self::Count(w) => w.reset(),
+            Self::State(w) => w.reset(),
         }
     }
 }
@@ -414,39 +415,48 @@ impl Impl {
 impl Trait for Impl {
     fn on_event(
         &mut self,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
         match self {
-            Self::TumblingTimeBased(w) => w.on_event(data, ingest_ns, origin_uri),
-            Self::TumblingCountBased(w) => w.on_event(data, ingest_ns, origin_uri),
+            Self::Time(w) => w.on_event(data, ingest_ns, origin_uri),
+            Self::Count(w) => w.on_event(data, ingest_ns, origin_uri),
+            Self::State(w) => w.on_event(data, ingest_ns, origin_uri),
         }
     }
 
-    fn on_tick(&mut self, ns: u64) -> Actions {
+    fn on_tick(&mut self, ns: u64) -> Result<Actions> {
         match self {
-            Self::TumblingTimeBased(w) => w.on_tick(ns),
-            Self::TumblingCountBased(w) => w.on_tick(ns),
+            Self::Time(w) => w.on_tick(ns),
+            Self::Count(w) => w.on_tick(ns),
+            Self::State(w) => w.on_tick(ns),
         }
     }
 
     fn max_groups(&self) -> usize {
         match self {
-            Self::TumblingTimeBased(w) => w.max_groups(),
-            Self::TumblingCountBased(w) => w.max_groups(),
+            Self::Time(w) => w.max_groups(),
+            Self::Count(w) => w.max_groups(),
+            Self::State(w) => w.max_groups(),
         }
     }
 }
 
 impl From<TumblingOnNumber> for Impl {
     fn from(w: TumblingOnNumber) -> Self {
-        Self::TumblingCountBased(w)
+        Self::Count(w)
     }
 }
 impl From<TumblingOnTime> for Impl {
     fn from(w: TumblingOnTime) -> Self {
-        Self::TumblingTimeBased(w)
+        Self::Time(w)
+    }
+}
+
+impl From<TumblingOnState> for Impl {
+    fn from(w: TumblingOnState) -> Self {
+        Self::State(w)
     }
 }
 
@@ -476,7 +486,7 @@ pub struct No {}
 impl Trait for No {
     fn on_event(
         &mut self,
-        _data: &ValueAndMeta,
+        _data: &mut ValueAndMeta,
         _ingest_ns: u64,
         _origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
@@ -484,6 +494,128 @@ impl Trait for No {
     }
     fn max_groups(&self) -> usize {
         usize::MAX
+    }
+}
+
+impl<'v> TryFrom<&Value<'v>> for Actions {
+    type Error = tremor_script::errors::Error;
+    fn try_from(v: &Value<'v>) -> std::result::Result<Self, Self::Error> {
+        if let Some(emit) = v.as_bool() {
+            if emit {
+                Ok(Actions::all_true())
+            } else {
+                Ok(Actions::all_false())
+            }
+        } else if let Some(r) = v
+            .as_array()
+            .and_then(|a| a.iter().map(Value::as_bool).collect::<Option<Vec<bool>>>())
+        {
+            if let [emit, include] = *r.as_slice() {
+                Ok(Actions { include, emit })
+            } else {
+                Err("An array as return value needs to be a two-element array of booleans with the form `[emit, include]`".into())
+            }
+        } else {
+            Err(format!(
+                "Window returned `{}` this can't be used as a window reply",
+                v.encode()
+            )
+            .into())
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TumblingOnState {
+    pub(crate) initial_state: Value<'static>,
+    pub(crate) max_groups: usize,
+    pub(crate) script: Script<'static>,
+    pub(crate) tick_script: Option<Script<'static>>,
+    pub(crate) state: Value<'static>,
+}
+
+impl TumblingOnState {
+    pub(crate) fn reset(&mut self) {
+        self.state = self.initial_state.clone();
+    }
+    pub fn from_stmt(
+        state: Value<'static>,
+        max_groups: usize,
+        script: Script<'static>,
+        tick_script: Option<Script<'static>>,
+    ) -> Self {
+        Self {
+            initial_state: state.clone(),
+            max_groups,
+            script,
+            state,
+            tick_script,
+        }
+    }
+}
+
+impl Trait for TumblingOnState {
+    fn max_groups(&self) -> usize {
+        self.max_groups
+    }
+    fn on_event(
+        &mut self,
+        data: &mut ValueAndMeta,
+        ingest_ns: u64,
+        origin_uri: &Option<EventOriginUri>,
+    ) -> Result<Actions> {
+        let context = EventContext::new(ingest_ns, origin_uri.as_ref());
+        let (unwind_event, event_meta) = data.parts_mut();
+        let value = stry!(self.script.run(
+            &context,
+            AggrType::Emit,
+            unwind_event,    // event
+            &mut self.state, // state for the window
+            event_meta,      // $
+        ));
+        match value {
+            Return::Emit { value, .. } => {
+                Actions::try_from(&value).map_err(|e| error_generic(&self.script, &self.script, &e))
+            }
+            Return::EmitEvent { .. } => Actions::try_from(&*unwind_event)
+                .map_err(|e| error_generic(&self.script, &self.script, &e)),
+            Return::Drop { .. } => err_generic(
+                &self.script,
+                &self.script,
+                &"State based window didn't provide a boolean return",
+            ),
+        }
+    }
+
+    fn on_tick(&mut self, ns: u64) -> Result<Actions> {
+        let context = EventContext::new(ns, None);
+        let mut unwind_event = Value::const_null();
+        let mut event_meta = Value::const_null();
+        // We protect against altering event by ensuring event and meta
+        // arent accessed during 'compile' time
+        if let Some(tick_script) = &self.tick_script {
+            let value = tick_script.run(
+                &context,
+                AggrType::Emit,
+                &mut unwind_event, // event
+                &mut self.state,   // state for the window
+                &mut event_meta,   // $
+            )?;
+
+            match value {
+                Return::Emit { value, .. } => Actions::try_from(&value)
+                    .map_err(|e| error_generic(tick_script, tick_script, &e)),
+                Return::EmitEvent { .. } => Actions::try_from(&unwind_event)
+                    .map_err(|e| error_generic(tick_script, tick_script, &e)),
+                Return::Drop { .. } => err_generic(
+                    tick_script,
+                    tick_script,
+                    &"State based window didn't provide a boolean return",
+                ),
+            }
+        } else {
+            Ok(Actions::all_false())
+        }
     }
 }
 
@@ -495,6 +627,7 @@ pub struct TumblingOnTime {
     pub(crate) interval: u64,
     pub(crate) script: Option<WindowDefinition<'static>>,
 }
+
 impl TumblingOnTime {
     pub(crate) fn reset(&mut self) {
         self.next_window = None;
@@ -538,7 +671,7 @@ impl Trait for TumblingOnTime {
     }
     fn on_event(
         &mut self,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
@@ -567,12 +700,12 @@ impl Trait for TumblingOnTime {
         Ok(self.get_window_event(time))
     }
 
-    fn on_tick(&mut self, ns: u64) -> Actions {
+    fn on_tick(&mut self, ns: u64) -> Result<Actions> {
         if self.script.is_none() {
-            self.get_window_event(ns)
+            Ok(self.get_window_event(ns))
         } else {
             // we basically ignore ticks when we have a script with a custom timestamp
-            Actions::all_false()
+            Ok(Actions::all_false())
         }
     }
 }
@@ -612,7 +745,7 @@ impl Trait for TumblingOnNumber {
     }
     fn on_event(
         &mut self,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {

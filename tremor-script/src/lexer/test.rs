@@ -468,7 +468,7 @@ fn test_preprocessor() {
 
 #[test]
 fn test_test_literal_format_bug_regression() {
-    let snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
+    let snot = "match %{ test ~= base64|| } of case _ => \"badger\" end ".to_string();
 
     let mut res = String::new();
     for b in Lexer::new(&snot, arena::Index::default())

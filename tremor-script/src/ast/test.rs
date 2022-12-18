@@ -100,6 +100,7 @@ fn as_invoke() {
         node_id: NodeId {
             module: Vec::new(),
             id: "fun".to_string(),
+            mid: NodeMeta::dummy(),
         },
         invocable,
         args: Vec::new(),
@@ -119,6 +120,7 @@ fn as_invoke() {
         node_id: NodeId {
             module: Vec::new(),
             id: "fun".to_string(),
+            mid: NodeMeta::dummy(),
         },
         invocable: invocable2,
         args: Vec::new(),
@@ -191,7 +193,7 @@ fn replace_last_shadow_use() {
     };
     let pc = PredicateClause {
         mid: NodeMeta::dummy(),
-        pattern: Pattern::Default,
+        pattern: Pattern::DoNotCare,
         guard: None,
         exprs: vec![],
         last_expr: expr.clone(),

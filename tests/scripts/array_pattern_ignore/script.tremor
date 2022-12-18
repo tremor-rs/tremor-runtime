@@ -1,9 +1,9 @@
 let ignore = match [event] of
   case %[ _ ] => true
-  default => false
+  case _ => false
 end;
 let empty = match [] of
   case %[ _ ] => true
-  default => false
+  case _ => false
 end;
 [ignore, empty]

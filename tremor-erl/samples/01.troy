@@ -1,74 +1,71 @@
 define flow flow_01
 flow
-    use tremor::connectors;
-    use tremor::pipelines;
+  use tremor::{connectors, pipelines};
 
-    # not connected to anything on purpose
-    define connector outfile from file
-    with
-        metrics_interval_s = 1,
-        codec = "string",
-        postprocessors = ["separate"],
-        config = {
-            "mode": "truncate",
-            "path": "/tmp/tremor_eqc_outfile"
-        }
-    end;
+  # not connected to anything on purpose
+  define connector outfile from file
+  with
+    metrics_interval_s = 1,
+    codec = "string",
+    postprocessors = ["separate"],
+    config = {
+      "mode": "truncate",
+      "path": "/tmp/tremor_eqc_outfile"
+    }
+  end;
 
-    create connector metrics from connectors::metrics;
-    create connector console from connectors::console;
+  create connector metrics from connectors::metrics;
+  create connector console from connectors::console;
 
-    create pipeline passthrough from pipelines::passthrough;
+  create pipeline passthrough from pipelines::passthrough;
 
-    connect /connector/metrics to /pipeline/passthrough;
-    connect /pipeline/passthrough to /connector/console;
+  connect /connector/metrics to /pipeline/passthrough;
+  connect /pipeline/passthrough to /connector/console;
 end;
 
 define flow flow_02
 flow
+  use tremor::{connectors, pipelines};
 
-    use tremor::connectors;
-    use tremor::pipelines;
+  define connector infile from file
+  with
+    metrics_interval_s = 5,
+    codec = "string",
+    preprocessors = ["separate"],
+    config = {
+      "mode": "read",
+      "path": "README.md"
+    }
+  end;
 
-    define connector infile from file
-    with
-        metrics_interval_s = 5,
-        codec = "string",
-        preprocessors = ["separate"],
-        config = {
-            "mode": "read",
-            "path": "README.md"
-        }
-    end;
+  # this one should be in failed state
+  define connector non_existent_file from file
+  with
+    codec = "string",
+    preprocessors = ["separate"],
+    config = {
+      "mode": "read",
+      "path": "path/to/nowhere/i_do_no_exist.txt"
+    }
+  end;
 
-    # this one should be in failed state
-    define connector non_existent_file from file
-    with
-        codec = "string",
-        preprocessors = ["separate"],
-        config = {
-            "mode": "read",
-            "path": "path/to/nowhere/i_do_no_exist.txt"
-        }
-    end;
+  create connector infile;
+  create connector non_existent_file;
+  create connector console from connectors::console;
 
-    create connector infile;
-    create connector non_existent_file;
-    create connector console from connectors::console;
+  create pipeline pipe1 from pipelines::passthrough;
+  create pipeline pipe2 from pipelines::passthrough;
 
-    create pipeline pipe1 from pipelines::passthrough;
-    create pipeline pipe2 from pipelines::passthrough;
-
-    connect /connector/infile to /pipeline/pipe1;
-    connect /pipeline/pipe1 to /pipeline/pipe2;
-    connect /connector/non_existent_file to /pipeline/pipe2;
-    connect /pipeline/pipe2 to /connector/console;
+  connect /connector/infile to /pipeline/pipe1;
+  connect /pipeline/pipe1 to /pipeline/pipe2;
+  connect /connector/non_existent_file to /pipeline/pipe2;
+  connect /pipeline/pipe2 to /connector/console;
 
 end;
 
 define flow flow_03
 flow
-    define connector placeholder from stdio;
+  define connector placeholder from stdio;
 end;
 
 deploy flow flow_01;

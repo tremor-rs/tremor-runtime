@@ -12,6 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! The `msgpack` codec supports the [Msgpack](https://msgpack.org) binary format that.
+//!
+//! The format is structurally compatible with JSON.
+//!
+//! Message pack is typically significantly more compute efficient to process and requires less memory
+//! when compared to typical JSON processors.
+
 use super::prelude::*;
 use rmp_serde as rmps;
 

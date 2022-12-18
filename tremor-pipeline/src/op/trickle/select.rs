@@ -28,7 +28,7 @@ use tremor_common::stry;
 use tremor_script::{
     self,
     ast::{self, ImutExpr, RunConsts, SelectStmt},
-    errors::{error_generic, Result as TSResult},
+    errors::{err_generic, Result as TSResult},
     interpreter::{Env, LocalStack},
     prelude::*,
     utils::sorted_serialize,
@@ -288,7 +288,7 @@ impl Operator for Select {
                             // if we can't delete it check if we're having too many groups,
                             // if so, error.
                             if ctx.cardinality >= *max_groups {
-                                return error_generic(select.as_ref(), inner, &format!(
+                                return err_generic(select.as_ref(), inner, &format!(
                                         "Maxmimum amount of groups reached ({}). Ignoring group [{}]",
                                         max_groups,
                                         *max_groups + 1
@@ -342,7 +342,7 @@ impl Operator for Select {
         } = select;
         let mut res = EventAndInsights::default();
 
-        let data: ValueAndMeta = (Value::const_null(), Value::object()).into();
+        let mut data: ValueAndMeta = (Value::const_null(), Value::object()).into();
         let op_meta = OpMeta::default();
         let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
 
@@ -356,7 +356,7 @@ impl Operator for Select {
         let mut to_remove = vec![];
         for (group_str, g) in groups.iter_mut() {
             if let Some(w) = &mut g.windows {
-                let window_event = w.window.on_tick(ingest_ns);
+                let window_event = w.window.on_tick(ingest_ns)?;
                 let mut can_remove = window_event.emit;
 
                 if window_event.emit {
@@ -398,7 +398,7 @@ impl Operator for Select {
                         can_remove = next.on_event(
                             &mut ctx,
                             run,
-                            &data,
+                            &mut data,
                             &mut res.events,
                             Some((w.holds_data, &w.aggrs)),
                             can_remove,

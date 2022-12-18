@@ -2,7 +2,7 @@ match event of
   case %{ snot == "badger" } =>
     let event.if_you_wanna_be_my_lover = "you gotta get with my friends";
     let event.badger_is_snot = true
-  default =>
+  case _ =>
     let event.i_tell_you_what_i_want = "what I really, really want";
     let event.no_badger = "sad"
 end;

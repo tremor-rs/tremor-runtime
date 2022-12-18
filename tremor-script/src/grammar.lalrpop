@@ -102,8 +102,53 @@ ConfigDirective: (IdentRaw<'input>, ImutExprRaw<'input>) = {
 }
 
 Use: UseRaw = {
-    <start:@L> "use" <module:ModularTarget> <end:@L>  => UseRaw{module, alias: None, mid: NodeMeta::new_box(start, end)},
-    <start:@L> "use" <module:ModularTarget> "as" <alias:Ident> <end:@L> => UseRaw{module, alias: Some(alias.to_string()), mid: NodeMeta::new_box(start, end)},
+    <start:@L> "use" <modules:UseTarget> <end:@L>  => UseRaw{modules,  mid: NodeMeta::new_box(start, end)},
+}
+
+/// Module target
+UseTarget: Vec<(NodeId, Option<String>)> = {
+    <target:MaybeAliased> => vec![(NodeId::from(target.0), target.1.map(|a|a.to_string()))],
+    <start:@L> <m:ModPath> "::" <target:MaybeAliased> <end:@L> => vec![(NodeId{id: target.0.to_string(), module: m.iter().map(ToString::to_string).collect(),  mid: NodeMeta::new_box(start, end)}, target.1.map(|a|a.to_string()))],
+    <start:@L> <m:ModPath> "::" "{" <targets:TargetList> "}" <end:@L> => {
+        targets.into_iter().map(|(target, alias)| {
+            let (id, module) = if let Some((id, suffix)) = target.split_last() {
+                (id.to_string(), m.iter().chain(suffix.iter()).map(ToString::to_string).collect())
+            } else {
+                unreachable!("the use target is guaranteed to have at least one element")
+            };
+            (NodeId{id, module,  mid: NodeMeta::new_box(start, end)}, alias.map(|a|a.to_string()))
+        }).collect()
+    },
+}
+
+TargetList: Vec<(Vec<IdentRaw<'input>>, Option<IdentRaw<'input>>)> = {
+    <target:TargetElement> => target,
+    <target:TargetElement> "," <list:TargetList> => {
+        let mut list = list;
+        let mut target = target;
+        list.append(&mut target);
+        list
+    },
+}
+TargetElement: Vec<(Vec<IdentRaw<'input>>, Option<IdentRaw<'input>>)> = {
+    <target:MaybeAliased> => vec![(vec![target.0], target.1)],
+    <m:ModPath> "::" <target:MaybeAliased> => {
+        let mut m = m;
+        m.push(target.0);
+        vec![(m, target.1)]
+    },
+    <m:ModPath> "::" "{" <targets:TargetList> "}" => {
+        targets.into_iter().map(|(mut target, alias)| {
+            let mut m = m.clone();
+            m.append(&mut target);
+            (m, alias)
+        }).collect()
+    },
+}
+
+MaybeAliased: (IdentRaw<'input>, Option<IdentRaw<'input>>) = {
+    <target:Ident> => (target, None),
+    <target:Ident> "as" <alias:Ident> => (target, Some(alias)),
 }
 
 
@@ -185,7 +230,7 @@ WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
 /// Module target
 ModularTarget: NodeId = {
     <Ident> => NodeId::from(<>),
-    <m:ModPath> "::" <target:Ident> => NodeId{id: target.to_string(), module: m.iter().map(ToString::to_string).collect()},
+    <start:@L> <m:ModPath> "::" <target:Ident> <end:@L> => NodeId{id: target.to_string(), module: m.iter().map(ToString::to_string).collect(),  mid: NodeMeta::new_box(start, end)},
 }
 
   
@@ -327,8 +372,8 @@ Stmt: StmtRaw<'input> = {
 //// DEFINEs
 
 DefineWindow: WindowDefinitionRaw<'input> = {
-    <doc:(DocComment)?> <start:@L> "define" "window" <id:Ident> "from"  <kind:WindowKind> <params:CreationWith> <script:(EmbeddedScriptImut)?> "end" <end:@L> => {
-        WindowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, script, doc }
+    <doc:(DocComment)?> <start:@L> "define" "window" <id:Ident> "from"  <kind:WindowKind> <params:CreationWith> <state:(ScriptState)?> <named_script:(NamedScript)?> <script:(EmbeddedScriptContent)?> "end" <end:@L> => {
+        WindowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, script, doc, named_script, state }
     }
 }
 
@@ -485,10 +530,10 @@ GroupDefs_: Vec<GroupByRaw<'input>> = {
 }
 
 EmbeddedScriptImut: ScriptRaw<'input> = {
-    "script" <EmbeddedScriptContent> => <>,
+    "script" <EmbeddedScriptContentImut> => <>,
 }
 
-EmbeddedScriptContent: ScriptRaw<'input> = {
+EmbeddedScriptContentImut: ScriptRaw<'input> = {
     <start:@L> <expr:ExprImut> <end:@L> => ScriptRaw::new(NodeMeta::new_box(start, end), vec![TopLevelExprRaw::Expr(ExprRaw::Imut(expr))], None),
 }
 
@@ -501,8 +546,12 @@ OperatorKind: OperatorKindRaw = {
     <start:@L> <module:Ident> "::" <oper:Ident> <end:@L> => OperatorKindRaw { mid: NodeMeta::new_box(start, end), module:  module.id.to_string(), operation: oper.id.to_string() }
 }
 
+
 EmbeddedScript: ScriptRaw<'input> = {
-    "script" <start:@L> <exprs:TopLevelExprs> <end:@L> "end" => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, None),
+    <EmbeddedScriptContent> "end" => <>,
+}
+EmbeddedScriptContent: ScriptRaw<'input> = {
+    "script" <start:@L> <exprs:TopLevelExprs> <end:@L> => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, None),
 }
 
 Pipeline: (ConfigRaw<'input>, StmtsRaw<'input>) = {
@@ -805,8 +854,8 @@ FnCases: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
 }
 
 FnCaseDefault: PredicateClauseRaw<'input, ExprRaw<'input>> = {
-    <start:@L> "default" <exprs:Effectors> <end:@L> => {
-        PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, mid: NodeMeta::new_box(start, end)}
+    <start:@L> "case" "_" <exprs:Effectors> <end:@L> => {
+        PredicateClauseRaw { pattern: PatternRaw::DoNotCare, exprs, guard: None, mid: NodeMeta::new_box(start, end)}
     }
 }
 
@@ -1258,7 +1307,6 @@ Predicates: PredicatesRaw<'input, ExprRaw<'input>> = {
 /// A case statement
 PredicateClause: PredicateClauseRaw<'input, ExprRaw<'input>> = {
     <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, mid: NodeMeta::new_box(start, end) },
-    <start:@L> "default" <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, mid: NodeMeta::new_box(start, end) },
 }
 
 /// Effoectors aka (=>  ... )
@@ -1306,7 +1354,6 @@ CasePattern: PatternRaw<'input> = {
 /// A case statement
 PredicateClauseImut: PredicateClauseRaw<'input, ImutExprRaw<'input>> = {
     <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, mid: NodeMeta::new_box(start, end) },
-    <start:@L> "default" <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, mid: NodeMeta::new_box(start, end) },
 }
 
 /// Effoectors aka (=>  ... )

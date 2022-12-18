@@ -5,37 +5,37 @@
 ## > Unspecified. Do NOT use as default.
 ## > Implementations MAY assume SpanKind to be `INTERNAL` when receiving `UNSPECIFIED`.
 ##
-const unspecified = 0;
+const UNSPECIFIED = 0;
 
 ## > Indicates that the span represents an internal operation within an application,
 ## > as opposed to an operation happening at the boundaries. Default value.
 ##
-const internal = 1;
+const INTERNAL = 1;
 
 ## > Indicates that the span covers server-side handling of an RPC or other
 ## > remote network request.
 ##
-const server = 2;
+const SERVER = 2;
 
 ## > Indicates that the span describes a request to some remote service.
 ##
-const client = 3;
+const CLIENT = 3;
 
 ## Indicates that the span describes a producer sending a message to a broker.
 ## > Unlike `CLIENT` and `SERVER`, there is often no direct critical path latency relationship
 ## > between producer and consumer spans. A `PRODUCER` span ends when the message was accepted
 ## > by the broker while the logical processing of the message might span a much longer time.
 ##
-const producer = 4;
+const PRODUCER = 4;
 
 ## > Indicates that the span describes consumer receiving a message from a broker.
 ## > Like the `PRODUCER` kind, there is often no direct critical path latency relationship
 ## > between producer and consumer spans.
-const consumer = 5;
+const CONSUMER = 5;
 
 ## The `default` function returns the preferred default spankind if/when none is
 ## specified
 ##
 fn make_default() with
-  internal
+  INTERNAL
 end;

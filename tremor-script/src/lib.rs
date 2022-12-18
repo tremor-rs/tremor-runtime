@@ -44,6 +44,7 @@ pub mod deploy;
 pub mod docs;
 /// Errors
 pub mod errors;
+mod extractor;
 /// Grok implementation
 pub mod grok;
 /// Tremor Script highlighter
@@ -68,7 +69,6 @@ pub mod script;
 /// Self referential structs
 pub mod srs;
 mod std_lib;
-mod tilde;
 /// Utility functions
 pub mod utils;
 pub use srs::{EventPayload, ValueAndMeta};

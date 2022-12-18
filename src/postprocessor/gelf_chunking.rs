@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Splits the data using [GELF chunking protocol](https://docs.graylog.org/en/3.0/pages/gelf.html#chunking).
+
 use super::Postprocessor;
 use crate::errors::Result;
 
@@ -81,8 +83,8 @@ impl Postprocessor for Gelf {
 #[cfg(test)]
 mod test {
     use crate::errors::Result;
-    use crate::postprocessor::{self, Postprocessor};
-    use crate::preprocessor::{self, Preprocessor};
+    use crate::postprocessor::Postprocessor;
+    use crate::preprocessor::{self as pre, Preprocessor};
 
     #[test]
     fn simple_encode_decode() -> Result<()> {
@@ -91,12 +93,12 @@ mod test {
         let input_data = vec![
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
         ];
-        let mut encoder = postprocessor::Gelf {
+        let mut encoder = super::Gelf {
             id: 0,
             chunk_size: 20,
         };
 
-        let mut decoder = preprocessor::gelf::Gelf::default();
+        let mut decoder = pre::gelf_chunking::GelfChunking::default();
 
         let encoded_data = encoder.process(ingest_ns, egest_ns, &input_data)?;
         assert_eq!(encoded_data.len(), 3);

@@ -101,7 +101,11 @@ impl<'script> PartialEq for Invoke<'script> {
 
 impl<'script> fmt::Debug for Invoke<'script> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "fn {}", self.node_id.fqn())
+        f.debug_struct(&format!("fn {}", self.node_id.fqn()))
+            .field("mid", &self.mid)
+            .field("node_id", &self.node_id)
+            .field("argsc", &self.args.len())
+            .finish()
     }
 }
 

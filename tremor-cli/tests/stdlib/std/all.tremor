@@ -1,21 +1,23 @@
-use std::array;
-use std::base64;
-use std::binary;
-use std::datetime;
-use std::float;
-use std::integer;
-use std::json;
-use std::math;
-use std::path;
-use std::random;
-use std::range;
-use std::re;
-use std::record;
-use std::string;
-use std::test;
+use std::{
+  array,
+  base64,
+  binary,
+  datetime,
+  float,
+  integer,
+  json,
+  math,
+  path,
+  random,
+  range,
+  re,
+  record,
+  string,
+  test,
+  type,
+  url
+};
 use std::time::nanos;
-use std::type;
-use std::url;
 use tremor::system;
 
 fn as_string(arr) with
@@ -139,15 +141,23 @@ test::suite({
   "tests": [
     test::test({
       "name": "integer min",
-      "test": test::assert("integer min", integer::signed::min, -9223372036854775808)
+      "test": test::assert("integer signed min", integer::signed::MIN, -9_223_372_036_854_775_808)
     }),
     test::test({
       "name": "integer max",
-      "test": test::assert("integer max", integer::signed::max, 9223372036854775807)
+      "test": test::assert("integer signed max", integer::signed::MAX, 9_223_372_036_854_775_807)
+    }),
+    test::test({
+      "name": "integer min",
+      "test": test::assert("integer unsigned min", integer::unsigned::MIN, 0)
+    }),
+    test::test({
+      "name": "integer max",
+      "test": test::assert("integer unsignedmax", integer::unsigned::MAX, 18_446_744_073_709_551_615)
     }),
     test::test({
       "name": "integer parse",
-      "test": test::assert("integer max", integer::parse("42"), 42)
+      "test": test::assert("integer parse", integer::parse("42"), 42)
     }),
   ]
 });
@@ -362,19 +372,19 @@ test::suite({
     }),
     test::test({
       "name": "record extract 1",
-      "test": test::assert("record extract 1", record::`extract`({"a": 1}, ["c"]), {})
+      "test": test::assert("record extract 1", record::extract({"a": 1}, ["c"]), {})
     }),
     test::test({
       "name": "record extract 2",
-      "test": test::assert("record extract 2", record::`extract`({"a": 1}, ["a"]), {"a": 1})
+      "test": test::assert("record extract 2", record::extract({"a": 1}, ["a"]), {"a": 1})
     }),
     test::test({
       "name": "record combine 1",
-      "test": test::assert("record combine 1", record::`combine`({"a": 1}, {"a": 2}), {"a": 2})
+      "test": test::assert("record combine 1", record::combine({"a": 1}, {"a": 2}), {"a": 2})
     }),
     test::test({
       "name": "record combine 2",
-      "test": test::assert("record combine 2", record::`combine`({"a": 1}, {"b": 2}), {"a": 1, "b": 2})
+      "test": test::assert("record combine 2", record::combine({"a": 1}, {"b": 2}), {"a": 1, "b": 2})
     }),
     test::test({
       "name": "record rename 1",
