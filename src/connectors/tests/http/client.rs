@@ -34,7 +34,8 @@ use tide;
 use tide_rustls::TlsListener;
 use tremor_common::ports::IN;
 use tremor_pipeline::Event;
-use tremor_script::{literal, Value, ValueAndMeta};
+use tremor_script::ValueAndMeta;
+use tremor_value::{literal, Value};
 use value_trait::{Mutable, ValueAccess};
 
 /// Find free TCP host:port for use in test server endpoints
@@ -132,8 +133,8 @@ async fn rtt(
         "url": url.clone(),
         "method": "get",
         "mime_mapping": {
-            "application/json": "json",
-            "application/yaml": "yaml",
+            "application/json": {"name": "json", "config": {"mode": "sorted"}},
+            "application/yaml": {"name": "yaml"},
             "*/*": codec,
         },
     });

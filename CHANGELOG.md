@@ -9,6 +9,8 @@
 * Functions now can create warnings
 * Allow grouping of use with `use std::{m1, m2}`
 * Add `tremor` codec for tremor to tremor communication
+* Optimized buffer handling for json and binflux codec
+* Update HTTP connector to allow configured for mime codecs
 
 ### Fixes
 * Fix google pub sub default api endpoint
@@ -18,6 +20,7 @@
 * **all** std library constants are now uppercase
 * Remove `default` in `match of` and `fn of` and standardize on `case _`
 * `textual-length-prefix` pre and postprocessor are now named `textual-length-prefixed` for consistency in naming
+* `json-sorted` codec  is now part of the `json` codec with `mode: sorted`
 
 ## [0.13.0-rc.10]
 

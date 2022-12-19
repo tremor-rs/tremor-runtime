@@ -78,7 +78,8 @@ mod tests {
         let d = influx::decode(s, 0)
             .expect("failed to parse")
             .expect("failed to parse");
-        let b = BInflux::encode(&d)?;
+        let mut b = Vec::new();
+        BInflux::encode(&d, &mut b)?;
         let e = BInflux::decode(&b)?;
         assert_eq!(e, d);
         Ok(())
@@ -291,7 +292,8 @@ mod tests {
                 .expect("failed to decode");
             let expected: Value = case.1.clone();
             let got = decoded;
-            let bin = BInflux::encode(&expected)?;
+            let mut bin = Vec::new();
+            BInflux::encode(&expected, &mut bin)?;
             if got != expected {
                 println!("{} fails while decoding", &case.2);
                 assert_eq!(got.encode(), expected.encode());

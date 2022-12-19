@@ -1,0 +1,28 @@
+define flow test
+flow
+  use std::time::nanos;
+  define connector metronome from metronome
+  with
+    config = {
+      "interval": nanos::from_millis(1)
+    }
+  end;
+  define connector sorted from stdio 
+  with
+    codec = {"name": "json", "config":{"mode": "sorted"}}
+  end;
+  define connector exit from exit;
+  define pipeline identity
+  pipeline
+    select event from in into out;
+  end;
+  create connector metronome;
+  create connector exit;
+  create pipeline identity;
+  create connector sorted;
+  connect /connector/metronome to /pipeline/identity;
+  connect /pipeline/identity to /connector/exit;
+  connect /pipeline/identity to /connector/sorted;
+end;
+
+deploy flow test

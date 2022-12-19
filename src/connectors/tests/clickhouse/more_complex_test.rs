@@ -55,7 +55,7 @@ use clickhouse_rs::Pool;
 use testcontainers::{clients, core::Port, images::generic::GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
-use tremor_script::literal;
+use tremor_value::literal;
 
 use super::utils;
 use crate::{

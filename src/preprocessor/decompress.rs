@@ -50,7 +50,7 @@ use super::Preprocessor;
 use crate::Result;
 use simd_json::ValueAccess;
 use std::io::{self, Read};
-use tremor_script::Value;
+use tremor_value::Value;
 
 #[derive(Clone, Default, Debug)]
 struct Gzip {}

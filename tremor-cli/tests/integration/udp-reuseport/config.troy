@@ -5,7 +5,7 @@ flow
 
   define connector client from udp_client
   with
-    codec = "json-sorted",
+    codec = {"name": "json", "config": {"mode": "sorted"}},
     config = {
       "url": "127.0.0.1:22222",
       "socket_options": {

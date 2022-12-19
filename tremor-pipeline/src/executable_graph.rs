@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{fmt, fmt::Display};
-
 use crate::{
     common_cow,
     errors::Result,
@@ -24,8 +22,10 @@ use crate::{
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
+use std::{fmt, fmt::Display};
 use tremor_common::{ids::OperatorId, stry};
-use tremor_script::{ast::Helper, ast::Stmt, Value};
+use tremor_script::{ast::Helper, ast::Stmt};
+use tremor_value::Value;
 
 /// Configuration for a node
 #[derive(Debug, Clone, Default)]

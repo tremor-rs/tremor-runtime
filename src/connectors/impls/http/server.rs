@@ -17,6 +17,7 @@ use super::{
     utils::{FixedBodyReader, RequestId, StreamingBodyReader},
 };
 use crate::{
+    config::NameWithConfig,
     connectors::{
         prelude::*,
         spawn_task,
@@ -54,7 +55,7 @@ pub(crate) struct Config {
     /// custom codecs mapping from mime_type to custom codec name
     /// e.g. for handling `application/json` with the `binary` codec, if desired
     /// the mime type of `*/*` serves as a default / fallback
-    mime_mapping: Option<HashMap<String, String>>,
+    mime_mapping: Option<HashMap<String, NameWithConfig>>,
 }
 
 impl ConfigImpl for Config {}
@@ -283,7 +284,7 @@ impl Source for HttpServerSource {
                 .and_then(|t| self.codec_map.get_codec_name(t.as_str()))
                 .or_else(|| self.codec_map.get_codec_name("*/*"))
                 .cloned()
-                .unwrap_or_else(|| "binary".to_string());
+                .unwrap_or_else(|| "binary".into());
 
             SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
@@ -498,7 +499,7 @@ struct SinkResponse {
     res: Option<Response>,
     body_data: BodyData,
     tx: Sender<Response>,
-    codec_overwrite: Option<String>,
+    codec_overwrite: Option<NameWithConfig>,
 }
 
 impl SinkResponse {

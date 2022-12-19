@@ -7,7 +7,7 @@ flow
   # so it makes more sense to define them here
   define connector out_file from file
   with 
-    codec = "json-sorted",
+    codec = {"name": "json", "config": {"mode": "sorted"}},
     postprocessors = ["separate"],
     config = {
       "path": "out.log",

@@ -5,7 +5,7 @@ flow
 
   define connector server from tcp_server
   with
-    codec = "json-sorted",
+    codec = {"name": "json", "config": {"mode": "sorted"}},
     preprocessors = [
       "separate"
     ],

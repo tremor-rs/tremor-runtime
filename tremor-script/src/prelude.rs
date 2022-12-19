@@ -17,7 +17,6 @@ pub use crate::ast::base_expr::{BaseExpr, Ranged};
 pub use crate::ctx::{EventContext, EventOriginUri};
 pub use crate::interpreter::{AggrType, ExecOpts};
 pub use crate::Return;
-pub use crate::{Object, Value};
 pub use crate::{FALSE, NULL, TRUE};
 pub use simd_json::prelude::*;
 pub use tremor_value::prelude::*;

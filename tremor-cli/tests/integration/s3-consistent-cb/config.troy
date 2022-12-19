@@ -17,7 +17,7 @@ flow
 
   define connector s3 from s3_streamer
   with
-    codec = "json-sorted",
+    codec = {"name": "json", "config": {"mode": "sorted"}},
     postprocessors = [
       "separate"
     ],

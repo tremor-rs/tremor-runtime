@@ -49,10 +49,14 @@
 //!
 //! For **gauge** there is also the field `action` which might be `add` if the value was prefixed with a `+`, or `sub` if the value was prefixed with a `-`
 
+use std::io::Write;
+
 use super::prelude::*;
 
-#[derive(Clone)]
-pub struct StatsD {}
+#[derive(Clone, Default, Debug)]
+pub struct StatsD {
+    buf: Vec<u8>,
+}
 
 impl Codec for StatsD {
     fn name(&self) -> &str {
@@ -68,7 +72,10 @@ impl Codec for StatsD {
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
-        encode(data)
+        encode(data, &mut self.buf)?;
+        let v = self.buf.clone();
+        self.buf.clear();
+        Ok(v)
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
@@ -76,45 +83,44 @@ impl Codec for StatsD {
     }
 }
 
-fn encode(value: &Value) -> Result<Vec<u8>> {
+fn encode(value: &Value, r: &mut impl Write) -> Result<()> {
     let mut itoa_buf = itoa::Buffer::new();
     let mut ryu_buf = ryu::Buffer::new();
 
-    let mut r = Vec::with_capacity(512);
-    r.extend_from_slice(
+    r.write_all(
         value
             .get_str("metric")
             .ok_or(ErrorKind::InvalidStatsD)?
             .as_bytes(),
-    );
+    )?;
     let t = value.get_str("type").ok_or(ErrorKind::InvalidStatsD)?;
     let val = value.get("value").ok_or(ErrorKind::InvalidStatsD)?;
     if !val.is_number() {
         return Err(ErrorKind::InvalidStatsD.into());
     };
 
-    r.push(b':');
+    r.write_all(b":")?;
     if t == "g" {
         match value.get_str("action") {
-            Some("add") => r.push(b'+'),
-            Some("sub") => r.push(b'-'),
+            Some("add") => r.write_all(b"+")?,
+            Some("sub") => r.write_all(b"-")?,
             _ => (),
         }
     };
 
-    r.extend_from_slice(val.encode().as_bytes());
-    r.push(b'|');
-    r.extend_from_slice(t.as_bytes());
+    r.write_all(val.encode().as_bytes())?;
+    r.write_all(b"|")?;
+    r.write_all(t.as_bytes())?;
 
     if let Some(n) = value.get_u64("sample_rate") {
-        r.extend_from_slice(b"|@");
-        r.extend_from_slice(itoa_buf.format(n).as_bytes());
+        r.write_all(b"|@")?;
+        r.write_all(itoa_buf.format(n).as_bytes())?;
     } else if let Some(n) = value.get_f64("sample_rate") {
-        r.extend_from_slice(b"|@");
-        r.extend_from_slice(ryu_buf.format(n).as_bytes());
+        r.write_all(b"|@")?;
+        r.write_all(ryu_buf.format(n).as_bytes())?;
     }
 
-    Ok(r)
+    Ok(())
 }
 
 fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
@@ -220,7 +226,8 @@ mod test {
 
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded.as_slice(), data);
     }
     // glork:320|ms
@@ -235,7 +242,8 @@ mod test {
 
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -251,7 +259,8 @@ mod test {
 
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -267,13 +276,14 @@ mod test {
 
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
     #[test]
     fn horst() {
-        let mut c = StatsD {};
+        let mut c = StatsD::default();
         let mut data = b"horst:42.23|h".to_vec();
 
         let parsed = c
@@ -304,7 +314,8 @@ mod test {
 
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -320,7 +331,8 @@ mod test {
 
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -336,7 +348,8 @@ mod test {
 
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -344,14 +357,20 @@ mod test {
     fn bench() {
         let data = b"foo:1620649445.3351967|h";
         let m = decode(data, 0).expect("failed to decode");
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut res = Vec::new();
+        encode(&m, &mut res).expect("failed to encode");
+        assert_eq!(&data[..], res);
 
         let data = b"foo1:12345|c";
         let m = decode(data, 0).expect("failed to decode");
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut res = Vec::new();
+        encode(&m, &mut res).expect("failed to encode");
+        assert_eq!(&data[..], res);
 
         let data = b"foo2:1234567890|c";
         let m = decode(data, 0).expect("failed to decode");
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut res = Vec::new();
+        encode(&m, &mut res).expect("failed to encode");
+        assert_eq!(&data[..], res);
     }
 }

@@ -15,6 +15,7 @@
 use super::*;
 use crate::{registry, CustomFn, NodeMeta};
 use matches::assert_matches;
+use tremor_value::Object;
 
 fn v(s: &'static str) -> ImutExpr<'static> {
     ImutExpr::literal(NodeMeta::dummy(), Value::from(s))

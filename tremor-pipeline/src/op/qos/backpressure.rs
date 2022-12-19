@@ -238,11 +238,10 @@ impl Operator for Backpressure {
 
 #[cfg(test)]
 mod test {
-    use tremor_common::ids::Id;
-
-    use crate::SignalKind;
-
     use super::*;
+    use crate::SignalKind;
+    use tremor_common::ids::Id;
+    use tremor_value::Object;
 
     #[test]
     fn pass_wo_error() {

@@ -27,13 +27,15 @@ use byteorder::{ByteOrder, NetworkEndian, ReadBytesExt, WriteBytesExt};
 use halfbrown::HashMap;
 use simd_json::StaticNode;
 
-#[derive(Clone, Default, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// Tremor to Tremor codec
+#[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tremor {
-    max_buf_size: usize,
+    buf: Vec<u8>,
 }
 
 type DefaultByteOrder = NetworkEndian;
 
+/// Tremor codec error
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Error {
     /// Invalid data
@@ -261,20 +263,14 @@ impl Codec for Tremor {
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
-        let mut dst = Vec::with_capacity(self.max_buf_size);
-        Self::encode(data, &mut dst)?;
-        if dst.len() > self.max_buf_size {
-            self.max_buf_size = dst.len();
-        }
-        Ok(dst)
-    }
-
-    fn encode_into(&mut self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
-        Self::encode(data, dst)
+        Self::encode(data, &mut self.buf)?;
+        let res = self.buf.clone();
+        self.buf.clear();
+        Ok(res)
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
-        Box::new(*self)
+        Box::new(self.clone())
     }
 }
 

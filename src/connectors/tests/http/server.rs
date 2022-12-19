@@ -105,7 +105,7 @@ async fn http_server_test() -> Result<()> {
         |req_data| {
             let value = literal!({
                 "value": req_data.value().clone_static(),
-                "meta": req_data.meta().get("http_server").get("request").map(tremor_script::Value::clone_static)
+                "meta": req_data.meta().get("http_server").get("request").map(tremor_value::Value::clone_static)
             });
             let meta = literal!({
                 "http_server": {
@@ -133,7 +133,7 @@ async fn http_server_test() -> Result<()> {
             |req_data| {
                 let value = literal!({
                     "value": req_data.value().clone_static(),
-                    "meta": req_data.meta().get("http_server").get("request").map(tremor_script::Value::clone_static)
+                    "meta": req_data.meta().get("http_server").get("request").map(tremor_value::Value::clone_static)
                 });
                 let meta = literal!({
                     "http_server": {
@@ -198,7 +198,7 @@ async fn http_server_test() -> Result<()> {
         |req_data| {
             let value = literal!({
                 "value": req_data.value().clone_static(),
-                "meta": req_data.meta().get("http_server").get("request").map(tremor_script::Value::clone_static)
+                "meta": req_data.meta().get("http_server").get("request").map(tremor_value::Value::clone_static)
             });
             let meta = literal!({
                 "http_server": {

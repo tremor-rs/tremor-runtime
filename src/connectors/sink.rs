@@ -23,7 +23,6 @@ pub(crate) mod single_stream_sink;
 
 pub(crate) use self::channel_sink::SinkMeta;
 use super::{utils::metrics::SinkReporter, CodecReq};
-use crate::codec::{self, Codec};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
 };
@@ -33,6 +32,10 @@ use crate::errors::Result;
 use crate::pipeline;
 use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocessors};
 use crate::primerge::PriorityMerge;
+use crate::{
+    codec::{self, Codec},
+    config::NameWithConfig,
+};
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
@@ -508,7 +511,7 @@ impl EventSerializer {
         value: &Value,
         ingest_ns: u64,
         stream_id: u64,
-        codec_overwrite: Option<&String>,
+        codec_overwrite: Option<&NameWithConfig>,
     ) -> Result<Vec<Vec<u8>>> {
         if stream_id == DEFAULT_STREAM_ID {
             // no codec_overwrite for the default stream
@@ -527,7 +530,7 @@ impl EventSerializer {
                 Entry::Vacant(entry) => {
                     // codec overwrite only considered for new streams
                     let codec = match codec_overwrite {
-                        Some(codec) => codec::resolve(&codec.into()),
+                        Some(codec) => codec::resolve(codec),
                         None => codec::resolve(&self.codec_config),
                     }?;
                     let pps = make_postprocessors(self.postprocessor_configs.as_slice())?;

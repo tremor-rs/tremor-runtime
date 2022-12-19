@@ -16,7 +16,10 @@ use super::{
     client,
     utils::{FixedBodyReader, RequestId, StreamingBodyReader},
 };
-use crate::connectors::{prelude::*, utils::mime::MimeCodecMap};
+use crate::{
+    config::NameWithConfig,
+    connectors::{prelude::*, utils::mime::MimeCodecMap},
+};
 use async_std::channel::{unbounded, Sender};
 use either::Either;
 use http_types::{
@@ -40,7 +43,7 @@ pub(crate) struct HttpRequestBuilder {
     request_id: RequestId,
     request: Option<Request>,
     body_data: BodyData,
-    codec_overwrite: Option<String>,
+    codec_overwrite: Option<NameWithConfig>,
 }
 
 #[derive(Clone)]
@@ -270,7 +273,7 @@ impl HttpRequestBuilder {
 pub(crate) fn consolidate_mime(
     header_content_type: Option<Mime>,
     codec_map: &MimeCodecMap,
-) -> (Option<String>, Option<Mime>) {
+) -> (Option<NameWithConfig>, Option<Mime>) {
     let codec_overwrite = if let Some(header_content_type) = &header_content_type {
         codec_map.get_codec_name(header_content_type.essence())
     } else {
@@ -279,7 +282,7 @@ pub(crate) fn consolidate_mime(
     .cloned();
     let codec_content_type = codec_overwrite
         .as_ref()
-        .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
+        .and_then(|codec| codec_map.get_mime_type(codec.name.as_str()))
         .and_then(|mime| Mime::from_str(mime).ok());
     let content_type = Some(
         header_content_type

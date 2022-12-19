@@ -23,7 +23,7 @@ use tremor_script::{
     errors::{err_generic, error_generic, Result},
     interpreter::{Env, LocalStack},
     prelude::*,
-    Value, NO_AGGRS,
+    NO_AGGRS,
 };
 
 pub(crate) struct SelectCtx<'run, 'script, 'local> {
