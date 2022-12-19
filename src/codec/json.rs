@@ -72,8 +72,8 @@ impl<S: Sorting> Default for Json<S> {
 
 pub(crate) fn from_config(config: Option<&Value>) -> Result<Box<dyn Codec>> {
     match config.get_str("mode") {
-        Some("sorted") => Ok(Box::new(Json::<Sorted>::default())),
-        None | Some("unsorted") => Ok(Box::new(Json::<Unsorted>::default())),
+        Some("sorted") => Ok(Box::<Json<Sorted>>::default()),
+        None | Some("unsorted") => Ok(Box::<Json<Unsorted>>::default()),
         Some(mode) => Err(format!(
             "Unknown json codec mode: {}, can only be one of `sorted` or `unsorted`",
             mode
