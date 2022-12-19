@@ -19,16 +19,24 @@
 //! Deserialization supports minified and fat JSON. Duplicate keys are not preserved, consecutive duplicate keys overwrite previous ones.
 //!
 //! Serialization supports minified JSON only.
-
-use std::{cmp::max, marker::PhantomData};
+//!
+//! The codec can be configured with a mode, either `sorted` or `unsorted`. The default is `unsorted` as it is singnificantly faster, `sorted` json is only needed in testing situations where the key order in maps matters for compairson.
 
 use super::prelude::*;
+use std::{cmp::max, marker::PhantomData};
 use tremor_script::utils::sorted_serialize;
 use tremor_value::AlignedBuf;
 
 /// Sorting for JSON
 pub trait Sorting: Sync + Send + Copy + Clone + 'static {
     const SORTED: bool;
+}
+
+/// Sorted
+#[derive(Clone, Copy, Debug)]
+pub struct Sorted {}
+impl Sorting for Sorted {
+    const SORTED: bool = true;
 }
 
 /// Unsorted
@@ -42,6 +50,7 @@ pub struct Json<S: Sorting> {
     _phantom: PhantomData<S>,
     input_buffer: AlignedBuf,
     string_buffer: Vec<u8>,
+    data_buf: Vec<u8>,
 }
 
 impl<S: Sorting> Clone for Json<S> {
@@ -56,7 +65,20 @@ impl<S: Sorting> Default for Json<S> {
             _phantom: PhantomData::default(),
             input_buffer: AlignedBuf::with_capacity(1024),
             string_buffer: vec![0u8; 1024],
+            data_buf: Vec::new(),
         }
+    }
+}
+
+pub(crate) fn from_config(config: Option<&Value>) -> Result<Box<dyn Codec>> {
+    match config.get_str("mode") {
+        Some("sorted") => Ok(Box::new(Json::<Sorted>::default())),
+        None | Some("unsorted") => Ok(Box::new(Json::<Unsorted>::default())),
+        Some(mode) => Err(format!(
+            "Unknown json codec mode: {}, can only be one of `sorted` or `unsorted`",
+            mode
+        )
+        .into()),
     }
 }
 
@@ -92,18 +114,15 @@ impl<S: Sorting> Codec for Json<S> {
         .map(Some)
         .map_err(Error::from)
     }
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         if S::SORTED {
             Ok(sorted_serialize(data)?.into_bytes())
         } else {
-            let mut v = Vec::with_capacity(1024);
-            self.encode_into(data, &mut v)?;
+            data.write(&mut self.data_buf)?;
+            let v = self.data_buf.clone();
+            self.data_buf.clear();
             Ok(v)
         }
-    }
-    fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
-        data.write(dst)?;
-        Ok(())
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
@@ -153,26 +172,11 @@ mod test {
     fn test_json_codec_sorted() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
 
-        let mut codec = Json::<crate::codec::json_sorted::Sorted>::default();
+        let mut codec = Json::<Sorted>::default();
 
         let mut as_raw = codec.encode(&seed)?;
         assert!(codec.decode(as_raw.as_mut_slice(), 0)?.is_some());
 
-        Ok(())
-    }
-
-    #[test]
-    fn encode_into() -> Result<()> {
-        let value = literal!({"snot": ["badger", null, false, 1.5, 42]});
-        let codec: Box<dyn Codec> = Box::new(Json::<Unsorted>::default());
-        println!("{codec} {codec:?}"); // for coverage
-
-        let mut buf = vec![];
-        codec.encode_into(&value, &mut buf)?;
-        assert_eq!(
-            "{\"snot\":[\"badger\",null,false,1.5,42]}".to_string(),
-            String::from_utf8_lossy(&buf)
-        );
         Ok(())
     }
 
@@ -192,7 +196,7 @@ mod test {
     #[test]
     fn duplicate_keys_sorted() -> Result<()> {
         let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
-        let mut codec = Json::<crate::codec::json_sorted::Sorted>::default();
+        let mut codec = Json::<Sorted>::default();
         let res = codec.decode(input.as_mut_slice(), 0)?;
         assert_eq!(Some(literal!({"key": 2})), res); // duplicate keys are deduplicated with last-key-wins strategy
         let value = res.expect("No value");

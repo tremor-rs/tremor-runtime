@@ -8,8 +8,8 @@ flow
     config = {
       "url": "http://localhost:65535/",
       "mime_mapping": {
-        "application/json": "json-sorted",
-        "*/*": "json-sorted"
+        "application/json": {"name": "json", "config": {"mode": "sorted"}},
+        "*/*": {"name": "json", "config": {"mode": "sorted"}}
       }
     }
   end;
@@ -51,8 +51,8 @@ flow
       },
       "timeout": nanos::from_seconds(10),
       "mime_mapping": {
-        "application/json": "json-sorted",
-        "*/*": "json-sorted"
+        "application/json": {"name": "json", "config": {"mode": "sorted"}},
+        "*/*": {"name": "json", "config": {"mode": "sorted"}}
       }
     }
   end;

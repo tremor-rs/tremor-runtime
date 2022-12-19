@@ -83,6 +83,39 @@ pub struct NameWithConfig {
     pub(crate) config: Option<Value<'static>>,
 }
 
+impl<'v> serde::Deserialize<'v> for NameWithConfig {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'v>,
+    {
+        // This makes little sense for some reason having three tuple variants is required
+        // where two with optional config should be enough.
+        // They are in the tests but here they are not and we couldn't figure out why :.(
+        #[derive(Deserialize, Debug)]
+        #[serde(bound(deserialize = "'de: 'v, 'v: 'de"), untagged)]
+        enum Variants<'v> {
+            // json: "json"
+            Name(String),
+            // json: { "name": "json", "config": { ... } }
+            NameAndConfig { name: String, config: Value<'v> },
+            // json: { "name": "json" }
+            NameAndNoConfig { name: String },
+        }
+
+        let var = Variants::deserialize(deserializer)?;
+
+        match var {
+            Variants::NameAndConfig { name, config } => Ok(NameWithConfig {
+                name,
+                config: Some(config.into_static()),
+            }),
+            Variants::NameAndNoConfig { name } | Variants::Name(name) => {
+                Ok(NameWithConfig { name, config: None })
+            }
+        }
+    }
+}
+
 impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
     type Error = crate::errors::Error;
 
@@ -110,10 +143,12 @@ impl From<&str> for NameWithConfig {
 }
 impl From<&String> for NameWithConfig {
     fn from(name: &String) -> Self {
-        Self {
-            name: name.clone(),
-            config: None,
-        }
+        name.clone().into()
+    }
+}
+impl From<String> for NameWithConfig {
+    fn from(name: String) -> Self {
+        Self { name, config: None }
     }
 }
 
@@ -196,7 +231,15 @@ impl Connector {
             ConnectorDefinition::CODEC,
             ValueType::String,
             connector_alias,
-        )?;
+        )
+        .or_else(|_| {
+            validate_type(
+                connector_config,
+                ConnectorDefinition::CODEC,
+                ValueType::Object,
+                connector_alias,
+            )
+        })?;
         validate_type(
             connector_config,
             ConnectorDefinition::CONFIG,
@@ -275,6 +318,9 @@ pub struct Binding {
 
 #[cfg(test)]
 mod tests {
+    use halfbrown::HashMap;
+    use serde::Deserialize;
+
     use super::*;
     use crate::{errors::Result, system::flow};
 
@@ -340,5 +386,53 @@ mod tests {
         let res = Connector::from_config(&id, "fancy_schmancy".into(), &config);
         assert!(res.is_err());
         assert_eq!(String::from("Invalid Definition for connector \"flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
+    }
+
+    #[test]
+    fn name_with_config() {
+        let v = literal!({"name": "json", "config": {"mode": "sorted"}});
+        let nac = NameWithConfig::deserialize(v).expect("could structurize two element struct");
+        assert_eq!(nac.name, "json");
+        assert!(nac.config.as_object().is_some());
+        let v = literal!({"name": "yaml"});
+        let nac = NameWithConfig::deserialize(v).expect("could structurize one element struct");
+        assert_eq!(nac.name, "yaml");
+        assert_eq!(nac.config, None);
+        let v = literal!("name");
+        let nac = NameWithConfig::deserialize(v).expect("could structurize string");
+        assert_eq!(nac.name, "name");
+        assert_eq!(nac.config, None);
+    }
+
+    #[test]
+    fn name_with_config_in_a_hatemap() {
+        let codec = "json";
+        let data = literal!( {
+            "application/json": {"name": "json", "config": {"mode": "sorted"}},
+            "application/yaml": {"name": "yaml"},
+            "*/*": codec,
+        });
+        let nac = HashMap::<String, NameWithConfig>::deserialize(data)
+            .expect("could structurize two element struct");
+
+        assert_eq!(nac.len(), 3);
+    }
+
+    #[test]
+    fn name_with_config_in_a_hatemap_in_struct() {
+        #[derive(Deserialize, Debug, Clone)]
+        #[serde(deny_unknown_fields)]
+        struct Config {
+            mime_mapping: Option<HashMap<String, NameWithConfig>>,
+        }
+        let codec = "json";
+        let data = literal!({ "mime_mapping": {
+            "application/json": {"name": "json", "config": {"mode": "sorted"}},
+            "application/yaml": {"name": "yaml"},
+            "*/*": codec,
+        }});
+        let nac = Config::deserialize(data).expect("could structurize two element struct");
+
+        assert_eq!(nac.mime_mapping.map(|h| h.len()).unwrap_or_default(), 3);
     }
 }

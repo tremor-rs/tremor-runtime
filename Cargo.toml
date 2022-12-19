@@ -96,8 +96,7 @@ pin-project-lite = "0.2"
 rand = "0.8.5"
 regex = "1.7"
 rmp-serde = "1.1"
-serde = "1"
-serde_derive = "1"
+serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 simd-json = { version = "0.7", features = ["known-key"] }
 simd-json-derive = "0.7"

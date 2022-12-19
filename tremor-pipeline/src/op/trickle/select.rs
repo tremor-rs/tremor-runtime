@@ -32,8 +32,9 @@ use tremor_script::{
     interpreter::{Env, LocalStack},
     prelude::*,
     utils::sorted_serialize,
-    Value, NO_AGGRS,
+    NO_AGGRS,
 };
+use tremor_value::Value;
 
 #[derive(Debug)]
 pub(crate) struct Select {

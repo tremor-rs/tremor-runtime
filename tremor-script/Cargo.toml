@@ -50,8 +50,7 @@ matches = "0.1.9"
 percent-encoding = "2.1"
 rand = { version = "0.8", features = ["small_rng"] }
 regex = "1"
-serde = "1.0"
-serde_derive = "1.0"
+serde = { version = "1", features = ["derive"] }
 simd-json = { version = "0.7", features = ["known-key"] }
 simd-json-derive = "0.7"
 sketches-ddsketch = "0.2.0"

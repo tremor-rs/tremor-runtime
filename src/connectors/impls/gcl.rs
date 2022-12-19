@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use rand::Rng;
-use tremor_script::{tremor_fn, Registry, Value};
+use tremor_script::{tremor_fn, Registry};
+use tremor_value::Value;
 
 pub(crate) mod writer;
 

@@ -26,9 +26,11 @@
 )]
 
 #[macro_use]
-extern crate serde_derive;
-#[macro_use]
 extern crate log;
+
+#[macro_use]
+extern crate serde;
+
 use crate::errors::{ErrorKind, Result};
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_std::task::block_on;

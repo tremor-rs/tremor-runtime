@@ -49,11 +49,8 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
                     visitor.visit_string(s.into_owned())
                 }
             }
-            Value::Array(a) => visitor.visit_seq(Array(a.iter())),
-            Value::Object(o) => visitor.visit_map(ObjectAccess {
-                i: o.iter(),
-                v: &Value::Static(StaticNode::Null),
-            }),
+            Value::Array(a) => visitor.visit_seq(Array(a.into_iter())),
+            Value::Object(o) => visitor.visit_map(ObjectAccess::new(o.into_iter())),
             Value::Bytes(b) => visitor.visit_bytes(&b),
         }
     }
@@ -82,11 +79,8 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
     {
         match self {
             // Give the visitor access to each element of the sequence.
-            Value::Array(a) => visitor.visit_seq(Array(a.iter())),
-            Value::Object(o) => visitor.visit_map(ObjectAccess {
-                i: o.iter(),
-                v: &Value::Static(StaticNode::Null),
-            }),
+            Value::Array(a) => visitor.visit_seq(Array(a.into_iter())),
+            Value::Object(o) => visitor.visit_map(ObjectAccess::new(o.into_iter())),
             _ => Err(Error::ExpectedMap),
         }
     }
@@ -178,11 +172,7 @@ impl<'de> VariantAccess<'de> for VariantDeserializer<'de> {
     {
         match self.value {
             Some(value) => seed.deserialize(value),
-            None => Err(Error::Serde("expected newtype variant".to_string()))
-            // None => Err(serde::de::Error::invalid_type(
-            //     Unexpected::UnitVariant,
-            //     &"newtype variant",
-            // )),
+            None => Err(Error::Serde("expected newtype variant".to_string())),
         }
     }
 
@@ -195,7 +185,7 @@ impl<'de> VariantAccess<'de> for VariantDeserializer<'de> {
                 if v.is_empty() {
                     visitor.visit_unit()
                 } else {
-                    visitor.visit_seq(Array(v.iter()))
+                    visitor.visit_seq(Array(v.into_iter()))
                 }
             }
             Some(_) | None => Err(Error::Serde("expected tuple variant".to_string())),
@@ -211,20 +201,17 @@ impl<'de> VariantAccess<'de> for VariantDeserializer<'de> {
         V: Visitor<'de>,
     {
         match self.value {
-            Some(Value::Object(v)) => visitor.visit_map(ObjectAccess {
-                i: v.iter(),
-                v: &Value::Static(StaticNode::Null),
-            }),
+            Some(Value::Object(o)) => visitor.visit_map(ObjectAccess::new(o.into_iter())),
             Some(_) | None => Err(Error::Serde("expected struct variant".to_string())),
         }
     }
 }
 
-struct Array<'de, 'value: 'de>(std::slice::Iter<'de, Value<'value>>);
+struct Array<'de>(std::vec::IntoIter<Value<'de>>);
 
 // `SeqAccess` is provided to the `Visitor` to give it the ability to iterate
 // through elements of the sequence.
-impl<'de, 'value> SeqAccess<'de> for Array<'value, 'de> {
+impl<'de> SeqAccess<'de> for Array<'de> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
@@ -234,18 +221,24 @@ impl<'de, 'value> SeqAccess<'de> for Array<'value, 'de> {
         //TODO: This is ugly
         self.0
             .next()
-            .map_or(Ok(None), |v| seed.deserialize(v.clone()).map(Some))
+            .map_or(Ok(None), |v| seed.deserialize(v).map(Some))
     }
 }
 
-struct ObjectAccess<'de, 'value: 'de> {
-    i: halfbrown::Iter<'de, Cow<'value, str>, Value<'value>>,
-    v: &'de Value<'value>,
+struct ObjectAccess<'de> {
+    i: halfbrown::IntoIter<Cow<'de, str>, Value<'de>>,
+    v: Option<Value<'de>>,
+}
+
+impl<'de> ObjectAccess<'de> {
+    fn new(i: halfbrown::IntoIter<Cow<'de, str>, Value<'de>>) -> Self {
+        Self { i, v: None }
+    }
 }
 
 // `MapAccess` is provided to the `Visitor` to give it the ability to iterate
 // through entries of the map.
-impl<'de, 'value> MapAccess<'de> for ObjectAccess<'value, 'de> {
+impl<'de> MapAccess<'de> for ObjectAccess<'de> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
@@ -253,8 +246,8 @@ impl<'de, 'value> MapAccess<'de> for ObjectAccess<'value, 'de> {
         K: DeserializeSeed<'de>,
     {
         if let Some((k, v)) = self.i.next() {
-            self.v = v;
-            seed.deserialize(Value::String(k.clone())).map(Some)
+            self.v = Some(v);
+            seed.deserialize(Value::String(k)).map(Some)
         } else {
             Ok(None)
         }
@@ -264,8 +257,10 @@ impl<'de, 'value> MapAccess<'de> for ObjectAccess<'value, 'de> {
     where
         V: DeserializeSeed<'de>,
     {
-        //TODO: This is ugly
-        seed.deserialize(self.v.clone())
+        match self.v.take() {
+            Some(v) => seed.deserialize(v),
+            None => Err(Error::Serde("emtpy object".to_string())),
+        }
     }
 }
 
@@ -553,8 +548,11 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::error::Result;
-    use crate::structurize;
+    use serde::Deserialize;
+    use simd_json::ValueAccess;
+
+    use crate::{error::Result, Value};
+    use crate::{literal, structurize};
 
     #[derive(serde::Deserialize, Debug)]
     pub struct SO {}
@@ -643,5 +641,82 @@ mod test {
         assert!(result.is_ok());
 
         Ok(())
+    }
+
+    #[test]
+    fn variant() {
+        #[derive(Clone, Debug, Default)]
+        struct NameWithConfig {
+            name: String,
+            config: Option<Value<'static>>,
+        }
+        impl<'v> serde::Deserialize<'v> for NameWithConfig {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'v>,
+            {
+                // This is ugly but it's needed for `serde::Deserialize` to not explode on lifetimes
+                // An error like this is otherwise produced:
+                //     error: lifetime may not live long enough
+                //     --> src/serde/value/borrowed/de.rs:960:25
+                //      |
+                //  953 |                 #[derive(Deserialize)]
+                //      |                          ----------- lifetime `'de` defined here
+                //  ...
+                //  956 |                 enum Variants<'v> {
+                //      |                               -- lifetime `'v` defined here
+                //  ...
+                //  960 |                         config: Option<borrowed::Value<'v>>,
+                //      |                         ^^^^^^ requires that `'de` must outlive `'v`
+                //      |
+                //      = help: consider adding the following bound: `'de: 'v`
+
+                //  error: lifetime may not live long enough
+                //     --> src/serde/value/borrowed/de.rs:960:25
+                //      |
+                //  953 |                 #[derive(Deserialize)]
+                //      |                          ----------- lifetime `'de` defined here
+                //  ...
+                //  956 |                 enum Variants<'v> {
+                //      |                               -- lifetime `'v` defined here
+                //  ...
+                //  960 |                         config: Option<borrowed::Value<'v>>,
+                //      |                         ^^^^^^ requires that `'v` must outlive `'de`
+                //      |
+                //      = help: consider adding the following bound: `'v: 'de`
+                #[derive(Deserialize)]
+                #[serde(bound(deserialize = "'de: 'v, 'v: 'de"), untagged)]
+                enum Variants<'v> {
+                    Name(String),
+                    NameAndConfig {
+                        name: String,
+                        config: Option<Value<'v>>,
+                    },
+                }
+
+                let var = Variants::deserialize(deserializer)?;
+
+                match var {
+                    Variants::Name(name) => Ok(NameWithConfig { name, config: None }),
+                    Variants::NameAndConfig { name, config } => Ok(NameWithConfig {
+                        name,
+                        config: config.map(Value::into_static),
+                    }),
+                }
+            }
+        }
+
+        let v = literal!({"name": "json", "config": {"mode": "sorted"}});
+        let nac = NameWithConfig::deserialize(v).expect("could structurize two element struct");
+        assert_eq!(nac.name, "json");
+        assert!(nac.config.as_object().is_some());
+        let v = literal!({"name": "yaml"});
+        let nac = NameWithConfig::deserialize(v).expect("could structurize one element struct");
+        assert_eq!(nac.name, "yaml");
+        assert_eq!(nac.config, None);
+        let v = literal!("name");
+        let nac = NameWithConfig::deserialize(v).expect("could structurize string");
+        assert_eq!(nac.name, "name");
+        assert_eq!(nac.config, None);
     }
 }

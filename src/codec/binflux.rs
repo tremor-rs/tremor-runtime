@@ -59,11 +59,13 @@ const TYPE_TRUE: u8 = 3;
 const TYPE_FALSE: u8 = 4;
 
 #[derive(Clone, Default)]
-pub struct BInflux {}
+pub struct BInflux {
+    buf: Vec<u8>,
+}
 
 impl BInflux {
-    pub fn encode(v: &Value) -> Result<Vec<u8>> {
-        fn write_str<W: Write>(w: &mut W, s: &str) -> Result<()> {
+    pub fn encode(v: &Value, res: &mut impl Write) -> Result<()> {
+        fn write_str(w: &mut impl Write, s: &str) -> Result<()> {
             w.write_u16::<BigEndian>(
                 u16::try_from(s.len())
                     .chain_err(|| ErrorKind::InvalidBInfluxData("string too long".into()))?,
@@ -72,10 +74,9 @@ impl BInflux {
             Ok(())
         }
 
-        let mut res = Vec::with_capacity(512);
         res.write_u16::<BigEndian>(0)?;
         if let Some(measurement) = v.get_str("measurement") {
-            write_str(&mut res, measurement)?;
+            write_str(res, measurement)?;
         } else {
             return Err(ErrorKind::InvalidBInfluxData("measurement missing".into()).into());
         }
@@ -93,8 +94,8 @@ impl BInflux {
 
             for (k, v) in tags {
                 if let Some(v) = v.as_str() {
-                    write_str(&mut res, k)?;
-                    write_str(&mut res, v)?;
+                    write_str(res, k)?;
+                    write_str(res, v)?;
                 }
             }
         } else {
@@ -107,7 +108,7 @@ impl BInflux {
                     .chain_err(|| ErrorKind::InvalidBInfluxData("too many fields".into()))?,
             )?;
             for (k, v) in fields {
-                write_str(&mut res, k)?;
+                write_str(res, k)?;
                 if let Some(v) = v.as_i64() {
                     res.write_u8(TYPE_I64)?;
                     res.write_i64::<BigEndian>(v)?;
@@ -122,7 +123,7 @@ impl BInflux {
                     }
                 } else if let Some(v) = v.as_str() {
                     res.write_u8(TYPE_STRING)?;
-                    write_str(&mut res, v)?;
+                    write_str(res, v)?;
                 } else {
                     return Err(ErrorKind::InvalidBInfluxData(format!(
                         "Unknown type as influx line value: {:?}",
@@ -134,7 +135,7 @@ impl BInflux {
         } else {
             res.write_u16::<BigEndian>(0)?;
         }
-        Ok(res)
+        Ok(())
     }
 
     pub fn decode(data: &[u8]) -> Result<Value> {
@@ -208,8 +209,11 @@ impl Codec for BInflux {
         Self::decode(data).map(Some)
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
-        Self::encode(data)
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+        Self::encode(data, &mut self.buf)?;
+        let v = self.buf.clone();
+        self.buf.clear();
+        Ok(v)
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
@@ -223,7 +227,7 @@ mod test {
     #[test]
     fn errors() {
         let mut o = Value::object();
-        let c = BInflux::default();
+        let mut c = BInflux::default();
         assert_eq!(
             c.encode(&o)
                 .err()

@@ -20,7 +20,7 @@ use tremor_script::ast::{Expr, ImutExpr};
 use tremor_script::interpreter::{Env, LocalStack};
 use tremor_script::module::Manager;
 use tremor_script::prelude::ExecOpts;
-use tremor_script::Value;
+use tremor_value::Value;
 
 fn do_run<'script>(bencher: &mut Bencher, invoke_event: &(ImutExpr<'script>, Value<'script>)) {
     let (invoke, event) = invoke_event;
@@ -57,10 +57,10 @@ fn calculate(c: &mut Criterion) {
     Manager::add_path(&cargo_dir.to_string_lossy()).unwrap();
 
     let inputs: Vec<(&'static str, &'static str, Value)> = vec![
-        ("addition", "+", tremor_script::literal!([100, 200])),
-        ("substraction", "-", tremor_script::literal!([-100, -200])),
-        ("multiplication", "*", tremor_script::literal!([3, 4])),
-        ("division", "/", tremor_script::literal!([100, 10])),
+        ("addition", "+", tremor_value::literal!([100, 200])),
+        ("substraction", "-", tremor_value::literal!([-100, -200])),
+        ("multiplication", "*", tremor_value::literal!([3, 4])),
+        ("division", "/", tremor_value::literal!([100, 10])),
     ];
     let mut group = c.benchmark_group("arithmetics");
     for (label, op, input) in inputs {

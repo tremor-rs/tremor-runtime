@@ -8,8 +8,8 @@ flow
     config = {
       "url": "http://localhost:65535/",
       "mime_mapping": {
-        "application/json": "json-sorted",
-        "*/*": "json-sorted"
+        "application/json": {"name": "json", "config": {"mode": "sorted"}},
+        "*/*": {"name": "json", "config": {"mode": "sorted"}}
       }
     }
   end;
@@ -54,8 +54,8 @@ flow
         "Client": "Tremor"
       },
       "mime_mapping": {
-        "application/json": "json-sorted",
-        "*/*": "json-sorted"
+        "application/json": {"name": "json", "config": {"mode": "sorted"}},
+        "*/*": {"name": "json", "config": {"mode": "sorted"}}
       }
     },
     reconnect = {

@@ -40,7 +40,7 @@ impl Codec for Yaml {
             .map(Some)
             .map_err(Error::from)
     }
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         Ok(serde_yaml::to_string(data)?.into_bytes())
     }
 

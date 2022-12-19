@@ -27,9 +27,9 @@ use tremor_common::time::nanotime;
 use super::auth::Auth;
 use super::meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder};
 use super::utils::{Header, RequestId};
-use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::mime::MimeCodecMap;
 use crate::connectors::utils::tls::{tls_client_config, TLSClientConfig};
+use crate::{config::NameWithConfig, connectors::sink::concurrency_cap::ConcurrencyCap};
 use crate::{connectors::prelude::*, errors::err_connector_def};
 
 const CONNECTOR_TYPE: &str = "http_client";
@@ -60,7 +60,7 @@ pub(crate) struct Config {
     /// custom codecs mapping from mime_type to custom codec name
     /// e.g. for handling `application/json` with the `binary` codec, if desired
     /// the mime type of `*/*` serves as a default / fallback
-    mime_mapping: Option<HashMap<String, String>>,
+    mime_mapping: Option<HashMap<String, NameWithConfig>>,
 }
 
 const DEFAULT_CONCURRENCY: usize = 4;

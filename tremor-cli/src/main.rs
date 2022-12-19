@@ -16,9 +16,15 @@
 // This isn't a external crate so we don't worry about docs
 // #![deny(missing_docs)]
 #![recursion_limit = "1024"]
-#![deny(clippy::unnecessary_unwrap)]
+#![deny(
+    clippy::all,
+    clippy::unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic
+)]
+
 #[macro_use]
-extern crate serde_derive;
+extern crate serde;
 
 #[macro_use]
 extern crate log;

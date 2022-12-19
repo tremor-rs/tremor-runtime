@@ -70,7 +70,7 @@ async fn transactional_retry() -> Result<()> {
                 "max_retries": 10_u64
             }
         },
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -295,7 +295,7 @@ async fn custom_no_retry() -> Result<()> {
                 "max_retries": 10_u64
             }
         },
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -508,7 +508,7 @@ async fn performance() -> Result<()> {
                 "max_retries": 10_u64
             }
         },
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -712,7 +712,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
                 "max_retries": 5_u64
             }
         },
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 format!("127.0.0.1:{kafka_port}")
@@ -753,7 +753,7 @@ async fn invalid_rdkafka_options() -> Result<()> {
                 "max_retries": 5_u64
             }
         },
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -804,7 +804,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         .create()
         .expect("Producer creation error");
     let connector_config = literal!({
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker
@@ -901,7 +901,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
         .expect("Producer creation error");
     let commit_interval: u64 = Duration::from_millis(100).as_nanos().try_into()?;
     let connector_config = literal!({
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -991,7 +991,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
     debug!("before start");
     // no offset reset
     let connector_config = literal!({
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -1112,7 +1112,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
         .create()
         .expect("Producer creation error");
     let connector_config = literal!({
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -1200,7 +1200,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
 
     // no offset reset, pick up where we left off
     let connector_config = literal!({
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -1256,7 +1256,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     // no offset reset, pick up where we left off
     // add debug logging
     let connector_config = literal!({
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()

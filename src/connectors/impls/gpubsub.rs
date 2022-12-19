@@ -19,7 +19,7 @@ use crate::connectors::prelude::*;
 #[allow(clippy::unwrap_used)]
 fn default_endpoint() -> Url<HttpsDefaults> {
     // ALLOW: this URL is hardcoded, so the only reason for parse failing would be if it was changed
-    Url::parse("https://storage.googleapis.com/upload/storage/v1").unwrap()
+    Url::parse("https://pubsub.googleapis.com").unwrap()
 }
 fn default_connect_timeout() -> u64 {
     1_000_000_000u64 // 1 second

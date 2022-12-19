@@ -35,8 +35,9 @@ use tremor_script::{
     prelude::*,
     query::Query,
     script::{AggrType, Return, Script},
-    EventPayload, Value, ValueAndMeta,
+    EventPayload, ValueAndMeta,
 };
+use tremor_value::Value;
 
 struct Ingress {
     is_interactive: bool,

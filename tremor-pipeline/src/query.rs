@@ -50,7 +50,7 @@ use tremor_script::{
     },
     highlighter::{Dumb, Highlighter},
     prelude::*,
-    AggrRegistry, NodeMeta, Registry, Value,
+    AggrRegistry, NodeMeta, Registry,
 };
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

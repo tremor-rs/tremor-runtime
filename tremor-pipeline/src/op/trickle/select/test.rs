@@ -23,12 +23,12 @@ use super::*;
 
 use tremor_common::ids::Id;
 use tremor_script::ast::{self, Helper, Ident, Literal};
-use tremor_script::{ast::Consts, NodeMeta, Value};
+use tremor_script::{ast::Consts, NodeMeta};
 use tremor_script::{
     ast::{visitors::ConstFolder, walkers::QueryWalker, Stmt},
     lexer::Location,
 };
-use tremor_value::literal;
+use tremor_value::{literal, Value};
 
 fn test_uid() -> OperatorId {
     OperatorId::new(42)

@@ -22,8 +22,9 @@ use tremor_common::file as cfile;
 use tremor_script::{
     arena::Arena,
     highlighter::{Highlighter, Term as TermHighlighter},
+    lexer,
 };
-use tremor_script::{lexer, Value};
+use tremor_value::Value;
 
 // Wrapper around fs::read_to_string to provide better erros
 // TODO create a tremor_common variant of fs::read_to_string

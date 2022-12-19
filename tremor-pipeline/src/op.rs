@@ -29,7 +29,7 @@ use beef::Cow;
 use halfbrown::HashMap;
 use regex::Regex;
 use tremor_common::ids::OperatorId;
-use tremor_script::Value;
+use tremor_value::Value;
 
 lazy_static::lazy_static! {
     static ref LINE_REGEXP: Regex = {

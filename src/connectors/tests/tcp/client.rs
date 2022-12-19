@@ -65,7 +65,7 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
                "max_retries": 10
            }
         },
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "preprocessors": ["separate"],
         "postprocessors": ["separate"],
         "config": {

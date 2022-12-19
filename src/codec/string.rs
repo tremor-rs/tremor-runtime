@@ -43,7 +43,7 @@ impl Codec for String {
             .map_err(Error::from)
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
         if let Some(s) = data.as_str() {
             Ok(s.as_bytes().to_vec())
         } else {
@@ -77,7 +77,7 @@ mod test {
     fn test_string_codec2() -> Result<()> {
         let seed = literal!(["snot badger"]);
 
-        let codec = String {};
+        let mut codec = String {};
         let as_raw = codec.encode(&seed)?;
         assert_eq!(as_raw, b"[\"snot badger\"]");
 

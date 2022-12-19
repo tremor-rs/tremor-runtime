@@ -103,9 +103,12 @@
 //! ```
 
 use super::prelude::*;
+use std::io::Write;
 
-#[derive(Clone)]
-pub struct DogStatsD {}
+#[derive(Clone, Default, Debug)]
+pub struct DogStatsD {
+    buf: Vec<u8>,
+}
 
 impl Codec for DogStatsD {
     fn name(&self) -> &str {
@@ -120,8 +123,11 @@ impl Codec for DogStatsD {
         decode(data, ingest_ns).map(Some)
     }
 
-    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
-        encode(data)
+    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+        encode(data, &mut self.buf)?;
+        let v = self.buf.clone();
+        self.buf.clear();
+        Ok(v)
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
@@ -129,180 +135,178 @@ impl Codec for DogStatsD {
     }
 }
 
-fn encode(data: &Value) -> Result<Vec<u8>> {
+fn encode(data: &Value, w: &mut impl Write) -> Result<()> {
     if let Some(metric) = data.get("metric") {
-        encode_metric(metric)
+        encode_metric(metric, w)
     } else if let Some(event) = data.get("event") {
-        encode_event(event)
+        encode_event(event, w)
     } else if let Some(service_check) = data.get("service_check") {
-        encode_service_check(service_check)
+        encode_service_check(service_check, w)
     } else {
         Err(ErrorKind::InvalidDogStatsD.into())
     }
 }
 
-fn encode_metric(value: &Value) -> Result<Vec<u8>> {
+fn encode_metric(value: &Value, r: &mut impl Write) -> Result<()> {
     let mut itoa_buf = itoa::Buffer::new();
     let mut ryu_buf = ryu::Buffer::new();
-    let mut r = Vec::with_capacity(512);
-    r.extend_from_slice(
+    r.write_all(
         value
             .get_str("metric")
             .ok_or(ErrorKind::InvalidDogStatsD)?
             .as_bytes(),
-    );
+    )?;
     let t = value.get_str("type").ok_or(ErrorKind::InvalidDogStatsD)?;
     let values = value
         .get_array("values")
         .ok_or(ErrorKind::InvalidDogStatsD)?;
     let mut values = values.iter().filter_map(simd_json::ValueAccess::as_f64);
 
-    r.push(b':');
+    r.write_all(b":")?;
     if let Some(x) = values.next() {
         if x.fract() == 0.0 {
             #[allow(clippy::cast_possible_truncation)]
             let n = x as i64;
-            r.extend_from_slice(itoa_buf.format(n).as_bytes());
+            r.write_all(itoa_buf.format(n).as_bytes())?;
         } else {
-            r.extend_from_slice(ryu_buf.format(x).as_bytes());
+            r.write_all(ryu_buf.format(x).as_bytes())?;
         }
     }
     for x in values {
-        r.push(b':');
+        r.write_all(b":")?;
         if x.fract() == 0.0 {
             #[allow(clippy::cast_possible_truncation)]
             let n = x as i64;
-            r.extend_from_slice(itoa_buf.format(n).as_bytes());
+            r.write_all(itoa_buf.format(n).as_bytes())?;
         } else {
-            r.extend_from_slice(ryu_buf.format(x).as_bytes());
+            r.write_all(ryu_buf.format(x).as_bytes())?;
         }
     }
-    r.push(b'|');
-    r.extend_from_slice(t.as_bytes());
+    r.write_all(b"|")?;
+    r.write_all(t.as_bytes())?;
 
     if let Some(val) = value.get("sample_rate") {
         if val.is_number() {
-            r.extend_from_slice(b"|@");
-            r.extend_from_slice(val.encode().as_bytes());
+            r.write_all(b"|@")?;
+            r.write_all(val.encode().as_bytes())?;
         } else {
             return Err(ErrorKind::InvalidDogStatsD.into());
         }
     }
 
-    write_tags(value, &mut r);
+    write_tags(value, r)?;
 
     if let Some(container_id) = value.get_str("container_id") {
-        r.extend_from_slice(b"|c:");
-        r.extend_from_slice(container_id.as_bytes());
+        r.write_all(b"|c:")?;
+        r.write_all(container_id.as_bytes())?;
     }
 
-    Ok(r)
+    Ok(())
 }
 
-fn encode_event(value: &Value) -> Result<Vec<u8>> {
+fn encode_event(value: &Value, r: &mut impl Write) -> Result<()> {
     let mut buf = itoa::Buffer::new();
-    let mut r = Vec::with_capacity(512);
     let title = value.get_str("title").ok_or(ErrorKind::InvalidDogStatsD)?;
     let text = value.get_str("text").ok_or(ErrorKind::InvalidDogStatsD)?;
 
-    r.extend_from_slice(b"_e{");
-    r.extend_from_slice(buf.format(title.len()).as_bytes());
-    r.push(b',');
-    r.extend_from_slice(buf.format(text.len()).as_bytes());
-    r.extend_from_slice(b"}:");
-    r.extend_from_slice(title.as_bytes());
-    r.push(b'|');
-    r.extend_from_slice(text.as_bytes());
+    r.write_all(b"_e{")?;
+    r.write_all(buf.format(title.len()).as_bytes())?;
+    r.write_all(b",")?;
+    r.write_all(buf.format(text.len()).as_bytes())?;
+    r.write_all(b"}:")?;
+    r.write_all(title.as_bytes())?;
+    r.write_all(b"|")?;
+    r.write_all(text.as_bytes())?;
 
     if let Some(timestamp) = value.get_u32("timestamp") {
-        r.extend_from_slice(b"|d:");
-        r.extend_from_slice(buf.format(timestamp).as_bytes());
+        r.write_all(b"|d:")?;
+        r.write_all(buf.format(timestamp).as_bytes())?;
     }
 
     if let Some(hostname) = value.get_str("hostname") {
-        r.extend_from_slice(b"|h:");
-        r.extend_from_slice(hostname.as_bytes());
+        r.write_all(b"|h:")?;
+        r.write_all(hostname.as_bytes())?;
     }
 
     if let Some(aggregation_key) = value.get_str("aggregation_key") {
-        r.extend_from_slice(b"|k:");
-        r.extend_from_slice(aggregation_key.as_bytes());
+        r.write_all(b"|k:")?;
+        r.write_all(aggregation_key.as_bytes())?;
     }
 
     if let Some(priority) = value.get_str("priority") {
-        r.extend_from_slice(b"|p:");
-        r.extend_from_slice(priority.as_bytes());
+        r.write_all(b"|p:")?;
+        r.write_all(priority.as_bytes())?;
     }
 
     if let Some(source) = value.get_str("source") {
-        r.extend_from_slice(b"|s:");
-        r.extend_from_slice(source.as_bytes());
+        r.write_all(b"|s:")?;
+        r.write_all(source.as_bytes())?;
     }
 
     if let Some(dogstatsd_type) = value.get_str("type") {
-        r.extend_from_slice(b"|t:");
-        r.extend_from_slice(dogstatsd_type.as_bytes());
+        r.write_all(b"|t:")?;
+        r.write_all(dogstatsd_type.as_bytes())?;
     }
 
-    write_tags(value, &mut r);
+    write_tags(value, r)?;
 
     if let Some(container_id) = value.get_str("container_id") {
-        r.extend_from_slice(b"|c:");
-        r.extend_from_slice(container_id.as_bytes());
+        r.write_all(b"|c:")?;
+        r.write_all(container_id.as_bytes())?;
     }
 
-    Ok(r)
+    Ok(())
 }
 
-fn encode_service_check(value: &Value) -> Result<Vec<u8>> {
+fn encode_service_check(value: &Value, r: &mut impl Write) -> Result<()> {
     let mut buf = itoa::Buffer::new();
-    let mut r = Vec::with_capacity(512);
     let name = value.get_str("name").ok_or(ErrorKind::InvalidDogStatsD)?;
     let status = value.get_i32("status").ok_or(ErrorKind::InvalidDogStatsD)?;
 
-    r.extend_from_slice(b"_sc|");
-    r.extend_from_slice(name.as_bytes());
-    r.push(b'|');
-    r.extend_from_slice(buf.format(status).as_bytes());
+    r.write_all(b"_sc|")?;
+    r.write_all(name.as_bytes())?;
+    r.write_all(b"|")?;
+    r.write_all(buf.format(status).as_bytes())?;
 
     if let Some(timestamp) = value.get_u32("timestamp") {
-        r.extend_from_slice(b"|d:");
-        r.extend_from_slice(buf.format(timestamp).as_bytes());
+        r.write_all(b"|d:")?;
+        r.write_all(buf.format(timestamp).as_bytes())?;
     }
 
     if let Some(hostname) = value.get_str("hostname") {
-        r.extend_from_slice(b"|h:");
-        r.extend_from_slice(hostname.as_bytes());
+        r.write_all(b"|h:")?;
+        r.write_all(hostname.as_bytes())?;
     }
 
-    write_tags(value, &mut r);
+    write_tags(value, r)?;
 
     if let Some(message) = value.get_str("message") {
-        r.extend_from_slice(b"|m:");
-        r.extend_from_slice(message.as_bytes());
+        r.write_all(b"|m:")?;
+        r.write_all(message.as_bytes())?;
     }
 
     if let Some(container_id) = value.get_str("container_id") {
-        r.extend_from_slice(b"|c:");
-        r.extend_from_slice(container_id.as_bytes());
+        r.write_all(b"|c:")?;
+        r.write_all(container_id.as_bytes())?;
     }
 
-    Ok(r)
+    Ok(())
 }
 
 #[inline]
-fn write_tags(value: &Value, r: &mut Vec<u8>) {
+fn write_tags(value: &Value, r: &mut impl Write) -> Result<()> {
     if let Some(tags) = value.get_array("tags") {
-        r.extend_from_slice(b"|#");
+        r.write_all(b"|#")?;
         let mut tags = tags.iter().filter_map(simd_json::ValueAccess::as_str);
         if let Some(t) = tags.next() {
-            r.extend_from_slice(t.as_bytes());
+            r.write_all(t.as_bytes())?;
         }
         for t in tags {
-            r.push(b',');
-            r.extend_from_slice(t.as_bytes());
+            r.write_all(b",")?;
+            r.write_all(t.as_bytes())?;
         }
     }
+    Ok(())
 }
 
 fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
@@ -471,7 +475,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -496,7 +501,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -514,7 +520,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -532,7 +539,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -550,7 +558,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -567,7 +576,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -584,7 +594,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -601,7 +612,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -617,7 +629,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded.as_slice(), data);
     }
 
@@ -633,7 +646,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -650,7 +664,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -665,7 +680,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -688,7 +704,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -711,7 +728,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -726,7 +744,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -746,7 +765,8 @@ mod test {
             }
         });
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
+        let mut encoded = Vec::new();
+        encode(&parsed, &mut encoded).expect("failed to encode");
         assert_eq!(encoded, data);
     }
 
@@ -761,36 +781,48 @@ mod test {
         let data = b"foo:1620649445.3351967|h";
         let m = decode(data, 0).expect("failed to decode");
         // ALLOW: Values are hardcoded
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut encoded = Vec::new();
+        encode(&m, &mut encoded).expect("failed to encode");
+        assert_eq!(&data[..], encoded);
 
         let data = b"foo1:12345|c";
         let m = decode(data, 0).expect("failed to decode");
         // ALLOW: Values are hardcoded
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut encoded = Vec::new();
+        encode(&m, &mut encoded).expect("failed to encode");
+        assert_eq!(&data[..], encoded);
 
         let data = b"foo2:1234567890|c";
         let m = decode(data, 0).expect("failed to decode");
         // ALLOW: Values are hardcoded
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut encoded = Vec::new();
+        encode(&m, &mut encoded).expect("failed to encode");
+        assert_eq!(&data[..], encoded);
 
         let data = b"_sc|Redis connection|2|d:1663016695|h:test.example.com|#env:dev|m:Redis connection timed out after 10s|c:123abc";
         let m = decode(data, 0).expect("failed to decode");
         // ALLOW: Values are hardcoded
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut encoded = Vec::new();
+        encode(&m, &mut encoded).expect("failed to encode");
+        assert_eq!(&data[..], encoded);
 
         let data = b"_sc|Redis connection|2";
         let m = decode(data, 0).expect("failed to decode");
         // ALLOW: Values are hardcoded
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut encoded = Vec::new();
+        encode(&m, &mut encoded).expect("failed to encode");
+        assert_eq!(&data[..], encoded);
 
         let data = b"_e{21,36}:An exception occurred|Cannot parse CSV file from 10.0.0.17";
         let m = decode(data, 0).expect("failed to decode");
-        // ALLOW: Values are hardcoded
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut encoded = Vec::new();
+        encode(&m, &mut encoded).expect("failed to encode");
+        assert_eq!(&data[..], encoded);
 
         let data = b"_e{21,36}:An exception occurred|Cannot parse CSV file from 10.0.0.17|#env:dev,test:testing";
         let m = decode(data, 0).expect("failed to decode");
-        // ALLOW: Values are hardcoded
-        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+        let mut encoded = Vec::new();
+        encode(&m, &mut encoded).expect("failed to encode");
+        assert_eq!(&data[..], encoded);
     }
 }

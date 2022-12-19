@@ -65,7 +65,7 @@ use std::{
     io::Write,
     str::{self, FromStr},
 };
-use tremor_script::Value;
+use tremor_value::Value;
 
 #[derive(Debug, PartialEq)]
 enum Algorithm {

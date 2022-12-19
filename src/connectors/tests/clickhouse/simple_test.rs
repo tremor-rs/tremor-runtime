@@ -29,7 +29,7 @@ use clickhouse_rs::Pool;
 use testcontainers::{clients, core::Port, images::generic::GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
-use tremor_script::literal;
+use tremor_value::literal;
 
 // In this test, we spin up an empty ClickHouse container, plug it to the
 // ClickHouse sink and use that sink to save a bunch of super simple events.

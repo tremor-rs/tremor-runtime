@@ -20,7 +20,6 @@ use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
 use futures::prelude::*;
 use futures::stream::{SplitSink, SplitStream};
-use simd_json::StaticNode;
 
 pub(crate) struct WsDefaults;
 impl Defaults for WsDefaults {
@@ -110,7 +109,7 @@ where
                 };
                 let mut meta = self.meta.clone();
                 if is_binary {
-                    meta.insert("binary", Value::Static(StaticNode::Bool(true)))?;
+                    meta.insert("binary", Value::const_true())?;
                 };
                 Ok(SourceReply::Data {
                     origin_uri: self.origin_uri.clone(),

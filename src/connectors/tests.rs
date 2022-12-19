@@ -82,7 +82,8 @@ use tremor_common::{
     ports::{ERR, IN, OUT},
 };
 use tremor_pipeline::{CbAction, EventId};
-use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta, Value};
+use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta};
+use tremor_value::Value;
 
 use super::{prelude::KillSwitch, sink::SinkMsg};
 
@@ -271,6 +272,7 @@ impl ConnectorHarness {
         feature = "es-integration",
         feature = "s3-integration",
         feature = "net-integration",
+        feature = "http-integration",
         feature = "gcp-integration"
     ))]
     pub(crate) async fn consume_initial_sink_contraflow(&self) -> Result<()> {
@@ -427,6 +429,7 @@ impl TestPipeline {
         feature = "es-integration",
         feature = "s3-integration",
         feature = "net-integration",
+        feature = "http-integration",
         feature = "gcp-integration"
     ))]
     pub(crate) async fn get_contraflow(&self) -> Result<Event> {

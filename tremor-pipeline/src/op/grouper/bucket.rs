@@ -238,7 +238,7 @@ impl Operator for Grouper {
 mod test {
     use super::*;
     use tremor_common::ids::Id;
-    use tremor_script::Value;
+    use tremor_value::Value;
 
     #[test]
     fn bucket() -> Result<()> {

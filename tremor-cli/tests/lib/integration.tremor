@@ -12,7 +12,7 @@ define connector write_file from file
 args
     file = "out.log"
 with 
-    codec = "json-sorted",
+    codec = {"name": "json", "config": {"mode": "sorted"}},
     postprocessors = ["separate"],
     config = {
         "path": args.file,
@@ -24,7 +24,7 @@ define connector read_file from file
 args
     file = "in.json"
 with 
-    codec = "json-sorted",
+    codec = {"name": "json", "config": {"mode": "sorted"}},
     preprocessors = ["separate"],
     config = {
         "path": args.file,

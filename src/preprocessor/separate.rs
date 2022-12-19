@@ -295,7 +295,7 @@ impl Preprocessor for Separate {
 
 #[cfg(test)]
 mod test {
-    use tremor_script::literal;
+    use tremor_value::literal;
 
     use super::*;
     use crate::Result;
