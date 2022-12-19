@@ -98,17 +98,17 @@ impl Debug for dyn Codec {
 pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
     match config.name.as_str() {
         "binary" => Ok(Box::new(binary::Binary {})),
-        "binflux" => Ok(Box::new(binflux::BInflux::default())),
+        "binflux" => Ok(Box::<binflux::BInflux>::default()),
         "csv" => Ok(Box::new(csv::Csv {})),
-        "dogstatsd" => Ok(Box::new(dogstatsd::DogStatsD::default())),
-        "influx" => Ok(Box::new(influx::Influx {})),
+        "dogstatsd" => Ok(Box::<dogstatsd::DogStatsD>::default()),
         "json" => json::from_config(config.config.as_ref()),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
+        "influx" => Ok(Box::new(influx::Influx {})),
         "null" => Ok(Box::new(null::Null {})),
-        "statsd" => Ok(Box::new(statsd::StatsD::default())),
+        "statsd" => Ok(Box::<statsd::StatsD>::default()),
         "string" => Ok(Box::new(string::String {})),
         "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
-        "tremor" => Ok(Box::new(tremor::Tremor::default())),
+        "tremor" => Ok(Box::<tremor::Tremor>::default()),
         "yaml" => Ok(Box::new(yaml::Yaml {})),
         s => Err(ErrorKind::CodecNotFound(s.into()).into()),
     }

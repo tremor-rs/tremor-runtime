@@ -95,15 +95,15 @@ impl Operator for History {
                 .and_then(Value::as_array_mut)
             {
                 Some(ref mut history) => {
-                    history.push(Value::from(format!("evt: {}({})", self.config.op, id)));
+                    history.push(Value::from(format!("evt: {}({id})", self.config.op)));
                 }
                 None => {
                     if let Some(ref mut obj) = meta.as_object_mut() {
                         obj.insert(
                             self.config.name.clone().into(),
                             Value::from(vec![Value::from(format!(
-                                "evt: {}({})",
-                                self.config.op, id
+                                "evt: {}({id})",
+                                self.config.op
                             ))]),
                         );
                     }
@@ -136,15 +136,15 @@ impl Operator for History {
                 .and_then(Value::as_array_mut)
             {
                 Some(ref mut history) => {
-                    history.push(Value::from(format!("sig: {}({})", self.config.op, id)));
+                    history.push(Value::from(format!("sig: {}({id})", self.config.op)));
                 }
                 None => {
                     if let Some(ref mut obj) = m.as_object_mut() {
                         obj.insert(
                             self.config.name.clone().into(),
                             Value::from(vec![Value::from(format!(
-                                "sig: {}({})",
-                                self.config.op, id
+                                "sig: {}({id})",
+                                self.config.op
                             ))]),
                         );
                     }

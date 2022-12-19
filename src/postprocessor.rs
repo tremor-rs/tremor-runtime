@@ -66,14 +66,14 @@ pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postpr
             config.config.as_ref(),
         )?)),
         "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
-        "base64" => Ok(Box::new(base64::Base64::default())),
-        "ingest-ns" => Ok(Box::new(ingest_ns::IngestNs {})),
-        "length-prefixed" => Ok(Box::new(length_prefixed::LengthPrefixed::default())),
-        "gelf-chunking" => Ok(Box::new(gelf_chunking::Gelf::default())),
-        "textual-length-prefixed" => Ok(Box::new(
-            textual_length_prefixed::TextualLengthPrefixed::default(),
-        )),
-        name => Err(format!("Postprocessor '{}' not found.", name).into()),
+        "base64" => Ok(Box::<base64::Base64>::default()),
+        "ingest-ns" => Ok(Box::<ingest_ns::IngestNs>::default()),
+        "length-prefixed" => Ok(Box::<length_prefixed::LengthPrefixed>::default()),
+        "gelf-chunking" => Ok(Box::<gelf_chunking::Gelf>::default()),
+        "textual-length-prefixed" => Ok(Box::<
+            textual_length_prefixed::TextualLengthPrefixed>::default(),
+        ),
+        name => Err(format!("Postprocessor '{name}' not found.").into()),
     }
 }
 

@@ -141,8 +141,8 @@ impl Connector for S3Reader {
             .map_err(|e| {
                 let msg = if let Some(err) = e.source() {
                     format!(
-                        "Failed to access Bucket \"{}\": {}.",
-                        &self.config.bucket, err
+                        "Failed to access Bucket \"{}\": {err}.",
+                        &self.config.bucket
                     )
                 } else {
                     format!("Failed to access Bucket \"{}\".", &self.config.bucket)
@@ -179,7 +179,7 @@ impl Connector for S3Reader {
                 origin_uri,
             };
             let handle = task::Builder::new()
-                .name(format!("fetch_obj_task{}", i))
+                .name(format!("fetch_obj_task{i}"))
                 .spawn(async move { instance.start().await })?;
             self.handles.push(handle);
         }
@@ -354,7 +354,7 @@ impl S3Instance {
 
         while fetched_bytes < size {
             let fetch_till = (fetched_bytes + self.part_size).min(size);
-            let range = Some(format!("bytes={}-{}", fetched_bytes, fetch_till - 1)); // -1 is reqd here as range is inclusive.
+            let range = Some(format!("bytes={fetched_bytes}-{}", fetch_till - 1)); // -1 is reqd here as range is inclusive.
 
             debug!(
                 "{} Fetching byte range: bytes={fetched_bytes}-{} for key {key:?}",

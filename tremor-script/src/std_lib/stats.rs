@@ -39,7 +39,7 @@ use std::u64;
 ///
 /// taken from <https://github.com/0x022b/libmath-rs/blob/af3aff7e1500e5f801e73f3c464ea7bf81ec83c7/src/round.rs>
 pub fn ceil(value: f64, scale: i8) -> f64 {
-    let multiplier = 10_f64.powi(i32::from(scale)) as f64;
+    let multiplier = 10_f64.powi(i32::from(scale));
     (value * multiplier).ceil() / multiplier
 }
 
@@ -392,7 +392,7 @@ impl TremorAggrFn for Dds {
                     .map(|s| {
                         let p = s.parse().map_err(|e| FunctionError::RuntimeError {
                             mfa: mfa("stats", "dds", 2),
-                            error: format!("Provided percentile '{}' isn't a float: {}", s, e),
+                            error: format!("Provided percentile '{s}' isn't a float: {e}"),
                         })?;
                         Ok((s, p))
                     })
@@ -586,7 +586,7 @@ impl Hdr {
         let msg = msg.to_string();
         move |e: E| FunctionError::RuntimeError {
             mfa: mfa("stats", "hdr", 2),
-            error: format!("{}: {:?}", msg, e),
+            error: format!("{msg}: {e:?}"),
         }
     }
 }
@@ -725,47 +725,47 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),
             "count".to_string(),
-            Box::new(Count::default()),
+            Box::<Count>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),
             "min".to_string(),
-            Box::new(Min::default()),
+            Box::<Min>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),
             "max".to_string(),
-            Box::new(Max::default()),
+            Box::<Max>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),
             "sum".to_string(),
-            Box::new(Sum::default()),
+            Box::<Sum>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),
             "var".to_string(),
-            Box::new(Var::default()),
+            Box::<Var>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),
             "stdev".to_string(),
-            Box::new(Stdev::default()),
+            Box::<Stdev>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),
             "mean".to_string(),
-            Box::new(Mean::default()),
+            Box::<Mean>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),
             "hdr".to_string(),
-            Box::new(Hdr::default()),
+            Box::<Hdr>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),
             "dds".to_string(),
-            Box::new(Dds::default()),
+            Box::<Dds>::default(),
         ));
 }
 

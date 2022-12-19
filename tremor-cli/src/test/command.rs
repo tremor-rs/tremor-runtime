@@ -140,8 +140,8 @@ pub(crate) async fn suite_command(
                             &case.env,
                         )?;
 
-                        let fg_out_file = suite_root.join(&format!("fg.{}.out.log", counter));
-                        let fg_err_file = suite_root.join(&format!("fg.{}.err.log", counter));
+                        let fg_out_file = suite_root.join(format!("fg.{counter}.out.log"));
+                        let fg_err_file = suite_root.join(format!("fg.{counter}.err.log"));
                         let start = nanotime();
                         let exit_status = fg_process.tail(&fg_out_file, &fg_err_file).await?;
                         let elapsed = nanotime() - start;

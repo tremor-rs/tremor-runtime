@@ -23,10 +23,10 @@ pub fn load(registry: &mut Registry) {
             Ok(TRUE)
         } else if ctx.panic_on_assert {
             Err(to_runtime_error(format!(r#"
-Assertion for {} failed:
+Assertion for {desc} failed:
     expected: {}
     got: {}
-"#, desc, expected.encode(), got.encode())))
+"#, expected.encode(), got.encode())))
         } else {
             Ok(Value::from(vec![(*expected).clone(), (*got).clone()]))
         }

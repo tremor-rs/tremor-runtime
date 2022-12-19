@@ -59,21 +59,11 @@ use rand::{self, RngCore};
 
 const FIVE_SEC: u64 = 5_000_000_000;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct GelfChunking {
     buffer: HashMap<u64, GelfMsgs>,
     last_buffer: HashMap<u64, GelfMsgs>,
     last_swap: u64,
-}
-
-impl GelfChunking {
-    pub(crate) fn default() -> Self {
-        Self {
-            buffer: HashMap::new(),
-            last_buffer: HashMap::new(),
-            last_swap: 0,
-        }
-    }
 }
 
 #[derive(Clone, Default)]

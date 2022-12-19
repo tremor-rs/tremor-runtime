@@ -651,10 +651,10 @@ impl fmt::Display for EventId {
         if !self.tracked_pull_ids.is_empty() {
             let mut iter = self.tracked_pull_ids.iter();
             if let Some(ids) = iter.next() {
-                write!(f, " {}", ids)?;
+                write!(f, " {ids}")?;
             }
             for ids in iter {
-                write!(f, ", {}", ids)?;
+                write!(f, ", {ids}")?;
             }
         }
         Ok(())
@@ -934,9 +934,9 @@ impl Display for Connection {
         let to: &str = &self.to;
         match (from, to) {
             ("out", "in") => write!(f, ""),
-            ("out", to) => write!(f, "{}", to),
-            (from, "in") => write!(f, "{} ", from),
-            (from, to) => write!(f, "{} -> {}", from, to),
+            ("out", to) => write!(f, "{to}"),
+            (from, "in") => write!(f, "{from} "),
+            (from, to) => write!(f, "{from} -> {to}"),
         }
     }
 }

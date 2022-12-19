@@ -158,11 +158,11 @@ fn write_bits_le(
     } else if bits <= 32 {
         write_bits_be(bytes, bits, buf, pending, u64::from((v as u32).to_be()))
     } else if bits <= 40 {
-        write_bits_be(bytes, bits, buf, pending, (v.to_be() >> 24) as u64)
+        write_bits_be(bytes, bits, buf, pending, v.to_be() >> 24)
     } else if bits <= 48 {
-        write_bits_be(bytes, bits, buf, pending, (v.to_be() >> 16) as u64)
+        write_bits_be(bytes, bits, buf, pending, v.to_be() >> 16)
     } else if bits <= 56 {
-        write_bits_be(bytes, bits, buf, pending, (v.to_be() >> 8) as u64)
+        write_bits_be(bytes, bits, buf, pending, v.to_be() >> 8)
     } else {
         write_bits_be(bytes, bits, buf, pending, v.to_be())
     }
@@ -204,12 +204,12 @@ pub(crate) fn extend_bytes_from_value<'value, O: Ranged, I: Ranged>(
     value: &Value<'value>,
 ) -> Result<()> {
     let err =
-        |e: &str, v: &Value| -> Result<()> { err_generic(outer, inner, &format!("{}: {}", e, v)) };
+        |e: &str, v: &Value| -> Result<()> { err_generic(outer, inner, &format!("{e}: {v}")) };
 
     match data_type {
         BytesDataType::UnsignedInteger => value.as_u64().map_or_else(
             || err("Not an unsigned integer", value),
-            |v| write_bits(bytes, bits as u8, endianess, buf, pending, v as u64),
+            |v| write_bits(bytes, bits as u8, endianess, buf, pending, v),
         ),
         BytesDataType::SignedInteger => value.as_i64().map_or_else(
             || err("Not an signed integer", value),

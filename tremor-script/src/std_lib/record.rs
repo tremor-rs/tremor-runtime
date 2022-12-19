@@ -57,12 +57,12 @@ pub fn load(registry: &mut Registry) {
                 if let Some(Value::String(first)) = a.pop() {
                     Ok((first, second))
                 } else {
-                    Err(to_runtime_error(format!("The first element of the tuple needs to be a string: {:?}", a)))
+                    Err(to_runtime_error(format!("The first element of the tuple needs to be a string: {a:?}")))
                 }
             } else {
                 Err(to_runtime_error( format!("Onlay arrays that consist of tuples (arrays of two elements) can be trurned into an record this array contained {} elements", a.len())))
             }
-            other => Err(to_runtime_error(format!("Onlay arrays that consist of tuples (arrays of two elements) can be turned into records but this array contained: {:?}", other)))
+            other => Err(to_runtime_error(format!("Onlay arrays that consist of tuples (arrays of two elements) can be turned into records but this array contained: {other:?}")))
         }).collect();
         Ok(Value::from(r?))
         })).insert(tremor_const_fn!(record|extract(_context, _input: Object, _keys: Array) {

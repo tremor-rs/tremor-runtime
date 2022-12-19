@@ -86,7 +86,7 @@ impl EventOriginUri {
     #[must_use]
     pub fn host_port(&self) -> String {
         if let Some(port) = self.port() {
-            format!("{}:{}", self.host(), port)
+            format!("{}:{port}", self.host())
         } else {
             self.host().to_string()
         }
@@ -97,10 +97,10 @@ impl fmt::Display for EventOriginUri {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}://{}", self.scheme, self.host)?;
         if let Some(port) = self.port {
-            write!(f, ":{}", port)?;
+            write!(f, ":{port}")?;
         }
         let maybe_sep = if self.path.is_empty() { "" } else { "/" };
-        write!(f, "{}{}", maybe_sep, self.path.join("/"))
+        write!(f, "{maybe_sep}{}", self.path.join("/"))
     }
 }
 

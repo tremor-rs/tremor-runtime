@@ -42,7 +42,7 @@ pub(crate) fn execute(s: &str, result_needed: bool) -> Result<'static> {
         match String::from_utf8(decoded) {
             Ok(s) => Result::Match(Value::from(s)),
             StdResult::Err(e) => Result::Err(Error {
-                msg: format!("failed to decode: {}", e),
+                msg: format!("failed to decode: {e}"),
             }),
         }
     } else {

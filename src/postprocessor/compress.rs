@@ -104,12 +104,12 @@ impl Algorithm {
             }
         } else {
             let codec: Box<dyn Postprocessor> = match self {
-                Algorithm::Gzip => Box::new(Gzip::default()),
-                Algorithm::Zlib => Box::new(Zlib::default()),
-                Algorithm::Xz2 => Box::new(Xz2::default()),
-                Algorithm::Zstd => Box::new(Zstd::default()),
-                Algorithm::Snappy => Box::new(Snappy::default()),
-                Algorithm::Lz4 => Box::new(Lz4::default()),
+                Algorithm::Gzip => Box::<Gzip>::default(),
+                Algorithm::Zlib => Box::<Zlib>::default(),
+                Algorithm::Xz2 => Box::<Xz2>::default(),
+                Algorithm::Zstd => Box::<Zstd>::default(),
+                Algorithm::Snappy => Box::<Snappy>::default(),
+                Algorithm::Lz4 => Box::<Lz4>::default(),
             };
             Ok(codec)
         }
@@ -197,7 +197,7 @@ impl Postprocessor for Snappy {
         writer.write_all(data)?;
         let compressed = writer
             .into_inner()
-            .map_err(|e| format!("Snappy compression postprocessor error: {}", e))?;
+            .map_err(|e| format!("Snappy compression postprocessor error: {e}"))?;
         Ok(vec![compressed])
     }
 }
