@@ -33,7 +33,7 @@ use tremor_pipeline::EventId;
 use tremor_value::literal;
 
 #[async_std::test]
-#[serial(kafka, timeout_ms = 6000000)]
+#[serial(kafka)]
 async fn connector_kafka_producer() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = DockerCli::default();
@@ -275,7 +275,7 @@ async fn connector_kafka_producer() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka, timeout_ms = 6000000)]
+#[serial(kafka)]
 async fn producer_unreachable() -> Result<()> {
     let _ = env_logger::try_init();
     let port = find_free_tcp_port().await?;
@@ -305,7 +305,7 @@ async fn producer_unreachable() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka, timeout_ms = 6000000)]
+#[serial(kafka)]
 async fn producer_unresolvable() -> Result<()> {
     let _ = env_logger::try_init();
     let port = find_free_tcp_port().await?;

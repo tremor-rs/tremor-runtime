@@ -35,7 +35,7 @@ macro_rules! test_cases {
             use super::*;
             $(
                 #[async_std::test]
-                #[serial(flow, timeout_ms = 6000000)]
+                #[serial(flow)]
                 async fn $file() -> Result<()> {
 
                     let deploy_dir = concat!("tests/flows/", stringify!($file), "/").to_string();

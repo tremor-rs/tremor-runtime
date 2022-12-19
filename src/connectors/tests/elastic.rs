@@ -35,7 +35,7 @@ use value_trait::{Mutable, Value, ValueAccess};
 const ELASTICSEARCH_VERSION: &str = "8.4.1";
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 6000000)]
+#[serial(elastic)]
 async fn connector_elastic() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -466,7 +466,7 @@ async fn connector_elastic() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 6000000)]
+#[serial(elastic)]
 async fn auth_basic() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = clients::Cli::default();
@@ -530,7 +530,7 @@ async fn auth_basic() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 6000000)]
+#[serial(elastic)]
 async fn auth_api_key() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = clients::Cli::default();
@@ -607,7 +607,7 @@ async fn auth_api_key() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 6000000)]
+#[serial(elastic)]
 async fn auth_client_cert() -> Result<()> {
     let _ = env_logger::try_init();
     setup_for_tls();
@@ -747,7 +747,7 @@ async fn auth_client_cert() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(elastic, timeout_ms = 6000000)]
+#[serial(elastic)]
 async fn elastic_https() -> Result<()> {
     let _ = env_logger::try_init();
     setup_for_tls();

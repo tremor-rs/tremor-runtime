@@ -30,7 +30,7 @@ use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 6000000)]
+#[serial(gpubsub)]
 async fn no_connection() -> Result<()> {
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
@@ -93,7 +93,7 @@ async fn create_subscription(endpoint: String, topic: &str, subscription: &str) 
 }
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 6000000)]
+#[serial(gpubsub)]
 async fn simple_subscribe() -> Result<()> {
     let _ = env_logger::try_init();
 
