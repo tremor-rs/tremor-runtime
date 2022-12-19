@@ -22,7 +22,7 @@ use tremor_script::interpreter::{Env, LocalStack};
 
 use tremor_script::module::Manager;
 use tremor_script::prelude::ExecOpts;
-use tremor_script::Value;
+use tremor_value::Value;
 
 fn do_array_flatten<'script>(
     bencher: &mut Bencher,
@@ -64,18 +64,18 @@ fn array_flatten(c: &mut Criterion) {
     let inputs: Vec<(&'static str, Value)> = vec![
         (
             "deeply nested",
-            tremor_script::literal!([
+            tremor_value::literal!([
                 "1", "2", ["3", ["4"]], [[["5", "6"], ["7", {"foo": "bar"}, ["8", "9", "10", "11", "12", "13"]]]]
             ]),
         ),
         (
             "flat",
-            tremor_script::literal!([
+            tremor_value::literal!([
                 "1", "2", ["3", "4", "5", "6"], ["7", {"foo": "bar"}, "8", "9"], ["10"], ["11", "12"], "13"
             ]),
         ),
-        ("one", tremor_script::literal!([["1", "2", "3"]])),
-        ("baseline", tremor_script::literal!([])),
+        ("one", tremor_value::literal!([["1", "2", "3"]])),
+        ("baseline", tremor_value::literal!([])),
     ];
     let mut group = c.benchmark_group("array_flatten");
     for (label, input) in inputs {

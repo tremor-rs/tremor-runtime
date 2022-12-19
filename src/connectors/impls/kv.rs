@@ -14,7 +14,10 @@
 
 // #![cfg_attr(coverage, no_coverage)]
 use crate::{
-    codec::{json::Json, json_sorted::Sorted, Codec},
+    codec::{
+        json::{Json, Sorted},
+        Codec,
+    },
     connectors::prelude::*,
     errors::err_connector_def,
 };

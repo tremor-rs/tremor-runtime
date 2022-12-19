@@ -23,6 +23,7 @@ use tremor_script::utils::*;
 use tremor_script::{
     highlighter::Dumb, module::Manager, AggrType, EventContext, Return, Script, FN_REGISTRY,
 };
+use tremor_value::{Object, Value};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {

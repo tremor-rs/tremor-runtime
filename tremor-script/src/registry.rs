@@ -692,7 +692,8 @@ macro_rules! tremor_fn_ {
 
     ($module:expr ; $name:ident($const:expr, $warn:expr, $context:ident) $code:block) => {
         {
-            use $crate::{EventContext, Value};
+            use $crate::EventContext;
+            use tremor_value::Value;
             use $crate::ast::warning;
             use $crate::registry::{TremorFnWrapper, TremorFn, FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = 0;

@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
+use serial_test::serial;
 use std::io::prelude::*;
 use tremor_common::file;
-use tremor_script::FN_REGISTRY;
-
-use serial_test::serial;
 use tremor_runtime::errors::*;
-use tremor_script::highlighter::Dumb;
-use tremor_script::module::Manager;
-use tremor_script::prelude::*;
-use tremor_script::utils::*;
-use tremor_script::{AggrType, EventContext, Script};
-use tremor_script::{Object, Value};
+use tremor_script::{
+    highlighter::Dumb, module::Manager, prelude::*, utils::*, AggrType, EventContext, Script,
+    FN_REGISTRY,
+};
+use tremor_value::{Object, Value};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {

@@ -1,8 +1,0 @@
-binding:
-  - id: input
-    links:
-      "/onramp/file-in/{instance}/out":
-        - "/pipeline/request/{instance}/in"
-mapping:
-  /binding/input/01:
-    instance: "01"

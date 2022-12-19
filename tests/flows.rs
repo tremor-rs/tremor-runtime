@@ -79,6 +79,7 @@ test_cases!(
     pipeline_args,
     pipeline_with,
     // INSERT
+    codec_config,
     consts_as_default_args,
     args_in_create,
     chained_pipelines,

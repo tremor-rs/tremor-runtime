@@ -23,7 +23,6 @@ const MIME_TO_CODEC = {
 
 ## Mapping of codecs to mimetypes
 const CODEC_TO_MIME = {
-    "json-sorted": "application/json",
     "json": "application/json",
     "csv": "text/csv",
     "string": "text/plain",

@@ -48,7 +48,7 @@
 
 use super::Postprocessor;
 use crate::errors::{Error, Kind as ErrorKind, Result};
-use tremor_script::Value;
+use tremor_value::Value;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -168,7 +168,7 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
     use proptest::{collection, num, option};
-    use tremor_script::literal;
+    use tremor_value::literal;
 
     #[test]
     fn from_config() {

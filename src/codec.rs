@@ -17,20 +17,20 @@ use crate::{
     errors::{Kind as ErrorKind, Result},
 };
 use std::fmt::{Debug, Display};
-use tremor_script::Value;
+use tremor_value::Value;
 pub(crate) mod binary;
 pub(crate) mod binflux;
 pub(crate) mod csv;
 pub(crate) mod dogstatsd;
 pub(crate) mod influx;
 pub(crate) mod json;
-pub(crate) mod json_sorted;
 pub(crate) mod msgpack;
 pub(crate) mod null;
 pub(crate) mod statsd;
 pub(crate) mod string;
 pub(crate) mod syslog;
-pub(crate) mod tremor;
+/// Tremor to Tremor codec
+pub mod tremor;
 pub(crate) mod yaml;
 
 mod prelude {
@@ -72,17 +72,6 @@ pub trait Codec: Send + Sync {
     ///  * If the encoding fails
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>>;
 
-    /// Encodes into an existing buffer
-    ///
-    /// # Errors
-    ///  * when we can't write encode to the given vector
-
-    fn encode_into(&mut self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
-        let mut res = self.encode(data)?;
-        std::mem::swap(&mut res, dst);
-        Ok(())
-    }
-
     /// special clone method for getting clone functionality
     /// into a this trait referenced as trait object
     /// otherwise we cannot use this type inside structs that need to be `Clone`.
@@ -109,15 +98,14 @@ impl Debug for dyn Codec {
 pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
     match config.name.as_str() {
         "binary" => Ok(Box::new(binary::Binary {})),
-        "binflux" => Ok(Box::new(binflux::BInflux {})),
+        "binflux" => Ok(Box::new(binflux::BInflux::default())),
         "csv" => Ok(Box::new(csv::Csv {})),
-        "dogstatsd" => Ok(Box::new(dogstatsd::DogStatsD {})),
+        "dogstatsd" => Ok(Box::new(dogstatsd::DogStatsD::default())),
         "influx" => Ok(Box::new(influx::Influx {})),
-        "json-sorted" => Ok(Box::new(json::Json::<json_sorted::Sorted>::default())),
-        "json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
+        "json" => json::from_config(config.config.as_ref()),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
         "null" => Ok(Box::new(null::Null {})),
-        "statsd" => Ok(Box::new(statsd::StatsD {})),
+        "statsd" => Ok(Box::new(statsd::StatsD::default())),
         "string" => Ok(Box::new(string::String {})),
         "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
         "tremor" => Ok(Box::new(tremor::Tremor::default())),
@@ -128,13 +116,36 @@ pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
 
 #[cfg(test)]
 mod test {
+    use crate::config::NameWithConfig;
+    use tremor_value::literal;
 
     #[test]
     fn lookup() {
         assert!(super::resolve(&"binflux".into()).is_ok());
         assert!(super::resolve(&"dogstatsd".into()).is_ok());
         assert!(super::resolve(&"influx".into()).is_ok());
-        assert!(super::resolve(&"json-sorted".into()).is_ok());
+        assert!(super::resolve(&"json".into()).is_ok());
+        assert!(super::resolve(&NameWithConfig {
+            name: "json".into(),
+            config: None
+        })
+        .is_ok());
+        assert!(super::resolve(&NameWithConfig {
+            name: "json".into(),
+            config: Some(literal!({"mode": "sorted"}))
+        })
+        .is_ok());
+        assert!(super::resolve(&NameWithConfig {
+            name: "json".into(),
+            config: Some(literal!({"mode": "unsorted"}))
+        })
+        .is_ok());
+
+        assert!(super::resolve(&NameWithConfig {
+            name: "json".into(),
+            config: Some(literal!({"mode": "badger"}))
+        })
+        .is_err());
         assert!(super::resolve(&"json".into()).is_ok());
         assert!(super::resolve(&"msgpack".into()).is_ok());
         assert!(super::resolve(&"null".into()).is_ok());

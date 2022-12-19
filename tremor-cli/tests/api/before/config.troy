@@ -6,7 +6,7 @@ flow
 
     define connector in from ws_server
     with
-        codec = "json-sorted",
+        codec = {"name": "json", "config": {"mode": "sorted"}},
         config = {
             "host": "127.0.0.1",
             "port": 4242
@@ -15,7 +15,7 @@ flow
 
     define connector out from file
     with
-        codec = "json-sorted",
+        codec = {"name": "json", "config": {"mode": "sorted"}},
         config = {
             "path": "../before.log",
             "mode": "truncate"

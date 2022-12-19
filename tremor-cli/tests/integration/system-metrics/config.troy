@@ -20,7 +20,7 @@ flow
   define connector out from file
   with
     metrics_interval_s = 3,
-    codec = "json-sorted",
+    codec = {"name": "json", "config": {"mode": "sorted"}},
     postprocessors = ["separate"],
     config = {
       "path": "events.log",

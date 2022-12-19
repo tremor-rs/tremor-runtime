@@ -30,6 +30,8 @@
 #[macro_use]
 extern crate pretty_assertions;
 
+#[macro_use]
+extern crate serde;
 /// Memory arena for souces
 pub mod arena;
 /// The Tremor Script AST
@@ -73,10 +75,6 @@ mod std_lib;
 pub mod utils;
 pub use srs::{EventPayload, ValueAndMeta};
 
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-
 pub use crate::ast::deploy::raw::run_script;
 pub use crate::ast::module;
 pub use crate::ast::query::SelectType;
@@ -96,8 +94,8 @@ use std::sync::{
     atomic::{AtomicU32, Ordering},
     RwLock,
 };
-pub use tremor_common::stry;
-pub use tremor_value::{literal, KnownKey, Object, Value};
+use tremor_common::stry;
+use tremor_value::{KnownKey, Object, Value};
 
 /// Default recursion limit
 pub static RECURSION_LIMIT: AtomicU32 = AtomicU32::new(1024);

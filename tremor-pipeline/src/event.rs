@@ -17,7 +17,7 @@ use std::mem::swap;
 use tremor_common::ids::SourceId;
 use tremor_common::time::nanotime;
 use tremor_script::prelude::*;
-use tremor_script::{literal, EventOriginUri, EventPayload, Value};
+use tremor_script::{EventOriginUri, EventPayload};
 
 /// A tremor event
 #[derive(
@@ -465,7 +465,8 @@ mod test {
     use crate::Result;
     use simd_json::OwnedValue;
     use tremor_common::ids::{Id, OperatorId};
-    use tremor_script::{Object, ValueAndMeta};
+    use tremor_script::ValueAndMeta;
+    use tremor_value::Object;
 
     #[allow(clippy::unnecessary_wraps)] // as this is a function that gets passed as an argument and needs to fulful the bounds
     fn merge<'iref, 'head>(

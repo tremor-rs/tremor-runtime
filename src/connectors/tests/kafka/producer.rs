@@ -78,7 +78,7 @@ async fn connector_kafka_producer() -> Result<()> {
                 "max_retries": 10_u64
             }
         },
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -282,7 +282,7 @@ async fn producer_unreachable() -> Result<()> {
     let broker = format!("127.0.0.1:{port}");
     let topic = "unreachable";
     let connector_config = literal!({
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()
@@ -312,7 +312,7 @@ async fn producer_unresolvable() -> Result<()> {
     let broker = format!("i_do_not_resolve:{port}");
     let topic = "unresolvable";
     let connector_config = literal!({
-        "codec": "json-sorted",
+        "codec": {"name": "json", "config": {"mode": "sorted"}},
         "config": {
             "brokers": [
                 broker.clone()

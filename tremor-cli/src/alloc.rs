@@ -24,6 +24,7 @@ pub(crate) fn get_allocator_name() -> &'static str {
     if cfg!(feature = "stdalloc") {
         "stdalloc"
     } else {
-        "snmalloc" // NOTE The default allocator SHOULD be set in the Cargo.toml default features
+        // NOTE The default allocator SHOULD be set in the Cargo.toml default features
+        "snmalloc"
     }
 }
