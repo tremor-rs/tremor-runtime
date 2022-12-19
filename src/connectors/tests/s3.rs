@@ -111,9 +111,9 @@ fn get_client(http_port: u16) -> Client {
             "Environment",
         ))
         .region(Region::new(MINIO_REGION))
-        .endpoint_resolver(Endpoint::immutable(
-            format!("http://localhost:{http_port}").parse().unwrap(),
-        ))
+        .endpoint_resolver(
+            Endpoint::immutable(format!("http://localhost:{http_port}")).expect("Invalid endpoint"),
+        )
         .build();
 
     Client::from_conf(s3_config)
