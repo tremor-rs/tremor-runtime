@@ -60,18 +60,18 @@ pub trait Preprocessor: Sync + Send {
 pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preprocessor>> {
     match config.name.as_str() {
         "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
-        "base64" => Ok(Box::new(base64::Base64::default())),
+        "base64" => Ok(Box::<base64::Base64>::default()),
         "decompress" => Ok(Box::new(decompress::Decompress::from_config(
             config.config.as_ref(),
         )?)),
-        "remove-empty" => Ok(Box::new(remove_empty::RemoveEmpty::default())),
-        "gelf-chunking" => Ok(Box::new(gelf_chunking::GelfChunking::default())),
-        "ingest-ns" => Ok(Box::new(ingest_ns::ExtractIngestTs {})),
-        "length-prefixed" => Ok(Box::new(length_prefixed::LengthPrefixed::default())),
-        "textual-length-prefixed" => Ok(Box::new(
-            textual_length_prefixed::TextualLengthPrefixed::default(),
-        )),
-        name => Err(format!("Preprocessor '{}' not found.", name).into()),
+        "remove-empty" => Ok(Box::<remove_empty::RemoveEmpty>::default()),
+        "gelf-chunking" => Ok(Box::<gelf_chunking::GelfChunking>::default()),
+        "ingest-ns" => Ok(Box::<ingest_ns::ExtractIngestTs>::default()),
+        "length-prefixed" => Ok(Box::<length_prefixed::LengthPrefixed>::default()),
+        "textual-length-prefixed" => Ok(Box::<
+            textual_length_prefixed::TextualLengthPrefixed>::default(),
+        ),
+        name => Err(format!("Preprocessor '{name}' not found.").into()),
     }
 }
 

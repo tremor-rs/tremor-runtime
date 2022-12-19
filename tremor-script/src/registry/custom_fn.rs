@@ -104,7 +104,7 @@ impl<'script> CustomFn<'script> {
         let i = match self.body.first() {
             Some(Expr::Imut(Invoke1(i) | Invoke2(i) | Invoke3(i) | Invoke(i))) => i,
             Some(e) => {
-                return Err(format!("can't inline {}: bad expression: {:?}", self.name, e).into())
+                return Err(format!("can't inline {}: bad expression: {e:?}", self.name).into())
             }
             None => return Err(format!("can't inline {}: no body", self.name).into()),
         };

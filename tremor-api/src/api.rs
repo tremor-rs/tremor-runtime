@@ -119,7 +119,7 @@ pub fn serialize<T: Serialize>(t: ResourceType, d: &T, code: StatusCode) -> Resu
             .build()),
         _ => Err(Error::new(
             StatusCode::InternalServerError,
-            format!("Unsuported formatting: {}", t),
+            format!("Unsuported formatting: {t}"),
         )),
     }
 }

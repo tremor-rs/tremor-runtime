@@ -4,6 +4,7 @@
 
 ### New Features
 
+* Update to rust toolchain 1.66
 * Warning types: now warnings can specify what they are about (performance, behaviour, etc.)
 * New warnings for consistency, behaviour and performance
 * Functions now can create warnings

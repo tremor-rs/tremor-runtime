@@ -28,91 +28,91 @@ pub type Kind = ErrorKind;
 
 impl From<sled::transaction::TransactionError<()>> for Error {
     fn from(e: sled::transaction::TransactionError<()>) -> Self {
-        Self::from(format!("Sled Transaction Error: {:?}", e))
+        Self::from(format!("Sled Transaction Error: {e:?}"))
     }
 }
 
 impl From<hdr_s::DeserializeError> for Error {
     fn from(e: hdr_s::DeserializeError) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl From<Box<dyn std::error::Error>> for Error {
     fn from(e: Box<dyn std::error::Error>) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl From<Box<dyn std::error::Error + Sync + Send>> for Error {
     fn from(e: Box<dyn std::error::Error + Sync + Send>) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl From<hdrhistogram::errors::CreationError> for Error {
     fn from(e: hdrhistogram::errors::CreationError) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl From<hdrhistogram::RecordError> for Error {
     fn from(e: hdrhistogram::RecordError) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl From<hdrhistogram::serialization::V2SerializeError> for Error {
     fn from(e: hdrhistogram::serialization::V2SerializeError) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl From<http_types::Error> for Error {
     fn from(e: http_types::Error) -> Self {
-        Self::from(format!("{}", e))
+        Self::from(format!("{e}"))
     }
 }
 
 impl From<glob::PatternError> for Error {
     fn from(e: glob::PatternError) -> Self {
-        Self::from(format!("{}", e))
+        Self::from(format!("{e}"))
     }
 }
 
 impl<T> From<async_std::channel::SendError<T>> for Error {
     fn from(e: async_std::channel::SendError<T>) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl<T> From<async_std::channel::TrySendError<T>> for Error {
     fn from(e: async_std::channel::TrySendError<T>) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl<T> From<async_broadcast::TrySendError<T>> for Error {
     fn from(e: async_broadcast::TrySendError<T>) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl From<async_broadcast::TryRecvError> for Error {
     fn from(e: async_broadcast::TryRecvError) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl From<async_broadcast::RecvError> for Error {
     fn from(e: async_broadcast::RecvError) -> Self {
-        Self::from(format!("{:?}", e))
+        Self::from(format!("{e:?}"))
     }
 }
 
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {
-        Self::from(format!("Poison Error: {:?}", e))
+        Self::from(format!("Poison Error: {e:?}"))
     }
 }
 

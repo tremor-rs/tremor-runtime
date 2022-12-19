@@ -251,7 +251,7 @@ where
 
     /// register an "anonymous" shadow variable from a AST node meta id
     pub(crate) fn register_shadow_from_mid(&mut self, mid: &NodeMeta) -> usize {
-        let id = format!("{:?}", mid);
+        let id = format!("{mid:?}");
         self.register_shadow_var(&id)
     }
 
@@ -309,5 +309,5 @@ where
 
 /// create a unique shadow name that cannot be created by users
 fn shadow_name(id: usize) -> String {
-    format!(" __SHADOW {}__ ", id)
+    format!(" __SHADOW {id}__ ")
 }

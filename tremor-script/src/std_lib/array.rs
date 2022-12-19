@@ -67,7 +67,7 @@ pub fn load(registry: &mut Registry) {
                         Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Only arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained {} elements", a.len())})
                     }
                 } else {
-                    Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Only arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained: {:?}", a)})
+                    Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Only arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained: {a:?}")})
                 }).collect();
                 let (l, r): (Vec<_>, Vec<_>) = r?.into_iter().unzip();
                 Ok(Value::from(vec![l, r]))

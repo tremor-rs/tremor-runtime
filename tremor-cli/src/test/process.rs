@@ -52,7 +52,7 @@ fn test_env(tests_root_dir: &Path, test_dir: &Path) -> Result<HashMap<String, St
     let tremor_path = if tremor_path.is_empty() {
         test_lib
     } else {
-        format!("{}:{}", tremor_path, test_lib)
+        format!("{tremor_path}:{test_lib}")
     };
     if let Ok(env_content) = slurp_string("env.yaml") {
         // ALLOW: We don't use the string anymore after this
@@ -101,7 +101,7 @@ pub(crate) async fn run_process(
         .sort_by(|a, b| a.file_name().cmp(b.file_name()))
         .max_depth(1)
         .build()
-        .map_err(|e| Error::from(format!("Unable to walk path for artefacts capture: {}", e)))?
+        .map_err(|e| Error::from(format!("Unable to walk path for artefacts capture: {e}")))?
         .filter_map(|x| x.ok().map(|x| x.path().to_string_lossy().to_string()))
         .peekable();
 
@@ -193,7 +193,7 @@ pub(crate) async fn run_process(
         elements.insert(
             "integration".to_string(),
             report::TestSuite {
-                description: format!("{} test suite", kind),
+                description: format!("{kind} test suite"),
                 name: "name".into(),
                 elements: report,
                 evidence: Some(evidence),
@@ -235,7 +235,7 @@ pub(crate) async fn run_process(
                     .ok_or("unable to find the benchmark name")?
                     .to_string_lossy()
                     .into(),
-                description: format!("{} test suite", kind),
+                description: format!("{kind} test suite"),
                 elements: vec![],
                 evidence: Some(evidence),
                 stats: stats.clone(),

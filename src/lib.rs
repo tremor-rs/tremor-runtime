@@ -104,13 +104,13 @@ lazy_static! {
 /// Fails if the file can not be loaded
 pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
     use std::io::Read;
-    info!("Loading troy from {}", file_name);
+    info!("Loading troy from {file_name}");
 
     let mut file = tremor_common::file::open(&file_name)?;
     let mut src = String::new();
 
     file.read_to_string(&mut src)
-        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
+        .map_err(|e| Error::from(format!("Could not open file {file_name} => {e}")))?;
     let aggr_reg = tremor_script::registry::aggr();
 
     let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg);
@@ -123,7 +123,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
         Err(e) => {
             log_error!(h.format_error(&e), "Error: {e}");
 
-            return Err(format!("failed to load troy file: {}", file_name).into());
+            return Err(format!("failed to load troy file: {file_name}").into());
         }
     };
 

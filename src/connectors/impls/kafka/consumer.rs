@@ -276,7 +276,7 @@ impl ConnectorBuilder for Builder {
             path: vec![],
         };
 
-        let client_id = format!("tremor-{}-{}", hostname(), alias);
+        let client_id = format!("tremor-{}-{alias}", hostname());
         let mut client_config = config.mode.to_config().map_err(|e| {
             Error::from(ErrorKind::InvalidConfiguration(
                 alias.to_string(),

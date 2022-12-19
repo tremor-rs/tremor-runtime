@@ -190,22 +190,22 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
         .insert(TremorAggrFnWrapper::new(
             "win".to_string(),
             "first".to_string(),
-            Box::new(First::default()),
+            Box::<First>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "win".to_string(),
             "collect_flattened".to_string(),
-            Box::new(CollectFlattened::default()),
+            Box::<CollectFlattened>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "win".to_string(),
             "collect_nested".to_string(),
-            Box::new(CollectNested::default()),
+            Box::<CollectNested>::default(),
         ))
         .insert(TremorAggrFnWrapper::new(
             "win".to_string(),
             "last".to_string(),
-            Box::new(Last::default()),
+            Box::<Last>::default(),
         ));
 }
 

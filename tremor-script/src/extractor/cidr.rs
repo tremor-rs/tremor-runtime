@@ -226,7 +226,7 @@ impl Cidr {
             Ok(Self(cidr))
         } else {
             Err(Error {
-                msg: format!("Invalid CIDR: '{}'", s),
+                msg: format!("Invalid CIDR: '{s}'"),
             })
         }
     }
@@ -302,7 +302,7 @@ impl SnotCombiner {
                 combiner.push(y);
             } else {
                 return Err(Error {
-                    msg: format!("could not parse CIDR: '{}'", x),
+                    msg: format!("could not parse CIDR: '{x}'"),
                 });
             }
         }

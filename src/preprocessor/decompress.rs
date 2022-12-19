@@ -205,13 +205,13 @@ pub(crate) struct Decompress {
 impl Decompress {
     pub(crate) fn from_config(config: Option<&Value>) -> Result<Self> {
         let codec: Box<dyn Preprocessor> = match config.get_str("algorithm") {
-            Some("gzip") => Box::new(Gzip::default()),
-            Some("zlib") => Box::new(Zlib::default()),
-            Some("xz2") => Box::new(Xz2::default()),
-            Some("snappy") => Box::new(Snappy::default()),
-            Some("lz4") => Box::new(Lz4::default()),
-            Some("zstd") => Box::new(Zstd::default()),
-            Some("autodetect") | None => Box::new(Fingerprinted::default()),
+            Some("gzip") => Box::<Gzip>::default(),
+            Some("zlib") => Box::<Zlib>::default(),
+            Some("xz2") => Box::<Xz2>::default(),
+            Some("snappy") => Box::<Snappy>::default(),
+            Some("lz4") => Box::<Lz4>::default(),
+            Some("zstd") => Box::<Zstd>::default(),
+            Some("autodetect") | None => Box::<Fingerprinted>::default(),
             Some(other) => return Err(format!("Unknown decompression algorithm: {other}").into()),
         };
         Ok(Decompress { codec })

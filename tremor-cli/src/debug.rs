@@ -86,7 +86,7 @@ where
             "\n\n****************\n* {} - {}\n****************\n\n",
             section, detail
         );
-        write!(h.get_writer(), "{}", spec,)?;
+        write!(h.get_writer(), "{spec}")?;
     }
     Ok(())
 }
@@ -157,7 +157,7 @@ where
                         "{}:{} - {}:{}",
                         start.line(), start.column(), end.line(), end.column()
                     );
-                    write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
+                    write!(h.get_writer(), "{line_spec:^16} \u{2219}    ")?;
                     h.set_color( directive)?;
                     writeln!(h.get_writer(), " #!config ")?;
                 }
@@ -167,12 +167,12 @@ where
                         "{}:{} - {}:{}",
                         start.line(), start.column(), end.line(), end.column()
                     );
-                    write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
+                    write!(h.get_writer(), "{line_spec:^16} \u{2219}    ")?;
                     h.set_color(&mut default)?;
                     write!(
                         &mut h.get_writer(),
                         " {:<30}    \u{2219}    ",
-                        format!("{:?}", value).split('(').collect::<Vec<&str>>()[0]
+                        format!("{value:?}").split('(').collect::<Vec<&str>>()[0]
                     )?;
                     h.highlight(
                         None,
@@ -212,7 +212,7 @@ impl DbgAst {
                 }
                 Err(e) => {
                     if let Err(e) = h.format_error(&e) {
-                        eprintln!("Error: {}", e);
+                        eprintln!("Error: {e}");
                     };
                 }
             },
@@ -225,7 +225,7 @@ impl DbgAst {
                     }
                     Err(e) => {
                         if let Err(e) = h.format_error(&e) {
-                            eprintln!("Error: {}", e);
+                            eprintln!("Error: {e}");
                         };
                     }
                 };
@@ -239,7 +239,7 @@ impl DbgAst {
                     }
                     Err(e) => {
                         if let Err(e) = h.format_error(&e) {
-                            eprintln!("Error: {}", e);
+                            eprintln!("Error: {e}");
                         };
                     }
                 };
@@ -274,7 +274,7 @@ impl DbgDot {
                 }
                 Err(e) => {
                     if let Err(e) = h.format_error(&e) {
-                        eprintln!("Error: {}", e);
+                        eprintln!("Error: {e}");
                     };
                 }
             };
@@ -286,7 +286,7 @@ impl DbgDot {
                 }
                 Err(e) => {
                     if let Err(e) = h.format_error(&e) {
-                        eprintln!("Error: {}", e);
+                        eprintln!("Error: {e}");
                     };
                 }
             };

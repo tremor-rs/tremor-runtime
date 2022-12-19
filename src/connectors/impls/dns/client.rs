@@ -168,7 +168,7 @@ impl Sink for DnsSink {
                     // TODO: check for errors that require a reconnect
                     let data = literal!({
                         "request": m.get("dns").map(Value::clone_static).unwrap_or_default(),
-                        "error": format!("{}", err),
+                        "error": format!("{err}"),
                     });
                     let meta = m.get("correlation").map_or_else(
                         Value::object,
@@ -223,7 +223,7 @@ fn str_to_record_type(s: &str) -> Result<RecordType> {
         "TLSA" => Ok(RecordType::TLSA),
         "TXT" => Ok(RecordType::TXT),
         "ZERO" => Ok(RecordType::ZERO),
-        other => Err(format!("Invalid or unsupported record type: {}", other).into()),
+        other => Err(format!("Invalid or unsupported record type: {other}").into()),
     }
 }
 

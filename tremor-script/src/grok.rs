@@ -89,7 +89,7 @@ impl Pattern {
                 pattern: Arc::new(pattern),
             })
         } else {
-            Err(format!("Failed to compile logstash grok pattern `{}`", definition).into())
+            Err(format!("Failed to compile logstash grok pattern `{definition}`").into())
         }
     }
 

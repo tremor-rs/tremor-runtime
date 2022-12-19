@@ -39,7 +39,7 @@ where
     if name == "tremor" {
         env::var("TREMOR_BIN")
             .map_or_else(|_| env::current_exe(), |p| Ok(PathBuf::from(p)))
-            .map_err(|e| Error::from(format!("Unable to execute current tremor binary: {}", e)))
+            .map_err(|e| Error::from(format!("Unable to execute current tremor binary: {e}")))
     } else {
         env::var_os("PATH")
             .and_then(|paths| {
@@ -53,7 +53,7 @@ where
                 })
             })
             .ok_or_else(|| {
-                Error::from(format!("Unable to find suitable `{}` binary on path", name))
+                Error::from(format!("Unable to find suitable `{name}` binary on path"))
             })
     }
 }
@@ -144,7 +144,7 @@ impl TargetProcess {
         let cmdline = format!(
             "{}{} {}",
             env.iter()
-                .map(|(k, v)| format!("{}={} ", k, v))
+                .map(|(k, v)| format!("{k}={v} "))
                 .collect::<String>(),
             cmd.to_string_lossy(),
             args.join(" ")
@@ -274,7 +274,7 @@ impl Drop for TargetProcess {
         // this errors if the process is already killed, but this is fine for us
         let _ = self.process.kill().is_err();
         if let Err(e) = async_std::task::block_on(self.process.status()) {
-            eprintln!("target process drop error: {:?}", e);
+            eprintln!("target process drop error: {e:?}");
         }
     }
 }

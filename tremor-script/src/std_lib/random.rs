@@ -184,12 +184,12 @@ pub fn load(registry: &mut Registry) {
         .insert(TremorFnWrapper::new(
             "random".to_string(),
             "integer".to_string(),
-            Box::new(RandomInteger::default()),
+            Box::<RandomInteger>::default(),
         ))
         .insert(TremorFnWrapper::new(
             "random".to_string(),
             "float".to_string(),
-            Box::new(RandomFloat::default()),
+            Box::<RandomFloat>::default(),
         ));
 }
 

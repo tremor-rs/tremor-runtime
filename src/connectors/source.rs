@@ -864,7 +864,7 @@ where
         };
         self.ctx.swallow_err(
             p.send_mgmt(msg).await,
-            &format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
+            &format!("Failed sending ConnectInput to pipeline {pipeline_url}"),
         );
 
         pipes.push(pipeline);

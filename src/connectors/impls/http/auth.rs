@@ -44,7 +44,7 @@ impl Auth {
                 ref username,
                 ref password,
             } => {
-                let encoded = base64::encode(&format!("{}:{}", username, password));
+                let encoded = base64::encode(format!("{username}:{password}"));
                 Ok(Some(format!("Basic {}", &encoded)))
             }
             Auth::Bearer(token) => Ok(Some(format!("Bearer {}", &token))),
@@ -52,8 +52,8 @@ impl Auth {
                 let mut header_value = "ApiKey ".to_string();
                 let mut writer =
                     base64::write::EncoderStringWriter::from(&mut header_value, base64::STANDARD);
-                write!(writer, "{}:", id)?;
-                write!(writer, "{}", api_key)?;
+                write!(writer, "{id}:")?;
+                write!(writer, "{api_key}")?;
                 writer.into_inner(); // release the reference, so header-value is accessible again
                 Ok(Some(header_value))
             }

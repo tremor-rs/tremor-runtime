@@ -70,19 +70,19 @@ type ParserError<'screw_lalrpop> =
 
 impl From<url::ParseError> for Error {
     fn from(e: url::ParseError) -> Self {
-        Self::from(format!("Url Parse Error: {}", e))
+        Self::from(format!("Url Parse Error: {e}"))
     }
 }
 
 impl From<Error> for std::io::Error {
     fn from(e: Error) -> Self {
-        std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e))
+        std::io::Error::new(std::io::ErrorKind::Other, format!("{e}"))
     }
 }
 
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {
-        Self::from(format!("Poison Error: {:?}", e))
+        Self::from(format!("Poison Error: {e:?}"))
     }
 }
 
@@ -134,7 +134,7 @@ impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
                 )
                 .into()
             }
-            _ => ErrorKind::ParserError(format!("{:?}", error)).into(),
+            _ => ErrorKind::ParserError(format!("{error:?}")).into(),
         }
     }
 }
@@ -351,12 +351,12 @@ impl ErrorKind {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.start().absolute() == outer.start().absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
             UnrecognizedToken(_, _, t, _) if t == "##" => Some(format!("`{t}` is as doc comment, it needs to be followed by a statement, did you want to use `#` here?")),
             UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `;` in the prior statement".into()),
-            UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use '{}' as an ident, consider quoting it as `{}` to make it an identifier.", t, t)),
+            UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use '{t}' as an ident, consider quoting it as `{t}` to make it an identifier.")),
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             UnrecognizedToken(_, _, key, options) => {
                 match best_hint(key, options, 3) {
                     Some((_d, o)) if o == r#"`"`"# || o == r#"`"""`"#  => Some("Did you mean to use a string?".to_string()),
-                    Some((_d, o)) if o != r#"`"`"# && o != r#"`"""`"# => Some(format!("Did you mean to use {}?", o)),
+                    Some((_d, o)) if o != r#"`"`"# && o != r#"`"""`"# => Some(format!("Did you mean to use {o}?")),
                     _ => None
                 }
             }
@@ -374,14 +374,14 @@ impl ErrorKind {
                 options.push("false".to_owned());
                 options.push("null".to_owned());
                 match best_hint(key, &options, 2) {
-                    Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
+                    Some((_d, o)) => Some(format!("Did you mean to use `{o}`?")),
                     _ => None
                 }
             }
 
             BadAccessInEvent(_, _, key, options) |BadAccessInGlobal(_, _, key, options) => {
                 match best_hint(key, options, 2) {
-                    Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
+                    Some((_d, o)) => Some(format!("Did you mean to use `{o}`?")),
                     _ => None
                 }
             }
@@ -393,12 +393,12 @@ impl ErrorKind {
                 _ => None
             },
             MissingModule(_, _, m, _) if m == "object" => Some("Did you mean to use the `record` module".into()),
-            MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`?", suggestion)),
+            MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{suggestion}`?")),
 
             NoEventReferencesAllowed(_, _) => Some("Here you operate in the whole window, not a single event. You need to wrap this reference in an aggregate function (e.g. aggr::win::last(...)) or use it in the group by clause of this query.".to_owned()),
 
             NoClauseHit(_) => Some("Consider adding a `case _ => null` clause at the end of your match or validate full coverage beforehand.".into()),
-            Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
+            Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{id}")),
 
             InvalidDefinitionalWithParam(_, _, _, _, available_params) => if available_params.is_empty() {
                 Some(String::from("Definition does not allow any `with` parameters"))
@@ -463,9 +463,9 @@ impl Error {
                 let mut cur_line_num = start_line;
                 let mut error_lines = Vec::with_capacity(context_lines.len() + 1);
                 for context_line in context_lines {
-                    error_lines.push(format!("{:5} | {}", cur_line_num, context_line));
+                    error_lines.push(format!("{cur_line_num:5} | {context_line}"));
                     if cur_line_num == error_line {
-                        let err_msg = format!("{}", self);
+                        let err_msg = format!("{self}");
                         let (start_column, err_len) =
                             if error_loc_end.line() == error_loc_start.line() {
                                 (
@@ -481,7 +481,7 @@ impl Error {
 
                         let prefix = " ".repeat(start_column.saturating_sub(1));
                         let underline = "^".repeat(err_len);
-                        error_lines.push(format!("      | {}{} {}", prefix, underline, err_msg));
+                        error_lines.push(format!("      | {prefix}{underline} {err_msg}"));
                     }
                     cur_line_num += 1;
                 }
@@ -698,7 +698,7 @@ error_chain! {
             description("Module not found")
                 display("Module `{}` not found or not readable error in module path: {}",
                 resolved_relative_file_path.trim(),
-                expected.iter().map(|x| format!("\n                         - {}", x)).collect::<String>())
+                expected.iter().map(|x| format!("\n                         - {x}")).collect::<String>())
         }
 
 
@@ -751,9 +751,9 @@ error_chain! {
                             format!("index range {}:{}", r.start, r.end)
                         },
                         if r.start == r.end {
-                            format!("an index in the range 0:{}", len)
+                            format!("an index in the range 0:{len}")
                         } else {
-                            format!("a subrange of 0:{}", len)
+                            format!("a subrange of 0:{len}")
                         })
         }
         AssignIntoArray(expr: Span, inner: Span) {
