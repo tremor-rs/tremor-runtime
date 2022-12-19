@@ -42,7 +42,7 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[async_std::test]
-            #[serial(query_runtime_error, timeout_ms = 120000)]
+            #[serial(query_runtime_error)]
             async fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;

@@ -29,7 +29,7 @@ use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
 
 #[async_std::test]
-#[serial(s3, timeout_ms = 6000000)]
+#[serial(s3)]
 async fn connector_s3_no_connection() -> Result<()> {
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-connection");
@@ -56,7 +56,7 @@ async fn connector_s3_no_connection() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(s3, timeout_ms = 6000000)]
+#[serial(s3)]
 async fn connector_s3_no_credentials() -> Result<()> {
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-credentials");
@@ -92,7 +92,7 @@ async fn connector_s3_no_credentials() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(s3, timeout_ms = 6000000)]
+#[serial(s3)]
 async fn connector_s3_no_region() -> Result<()> {
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-region");
@@ -130,7 +130,7 @@ async fn connector_s3_no_region() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(s3, timeout_ms = 6000000)]
+#[serial(s3)]
 async fn connector_s3_no_bucket() -> Result<()> {
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-bucket");
@@ -164,7 +164,7 @@ async fn connector_s3_no_bucket() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(s3, timeout_ms = 6000000)]
+#[serial(s3)]
 async fn connector_s3_reader() -> Result<()> {
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("tremor");

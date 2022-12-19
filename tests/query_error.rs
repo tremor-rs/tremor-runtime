@@ -35,7 +35,7 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
-            #[serial(query_error, timeout_ms = 120000)]
+            #[serial(query_error)]
             fn $file() -> Result<()> {
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/query_errors/", stringify!($file), "/").to_string();
