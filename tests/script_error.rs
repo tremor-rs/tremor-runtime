@@ -22,7 +22,7 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
-            #[serial(script_error, timeout_ms = 120000)]
+            #[serial(script_error)]
             fn $file() -> Result<()> {
                 tremor_runtime::functions::load()?;
                 let script_dir = concat!("tests/script_errors/", stringify!($file), "/").to_string();
@@ -62,7 +62,7 @@ macro_rules! ignored_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
-            #[serial(script_error, timeout_ms = 120000)]
+            #[serial(script_error)]
             fn $file() -> Result<()> {
                 tremor_runtime::functions::load()?;
                 let script_dir = concat!("tests/script_errors/", stringify!($file), "/").to_string();

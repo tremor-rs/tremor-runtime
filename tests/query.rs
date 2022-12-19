@@ -248,7 +248,7 @@ macro_rules! test_cases {
     ($($file:ident),*) => {
         $(
             #[async_std::test]
-            #[serial(query, timeout_ms = 120000)]
+            #[serial(query)]
             async fn $file() -> Result<()> {
                 main_config(stringify!($file)).await
             }

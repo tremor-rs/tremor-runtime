@@ -31,7 +31,7 @@ use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 6000000)]
+#[serial(gpubsub)]
 async fn no_connection() -> Result<()> {
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
@@ -50,7 +50,7 @@ async fn no_connection() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 6000000)]
+#[serial(gpubsub)]
 async fn no_hostname() -> Result<()> {
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
@@ -71,7 +71,7 @@ async fn no_hostname() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 6000000)]
+#[serial(gpubsub)]
 async fn simple_publish() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -177,7 +177,7 @@ async fn simple_publish() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub, timeout_ms = 6000000)]
+#[serial(gpubsub)]
 async fn simple_publish_with_timeout() -> Result<()> {
     let _ = env_logger::try_init();
 
