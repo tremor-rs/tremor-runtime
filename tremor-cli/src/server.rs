@@ -87,14 +87,11 @@ impl ServerRun {
             }
         }
         if let Some(pid_file) = &self.pid {
-            let mut file = file::create(pid_file).map_err(|e| {
-                Error::from(format!("Failed to create pid file `{pid_file}`: {e}"))
-            })?;
+            let mut file = file::create(pid_file)
+                .map_err(|e| Error::from(format!("Failed to create pid file `{pid_file}`: {e}")))?;
 
             file.write(format!("{}\n", std::process::id()).as_ref())
-                .map_err(|e| {
-                    Error::from(format!("Failed to write pid to `{pid_file}`: {e}"))
-                })?;
+                .map_err(|e| Error::from(format!("Failed to write pid to `{pid_file}`: {e}")))?;
         }
 
         tremor_script::RECURSION_LIMIT.store(self.recursion_limit, Ordering::Relaxed);

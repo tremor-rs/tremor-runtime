@@ -70,9 +70,9 @@ pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postpr
         "ingest-ns" => Ok(Box::<ingest_ns::IngestNs>::default()),
         "length-prefixed" => Ok(Box::<length_prefixed::LengthPrefixed>::default()),
         "gelf-chunking" => Ok(Box::<gelf_chunking::Gelf>::default()),
-        "textual-length-prefixed" => Ok(Box::<
-            textual_length_prefixed::TextualLengthPrefixed>::default(),
-        ),
+        "textual-length-prefixed" => {
+            Ok(Box::<textual_length_prefixed::TextualLengthPrefixed>::default())
+        }
         name => Err(format!("Postprocessor '{name}' not found.").into()),
     }
 }

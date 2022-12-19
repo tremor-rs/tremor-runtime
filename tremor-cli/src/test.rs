@@ -440,9 +440,8 @@ impl Test {
         if let Some(report) = &self.report {
             let mut file = file::create(report)?;
             let result = simd_json::to_string(&test_run)?;
-            file.write_all(result.as_bytes()).map_err(|e| {
-                Error::from(format!("Failed to write report to `{report}`: {e}"))
-            })?;
+            file.write_all(result.as_bytes())
+                .map_err(|e| Error::from(format!("Failed to write report to `{report}`: {e}")))?;
         }
 
         if all_stats.fail > 0 {
