@@ -68,9 +68,9 @@ pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preproc
         "gelf-chunking" => Ok(Box::<gelf_chunking::GelfChunking>::default()),
         "ingest-ns" => Ok(Box::<ingest_ns::ExtractIngestTs>::default()),
         "length-prefixed" => Ok(Box::<length_prefixed::LengthPrefixed>::default()),
-        "textual-length-prefixed" => Ok(Box::<
-            textual_length_prefixed::TextualLengthPrefixed>::default(),
-        ),
+        "textual-length-prefixed" => {
+            Ok(Box::<textual_length_prefixed::TextualLengthPrefixed>::default())
+        }
         name => Err(format!("Preprocessor '{name}' not found.").into()),
     }
 }

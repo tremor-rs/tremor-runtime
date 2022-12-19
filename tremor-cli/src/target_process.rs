@@ -52,9 +52,7 @@ where
                     }
                 })
             })
-            .ok_or_else(|| {
-                Error::from(format!("Unable to find suitable `{name}` binary on path"))
-            })
+            .ok_or_else(|| Error::from(format!("Unable to find suitable `{name}` binary on path")))
     }
 }
 
