@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::impls::{
-    object_storage::{
-        BufferPart, ObjectId, ObjectStorageBuffer, ObjectStorageCommon, ObjectStorageSinkImpl,
-        ObjectStorageUpload,
+use crate::connectors::{
+    impls::{
+        object_storage::{
+            BufferPart, ConsistentSink, Mode, ObjectId, ObjectStorageBuffer, ObjectStorageCommon,
+            ObjectStorageSinkImpl, ObjectStorageUpload, YoloSink,
+        },
+        s3::auth,
     },
-    s3::auth,
+    prelude::*,
 };
-use crate::connectors::prelude::*;
 use async_std::channel::Sender;
+use aws_sdk_s3::{
+    model::{CompletedMultipartUpload, CompletedPart},
+    Client as S3Client,
+};
 use tremor_common::time::nanotime;
 use tremor_pipeline::{Event, EventId, OpMeta};
-
-use aws_sdk_s3 as s3;
-use s3::model::{CompletedMultipartUpload, CompletedPart};
-use s3::Client as S3Client;
-
-use crate::connectors::impls::object_storage::{ConsistentSink, Mode, YoloSink};
 
 pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";
 

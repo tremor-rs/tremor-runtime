@@ -222,9 +222,9 @@ tremor-otelapis = { version = "=0.2.4" }
 
 # aws-s3
 aws-sdk-s3 = "0.22"
-aws-types = "0.51"
-aws-config = "0.51"
-aws-smithy-http = "0.51"
+aws-types = "0.52"
+aws-config = "0.52"
+aws-smithy-http = "0.52"
 
 # gcp
 googapis = { version = "0.6", default-features = false, features = [
