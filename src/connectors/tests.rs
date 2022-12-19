@@ -333,6 +333,7 @@ impl ConnectorHarness {
         feature = "socket-integration",
         feature = "net-integration",
         feature = "ws-integration",
+        feature = "s3-integration",
         feature = "gcp-integration"
     ))]
     pub(crate) async fn send_to_sink(&self, event: Event, port: Cow<'static, str>) -> Result<()> {
@@ -414,7 +415,7 @@ impl TestPipeline {
     }
 
     // get all available contraflow events
-    #[cfg(feature = "kafka-integration")]
+    #[cfg(any(feature = "s3-integration", feature = "kafka-integration"))]
     pub(crate) fn get_contraflow_events(&self) -> Result<Vec<Event>> {
         let mut events = Vec::with_capacity(self.rx.len());
         while let Ok(pipeline::CfMsg::Insight(event)) = self.rx_cf.try_recv() {
