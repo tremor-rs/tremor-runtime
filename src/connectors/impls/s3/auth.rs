@@ -13,13 +13,9 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-
 use aws_config::meta::region::RegionProviderChain;
+use aws_sdk_s3::{config, Client, Endpoint};
 use aws_types::region::Region;
-
-use aws_sdk_s3 as s3;
-use s3::Client as S3Client;
-use s3::Endpoint;
 
 /// Get an S3 client for the given region and the optionally provided endpoint URL.
 ///
@@ -35,7 +31,7 @@ use s3::Endpoint;
 pub(crate) async fn get_client<D>(
     region: Option<String>,
     endpoint: Option<&Url<D>>,
-) -> Result<S3Client>
+) -> Result<Client>
 where
     D: Defaults,
 {
@@ -43,13 +39,12 @@ where
         RegionProviderChain::first_try(region.map(Region::new)).or_default_provider();
     let region = region_provider.region().await;
     let config = aws_config::from_env().load().await;
-    let mut config_builder = s3::config::Builder::from(&config).region(region);
+    let mut config_builder = config::Builder::from(&config).region(region);
 
     if let Some(endpoint) = endpoint {
-        config_builder = config_builder.endpoint_resolver(Endpoint::immutable(
-            endpoint.to_string().parse::<http::Uri>()?,
-        ));
+        config_builder =
+            config_builder.endpoint_resolver(Endpoint::immutable(endpoint.to_string())?);
     }
 
-    Ok(S3Client::from_conf(config_builder.build()))
+    Ok(Client::from_conf(config_builder.build()))
 }

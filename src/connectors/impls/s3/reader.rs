@@ -11,19 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use super::auth;
 use crate::connectors::prelude::*;
+use async_std::{
+    channel::{self, Receiver, Sender},
+    sync::Arc,
+    task::{self, JoinHandle},
+};
+use aws_sdk_s3::{model::Object, types::ByteStream, Client as S3Client};
 use futures::stream::TryStreamExt;
 use std::error::Error as StdError;
-
-use async_std::channel::{self, Receiver, Sender};
-use async_std::sync::Arc;
-use async_std::task::{self, JoinHandle};
-
-use super::auth;
-use aws_sdk_s3 as s3;
-use s3::model::Object;
-use s3::types::ByteStream;
-use s3::Client as S3Client;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 

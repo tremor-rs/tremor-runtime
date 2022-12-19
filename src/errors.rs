@@ -122,12 +122,6 @@ impl<T: std::fmt::Debug> From<aws_sdk_s3::types::SdkError<T>> for Error {
     }
 }
 
-impl From<aws_smithy_http::byte_stream::Error> for Error {
-    fn from(e: aws_smithy_http::byte_stream::Error) -> Self {
-        Self::from(ErrorKind::S3Error(format!("{e}")))
-    }
-}
-
 impl From<TryTypeError> for Error {
     fn from(e: TryTypeError) -> Self {
         ErrorKind::TypeError(e.expected, e.got).into()
@@ -203,6 +197,8 @@ error_chain! {
         Lexical(lexical::Error);
         SimdUtf8(simdutf8::basic::Utf8Error);
         TremorCodec(crate::codec::tremor::Error);
+        S3Endpoint(aws_smithy_http::endpoint::error::InvalidEndpointError);
+        S3ByteStream(aws_smithy_http::byte_stream::error::Error);
     }
 
     errors {
