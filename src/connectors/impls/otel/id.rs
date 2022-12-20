@@ -29,7 +29,7 @@ pub(crate) fn random_span_id_string(ingest_ns_seed: u64) -> String {
     let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
     let span_id: String = (0..8)
         .map(|_| rng.gen_range(0_u8..=255_u8))
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect();
     span_id
 }
@@ -55,7 +55,7 @@ pub(crate) fn random_trace_id_string(ingest_ns_seed: u64) -> String {
     let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
     let span_id: String = (0..16)
         .map(|_| rng.gen_range(0_u8..=255_u8))
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect();
     span_id
 }
@@ -80,7 +80,7 @@ pub(crate) fn hex_span_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
 }
 
 pub(crate) fn hex_span_id_to_json(data: &[u8]) -> Value<'static> {
-    let hex: String = data.iter().map(|b| format!("{:02x}", b)).collect();
+    let hex: String = data.iter().map(|b| format!("{b:02x}")).collect();
     Value::from(hex)
 }
 
@@ -89,7 +89,7 @@ pub(crate) fn hex_trace_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
 }
 
 pub(crate) fn hex_trace_id_to_json(data: &[u8]) -> Value<'static> {
-    let hex: String = data.iter().map(|b| format!("{:02x}", b)).collect();
+    let hex: String = data.iter().map(|b| format!("{b:02x}")).collect();
     Value::from(hex)
 }
 
@@ -109,7 +109,7 @@ fn hex_id_to_pb(
             kind
         ))?
     } else {
-        return Err(format!("Cannot convert json value to otel pb {} id", kind).into());
+        return Err(format!("Cannot convert json value to otel pb {kind} id").into());
     };
     if (allow_empty && data.is_empty()) || data.len() == len_bytes {
         Ok(data)

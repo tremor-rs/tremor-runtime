@@ -715,7 +715,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                     self.insert_update_op(data, ops)
                 }
             }
-            other => Err(Error::from(format!("Invalid `$elastic.action` {}", other))),
+            other => Err(Error::from(format!("Invalid `$elastic.action` {other}"))),
         }
     }
 

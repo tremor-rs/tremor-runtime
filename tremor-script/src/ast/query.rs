@@ -513,7 +513,7 @@ impl<'script> DefinitionalArgsWith<'script> {
             .map(|(k, expr)| {
                 let expr = expr
                     .clone()
-                    .ok_or_else(|| format!("Missing configuration variable {}", k))?;
+                    .ok_or_else(|| format!("Missing configuration variable {k}"))?;
                 Ok((k.id.clone(), ConstFolder::reduce_to_val(helper, expr)?))
             })
             .collect::<Result<Value>>()?;
@@ -569,7 +569,7 @@ impl<'script> DefinitionalArgs<'script> {
 
         if let Some((k, _)) = self.args.0.iter_mut().find(|(_, v)| v.is_none()) {
             let k = k.clone();
-            err_generic(self, &k, &format!("Missing required argument: {}", k))
+            err_generic(self, &k, &format!("Missing required argument: {k}"))
         } else {
             Ok(())
         }

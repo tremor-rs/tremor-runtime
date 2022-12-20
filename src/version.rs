@@ -35,7 +35,7 @@ pub fn long_ver() -> String {
         Some(branch) => {
             // provide additional version info
             let commit_hash: &str = option_env!("VERSION_HASH").map_or("", |hash| hash);
-            format!("{} {}:{}", VERSION_LONG, branch, commit_hash)
+            format!("{VERSION_LONG} {branch}:{commit_hash}")
         }
     }
 }
@@ -45,14 +45,14 @@ pub fn print() {
     eprintln!("tremor version: {}", long_ver().as_str());
     eprintln!("tremor instance: {}", instance!());
     let (version_n, version_s) = get_rdkafka_version();
-    eprintln!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
+    eprintln!("rd_kafka version: 0x{version_n:08x}, {version_s}");
 }
 
 /// Logs tremor and librdkafka version.
 pub fn log() {
     info!("tremor version: {}", long_ver().as_str());
     let (version_n, version_s) = get_rdkafka_version();
-    info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
+    info!("rd_kafka version: 0x{version_n:08x}, {version_s}");
 }
 
 /// Gets the librdkafka version string

@@ -172,7 +172,7 @@ where
         let datetime = data
             .get_i64("timestamp")
             .map_or_else(|| self.now.now(), |t| Utc.timestamp_nanos(t));
-        result.push(format!("<{}>{}", pri, datetime.format("%b %e %H:%M:%S")));
+        result.push(format!("<{pri}>{}", datetime.format("%b %e %H:%M:%S")));
 
         result.push(
             data.get_str("hostname")
@@ -182,8 +182,8 @@ where
             || String::from(":"),
             |appname| {
                 data.get_str("procid").map_or_else(
-                    || format!("{}:", appname),
-                    |procid| format!("{}[{}]:", appname, procid),
+                    || format!("{appname}:"),
+                    |procid| format!("{appname}[{procid}]:"),
                 )
             },
         ));

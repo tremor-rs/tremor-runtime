@@ -168,7 +168,7 @@ pub fn mfa(m: &str, f: &str, a: usize) -> Mfa {
 pub fn to_runtime_error<E: core::fmt::Display>(mfa: Mfa, e: E) -> FunctionError {
     FunctionError::RuntimeError {
         mfa,
-        error: format!("{}", e),
+        error: format!("{e}"),
     }
 }
 

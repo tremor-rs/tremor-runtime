@@ -20,18 +20,18 @@
 use error_chain::error_chain;
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {
-        Self::from(format!("Poison Error: {:?}", e))
+        Self::from(format!("Poison Error: {e:?}"))
     }
 }
 impl From<regex::Error> for Error {
     fn from(e: regex::Error) -> Self {
-        Self::from(format!("Regex Error: {:?}", e))
+        Self::from(format!("Regex Error: {e:?}"))
     }
 }
 
 impl From<sled::transaction::TransactionError<()>> for Error {
     fn from(e: sled::transaction::TransactionError<()>) -> Self {
-        Self::from(format!("Sled Transaction Error: {:?}", e))
+        Self::from(format!("Sled Transaction Error: {e:?}"))
     }
 }
 
@@ -97,5 +97,5 @@ error_chain! {
 /// Creates a missing config field error
 #[must_use]
 pub fn missing_config(f: &str) -> Error {
-    ErrorKind::MissingOpConfig(format!("missing field {}", f)).into()
+    ErrorKind::MissingOpConfig(format!("missing field {f}")).into()
 }

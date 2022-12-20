@@ -62,7 +62,7 @@ impl After {
             "{}{} {}",
             self.env
                 .iter()
-                .map(|(k, v)| format!("{}={} ", k, v))
+                .map(|(k, v)| format!("{k}={v} "))
                 .collect::<String>(),
             self.cmd,
             self.args.join(" ")
@@ -110,7 +110,7 @@ impl AfterController {
                     let after_err_file = root.join(format!("after.err.{i}.log"));
                     let after_process = async_std::task::spawn(async move {
                         if let Err(e) = process.tail(&after_out_file, &after_err_file).await {
-                            eprintln!("failed to tail tremor process: {}", e);
+                            eprintln!("failed to tail tremor process: {e}");
                         }
                     });
 

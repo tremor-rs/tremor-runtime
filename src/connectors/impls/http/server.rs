@@ -195,7 +195,7 @@ impl Source for HttpServerSource {
                 80
             }
         });
-        let hostport = format!("{}:{}", host, port);
+        let hostport = format!("{host}:{port}");
 
         // cancel last accept task if necessary, this will drop the previous listener
         if let Some(server_task) = self.server_task.take() {

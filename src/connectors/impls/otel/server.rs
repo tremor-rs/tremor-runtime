@@ -129,7 +129,7 @@ impl Connector for Server {
             .url
             .port()
             .ok_or("Missing prot for otel server")?;
-        let endpoint = format!("{}:{}", host, port).parse()?;
+        let endpoint = format!("{host}:{port}").parse()?;
 
         if let Some(previous_handle) = self.accept_task.take() {
             previous_handle.cancel().await;

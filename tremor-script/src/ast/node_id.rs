@@ -80,7 +80,7 @@ impl NodeId {
         if self.module.is_empty() {
             target.to_string()
         } else {
-            format!("{}::{}", self.module.join("::"), target)
+            format!("{}::{target}", self.module.join("::"))
         }
     }
 }

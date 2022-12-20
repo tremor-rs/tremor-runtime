@@ -516,11 +516,11 @@ impl<'value> ValueTrait for Value<'value> {
 impl<'value> fmt::Display for Value<'value> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Static(s) => write!(f, "{}", s),
-            Self::String(s) => write!(f, "{}", s),
-            Self::Array(a) => write!(f, "{:?}", a),
-            Self::Object(o) => write!(f, "{:?}", o),
-            Value::Bytes(b) => write!(f, "<<{:?}>>", b),
+            Self::Static(s) => write!(f, "{s}"),
+            Self::String(s) => write!(f, "{s}"),
+            Self::Array(a) => write!(f, "{a:?}"),
+            Self::Object(o) => write!(f, "{o:?}"),
+            Value::Bytes(b) => write!(f, "<<{b:?}>>"),
         }
     }
 }

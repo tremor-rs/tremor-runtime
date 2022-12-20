@@ -183,14 +183,14 @@ fn eval_suite_tests(
                     let mut th: TermHighlighter = TermHighlighter::default();
                     th.highlight_range_with_indent("       ", extent)?;
                     if let Some([expected, got]) = value.as_array().map(Vec::as_slice) {
-                        println!("             | {} != {}", expected, got);
+                        println!("             | {expected} != {got}");
                     }
                     th.finalize()?;
                     println!();
                 }
                 // Test record
                 elements.push(report::TestElement {
-                    description: format!("{} Executing test {} of {}", prefix, idx + 1, ll),
+                    description: format!("{prefix} Executing test {} of {ll}", idx + 1),
                     keyword: report::KeywordKind::Test,
                     result: report::ResultKind {
                         status: report,
@@ -303,7 +303,7 @@ pub(crate) fn run_suite(
             stats.fail(&script);
             let mut h = TermHighlighter::default();
             if let Err(e) = h.format_error(&e) {
-                eprintln!("Error: {}", e);
+                eprintln!("Error: {e}");
             };
         }
     }

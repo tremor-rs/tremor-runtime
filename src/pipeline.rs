@@ -589,7 +589,7 @@ pub(crate) async fn pipeline_task(
                         let script_error = tremor_script::errors::Error(script_kind, e.1);
                         Dumb::error_to_string(&script_error)?
                     } else {
-                        format!(" {:?}", e)
+                        format!(" {e:?}")
                     };
                     error!("{ctx} Error handling signal: {err_str}");
                 } else {

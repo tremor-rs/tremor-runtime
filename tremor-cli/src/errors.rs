@@ -22,13 +22,13 @@ use error_chain::error_chain;
 
 impl From<http_types::Error> for Error {
     fn from(e: http_types::Error) -> Self {
-        Self::from(format!("{}", e))
+        Self::from(format!("{e}"))
     }
 }
 
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {
-        Self::from(format!("Poison Error: {:?}", e))
+        Self::from(format!("Poison Error: {e:?}"))
     }
 }
 

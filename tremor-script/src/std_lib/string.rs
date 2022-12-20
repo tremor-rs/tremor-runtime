@@ -62,7 +62,7 @@ impl TremorFn for StringFormat {
                         };
                         out.push(c);
                     } else {
-                        return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("bad escape sequence at {}", pos)});
+                        return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("bad escape sequence at {pos}")});
 
                     }
                     '{' => match iter.next() {
@@ -73,19 +73,19 @@ impl TremorFn for StringFormat {
                                 out.push_str(arg.encode().as_str());
                             };
                         } else {
-                             return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {} can not be filled", pos)});
+                             return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {pos} can not be filled")});
                         },
                         Some((_, '{')) => {
                             out.push('{');
                         }
                         _ => {
-                            return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`", pos)})
+                            return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {pos} is invalid. If you want to use `{{` as a literal in the string, you need to escape it with `{{{{`")})
                         }
                     },
                     '}' => if let Some((_, '}')) =  iter.next() {
                         out.push('}');
                     } else {
-                        return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
+                        return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {pos} is invalid. You have to terminate `}}` with another `}}` to escape it")});
                     },
                     c => out.push(c),
                 }
@@ -181,7 +181,7 @@ pub fn load(registry: &mut Registry) {
         ).insert(TremorFnWrapper::new(
             "string".to_string(),
             "format".to_string(),
-            Box::new(StringFormat::default()),
+            Box::<StringFormat>::default(),
         ));
 }
 

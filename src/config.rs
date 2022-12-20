@@ -128,7 +128,7 @@ impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
                 config: value.get("config").map(Value::clone_static),
             })
         } else {
-            Err(format!("Invalid codec: {}", value).into())
+            Err(format!("Invalid codec: {value}").into())
         }
     }
 }

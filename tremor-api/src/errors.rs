@@ -69,13 +69,13 @@ impl From<Error> for Response {
 
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
-        Self::new(StatusCode::InternalServerError, format!("IO error: {}", e))
+        Self::new(StatusCode::InternalServerError, format!("IO error: {e}"))
     }
 }
 
 impl From<tremor_common::Error> for Error {
     fn from(e: tremor_common::Error) -> Self {
-        Self::new(StatusCode::InternalServerError, format!("{}", e))
+        Self::new(StatusCode::InternalServerError, format!("{e}"))
     }
 }
 
@@ -83,7 +83,7 @@ impl From<RecvError> for Error {
     fn from(e: RecvError) -> Self {
         Self::new(
             StatusCode::InternalServerError,
-            format!("Error receiving from channel: {}", e),
+            format!("Error receiving from channel: {e}"),
         )
     }
 }
@@ -96,13 +96,13 @@ impl From<async_std::future::TimeoutError> for Error {
 
 impl From<simd_json::Error> for Error {
     fn from(e: simd_json::Error) -> Self {
-        Self::new(StatusCode::BadRequest, format!("JSON error: {}", e))
+        Self::new(StatusCode::BadRequest, format!("JSON error: {e}"))
     }
 }
 
 impl From<serde_yaml::Error> for Error {
     fn from(e: serde_yaml::Error) -> Self {
-        Self::new(StatusCode::BadRequest, format!("YAML error: {}", e))
+        Self::new(StatusCode::BadRequest, format!("YAML error: {e}"))
     }
 }
 
@@ -110,14 +110,14 @@ impl From<http_types::Error> for Error {
     fn from(e: http_types::Error) -> Self {
         Self::new(
             StatusCode::InternalServerError,
-            format!("HTTP type error: {}", e),
+            format!("HTTP type error: {e}"),
         )
     }
 }
 
 impl From<tremor_pipeline::errors::Error> for Error {
     fn from(e: tremor_pipeline::errors::Error) -> Self {
-        Self::new(StatusCode::BadRequest, format!("Pipeline error: {}", e))
+        Self::new(StatusCode::BadRequest, format!("Pipeline error: {e}"))
     }
 }
 
@@ -125,7 +125,7 @@ impl From<PoisonError<MutexGuard<'_, tremor_script::Registry>>> for Error {
     fn from(e: PoisonError<MutexGuard<tremor_script::Registry>>) -> Self {
         Self::new(
             StatusCode::InternalServerError,
-            format!("Locking error: {}", e),
+            format!("Locking error: {e}"),
         )
     }
 }
