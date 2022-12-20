@@ -1074,7 +1074,7 @@ mod tests {
         es_meta.insert_op(&data, &mut ops)?;
         assert_eq!(
             Some(String::from(
-                r#"{"index":{"_index":"snot","_id":"abcdef","version":12,"version_type":"external"}}
+                r#"{"index":{"_index":"snot","_id":"abcdef","pipeline":"pipeline","routing":"routing","version":12,"version_type":"external"}}
 {}
 "#
             )),
