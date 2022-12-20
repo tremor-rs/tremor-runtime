@@ -188,6 +188,8 @@ mod test {
         }
         let t = "snot";
         assert!(lookup(t).is_err());
+
+        assert!(lookup("bad_lookup").is_err());
     }
 
     #[test]
@@ -226,5 +228,152 @@ mod test {
         assert_eq!("3 \u{1}\u{2}\u{3}", str::from_utf8(&encoded)?);
         assert!(post.finish(None)?.is_empty());
         Ok(())
+    }
+
+    #[derive(Default)]
+    struct Reverse {}
+
+    impl Postprocessor for Reverse {
+        fn name(&self) -> &str {
+            "reverse"
+        }
+
+        fn process(
+            &mut self,
+            _ingres_ns: u64,
+            _egress_ns: u64,
+            data: &[u8],
+        ) -> Result<Vec<Vec<u8>>> {
+            let mut data = data.to_vec();
+            data.reverse();
+            Ok(vec![data])
+        }
+
+        fn finish(&mut self, data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+            if let Some(data) = data {
+                let mut data = data.to_vec();
+                data.reverse();
+                Ok(vec![data])
+            } else {
+                Ok(vec![])
+            }
+        }
+    }
+
+    #[derive(Default)]
+    struct BadProcessor {}
+
+    impl Postprocessor for BadProcessor {
+        fn name(&self) -> &str {
+            "nah-proc"
+        }
+
+        fn process(
+            &mut self,
+            _ingres_ns: u64,
+            _egress_ns: u64,
+            _data: &[u8],
+        ) -> Result<Vec<Vec<u8>>> {
+            Err("nah".into())
+        }
+
+        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+            Ok(vec![])
+        }
+    }
+
+    #[derive(Default)]
+    struct BadFinisher {}
+
+    impl Postprocessor for BadFinisher {
+        fn name(&self) -> &str {
+            "reverse"
+        }
+
+        fn process(
+            &mut self,
+            _ingres_ns: u64,
+            _egress_ns: u64,
+            _data: &[u8],
+        ) -> Result<Vec<Vec<u8>>> {
+            Ok(vec![b"snot".to_vec()]) // NOTE has to be non-empty for finish err to trigger in tests
+        }
+
+        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+            Err("nah".into())
+        }
+    }
+
+    #[test]
+    fn postprocess_ok() -> Result<()> {
+        let mut posties: Vec<Box<dyn Postprocessor>> = vec![
+            Box::<Reverse>::default(),
+            Box::<separate::Separate>::default(),
+        ];
+
+        let data: Vec<u8> = b"\ntons\nregdab\n".to_vec();
+        let encoded = postprocess(&mut posties, 42, data, "test")?;
+        assert_eq!(1, encoded.len());
+        assert_eq!("\nbadger\nsnot\n\n", str::from_utf8(&encoded[0])?);
+
+        let encoded = finish(&mut posties, "test")?;
+        assert_eq!(0, encoded.len());
+
+        let mut seitsop: Vec<Box<dyn Postprocessor>> = vec![
+            Box::<separate::Separate>::default(),
+            Box::<Reverse>::default(),
+        ];
+
+        let data: Vec<u8> = b"\ntons\nregdab\n".to_vec();
+        let encoded = postprocess(&mut seitsop, 42, data, "test")?;
+        assert_eq!(1, encoded.len());
+        assert_eq!("\n\nbadger\nsnot\n", str::from_utf8(&encoded[0])?);
+
+        let encoded = finish(&mut seitsop, "test")?;
+        assert_eq!(0, encoded.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn appease_coverage_gods() {
+        let mut a = Box::<BadProcessor>::default();
+        let mut b = Box::<BadFinisher>::default();
+        let mut c = Box::<Reverse>::default();
+
+        a.name();
+        b.name();
+        c.name();
+
+        let _ = a.process(0, 0, &[]);
+        let _ = b.process(0, 0, &[]);
+        let _ = c.process(0, 0, &[]);
+
+        let data: Vec<u8> = b"donotcare".to_vec();
+        let _ = a.finish(Some(&data));
+        let _ = b.finish(Some(&data));
+        let _ = c.finish(Some(&data));
+    }
+
+    #[test]
+    fn postprocess_process_err() {
+        let mut seitsop: Vec<Box<dyn Postprocessor>> = vec![
+            Box::<separate::Separate>::default(),
+            Box::<Reverse>::default(),
+            Box::<BadProcessor>::default(),
+        ];
+
+        let data: Vec<u8> = b"\ntons\nregdab\n".to_vec();
+        let encoded = postprocess(&mut seitsop, 42, data, "test");
+        assert!(encoded.is_err());
+    }
+
+    #[test]
+    fn postprocess_finish_err() {
+        let mut seitsop: Vec<Box<dyn Postprocessor>> =
+            vec![Box::<BadFinisher>::default(), Box::<BadFinisher>::default()];
+
+        let encoded = finish(&mut seitsop, "test");
+        assert!(encoded.is_err());
     }
 }
