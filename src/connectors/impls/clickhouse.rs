@@ -54,7 +54,7 @@ pub(crate) struct Clickhouse {
 impl Connector for Clickhouse {
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let db_url = self.connection_url();
@@ -72,7 +72,7 @@ impl Connector for Clickhouse {
             table,
             columns,
         };
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -158,7 +158,7 @@ impl Sink for ClickhouseSink {
             Err(e) => {
                 return match e {
                     CError::Driver(_) | CError::Io(_) | CError::Connection(_) => {
-                        ctx.notifier.connection_lost().await?;
+                        ctx.notifier().connection_lost().await?;
                         Ok(false)
                     }
                     _ => Err(Error::from(e)),

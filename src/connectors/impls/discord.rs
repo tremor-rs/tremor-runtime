@@ -17,17 +17,14 @@
 mod handler;
 mod utils;
 
+use crate::channel::{bounded, Receiver, Sender};
 use crate::{
-    connectors::{prelude::*, spawn_task, Context},
+    connectors::{prelude::*, spawn_task},
     system::KillSwitch,
-};
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    task::JoinHandle,
 };
 use handler::Handler;
 use serenity::prelude::*;
-use std::sync::atomic::AtomicBool;
+use tokio::task::JoinHandle;
 use utils::Intents;
 
 #[derive(Deserialize, Clone)]
@@ -63,14 +60,15 @@ impl ConnectorBuilder for Builder {
             port: None,
             path: vec![],
         };
-        let message_channel = bounded(crate::QSIZE.load(Ordering::Relaxed));
-        let reply_channel = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let message_channel = bounded(qsize());
+        let (reply_tx, reply_rx) = bounded(qsize());
         Ok(Box::new(Discord {
             config,
             origin_uri,
             client_task: None,
-            message_channel,
-            reply_channel,
+            message_channel: (message_channel.0, Some(message_channel.1)),
+            reply_tx,
+            reply_rx: Some(reply_rx),
         }))
     }
 }
@@ -79,8 +77,9 @@ pub(crate) struct Discord {
     config: Config,
     origin_uri: EventOriginUri,
     client_task: Option<JoinHandle<()>>,
-    message_channel: (Sender<Value<'static>>, Receiver<Value<'static>>),
-    reply_channel: (Sender<Value<'static>>, Receiver<Value<'static>>),
+    message_channel: (Sender<Value<'static>>, Option<Receiver<Value<'static>>>),
+    reply_tx: Sender<Value<'static>>,
+    reply_rx: Option<Receiver<Value<'static>>>,
 }
 impl std::fmt::Debug for Discord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -96,60 +95,57 @@ impl Connector for Discord {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         // the source is listening for events formatted as `Value` from the discord client
         let source = DiscordSource {
-            rx: self.message_channel.1.clone(),
+            rx: self.message_channel.1.take().ok_or("No message channel")?,
             origin_uri: self.origin_uri.clone(),
         };
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     /// create sink if we have a stdout or stderr stream
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         // the sink is forwarding events to the discord client where they are decoded
         // into discord events and sent out
         let sink = DiscordSink {
-            tx: self.reply_channel.0.clone(),
+            tx: self.reply_tx.clone(),
         };
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        // cancel and quit client task
-        if let Some(client_task) = self.client_task.take() {
-            client_task.cancel().await;
+        if let Some(rx) = self.reply_rx.take() {
+            let token = self.config.token.clone();
+
+            let intents = self
+                .config
+                .intents
+                .iter()
+                .copied()
+                .map(Intents::into)
+                .fold(GatewayIntents::default(), |a, b| a | b);
+
+            let client = Client::builder(&token, intents).event_handler(Handler {
+                tx: self.message_channel.0.clone(),
+                rx: RwLock::new(Some(rx)),
+            });
+
+            let mut client = client
+                .await
+                .map_err(|e| Error::from(format!("Err discord creating client: {e}")))?;
+            // set up new client task
+            self.client_task = Some(spawn_task(
+                ctx.clone(),
+                async move { Ok(client.start().await?) },
+            ));
         }
-        let token = self.config.token.clone();
-
-        let intents = self
-            .config
-            .intents
-            .iter()
-            .copied()
-            .map(Intents::into)
-            .fold(GatewayIntents::default(), |a, b| a | b);
-
-        let client = Client::builder(&token, intents).event_handler(Handler {
-            tx: self.message_channel.0.clone(),
-            rx: self.reply_channel.1.clone(),
-            is_loop_running: AtomicBool::from(false),
-        });
-
-        let mut client = client
-            .await
-            .map_err(|e| Error::from(format!("Err discord creating client: {e}")))?;
-        // set up new client task
-        self.client_task = Some(spawn_task(
-            ctx.clone(),
-            async move { Ok(client.start().await?) },
-        ));
         Ok(true)
     }
 }
@@ -204,7 +200,7 @@ impl Source for DiscordSource {
                 stream: DEFAULT_STREAM_ID,
                 port: None,
             })
-            .map_err(Error::from)
+            .ok_or_else(|| Error::from("channel closed"))
     }
 
     fn is_transactional(&self) -> bool {

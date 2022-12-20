@@ -28,7 +28,7 @@ use testcontainers::clients;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_no_connection() -> Result<()> {
     let _ = env_logger::try_init();
@@ -56,7 +56,7 @@ async fn connector_s3_no_connection() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_no_credentials() -> Result<()> {
     let _ = env_logger::try_init();
@@ -97,7 +97,7 @@ async fn connector_s3_no_credentials() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_no_region() -> Result<()> {
     let _ = env_logger::try_init();
@@ -136,7 +136,7 @@ async fn connector_s3_no_region() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_no_bucket() -> Result<()> {
     let _ = env_logger::try_init();
@@ -171,9 +171,11 @@ async fn connector_s3_no_bucket() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_reader() -> Result<()> {
+    static SMALL_FILE: [u8; 256] = [b'A'; 256];
+    static HUGE_FILE: [u8; 4096] = [b'Z'; 4096];
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("tremor");
 
@@ -185,9 +187,9 @@ async fn connector_s3_reader() -> Result<()> {
 
     // insert 100 small files
     let s3_client: Client = get_client(http_port);
-    static SMALL_FILE: [u8; 256] = [b'A'; 256];
+
     for i in 0..100 {
-        let _ = s3_client
+        s3_client
             .put_object()
             .key(format!("small_{i}"))
             .bucket(bucket_name.as_str())
@@ -196,9 +198,9 @@ async fn connector_s3_reader() -> Result<()> {
             .await?;
     }
     // and 10 big ones
-    static HUGE_FILE: [u8; 4096] = [b'Z'; 4096];
+
     for i in 0..10 {
-        let _ = s3_client
+        s3_client
             .put_object()
             .key(format!("big_{i}"))
             .bucket(bucket_name.as_str())
@@ -224,24 +226,21 @@ async fn connector_s3_reader() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &s3::reader::Builder::default(),
         &connector_yaml,
     )
     .await?;
-    let out_pipe = harness
-        .out()
-        .expect("No pipelines connected to out port of s3-reader");
     harness.start().await?;
 
     for _ in 0..150 {
-        let event = out_pipe.get_event().await?;
+        let event = harness.out()?.get_event().await?;
         let meta = event.data.suffix().meta();
         let s3_meta = meta.get("s3_reader");
         let bucket = s3_meta.get_str("bucket");
         assert_eq!(Some(bucket_name.as_str()), bucket);
-        let key = s3_meta.get_str("key").unwrap();
+        let key = s3_meta.get_str("key").expect("no key");
         if key.starts_with("small_") {
             assert_eq!(Some(SMALL_FILE.len()), s3_meta.get_usize("size"));
             assert_eq!(
@@ -252,8 +251,8 @@ async fn connector_s3_reader() -> Result<()> {
         } else {
             assert_eq!(Some(HUGE_FILE.len()), s3_meta.get_usize("size"));
             assert!(s3_meta.get_object("range").is_some());
-            let start = s3_meta.get("range").get_usize("start").unwrap();
-            let end = s3_meta.get("range").get_usize("end").unwrap();
+            let start = s3_meta.get("range").get_usize("start").expect("no start");
+            let end = s3_meta.get("range").get_usize("end").expect("no end");
             assert_eq!(
                 Some(&HUGE_FILE.as_slice()[start..=end]),
                 event.data.suffix().value().as_bytes()

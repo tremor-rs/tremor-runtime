@@ -12,17 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::channel::{bounded, Receiver, Sender};
 use crate::{connectors::prelude::*, system::KillSwitch};
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    sync::Arc,
-};
-use async_std_resolver::{
+use std::sync::Arc;
+use std::{boxed::Box, sync::atomic::AtomicBool};
+use trust_dns_resolver::{
     lookup::Lookup,
     proto::rr::{RData, RecordType},
-    resolver_from_system_conf, AsyncStdResolver,
+    TokioAsyncResolver, TokioHandle,
 };
-use std::{boxed::Box, sync::atomic::AtomicBool};
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -42,7 +40,7 @@ impl ConnectorBuilder for Builder {
         let (tx, rx) = bounded(128);
         Ok(Box::new(Client {
             tx,
-            rx,
+            rx: Some(rx),
             source_is_connected: Arc::default(),
         }))
     }
@@ -50,7 +48,7 @@ impl ConnectorBuilder for Builder {
 
 pub(crate) struct Client {
     tx: Sender<SourceReply>,
-    rx: Receiver<SourceReply>,
+    rx: Option<Receiver<SourceReply>>,
     source_is_connected: Arc<AtomicBool>,
 }
 
@@ -62,33 +60,35 @@ impl Connector for Client {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         // this is a dumb source that is simply forwarding `SourceReply`s it receives from the sink
         let source = ChannelSource::from_channel(
             self.tx.clone(),
-            self.rx.clone(),
+            self.rx
+                .take()
+                .ok_or("Tried to create a source from a connector that has already been used")?,
             self.source_is_connected.clone(),
         );
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         // issues DNS queries and forwards the responses to the source
-        let s = DnsSink::new(self.tx.clone(), self.source_is_connected.clone());
-        builder.spawn(s, sink_context).map(Some)
+        let sink = DnsSink::new(self.tx.clone(), self.source_is_connected.clone());
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 }
 
 struct DnsSink {
     // for forwarding DNS responses
     tx: Sender<SourceReply>,
-    resolver: Option<AsyncStdResolver>,
+    resolver: Option<TokioAsyncResolver>,
     origin_uri: EventOriginUri,
     source_is_connected: Arc<AtomicBool>,
 }
@@ -139,7 +139,7 @@ impl DnsSink {
 #[async_trait::async_trait]
 impl Sink for DnsSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        self.resolver = Some(resolver_from_system_conf().await?);
+        self.resolver = Some(TokioAsyncResolver::from_system_conf(TokioHandle)?);
         Ok(true)
     }
     async fn on_event(

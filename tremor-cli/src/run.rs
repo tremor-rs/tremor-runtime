@@ -18,7 +18,12 @@ use crate::errors::Result;
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
-use tremor_common::{file, ids::OperatorIdGen, ports::IN, time::nanotime};
+use tremor_common::{
+    file,
+    ids::OperatorIdGen,
+    ports::{Port, IN},
+    time::nanotime,
+};
 use tremor_pipeline::{Event, EventId};
 use tremor_runtime::{
     codec::Codec,
@@ -175,46 +180,40 @@ impl Egress {
         match ret {
             Return::Drop => Ok(()),
             Return::Emit { value, port } => {
-                match port.unwrap_or_else(|| String::from("out")).as_str() {
-                    "err" | "error" | "stderr" => {
-                        self.buffer
-                            .write_all(format!("{}\n", value.encode()).as_bytes())?;
-                        self.buffer.flush()?;
+                if port == Some(Port::Err) {
+                    self.buffer
+                        .write_all(format!("{}\n", value.encode()).as_bytes())?;
+                    self.buffer.flush()?;
+                } else {
+                    if self.is_interactive {
+                        eprintln!(
+                            "egress> [codec: {}], [postprocessor: {}]",
+                            self.codec.name(),
+                            self.postprocessor.name()
+                        );
+                        highlight(self.is_pretty, &value)?;
                     }
-                    _ => {
-                        if self.is_interactive {
-                            eprintln!(
-                                "egress> [codec: {}], [postprocessor: {}]",
-                                self.codec.name(),
-                                self.postprocessor.name()
-                            );
-                            highlight(self.is_pretty, &value)?;
-                        }
 
-                        let encoded = self.codec.encode(&value);
+                    let encoded = self.codec.encode(&value);
 
-                        let ppd = self
-                            .postprocessor
-                            .process(nanotime(), nanotime(), &encoded?);
-                        for packet in ppd? {
-                            self.buffer.write_all(&packet)?;
-                            self.buffer.flush()?;
-                        }
+                    let ppd = self
+                        .postprocessor
+                        .process(nanotime(), nanotime(), &encoded?);
+                    for packet in ppd? {
+                        self.buffer.write_all(&packet)?;
+                        self.buffer.flush()?;
                     }
                 };
                 self.buffer.flush()?;
                 Ok(())
             }
             Return::EmitEvent { port } => {
-                match port.unwrap_or_else(|| String::from("out")).as_str() {
-                    "err" | "error" | "stderr" => {
-                        eprintln!("{}", event.encode());
-                    }
-                    _ => {
-                        self.buffer
-                            .write_all(format!("{}\n", event.encode()).as_bytes())?;
-                        self.buffer.flush()?;
-                    }
+                if port == Some(Port::Err) {
+                    eprintln!("{}", event.encode());
+                } else {
+                    self.buffer
+                        .write_all(format!("{}\n", event.encode()).as_bytes())?;
+                    self.buffer.flush()?;
                 };
                 Ok(())
             }
@@ -353,7 +352,7 @@ impl Run {
 
                 let mut continuation = vec![];
 
-                if let Err(e) = async_std::task::block_on(runnable.enqueue(
+                if let Err(e) = runnable.enqueue(
                     IN,
                     Event {
                         id: EventId::from_id(0, 0, *id),
@@ -362,7 +361,7 @@ impl Run {
                         ..Event::default()
                     },
                     &mut continuation,
-                )) {
+                ) {
                     match e.0 {
                         tremor_pipeline::errors::ErrorKind::Script(script_kind) => {
                             let script_error: tremor_script::errors::Error = script_kind.into();
@@ -405,7 +404,7 @@ impl Run {
                         &event,
                         Return::Emit {
                             value: rvalue.data.suffix().value().clone_static(),
-                            port: Some(port.to_string()),
+                            port: Some(port),
                         },
                     )?;
                 }
@@ -422,11 +421,10 @@ impl Run {
     async fn run_troy_source(&self) -> Result<()> {
         let config = WorldConfig {
             debug_connectors: true,
-            ..WorldConfig::default()
         };
         let (world, handle) = World::start(config).await?;
         tremor_runtime::load_troy_file(&world, &self.script).await?;
-        handle.await?;
+        handle.await??;
         Ok(())
     }
 
@@ -444,11 +442,11 @@ impl Run {
 
 #[cfg(test)]
 mod test {
-    use async_std::prelude::FutureExt;
     use std::time::Duration;
+    use tokio::time::timeout;
 
     use super::*;
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn run_troy_source() -> Result<()> {
         let r = Run {
             script: "tests/fixtures/exit.troy".into(),
@@ -462,6 +460,6 @@ mod test {
             postprocessor: String::new(),
             port: None,
         };
-        r.run().timeout(Duration::from_secs(1)).await?
+        timeout(Duration::from_secs(1), r.run()).await?
     }
 }

@@ -240,7 +240,7 @@ struct Gcl {
 impl Connector for Gcl {
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = GclSink::<GouthTokenProvider, Channel>::new(
@@ -249,7 +249,7 @@ impl Connector for Gcl {
             TonicChannelFactory,
         );
 
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {

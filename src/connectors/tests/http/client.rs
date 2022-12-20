@@ -14,24 +14,25 @@
 
 use crate::{
     connectors::{
-        impls::http,
+        impls::http::{self as http_impl, meta::content_type},
         prelude::Url,
-        tests::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness},
+        tests::{free_port::find_free_tcp_port, ConnectorHarness},
         utils::url::HttpDefaults,
     },
     errors::Result,
 };
-use async_std::{
-    io::Cursor,
-    task::{spawn, JoinHandle},
+use hyper::StatusCode;
+use hyper::{
+    body::to_bytes,
+    server::conn::AddrStream,
+    service::{make_service_fn, service_fn},
+    Body, Response,
 };
-use http_types::{
-    headers::{HeaderValues, CONTENT_TYPE, TRANSFER_ENCODING},
-    Body,
+use std::{
+    convert::Infallible,
+    net::{SocketAddr, ToSocketAddrs},
 };
-use rustls::NoClientAuth;
-use tide;
-use tide_rustls::TlsListener;
+use tokio::task::{spawn, JoinHandle};
 use tremor_common::ports::IN;
 use tremor_pipeline::Event;
 use tremor_script::ValueAndMeta;
@@ -39,38 +40,31 @@ use tremor_value::{literal, Value};
 use value_trait::{Mutable, ValueAccess};
 
 /// Find free TCP host:port for use in test server endpoints
-pub(crate) async fn find_free_tcp_endpoint_str() -> String {
-    let port = find_free_tcp_port().await.unwrap_or(65535);
-    format!("localhost:{port}") // NOTE we use localhost rather than an IP for cmopat with TLS
+pub(crate) async fn find_free_tcp_endpoint_str() -> Result<String> {
+    let port = find_free_tcp_port().await?;
+    Ok(format!("localhost:{port}")) // NOTE we use localhost rather than an IP for cmopat with TLS
 }
 
 struct TestHttpServer {
     acceptor: Option<JoinHandle<Result<()>>>,
 }
 
-async fn fake_server_dispatch(mut reqest: tide::Request<()>) -> tide::Result<tide::Response> {
-    use tide::StatusCode;
-    let mut res = tide::Response::new(StatusCode::Ok);
-    dbg!(&reqest);
-    let chunked = reqest
-        .header(TRANSFER_ENCODING)
-        .map(HeaderValues::last)
-        .filter(|hv| hv.as_str() == "chunked")
-        .is_some();
+async fn fake_server_dispatch(
+    _addr: SocketAddr,
+    reqest: hyper::Request<Body>,
+) -> std::result::Result<Response<Body>, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    let mut res = Response::builder().status(StatusCode::OK);
 
-    let body = reqest.body_bytes().await?;
+    let ct = content_type(Some(reqest.headers()))?;
+    let body = reqest.into_body();
+    let data: Vec<u8> = to_bytes(body).await?.to_vec();
 
-    if chunked {
-        res.set_content_type(http_types::mime::PLAIN);
-        res.set_body(Body::from_reader(Cursor::new(body), None));
-    } else {
-        if let Some(ct) = reqest.content_type() {
-            res.set_content_type(ct);
-        }
-        res.set_body(body);
-    }
+    res = res.header(
+        hyper::header::CONTENT_TYPE,
+        ct.unwrap_or(mime::TEXT_PLAIN).to_string(),
+    );
 
-    Ok(res)
+    Ok(res.body(Body::from(data))?)
 }
 
 impl TestHttpServer {
@@ -78,44 +72,59 @@ impl TestHttpServer {
         let mut instance = TestHttpServer { acceptor: None };
         instance.acceptor = Some(spawn(async move {
             let url: Url<HttpDefaults> = Url::parse(&raw_url)?;
-            if "https" == url.scheme() {
-                let cert_file = "./tests/localhost.cert";
-                let key_file = "./tests/localhost.key";
-                setup_for_tls(); // Setups up TLS certs for localhost testing as a side-effect
+            let host = url.host().expect("no host").to_string();
+            let port = url.port().expect("no port");
 
-                let mut endpoint = tide::Server::new();
-                endpoint.at("/").all(fake_server_dispatch);
-                endpoint.at("/*").all(fake_server_dispatch);
-                if let Err(e) = endpoint
-                    .listen(
-                        TlsListener::build()
-                            .config(rustls::ServerConfig::new(NoClientAuth::new()))
-                            .addrs(url.url().socket_addrs(|| None)?[0])
-                            .cert(cert_file)
-                            .key(key_file),
-                    )
-                    .await
-                {
-                    error!("Error listening on {url}: {e}");
-                }
+            if "https" == url.scheme() {
+                todo!();
+                // let cert_file = "./tests/localhost.cert";
+                // let key_file = "./tests/localhost.key";
+                // setup_for_tls(); // Setups up TLS certs for localhost testing as a side-effect
+
+                // let mut endpoint = tide::Server::new();
+                // endpoint.at("/").all(fake_server_dispatch);
+                // endpoint.at("/*").all(fake_server_dispatch);
+                // if let Err(e) = endpoint
+                //     .listen(
+                //         TlsListener::build()
+                //             .config(rustls::ServerConfig::new(NoClientAuth::new()))
+                //             .addrs(url.url().socket_addrs(|| None)?[0])
+                //             .cert(cert_file)
+                //             .key(key_file),
+                //     )
+                //     .await
+                // {
+                //     error!("Error listening on {url}: {e}");
+                // }
             } else {
-                let mut endpoint = tide::Server::new();
-                endpoint.at("/").all(fake_server_dispatch);
-                endpoint.at("/*").all(fake_server_dispatch);
-                if let Err(e) = endpoint.listen(url.url().clone()).await {
-                    error!("Error listening on {url}: {e}");
-                }
+                let make_service = make_service_fn(move |conn: &AddrStream| {
+                    // We have to clone the context to share it with each invocation of
+                    // `make_service`. If your data doesn't implement `Clone` consider using
+                    // an `std::sync::Arc`.
+
+                    // You can grab the address of the incoming connection like so.
+                    let addr = conn.remote_addr();
+
+                    // Create a `Service` for responding to the request.
+                    let service = service_fn(move |req| fake_server_dispatch(addr, req));
+
+                    // Return the service to hyper.
+                    async move { Ok::<_, Infallible>(service) }
+                });
+                let addr = (host, port).to_socket_addrs()?.next().ok_or("no address")?;
+
+                let listener = hyper::Server::bind(&addr).serve(make_service);
+                listener.await?;
             };
             Ok(())
         }));
         Ok(instance)
     }
 
-    async fn stop(&mut self) -> Result<()> {
+    fn stop(&mut self) {
         if let Some(acceptor) = self.acceptor.take() {
-            acceptor.cancel().await;
+            acceptor.abort();
         }
-        Ok(())
     }
 }
 
@@ -123,7 +132,7 @@ impl TestHttpServer {
 async fn rtt(
     scheme: &'static str,
     target: &str,
-    codec: &'static str,
+    default_codec: &'static str,
     auth: Option<Value<'static>>,
     event: Event,
 ) -> Result<ValueAndMeta<'static>> {
@@ -131,11 +140,11 @@ async fn rtt(
     let url = format!("{scheme}://{target}");
     let mut config = literal!({
         "url": url.clone(),
-        "method": "get",
+        "method": "GET",
         "mime_mapping": {
             "application/json": {"name": "json", "config": {"mode": "sorted"}},
             "application/yaml": {"name": "yaml"},
-            "*/*": codec,
+            "*/*": default_codec,
         },
     });
     if let Some(auth) = auth {
@@ -144,23 +153,23 @@ async fn rtt(
     let defn = literal!({
       "config": config,
     });
-
     let mut fake = TestHttpServer::new(url.clone()).await?;
-
-    let harness =
-        ConnectorHarness::new(function_name!(), &http::client::Builder::default(), &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of connector");
-
+    let mut harness = ConnectorHarness::new(
+        function_name!(),
+        &http_impl::client::Builder::default(),
+        &defn,
+    )
+    .await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
-
     harness.send_to_sink(event, IN).await?;
-
-    let event = out_pipeline.get_event().await?;
-    fake.stop().await?;
+    let event = harness.out()?.get_event().await;
+    let event = match event {
+        Ok(event) => event,
+        Err(_) => harness.err()?.get_event().await?,
+    };
+    fake.stop();
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     let (value, meta) = event.data.parts();
@@ -221,9 +230,9 @@ macro_rules! assert_with_request_headers {
     };
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn http_client_request_with_defaults() -> Result<()> {
-    let target = find_free_tcp_endpoint_str().await;
+    let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
             literal!(null),
@@ -231,7 +240,7 @@ async fn http_client_request_with_defaults() -> Result<()> {
                 "http_client": {
                     "request": {},
                 },
-                "correlation": "snot"
+                "correlation": "http_client_request_with_defaults"
             }),
         )
             .into(),
@@ -239,22 +248,45 @@ async fn http_client_request_with_defaults() -> Result<()> {
         ..Default::default()
     };
     let res = rtt("http", &target, "string", None, event).await?;
-    assert_eq!(&Value::from("null"), res.value());
+    assert_eq!(&Value::from(""), res.value());
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
+async fn http_client_request_with_defaults_post() -> Result<()> {
+    let target = find_free_tcp_endpoint_str().await?;
+    let event = Event {
+        data: (
+            literal!("a string"),
+            literal!({
+                "http_client": {
+                    "request": {"method": "POST"},
+                },
+                "correlation": "http_client_request_with_defaults_post"
+            }),
+        )
+            .into(),
+        transactional: true,
+        ..Default::default()
+    };
+    let res = rtt("http", &target, "string", None, event).await?;
+    assert_eq!(&Value::from("a string"), res.value());
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn http_client_request_override_method() -> Result<()> {
-    let target = find_free_tcp_endpoint_str().await;
+    let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
             Value::from(""),
             literal!({
                 "http_client": {
                     "request": {
-                        "method": "get",
+                        "method": "GET",
                     }
-                }
+                },
+                "correlation": "http_client_request_override_method"
             }),
         )
             .into(),
@@ -269,19 +301,20 @@ async fn http_client_request_override_method() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn http_client_request_override_endpoint() -> Result<()> {
-    let target = find_free_tcp_endpoint_str().await;
+    let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
             Value::const_null(),
             literal!({
                 "http_client": {
                     "request": {
-                        "method": "put",
-                        "url": format!("http://{}/snot/badger?flork=mork", target)
+                        "method": "PUT",
+                        "url": format!("http://{target}/snot/badger?flork=mork")
                     }
-                }
+                },
+                "correlation": "http_client_request_override_endpoint"
             }),
         )
             .into(),
@@ -289,9 +322,9 @@ async fn http_client_request_override_endpoint() -> Result<()> {
     };
     let res = rtt("http", &target, "string", None, event).await?;
 
-    let overriden_url: &str = &format!("http://{}/snot/badger?flork=mork", target);
+    let overriden_url: &str = &format!("http://{target}/snot/badger?flork=mork");
     assert_with_request_meta!(res, meta, {
-        assert_eq!(Some(overriden_url), meta.get_str("url"));
+        assert_eq!(Some(overriden_url), meta.get_str("uri"));
         assert_eq!(Some("PUT"), meta.get_str("method"));
     });
 
@@ -299,21 +332,22 @@ async fn http_client_request_override_endpoint() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn http_client_request_override_codec() -> Result<()> {
-    let target = find_free_tcp_endpoint_str().await;
+    let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
             literal!({ "snot": "badger" }),
             literal!({
                 "http_client": {
                     "request": {
-                        "method": "patch",
+                        "method": "PATCH",
                         "headers": {
                             "content-type": "application/yaml"
                         }
                     }
-                }
+                },
+                "correlation": "http_client_request_override_codec"
             }),
         )
             .into(),
@@ -321,9 +355,9 @@ async fn http_client_request_override_codec() -> Result<()> {
     };
     let res = rtt("http", &target, "json", None, event).await?;
 
-    let base_url: &str = &format!("http://{}/", target);
+    let base_url: &str = &format!("http://{target}/");
     assert_with_request_meta!(res, meta, {
-        assert_eq!(Some(base_url), meta.get_str("url"));
+        assert_eq!(Some(base_url), meta.get_str("uri"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
     });
 
@@ -336,20 +370,20 @@ async fn http_client_request_override_codec() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn http_client_request_override_headers() -> Result<()> {
-    let target = find_free_tcp_endpoint_str().await;
+    let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
             Value::from(42),
             literal!({
                 "http_client": {
                     "request": {
-                        "method": "patch",
+                        "method": "PATCH",
                         "headers": { "x-snot": [ "badger", "badger", "badger"] }
                     }
                 },
-                "correlation": "snot"
+                "correlation": "http_client_request_override_headers"
             }),
         )
             .into(),
@@ -357,12 +391,15 @@ async fn http_client_request_override_headers() -> Result<()> {
     };
     let res = rtt("http", &target, "string", None, event).await?;
 
-    let base_url: &str = &format!("http://{}/", target);
+    let base_url: &str = &format!("http://{target}/");
     assert_with_request_meta!(res, meta, {
-        assert_eq!(Some(base_url), meta.get_str("url"));
+        assert_eq!(Some(base_url), meta.get_str("uri"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
     });
-    assert_eq!(Some(&Value::from("snot")), res.meta().get("correlation"));
+    assert_eq!(
+        Some(&Value::from("http_client_request_override_headers")),
+        res.meta().get("correlation")
+    );
 
     assert_with_request_headers!(res, meta, {
         assert_eq!(
@@ -379,20 +416,20 @@ async fn http_client_request_override_headers() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn http_client_request_override_content_type() -> Result<()> {
-    let target = find_free_tcp_endpoint_str().await;
+    let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
             literal!([{"snot": "badger"}, 42.0]),
             literal!({
                 "http_client": {
                     "request": {
-                        "method": "patch",
+                        "method": "PATCH",
                         "headers": { "content-type": [ "application/json"] }
                     }
                 },
-                "correlation": "snot"
+                "correlation": "http_client_request_override_content_type"
             }),
         )
             .into(),
@@ -401,13 +438,16 @@ async fn http_client_request_override_content_type() -> Result<()> {
     };
     let res = rtt("http", &target, "string", None, event).await?;
 
-    let base_url: &str = &format!("http://{}/", target);
+    let base_url: &str = &format!("http://{target}/");
     assert_with_request_meta!(res, meta, {
-        assert_eq!(Some(base_url), meta.get_str("url"));
+        assert_eq!(Some(base_url), meta.get_str("uri"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
     });
 
-    assert_eq!(Some(&Value::from("snot")), res.meta().get("correlation"));
+    assert_eq!(
+        Some(&Value::from("http_client_request_override_content_type")),
+        res.meta().get("correlation")
+    );
 
     assert_with_request_headers!(res, meta, {
         assert_eq!(
@@ -434,20 +474,20 @@ async fn http_client_request_override_content_type() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn http_client_request_auth_none() -> Result<()> {
-    let target = find_free_tcp_endpoint_str().await;
+    let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
             literal!({"snot": "badger"}),
             literal!({
                 "http_client": {
                     "request": {
-                        "method": "patch",
+                        "method": "PATCH",
                         "headers": { "Content-type": [ "application/json"] }
                     }
                 },
-                "correlation": "snot"
+                "correlation": "http_client_request_auth_none"
             }),
         )
             .into(),
@@ -456,18 +496,21 @@ async fn http_client_request_auth_none() -> Result<()> {
     };
     let res = rtt("http", &target, "string", Some(literal!("none")), event).await?;
 
-    let base_url: &str = &format!("http://{}/", target);
+    let base_url: &str = &format!("http://{target}/");
     assert_with_request_meta!(res, meta, {
-        assert_eq!(Some(base_url), meta.get_str("url"));
+        assert_eq!(Some(base_url), meta.get_str("uri"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
     });
 
-    assert_eq!(Some(&Value::from("snot")), res.meta().get("correlation"));
+    assert_eq!(
+        Some(&Value::from("http_client_request_auth_none")),
+        res.meta().get("correlation")
+    );
 
     assert_with_request_headers!(res, meta, {
         assert_eq!(
             Some(&literal!(["application/json"])), // NOTE - connector does not respect this and uses codec instead - see below for alternate
-            meta.get(CONTENT_TYPE.as_str())
+            meta.get(hyper::header::CONTENT_TYPE.as_str())
         );
     });
 
@@ -476,7 +519,7 @@ async fn http_client_request_auth_none() -> Result<()> {
         // the server mirrors the request content-type
         assert_eq!(
             Some(&literal!(["application/json"])),
-            meta.get(CONTENT_TYPE.as_str())
+            meta.get(hyper::header::CONTENT_TYPE.as_str())
         );
     });
 
@@ -489,20 +532,20 @@ async fn http_client_request_auth_none() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn http_client_request_auth_basic() -> Result<()> {
-    let target = find_free_tcp_endpoint_str().await;
+    let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
             literal!({"snot": "badger"}),
             literal!({
                 "http_client": {
                     "request": {
-                        "method": "PATCh",
-                        "headers": { "Content-TYPE": [ "application/json"] }
+                        "method": "PATCH",
+                        "headers": { "content-type": ["application/json"] }
                     }
                 },
-                "correlation": "snot"
+                "correlation": "http_client_request_auth_basic"
             }),
         )
             .into(),
@@ -512,23 +555,26 @@ async fn http_client_request_auth_basic() -> Result<()> {
     let res = rtt(
         "http",
         &target,
-        "string",
+        "json",
         Some(literal!({
             "basic": {
-                "username": "snot",
-                "password": "badger"
+                "username": "username-snot",
+                "password": "username-badger"
             }
         })),
         event,
     )
     .await?;
 
-    let base_url: &str = &format!("http://{}/", target);
+    let base_url: &str = &format!("http://{target}/");
     assert_with_request_meta!(res, meta, {
-        assert_eq!(Some(base_url), meta.get_str("url"));
+        assert_eq!(Some(base_url), meta.get_str("uri"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
     });
-    assert_eq!(Some(&Value::from("snot")), res.meta().get("correlation"));
+    assert_eq!(
+        Some(&Value::from("http_client_request_auth_basic")),
+        res.meta().get("correlation")
+    );
 
     assert_with_request_headers!(res, meta, {
         assert_eq!(
@@ -536,7 +582,9 @@ async fn http_client_request_auth_basic() -> Result<()> {
             meta.get("content-type")
         );
         assert_eq!(
-            Some(&literal!(["Basic c25vdDpiYWRnZXI="])),
+            Some(&literal!([
+                "Basic dXNlcm5hbWUtc25vdDp1c2VybmFtZS1iYWRnZXI="
+            ])),
             meta.get("authorization")
         );
     });
@@ -553,9 +601,23 @@ async fn http_client_request_auth_basic() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+/*
+
+What we know:
+
+1) we send data
+2) the data is received by the server
+3) the server responds with the data it received
+4) the data is received by the client
+5) the client sends the response to the pipeline
+
+6) the pipele reads the data, but hangs when trying to read it again (for some reason, this is where it gets confusing)
+
+7) if the second event isn't in the batch, the test works
+ */
+#[tokio::test(flavor = "multi_thread")]
 async fn chunked() -> Result<()> {
-    let target = find_free_tcp_endpoint_str().await;
+    let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
             literal!([
@@ -565,14 +627,14 @@ async fn chunked() -> Result<()> {
                         "meta": {
                             "http_client": {
                                 "request": {
-                                    "method": "PATCh",
+                                    "method": "POST",
                                     "headers": {
-                                        "content-TYPE": [ "application/json"],
+                                        "content-TYPE": [ "text/plain"],
                                         "transfer-Encoding": "chunked"
                                     }
                                 }
                             },
-                            "correlation": "badger"
+                            "correlation": "chunked"
                         }
                     },
                 },
@@ -602,40 +664,34 @@ async fn chunked() -> Result<()> {
     assert_with_request_headers!(res, meta, {
         assert_eq!(
             Some(&literal!(["chunked"])),
-            meta.get(TRANSFER_ENCODING.as_str())
+            meta.get(hyper::header::TRANSFER_ENCODING.as_str())
         );
-        assert_eq!(
-            Some(&literal!(["application/json"])),
-            meta.get("content-type")
-        );
+        assert_eq!(Some(&literal!(["text/plain"])), meta.get("content-type"));
     });
     // the fake server is setup to answer chunked requests with chunked responses
     assert_with_response_headers!(res, meta, {
         assert_eq!(
-            Some(&literal!(["chunked"])),
-            meta.get(TRANSFER_ENCODING.as_str())
-        );
-        assert_eq!(
             // the fake server sends text/plain
-            Some(&literal!(["text/plain;charset=utf-8"])),
+            Some(&literal!(["text/plain"])),
             meta.get("content-type")
         );
     });
     // the quotes are artifacts from request json encoding
-    assert_eq!(&Value::from("\"chunk01 \"\"chunk02 \""), res.value());
+    assert_eq!(&Value::from("chunk01 chunk02 "), res.value());
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn missing_tls_config_https() -> Result<()> {
+    let target = find_free_tcp_endpoint_str().await?;
     let defn = literal!({
       "config": {
-        "url": "https://localhost:12345"
+        "url": format!("https://{target}")
       },
       "codec": "influx",
     });
     let id = function_name!();
-    let res = ConnectorHarness::new(id, &http::client::Builder::default(), &defn)
+    let res = ConnectorHarness::new(id, &http_impl::client::Builder::default(), &defn)
         .await
         .err()
         .map(|e| e.to_string())
@@ -646,13 +702,13 @@ async fn missing_tls_config_https() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn missing_config() -> Result<()> {
     let defn = literal!({
       "codec": "binflux",
     });
     let id = function_name!();
-    let res = ConnectorHarness::new(id, &http::client::Builder::default(), &defn)
+    let res = ConnectorHarness::new(id, &http_impl::client::Builder::default(), &defn)
         .await
         .err()
         .map(|e| e.to_string())

@@ -131,11 +131,11 @@ impl QuiescenceBeacon {
 mod tests {
     use super::*;
     use crate::errors::Result;
-    use async_std::prelude::*;
     use futures::pin_mut;
     use std::{task::Poll, time::Duration};
+    use tokio::time::timeout;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn quiescence_pause_resume() -> Result<()> {
         let beacon = QuiescenceBeacon::default();
         let mut ctrl_beacon = beacon.clone();
@@ -163,29 +163,29 @@ mod tests {
         ctrl_beacon.stop_reading();
 
         // don't continue reading when stopped reading
-        assert_eq!(false, beacon.continue_reading().timeout(timeout_ms).await?);
+        assert_eq!(false, timeout(timeout_ms, beacon.continue_reading()).await?);
         // writing is fine
-        assert!(beacon.continue_writing().timeout(timeout_ms).await?);
+        assert!(timeout(timeout_ms, beacon.continue_writing()).await?);
 
         // a resume after stopping reading has no effect
         ctrl_beacon.resume();
         // don't continue reading when stopped reading
-        assert!(!beacon.continue_reading().timeout(timeout_ms).await?);
+        assert!(!timeout(timeout_ms, beacon.continue_reading()).await?);
         // writing is still fine
-        assert!(beacon.continue_writing().timeout(timeout_ms).await?);
+        assert!(timeout(timeout_ms, beacon.continue_writing()).await?);
 
         ctrl_beacon.full_stop();
         // no reading upon full stop
-        assert!(!beacon.continue_reading().timeout(timeout_ms).await?);
+        assert!(!timeout(timeout_ms, beacon.continue_reading()).await?);
         // no writing upon full stop
-        assert!(!beacon.continue_writing().timeout(timeout_ms).await?);
+        assert!(!timeout(timeout_ms, beacon.continue_writing()).await?);
 
         // a resume after a full stop has no effect
         ctrl_beacon.resume();
         // no reading upon full stop
-        assert!(!beacon.continue_reading().timeout(timeout_ms).await?);
+        assert!(!timeout(timeout_ms, beacon.continue_reading()).await?);
         // no writing upon full stop
-        assert!(!beacon.continue_writing().timeout(timeout_ms).await?);
+        assert!(!timeout(timeout_ms, beacon.continue_writing()).await?);
         Ok(())
     }
 }

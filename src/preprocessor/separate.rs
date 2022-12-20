@@ -649,7 +649,7 @@ mod test {
         assert_eq!(9998, r[0].len());
         assert_eq!(1, r[1].len());
         let r = pp.finish(None)?;
-        assert_eq!(0, dbg!(r).len());
+        assert_eq!(0, r.len());
         Ok(())
     }
 

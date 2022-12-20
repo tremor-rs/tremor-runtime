@@ -12,19 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::UnixSocketReader;
+use crate::channel::{bounded, Receiver, Sender};
 use crate::{
     connectors::prelude::*,
     errors::{Kind as ErrorKind, Result},
 };
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    os::unix::net::UnixStream,
-    path::PathBuf,
-    sync::Arc,
+use std::{path::PathBuf, sync::Arc};
+use tokio::{
+    io::{split, AsyncWriteExt, WriteHalf},
+    net::UnixStream,
 };
-use futures::AsyncWriteExt;
-
-use super::UnixSocketReader;
 
 const URL_SCHEME: &str = "tremor-unix-socket-client";
 
@@ -54,11 +52,11 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(conf)?;
-        let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (source_tx, source_rx) = bounded(qsize());
         Ok(Box::new(Client {
             config,
             source_tx,
-            source_rx,
+            source_rx: Some(source_rx),
         }))
     }
 }
@@ -66,7 +64,7 @@ impl ConnectorBuilder for Builder {
 pub(crate) struct Client {
     config: Config,
     source_tx: Sender<SourceReply>,
-    source_rx: Receiver<SourceReply>,
+    source_rx: Option<Receiver<SourceReply>>,
 }
 
 #[async_trait::async_trait()]
@@ -77,32 +75,34 @@ impl Connector for Client {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         // this source is wired up to the ending channel that is forwarding data received from the TCP (or TLS) connection
         let source = ChannelSource::from_channel(
             self.source_tx.clone(),
-            self.source_rx.clone(),
+            self.source_rx
+                .take()
+                .ok_or_else(crate::errors::already_created_error)?,
             Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
         );
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = UnixSocketSink::new(self.config.clone(), self.source_tx.clone());
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 }
 
 struct UnixSocketSink {
     config: Config,
     source_runtime: ChannelSourceRuntime,
-    stream: Option<UnixStream>,
+    writer: Option<WriteHalf<UnixStream>>,
 }
 
 impl UnixSocketSink {
@@ -111,13 +111,13 @@ impl UnixSocketSink {
         Self {
             config,
             source_runtime,
-            stream: None,
+            writer: None,
         }
     }
 
     async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
         let stream = self
-            .stream
+            .writer
             .as_mut()
             .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
         for chunk in data {
@@ -128,20 +128,13 @@ impl UnixSocketSink {
         stream.flush().await?;
         Ok(())
     }
-
-    fn close(&mut self) -> Result<()> {
-        if let Some(stream) = self.stream.take() {
-            stream.shutdown(std::net::Shutdown::Write)?;
-        }
-        Ok(())
-    }
 }
 
 #[async_trait::async_trait()]
 impl Sink for UnixSocketSink {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let path = PathBuf::from(&self.config.path);
-        if !path.exists().await {
+        if !path.exists() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 format!("{} not found or not accessible.", path.display()),
@@ -158,10 +151,11 @@ impl Sink for UnixSocketSink {
         let meta = ctx.meta(literal!({
             "peer": path.display().to_string()
         }));
-        self.stream = Some(stream.clone());
+        let (reader, writer) = split(stream);
+        self.writer = Some(writer);
         let reader = UnixSocketReader::new(
-            stream,
-            vec![0; self.config.buf_size],
+            reader,
+            self.config.buf_size,
             ctx.alias().to_string(),
             origin_uri,
             meta,
@@ -185,21 +179,12 @@ impl Sink for UnixSocketSink {
             let data = serializer.serialize(value, ingest_ns)?;
             if let Err(e) = self.write(data).await {
                 error!("{ctx} Error sending data: {e}. Initiating Reconnect...");
-                self.stream = None;
+                self.writer = None;
                 ctx.notifier().connection_lost().await?;
                 return Err(e);
             }
         }
         Ok(SinkReply::NONE)
-    }
-
-    /// when writing is done
-    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
-        // ignore error here
-        if let Err(e) = self.close() {
-            error!("{ctx} Failed stopping: {e}..");
-        }
-        Ok(())
     }
 
     fn auto_ack(&self) -> bool {

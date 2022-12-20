@@ -15,12 +15,11 @@
 use std::{ffi::OsStr, path::PathBuf};
 
 use crate::connectors::prelude::*;
-use async_compression::futures::bufread::XzDecoder;
-use async_std::{
+use async_compression::tokio::bufread::XzDecoder;
+use tokio::{
     fs::{File as FSFile, OpenOptions},
-    io::BufReader,
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
 };
-use futures::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tremor_common::asy::file;
 
 const URL_SCHEME: &str = "tremor-file";
@@ -110,25 +109,25 @@ impl ConnectorBuilder for Builder {
 impl Connector for File {
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         if self.config.mode == Mode::Read {
             Ok(None)
         } else {
             let sink = FileSink::new(self.config.clone());
-            builder.spawn(sink, sink_context).map(Some)
+            Ok(Some(builder.spawn(sink, ctx)))
         }
     }
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         if self.config.mode == Mode::Read {
             let source = FileSource::new(self.config.clone());
-            builder.spawn(source, source_context).map(Some)
+            Ok(Some(builder.spawn(source, ctx)))
         } else {
             Ok(None)
         }
@@ -181,10 +180,12 @@ impl Source for FileSource {
         // TODO: instead of looking for an extension
         // check the magic bytes at the beginning of the file to determine the compression applied
         if let Some("xz") = self.config.path.extension().and_then(OsStr::to_str) {
-            self.reader = Some(Box::new(XzDecoder::new(BufReader::new(read_file.clone()))));
+            self.reader = Some(Box::new(XzDecoder::new(BufReader::new(
+                read_file.try_clone().await?,
+            ))));
             self.underlying_file = Some(read_file);
         } else {
-            self.reader = Some(Box::new(read_file.clone()));
+            self.reader = Some(Box::new(read_file.try_clone().await?));
             self.underlying_file = Some(read_file);
         };
         Ok(true)
@@ -211,7 +212,7 @@ impl Source for FileSource {
                     origin_uri: self.origin_uri.clone(),
                     stream: Some(DEFAULT_STREAM_ID),
                     meta: Some(self.meta.clone()),
-                    // ALLOW: with the read above we ensure that this access is valid, unless async_std is broken
+                    // ALLOW: with the read above we ensure that this access is valid, unless AsyncRead is broken
                     data: self.buf[0..bytes_read].to_vec(),
                     port: Some(OUT),
                     codec_overwrite: None,
@@ -223,8 +224,11 @@ impl Source for FileSource {
 
     async fn on_stop(&mut self, ctx: &SourceContext) -> Result<()> {
         if let Some(mut file) = self.underlying_file.take() {
-            if let Err(e) = file.close().await {
-                error!("{} Error closing file: {}", &ctx, e);
+            if let Err(e) = file.flush().await {
+                error!("{} Error flushing file: {}", &ctx, e);
+            }
+            if let Err(e) = file.sync_all().await {
+                error!("{} Error syncing file: {}", &ctx, e);
             }
         }
         Ok(())

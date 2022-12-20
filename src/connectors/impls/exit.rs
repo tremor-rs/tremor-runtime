@@ -24,7 +24,6 @@
 //! * delay: milliseconds to wait before stopping the process
 use crate::connectors::prelude::*;
 use crate::system::{KillSwitch, ShutdownMode};
-use async_std::task;
 use std::time::Duration;
 use value_trait::ValueAccess;
 
@@ -86,12 +85,12 @@ pub(crate) struct Exit {
 impl Connector for Exit {
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = self.clone();
 
-        Ok(Some(builder.spawn(sink, sink_context)?))
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -123,7 +122,7 @@ impl Sink for Exit {
             if let Some(delay) = value.get_u64(Self::DELAY).or(self.config.delay) {
                 let delay = Duration::from_nanos(delay);
                 info!("{ctx} Sleeping for {delay:?} before triggering shutdown.");
-                task::sleep(delay).await;
+                tokio::time::sleep(delay).await;
             }
             let mode = if value
                 .get_bool(Self::GRACEFUL)
@@ -138,7 +137,7 @@ impl Sink for Exit {
 
             // this should stop the whole server process
             // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-            async_std::task::spawn(async move {
+            tokio::task::spawn(async move {
                 info!("{stop_ctx} Exiting...");
                 stop_ctx.swallow_err(kill_switch.stop(mode).await, "Error stopping the world");
             });

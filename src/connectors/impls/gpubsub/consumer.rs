@@ -12,16 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::channel::{bounded, Receiver, Sender};
 use crate::connectors::google::{AuthInterceptor, TokenProvider};
-
 use crate::connectors::prelude::*;
-use crate::connectors::utils::url::HttpsDefaults;
-use async_std::channel::{Receiver, Sender};
-use async_std::stream::StreamExt;
-use async_std::sync::RwLock;
-use async_std::task;
-use async_std::task::JoinHandle;
 use beef::generic::Cow;
+use futures::StreamExt;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{
     GetSubscriptionRequest, PubsubMessage, ReceivedMessage, StreamingPullRequest,
@@ -32,6 +27,8 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::{Code, Status};
@@ -84,7 +81,11 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         let url = Url::<HttpsDefaults>::parse(config.url.as_str())?;
-        let client_id = format!("tremor-{}-{alias}-{:?}", hostname(), task::current().id());
+        let client_id = format!(
+            "tremor-{}-{alias}-{:?}",
+            hostname(),
+            crate::utils::task_id()
+        );
 
         Ok(Box::new(GSubWithTokenProvider {
             config,
@@ -109,7 +110,7 @@ struct GSubSource<T: TokenProvider> {
     config: Config,
     client: Option<PubSubClient<T>>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
-    ack_sender: Option<Sender<u64>>,
+    ack_sender: Option<async_std::channel::Sender<u64>>,
     task_handle: Option<JoinHandle<()>>,
     url: Url<HttpsDefaults>,
     client_id: String,
@@ -136,7 +137,7 @@ async fn consumer_task<T: TokenProvider>(
     sender: Sender<AsyncTaskMessage>,
     subscription_id: String,
     ack_deadline: Duration,
-    ack_receiver: Receiver<u64>,
+    ack_receiver: async_std::channel::Receiver<u64>,
 ) -> Result<()> {
     let mut ack_counter = 0;
 
@@ -151,7 +152,7 @@ async fn consumer_task<T: TokenProvider>(
         modify_deadline_ack_ids: vec![],
         stream_ack_deadline_seconds: i32::try_from(ack_deadline.as_secs()).unwrap_or(10),
         client_id: client_id.clone(),
-        max_outstanding_messages: i64::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
+        max_outstanding_messages: i64::try_from(qsize()).unwrap_or(128),
         max_outstanding_bytes: 0,
     };
 
@@ -162,9 +163,13 @@ async fn consumer_task<T: TokenProvider>(
     'retry: loop {
         // yeah, i know, my name is george cloney
         let initial_req = initial_request.clone();
-        let ack_recvr = ack_receiver.clone();
         let ack_ids_cc = ack_ids_c.clone();
         let client_id_c = client_id.clone();
+        // TODO: This could be leading to a bug, we clone the receiver but the behaviour of the
+        // stream is that only one receiver will get the response, so if can't guarantee that before
+        // the next iteration we don't use this any more then we might have the problem that acks
+        // don't get properly delivered
+        let ack_recvr = ack_receiver.clone();
         let request_stream = async_stream::stream! {
             yield initial_req;
 
@@ -207,7 +212,7 @@ async fn consumer_task<T: TokenProvider>(
                         "{ctx} ERROR: {status}. Waiting for {}s for a retry...",
                         retry_wait_interval.as_secs_f32()
                     );
-                    async_std::task::sleep(retry_wait_interval).await;
+                    tokio::time::sleep(retry_wait_interval).await;
                     // exponential backoff
                     retry_wait_interval *= 2;
 
@@ -283,7 +288,7 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
         let channel = channel.connect().await?;
 
         if let Some(task_handle) = self.task_handle.take() {
-            task_handle.cancel().await;
+            task_handle.abort();
         }
 
         let mut client = SubscriberClient::with_interceptor(
@@ -307,8 +312,9 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
 
         let client_background = client.clone();
 
-        let (tx, rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
-        let (ack_tx, ack_rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
+        let (tx, rx) = bounded(qsize());
+        // TODO: get rid of async std but this is tricky, lets look at this after the gcp update
+        let (ack_tx, ack_rx) = async_std::channel::bounded(qsize());
 
         let join_handle = spawn_task(
             ctx.clone(),
@@ -336,13 +342,8 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
             "PubSub",
             "The receiver is not connected",
         ))?;
-        let (ack_id, pubsub_message) = match receiver.recv().await? {
-            Ok(response) => response,
-            Err(error) => return Err(error),
-        };
-
+        let (ack_id, pubsub_message) = receiver.recv().await.ok_or("The channel is closed")??;
         *pull_id = ack_id;
-
         Ok(SourceReply::Data {
             origin_uri: EventOriginUri::default(),
             data: pubsub_message.data,
@@ -389,7 +390,7 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
 impl<T: TokenProvider + 'static> Connector for GSub<T> {
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = GSubSource::<T>::new(
@@ -397,7 +398,7 @@ impl<T: TokenProvider + 'static> Connector for GSub<T> {
             self.url.clone(),
             self.client_id.clone(),
         );
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {

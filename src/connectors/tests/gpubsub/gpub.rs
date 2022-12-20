@@ -16,21 +16,21 @@ use crate::connectors::impls::gpubsub::producer::Builder;
 use crate::connectors::tests::ConnectorHarness;
 use crate::errors::Result;
 use crate::instance::State;
-use async_std::prelude::FutureExt;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{PullRequest, Subscription, Topic};
 use serial_test::serial;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
+use tokio::time::timeout;
 use tonic::transport::Channel;
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn no_connection() -> Result<()> {
     let _ = env_logger::try_init();
@@ -38,7 +38,7 @@ async fn no_connection() -> Result<()> {
         "codec": "binary",
         "config":{
             "url": "https://localhost:9090",
-            "connect_timeout": 100000000,
+            "connect_timeout": 100_000_000,
             "topic": "projects/xxx/topics/test-a",
         }
     });
@@ -49,7 +49,7 @@ async fn no_connection() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn no_hostname() -> Result<()> {
     let _ = env_logger::try_init();
@@ -57,7 +57,7 @@ async fn no_hostname() -> Result<()> {
         "codec": "binary",
         "config":{
             "url": "file:///etc/passwd",
-            "connect_timeout": 100000000,
+            "connect_timeout": 100_000_000,
             "topic": "projects/xxx/topics/test-a",
         }
     });
@@ -70,7 +70,7 @@ async fn no_hostname() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn simple_publish() -> Result<()> {
     let _ = env_logger::try_init();
@@ -84,14 +84,14 @@ async fn simple_publish() -> Result<()> {
 
     let port = container
         .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
-    let endpoint = format!("http://localhost:{}", port);
+    let endpoint = format!("http://localhost:{port}");
     let endpoint_clone = endpoint.clone();
 
     let connector_yaml: Value = literal!({
         "codec": "binary",
         "config":{
             "url": endpoint,
-            "connect_timeout": 30000000000u64,
+            "connect_timeout": 30_000_000_000_u64,
             "topic": "projects/test/topics/test",
         }
     });
@@ -102,7 +102,7 @@ async fn simple_publish() -> Result<()> {
     publisher
         .create_topic(Topic {
             name: "projects/test/topics/test".to_string(),
-            labels: Default::default(),
+            labels: HashMap::default(),
             message_storage_policy: None,
             kms_key_name: String::new(),
             schema_settings: None,
@@ -118,7 +118,7 @@ async fn simple_publish() -> Result<()> {
             ack_deadline_seconds: 0,
             retain_acked_messages: false,
             message_retention_duration: None,
-            labels: Default::default(),
+            labels: HashMap::default(),
             enable_message_ordering: false,
             expiration_policy: None,
             filter: String::new(),
@@ -129,7 +129,7 @@ async fn simple_publish() -> Result<()> {
         })
         .await?;
 
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
@@ -138,7 +138,7 @@ async fn simple_publish() -> Result<()> {
     for i in 0..100 {
         let event = Event {
             id: EventId::default(),
-            data: (Value::String(format!("Event {}", i).into()), literal!({})).into(),
+            data: (Value::String(format!("Event {i}").into()), literal!({})).into(),
             ..Event::default()
         };
         harness.send_to_sink(event, IN).await?;
@@ -157,26 +157,25 @@ async fn simple_publish() -> Result<()> {
             .await?;
 
         for msg in result.into_inner().received_messages {
-            let body = msg.message.unwrap();
-            received_messages.insert(String::from_utf8(body.data).unwrap());
+            let body = msg.message.expect("no body");
+            received_messages.insert(String::from_utf8(body.data).expect("bad data"));
         }
 
         iter_count += 1;
     }
 
-    if received_messages.len() != 100 {
-        panic!(
-            "Received an unexpected number of messages - {}",
-            received_messages.len()
-        );
-    }
+    assert!(
+        received_messages.len() == 100,
+        "Received an unexpected number of messages - {}",
+        received_messages.len()
+    );
 
     harness.stop().await?;
 
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn simple_publish_with_timeout() -> Result<()> {
     let _ = env_logger::try_init();
@@ -190,14 +189,14 @@ async fn simple_publish_with_timeout() -> Result<()> {
 
     let port = container
         .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
-    let endpoint = format!("http://localhost:{}", port);
+    let endpoint = format!("http://localhost:{port}");
     let endpoint_clone = endpoint.clone();
 
     let connector_yaml: Value = literal!({
         "codec": "binary",
         "config":{
             "url": endpoint,
-            "connect_timeout": 30000000000u64,
+            "connect_timeout": 30_000_000_000u64,
             "topic": "projects/test/topics/test",
         }
     });
@@ -208,7 +207,7 @@ async fn simple_publish_with_timeout() -> Result<()> {
     publisher
         .create_topic(Topic {
             name: "projects/test/topics/test".to_string(),
-            labels: Default::default(),
+            labels: HashMap::default(),
             message_storage_policy: None,
             kms_key_name: String::new(),
             schema_settings: None,
@@ -224,7 +223,7 @@ async fn simple_publish_with_timeout() -> Result<()> {
             ack_deadline_seconds: 0,
             retain_acked_messages: false,
             message_retention_duration: None,
-            labels: Default::default(),
+            labels: HashMap::default(),
             enable_message_ordering: false,
             expiration_policy: None,
             filter: String::new(),
@@ -235,7 +234,7 @@ async fn simple_publish_with_timeout() -> Result<()> {
         })
         .await?;
 
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
@@ -245,15 +244,16 @@ async fn simple_publish_with_timeout() -> Result<()> {
 
     let event = Event {
         id: EventId::default(),
-        data: (Value::String(format!("Event X").into()), literal!({})).into(),
+        data: (Value::from("Event X"), literal!({})).into(),
         ..Event::default()
     };
     harness.send_to_sink(event, IN).await?;
-    harness
-        .wait_for_state(State::Failed)
-        .timeout(Duration::from_secs(10))
-        .await?
-        .unwrap();
+    timeout(
+        Duration::from_secs(10),
+        harness.wait_for_state(State::Failed),
+    )
+    .await?
+    .expect("timeout");
 
     harness.stop().await?;
 

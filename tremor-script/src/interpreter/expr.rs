@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use tremor_common::ports::Port;
+
 use super::{
     resolve, resolve_value, set_local_shadow, test_guard, test_predicate_expr, Env, ExecOpts,
     LocalStack, NULL,
@@ -38,6 +40,7 @@ use std::{
 
 #[derive(Debug)]
 /// Continuation context to control program flow
+// TODO, can we avoid the static here?
 pub enum Cont<'run, 'event>
 where
     'event: 'run,
@@ -45,11 +48,11 @@ where
     /// Continue
     Cont(Cow<'run, Value<'event>>),
     /// Emit with default system supplied port
-    Emit(Value<'event>, Option<String>),
+    Emit(Value<'event>, Option<Port<'static>>),
     /// Drop
     Drop,
     /// Emit with user supplied port
-    EmitEvent(Option<String>),
+    EmitEvent(Option<Port<'static>>),
 }
 
 macro_rules! demit {
@@ -462,7 +465,7 @@ impl<'script> Expr<'script> {
                     .as_ref()
                     .map(|port| {
                         port.eval_to_string(opts, env, event, state, meta, local)
-                            .map(|s| s.to_string())
+                            .map(|s| Port::from(s.to_string()))
                     })
                     .transpose()
                     .map(Cont::EmitEvent),
@@ -471,7 +474,7 @@ impl<'script> Expr<'script> {
                     .as_ref()
                     .map(|port| {
                         port.eval_to_string(opts, env, event, state, meta, local)
-                            .map(|p| p.to_string())
+                            .map(|p| Port::from(p.to_string()))
                     })
                     .transpose()
                     .and_then(|port| {

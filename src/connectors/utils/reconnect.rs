@@ -13,19 +13,21 @@
 // limitations under the License.
 
 /// reconnect logic and execution for connectors
-use crate::config::Reconnect;
-use crate::connectors::sink::SinkMsg;
-use crate::connectors::source::SourceMsg;
-use crate::connectors::{Addr, Alias, Connectivity, Connector, ConnectorContext, Context, Msg};
-use crate::errors::{Error, Result};
-use async_std::channel::{bounded, Sender};
-use async_std::task::{self, JoinHandle};
-use futures::future::{join3, ready, FutureExt};
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
-use std::convert::identity;
-use std::fmt::Display;
-use std::time::Duration;
+use crate::{
+    config::Reconnect,
+    connectors::{
+        sink::SinkMsg, source::SourceMsg, Addr, Alias, Connectivity, Connector, ConnectorContext,
+        Context, Msg,
+    },
+    errors::{empty_error, Result},
+};
+use futures::future::FutureExt;
+use rand::{rngs::SmallRng, Rng, SeedableRng};
+use std::{fmt::Display, time::Duration};
+use tokio::{
+    sync::mpsc::{channel as bounded, Sender},
+    task::{self, JoinHandle},
+};
 
 #[derive(Debug, PartialEq, Clone)]
 enum ShouldRetry {
@@ -133,7 +135,7 @@ impl ReconnectStrategy for RetryWithBackoff {
 }
 
 /// describing the number of previous connection attempts
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct Attempt {
     overall: u64,
     success: u64,
@@ -267,28 +269,27 @@ impl ReconnectRuntime {
         connector: &mut dyn Connector,
         ctx: &ConnectorContext,
     ) -> Result<(Connectivity, bool)> {
-        let (tx, rx) = bounded(2);
-        let source_fut = if self.addr.has_source() {
+        let (tx, mut rx) = bounded(2);
+        let source_res = if self.addr.has_source() {
             self.addr
-                .send_source(SourceMsg::Connect(tx.clone(), self.attempt.clone()))
-                .await?;
-            rx.recv()
-                .map(|r| r.map_err(Error::from).and_then(identity))
-                .boxed()
+                .send_source(SourceMsg::Connect(tx.clone(), self.attempt))?;
+            rx.recv().map(|r| r.ok_or_else(empty_error)?).await
         } else {
-            ready(Ok(true)).boxed()
+            Ok(true)
         };
-        let sink_fut = if self.addr.has_sink() {
+        let sink_res = if self.addr.has_sink() {
             self.addr
-                .send_sink(SinkMsg::Connect(tx, self.attempt.clone()))
+                .send_sink(SinkMsg::Connect(tx, self.attempt))
                 .await?;
-            rx.recv()
-                .map(|r| r.map_err(Error::from).and_then(identity))
-                .boxed()
+            rx.recv().map(|r| r.ok_or_else(empty_error)?).await
         } else {
-            ready(Ok(true)).boxed()
+            Ok(true)
         };
-        let results = join3(source_fut, sink_fut, connector.connect(ctx, &self.attempt)).await;
+        let results = (
+            source_res,
+            sink_res,
+            connector.connect(ctx, &self.attempt).await,
+        );
         match results {
             (Ok(true), Ok(true), Ok(true)) => {
                 self.reset();
@@ -347,7 +348,7 @@ impl ReconnectRuntime {
                 let sender = self.addr.sender.clone();
                 let alias = self.alias.clone();
                 self.retry_task = Some(task::spawn(async move {
-                    task::sleep(duration).await;
+                    tokio::time::sleep(duration).await;
                     if sender.send(Msg::Reconnect).await.is_err() {
                         error!(
                             "[Connector::{}] Error sending reconnect msg to connector.",
@@ -362,11 +363,12 @@ impl ReconnectRuntime {
     }
 
     #[cfg(test)]
-    pub(crate) async fn await_retry(&mut self) {
+    pub(crate) async fn await_retry(&mut self) -> Result<()> {
         // take the task out to avoid having it be awaited from multiple tasks ?
         if let Some(retry_task) = self.retry_task.take() {
-            retry_task.await;
+            retry_task.await?;
         }
+        Ok(())
     }
 
     /// reset internal state after successful connect attempt
@@ -379,8 +381,13 @@ impl ReconnectRuntime {
 
 #[cfg(test)]
 mod tests {
+    use tokio::time::timeout;
+
     use super::*;
-    use crate::connectors::{utils::quiescence::QuiescenceBeacon, CodecReq};
+    use crate::{
+        connectors::{utils::quiescence::QuiescenceBeacon, CodecReq},
+        qsize,
+    };
 
     /// does not connect
     struct FakeConnector {
@@ -435,9 +442,9 @@ mod tests {
         attempt.on_success();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn failfast_runtime() -> Result<()> {
-        let (tx, rx) = async_std::channel::unbounded();
+        let (tx, _rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
         let alias = Alias::new("flow", "test");
         let addr = Addr {
@@ -463,15 +470,13 @@ mod tests {
             (Connectivity::Disconnected, false),
             runtime.attempt(&mut connector, &ctx).await?
         );
-        async_std::task::sleep(Duration::from_millis(100)).await;
-        assert!(rx.is_empty()); // no reconnect attempt has been made
+        tokio::time::sleep(Duration::from_millis(100)).await;
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn backoff_runtime() -> Result<()> {
-        use async_std::prelude::FutureExt;
-        let (tx, rx) = async_std::channel::unbounded();
+        let (tx, mut rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
         let alias = Alias::new("flow", "test");
         let addr = Addr {
@@ -504,30 +509,36 @@ mod tests {
         ));
         // we cannot test exact timings, but we can ensure it behaves as expected
         assert!(matches!(
-            rx.recv().timeout(Duration::from_secs(5)).await??,
+            timeout(Duration::from_secs(5), rx.recv())
+                .await?
+                .ok_or_else(empty_error)?,
             Msg::Reconnect
         ));
 
         // 2nd failing attempt
-        runtime.await_retry().await;
+        runtime.await_retry().await?;
         assert!(matches!(
             runtime.attempt(&mut connector, &ctx).await?,
             (Connectivity::Disconnected, true)
         ));
         assert!(matches!(
-            rx.recv().timeout(Duration::from_secs(5)).await??,
+            timeout(Duration::from_secs(5), rx.recv())
+                .await?
+                .ok_or_else(empty_error)?,
             Msg::Reconnect
         ));
 
         // 3rd failing attempt
-        runtime.await_retry().await;
+        runtime.await_retry().await?;
         assert!(matches!(
             runtime.attempt(&mut connector, &ctx).await?,
             (Connectivity::Disconnected, false)
         ));
 
         // assert we don't receive nothing, but run into a timeout
-        assert!(rx.recv().timeout(Duration::from_millis(100)).await.is_err()); // no reconnect attempt has been made
+        assert!(timeout(Duration::from_millis(100), rx.recv())
+            .await
+            .is_err()); // no reconnect attempt has been made
 
         Ok(())
     }

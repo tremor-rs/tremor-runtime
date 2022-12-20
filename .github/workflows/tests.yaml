@@ -23,7 +23,7 @@ jobs:
       - name: Generate code coverage
         env:
           PROPTEST_CASES: 2500
-          RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
+          RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2 --cfg tokio_unstable
           RUST_BACKTRACE: full
         run: cargo llvm-cov --workspace --lcov --output-path lcov.txt --features integration
       - uses: codecov/codecov-action@v3

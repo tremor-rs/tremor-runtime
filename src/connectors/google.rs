@@ -109,12 +109,17 @@ where
 #[cfg(test)]
 #[cfg(feature = "gcp-integration")]
 pub(crate) mod tests {
+    use hyper::{
+        service::{make_service_fn, service_fn},
+        Body,
+    };
+
     use super::*;
     use crate::{
         connectors::utils::EnvHelper,
         errors::{Error, Result},
     };
-    use std::io::Write;
+    use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
 
     #[derive(Clone)]
     pub struct TestTokenProvider {
@@ -190,7 +195,7 @@ sEUlZGvHmBh8nBk/7LJVlVcVRWQeQ1kg6b+m6thwRz6HsKIvExpNYbVkzqxbeJW3
 PX8efvDMhv16QqDFF0k80d0=
 -----END PRIVATE KEY-----";
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn gouth_token() -> Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
 
@@ -211,22 +216,31 @@ PX8efvDMhv16QqDFF0k80d0=
         let mut provider = GouthTokenProvider::default();
         assert!(provider.get_token().is_err());
 
-        let mut server = tide::new();
-        server.at("/").post(|_| async {
-            Ok(simd_json::serde::to_string_pretty(&TokenResponse {
-                token_type: "snot".to_string(),
-                access_token: "access_token".to_string(),
-                expires_in: 100_000_000,
-            })?)
+        let service_fn = make_service_fn(|_| async {
+            Ok::<_, Infallible>(service_fn(|_| async {
+                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(hyper::Response::builder().body(
+                    Body::from(simd_json::serde::to_vec(&TokenResponse {
+                        token_type: "snot".to_string(),
+                        access_token: "access_token".to_string(),
+                        expires_in: 100_000_000,
+                    })?),
+                )?)
+            }))
         });
-        let server_handle = async_std::task::spawn(async move {
-            server.listen(format!("127.0.0.1:{port}")).await?;
+
+        let addr = ("127.0.0.1", port)
+            .to_socket_addrs()?
+            .next()
+            .ok_or("no address")?;
+        let server_handle = tokio::task::spawn(async move {
+            let listener = hyper::Server::bind(&addr).serve(service_fn);
+            listener.await?;
             Ok::<(), Error>(())
         });
         let token = provider.get_token()?;
         assert_eq!(token.as_str(), "snot access_token");
 
-        server_handle.cancel().await;
+        server_handle.abort();
 
         // token is cached, no need to call again
         let token = provider.get_token()?;

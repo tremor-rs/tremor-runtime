@@ -32,6 +32,7 @@ use crate::{
 use halfbrown::HashMap;
 use serde::Serialize;
 use std::io;
+use tremor_common::ports::Port;
 
 /// Return of a script execution
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -42,7 +43,8 @@ pub enum Return<'event> {
         /// Value to emit
         value: Value<'event>,
         /// Port to emit to
-        port: Option<String>,
+        #[serde(bound(deserialize = "'de: 'event"))]
+        port: Option<Port<'static>>,
     },
     /// This event should be dropped
     Drop,
@@ -50,7 +52,7 @@ pub enum Return<'event> {
     /// was passed in
     EmitEvent {
         /// Port to emit to
-        port: Option<String>,
+        port: Option<Port<'static>>,
     },
 }
 
@@ -60,7 +62,7 @@ pub struct Script {
     /// Script to be executed upon events entering via `in` port
     pub script: crate::ast::Script<'static>,
     /// A map from input port to runnable script
-    pub named: HashMap<String, crate::ast::Script<'static>>,
+    pub named: HashMap<Port<'static>, crate::ast::Script<'static>>,
     /// Arena index of the string
     pub aid: crate::arena::Index,
     /// A set of warnings if any

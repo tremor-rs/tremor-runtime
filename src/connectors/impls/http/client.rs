@@ -12,26 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-use std::time::Duration;
-
-use async_std::channel::{bounded, Receiver, Sender};
-use either::Either;
-use halfbrown::HashMap;
-use http_client::h1::H1Client;
-use http_client::HttpClient;
-use http_types::Method;
-use tremor_common::time::nanotime;
-
 use super::auth::Auth;
 use super::meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder};
 use super::utils::{Header, RequestId};
 use crate::connectors::utils::mime::MimeCodecMap;
-use crate::connectors::utils::tls::{tls_client_config, TLSClientConfig};
+use crate::connectors::utils::tls::TLSClientConfig;
+use crate::{
+    channel::{bounded, Receiver, Sender},
+    errors::empty_error,
+};
 use crate::{config::NameWithConfig, connectors::sink::concurrency_cap::ConcurrencyCap};
 use crate::{connectors::prelude::*, errors::err_connector_def};
+use either::Either;
+use halfbrown::HashMap;
+use http_body::Body;
+use hyper::{
+    client::{Client as HyperClient, HttpConnector},
+    Method,
+};
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use serde::{Deserialize, Deserializer};
+use std::sync::Arc;
+use std::{sync::atomic::AtomicBool, time::Duration};
+use tokio::time::timeout;
+use tremor_common::time::nanotime;
 
+//  pipeline -> Sink -> http client
+//                          |
+//                          v
+//                         Sink -> Sink#reply_tx -> Source#rx -> pull_data -> pipline
 const CONNECTOR_TYPE: &str = "http_client";
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -50,9 +59,8 @@ pub(crate) struct Config {
     pub(super) headers: HashMap<String, Header>,
     /// Default HTTP method
     #[serde(default = "default_method")]
-    pub(super) method: Method,
+    pub(super) method: SerdeishMethod,
     /// request timeout in nanoseconds
-    #[serde(default = "Default::default")]
     timeout: Option<u64>,
     /// optional tls client config
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
@@ -63,14 +71,29 @@ pub(crate) struct Config {
     mime_mapping: Option<HashMap<String, NameWithConfig>>,
 }
 
+/// Just a wrapper
+#[derive(Debug, Clone)]
+pub(crate) struct SerdeishMethod(pub(crate) Method);
+
+impl<'de> Deserialize<'de> for SerdeishMethod {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let method = Method::from_bytes(s.as_bytes()).map_err(serde::de::Error::custom)?;
+        Ok(Self(method))
+    }
+}
+
 const DEFAULT_CONCURRENCY: usize = 4;
 
 fn default_concurrency() -> usize {
     DEFAULT_CONCURRENCY
 }
 
-fn default_method() -> Method {
-    Method::Post
+fn default_method() -> SerdeishMethod {
+    SerdeishMethod(Method::POST)
 }
 
 // for new
@@ -97,9 +120,9 @@ impl ConnectorBuilder for Builder {
         let tls_client_config = match config.tls.as_ref() {
             Some(Either::Right(true)) => {
                 // default config
-                Some(tls_client_config(&TLSClientConfig::default()).await?)
+                Some(TLSClientConfig::default().to_client_config()?)
             }
-            Some(Either::Left(tls_config)) => Some(tls_client_config(tls_config).await?),
+            Some(Either::Left(tls_config)) => Some(tls_config.to_client_config()?),
             Some(Either::Right(false)) | None => None,
         };
         if config.url.scheme() == "https" && tls_client_config.is_none() {
@@ -108,7 +131,7 @@ impl ConnectorBuilder for Builder {
                     "missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config.",
                 ));
         }
-        let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (response_tx, response_rx) = bounded(qsize());
         let mime_codec_map = Arc::new(if let Some(codec_map) = config.mime_mapping.clone() {
             MimeCodecMap::from_custom(codec_map)
         } else {
@@ -117,11 +140,11 @@ impl ConnectorBuilder for Builder {
 
         Ok(Box::new(Client {
             response_tx,
-            response_rx,
+            response_rx: Some(response_rx),
             config,
             tls_client_config,
             mime_codec_map,
-            source_is_connected: Arc::default(),
+            source_is_connected: Arc::new(AtomicBool::new(false)),
         }))
     }
 }
@@ -129,7 +152,7 @@ impl ConnectorBuilder for Builder {
 /// The HTTP client connector - for HTTP-based API interactions
 pub(crate) struct Client {
     response_tx: Sender<SourceReply>,
-    response_rx: Receiver<SourceReply>,
+    response_rx: Option<Receiver<SourceReply>>,
     config: Config,
     tls_client_config: Option<rustls::ClientConfig>,
     // this is basically an immutable map, we use arc to share it across tasks (e.g. for each request sending)
@@ -145,19 +168,19 @@ impl Connector for Client {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = HttpRequestSource {
-            is_connected: self.source_is_connected.clone(),
-            rx: self.response_rx.clone(),
+            source_is_connected: self.source_is_connected.clone(),
+            rx: self.response_rx.take().ok_or("source already created")?,
         };
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = HttpRequestSink::new(
@@ -167,20 +190,25 @@ impl Connector for Client {
             self.tls_client_config.clone(),
             self.mime_codec_map.clone(),
             self.source_is_connected.clone(),
+            if self.tls_client_config.is_some() {
+                "https"
+            } else {
+                "http"
+            },
         );
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 }
 
 struct HttpRequestSource {
-    is_connected: Arc<AtomicBool>,
+    source_is_connected: Arc<AtomicBool>,
     rx: Receiver<SourceReply>,
 }
 
 #[async_trait::async_trait()]
 impl Source for HttpRequestSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.rx.recv().await?)
+        self.rx.recv().await.ok_or_else(empty_error)
     }
 
     fn is_transactional(&self) -> bool {
@@ -192,25 +220,26 @@ impl Source for HttpRequestSource {
         false
     }
 
-    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
         // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
         // we will not send responses to out/err if we are not connected and this is determined by this variable
-        self.is_connected.store(true, Ordering::Release);
+        self.source_is_connected.store(true, Ordering::Release);
         Ok(())
     }
 }
 
 struct HttpRequestSink {
     request_counter: u64,
-    client: Option<Arc<H1Client>>,
+    client: Option<Arc<HyperClient<HttpsConnector<HttpConnector>>>>,
     response_tx: Sender<SourceReply>,
-    reply_tx: Sender<AsyncSinkReply>,
+    reply_tx: ReplySender,
     config: Config,
     tls_client_config: Option<rustls::ClientConfig>,
-    // reply_tx: Sender<AsyncSinkReply>,
+    // reply_tx: ReplySender,
     concurrency_cap: ConcurrencyCap,
     origin_uri: EventOriginUri,
     codec_map: Arc<MimeCodecMap>,
+    scheme: &'static str,
     // we should only send responses down the channel when we know there is a source consuming them
     // otherwise the channel would fill up and we'd be stuck
     // TODO: find/implement a channel that just throws away the oldest message when it is full, like a ring-buffer
@@ -220,11 +249,12 @@ struct HttpRequestSink {
 impl HttpRequestSink {
     fn new(
         response_tx: Sender<SourceReply>,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: ReplySender,
         config: Config,
         tls_client_config: Option<rustls::ClientConfig>,
         codec_map: Arc<MimeCodecMap>,
         source_is_connected: Arc<AtomicBool>,
+        scheme: &'static str,
     ) -> Self {
         let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
         Self {
@@ -243,6 +273,7 @@ impl HttpRequestSink {
             },
             codec_map,
             source_is_connected,
+            scheme,
         }
     }
 }
@@ -250,17 +281,23 @@ impl HttpRequestSink {
 #[async_trait::async_trait()]
 impl Sink for HttpRequestSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let timeout = self.config.timeout.map(Duration::from_nanos);
-        let tls_config = self.tls_client_config.as_ref().cloned().map(Arc::new);
-        let client_config = http_client::Config::new()
-            .set_http_keep_alive(true) // TODO: make configurable, maybe some people don't want that
-            .set_tcp_no_delay(true)
-            .set_timeout(timeout)
-            .set_max_connections_per_host(self.config.concurrency)
-            .set_tls_config(tls_config);
+        let https = if let Some(tls_config) = self.tls_client_config.clone() {
+            HttpsConnectorBuilder::new()
+                .with_tls_config(tls_config)
+                .https_or_http()
+                .enable_http1()
+                .enable_http2()
+                .build()
+        } else {
+            HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .https_or_http()
+                .enable_http1()
+                .enable_http2()
+                .build()
+        };
+        let client = HyperClient::builder().build(https);
 
-        let client = H1Client::try_from(client_config)
-            .map_err(|e| format!("Invalid HTTP Client config: {e}."))?;
         self.client = Some(Arc::new(client));
 
         Ok(true)
@@ -276,14 +313,17 @@ impl Sink for HttpRequestSink {
         start: u64,
     ) -> Result<SinkReply> {
         // constrain to max concurrency - propagate CB close on hitting limit
-        let guard = self.concurrency_cap.inc_for(&event).await?;
+        let guard = self.concurrency_cap.inc_for(&event)?;
 
         if let Some(client) = self.client.as_ref().cloned() {
-            let send_ctx = ctx.clone();
+            // TODO: think about making ctx an Arc so it doesn't have to be cloned deep
+            let task_ctx = ctx.clone();
+
             let response_tx = self
                 .source_is_connected
                 .load(Ordering::Acquire)
                 .then(|| self.response_tx.clone());
+
             let reply_tx = self.reply_tx.clone();
             let contraflow_data = if event.transactional {
                 Some(ContraflowData::from(&event))
@@ -307,43 +347,37 @@ impl Sink for HttpRequestSink {
                 "Error turning event into an HTTP Request",
             )?;
             let codec_map = self.codec_map.clone();
-            let mut request = builder.get_chunked_request();
-            let request_is_chunked = request.is_some();
-            if !request_is_chunked {
-                // if the request is not chunked
-                // we need to populate the request body from the (possibly batched) event payloads first
-                for value in event.value_iter() {
-                    ctx.bail_err(
-                        builder.append(value, ingest_ns, serializer).await,
-                        "Error serializing event into request body",
-                    )?;
-                }
-                // the request will only be available after finalizing
-                request = ctx.bail_err(
-                    builder.finalize(serializer).await,
-                    "Error serializing final parts of the event into request body",
-                )?;
-            }
+            let request = builder.take_request()?;
 
-            if let Some(request) = request {
-                // spawn the sending task
-                async_std::task::spawn::<_, Result<()>>(async move {
-                    // extract request meta for the response metadata from the finally prepared request
-                    // the actual sent request might differ from the metadata used to create this request
-                    let req_meta = extract_request_meta(&request);
-                    if let Some(host) = request.host() {
-                        origin_uri.host = host.to_string();
-                    }
-                    origin_uri.port = request.url().port_or_known_default();
-                    origin_uri.path = request
-                        .url()
-                        .path_segments()
-                        .map(|iter| iter.map(ToString::to_string).collect::<Vec<_>>())
-                        .unwrap_or_default();
-                    match client.send(request).await {
-                        Ok(mut response) => {
-                            let response_meta = extract_response_meta(&response);
-                            let mut meta = send_ctx.meta(literal!({
+            let req_meta = extract_request_meta(&request, self.scheme)?;
+            let t = self
+                .config
+                .timeout
+                .map_or_else(|| Duration::from_secs(60), Duration::from_nanos);
+            // spawn the sending task
+            tokio::task::spawn(async move {
+                // extract request meta for the response metadata from the finally prepared request
+                // the actual sent request might differ from the metadata used to create this request
+                if let Some(host) = request.uri().host() {
+                    origin_uri.host = host.to_string();
+                }
+                origin_uri.port = request.uri().port_u16();
+                origin_uri.path = request
+                    .uri()
+                    .path()
+                    .split('/')
+                    .map(ToString::to_string)
+                    .collect();
+                match timeout(t, client.request(request)).await {
+                    Ok(Ok(mut response)) => {
+                        let mut data: Vec<u8> = Vec::new();
+                        while let Some(chunk) = response.data().await.transpose()? {
+                            data.extend_from_slice(&chunk);
+                        }
+
+                        if let Some(response_tx) = response_tx {
+                            let response_meta = extract_response_meta(&response)?;
+                            let mut meta = task_ctx.meta(literal!({
                                 "request": req_meta,
                                 "request_id": request_id.get(),
                                 "response": response_meta
@@ -352,12 +386,13 @@ impl Sink for HttpRequestSink {
                             if let Some(corr_meta) = correlation_meta {
                                 meta.try_insert("correlation", corr_meta);
                             }
-                            let data = send_ctx.bail_err(
-                                response.body_bytes().await.map_err(Error::from),
-                                "Error receiving response body",
-                            )?;
-                            let codec_name = if let Some(mime) = response.content_type() {
-                                codec_map.get_codec_name(mime.essence())
+                            let codec_name = if let Some(mime_header) =
+                                response.headers().get(hyper::header::CONTENT_TYPE)
+                            {
+                                // https://static.wikia.nocookie.net/disney-fan-fiction/images/9/99/Nemo-Seagulls_.jpg/revision/latest?cb=20130722023815
+                                let mime: mime::Mime = mime_header.to_str()?.parse()?;
+
+                                codec_map.get_codec_name(mime.essence_str())
                             } else {
                                 None
                             };
@@ -370,56 +405,53 @@ impl Sink for HttpRequestSink {
                                 port: None,
                                 codec_overwrite,
                             };
-                            if let Some(response_tx) = response_tx {
-                                send_ctx.swallow_err(
-                                    response_tx.send(reply).await,
-                                    "Error sending response to source",
-                                );
-                            }
-                            if let Some(contraflow_data) = contraflow_data {
-                                send_ctx.swallow_err(
-                                    reply_tx
-                                        .send(AsyncSinkReply::Ack(
-                                            contraflow_data,
-                                            nanotime() - start,
-                                        ))
-                                        .await,
-                                    "Error sending ack contraflow",
-                                );
-                            }
+                            task_ctx.swallow_err(
+                                response_tx.send(reply).await,
+                                "Error sending response to source",
+                            );
                         }
-                        Err(e) => {
-                            error!("{send_ctx} Error sending HTTP request: {e}");
-                            if let Some(contraflow_data) = contraflow_data {
-                                send_ctx.swallow_err(
-                                    reply_tx.send(AsyncSinkReply::Fail(contraflow_data)).await,
-                                    "Error sending fail contraflow",
-                                );
-                            }
+                        if let Some(contraflow_data) = contraflow_data {
+                            task_ctx.swallow_err(
+                                reply_tx
+                                    .send(AsyncSinkReply::Ack(contraflow_data, nanotime() - start)),
+                                "Error sending ack contraflow",
+                            );
                         }
                     }
-                    drop(guard);
-                    Ok(())
-                });
-            } else {
-                // NOTE: this shouldn't happen
-                error!("{ctx} Unable to serialize event into HTTP request.");
-                return Err("Unable to serialize event into HTTP request.".into());
-            }
-
-            if request_is_chunked {
-                // if we have a chunked request we still gotta do some work (sending the chunks)
-                for value in event.value_iter() {
-                    ctx.bail_err(
-                        builder.append(value, ingest_ns, serializer).await,
-                        "Error serializing event into request body",
-                    )?;
+                    Ok(Err(e)) => {
+                        error!("{task_ctx} Error sending HTTP request: {e}");
+                        if let Some(contraflow_data) = contraflow_data {
+                            task_ctx.swallow_err(
+                                reply_tx.send(AsyncSinkReply::Fail(contraflow_data)),
+                                "Error sending fail contraflow",
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        error!("{task_ctx} Error sending HTTP request: {e}");
+                        if let Some(contraflow_data) = contraflow_data {
+                            task_ctx.swallow_err(
+                                reply_tx.send(AsyncSinkReply::Fail(contraflow_data)),
+                                "Error sending fail contraflow",
+                            );
+                        }
+                    }
                 }
+                drop(guard);
+                Result::Ok(())
+            });
+
+            // if we have a chunked request we still gotta do some work (sending the chunks)
+            for value in event.value_iter() {
                 ctx.bail_err(
-                    builder.finalize(serializer).await,
-                    "Error serializing final parts of the event into request body",
+                    builder.append(value, ingest_ns, serializer).await,
+                    "Error serializing event into request body",
                 )?;
             }
+            ctx.bail_err(
+                builder.finalize(serializer).await,
+                "Error serializing final parts of the event into request body",
+            )?;
         } else {
             error!("{ctx} No http client available.");
             return Ok(SinkReply::FAIL);

@@ -19,8 +19,5 @@ pub use beef::Cow;
 pub use halfbrown::{hashmap, HashMap};
 pub use serde_yaml;
 pub use simd_json::OwnedValue;
+pub use tremor_common::ports::{Port, ERR, IN, OUT, OVERFLOW};
 pub use value_trait::Value as ValueTrait;
-
-pub const OUT: Cow<'static, str> = Cow::const_str("out");
-pub const IN: Cow<'static, str> = Cow::const_str("in");
-pub const ERR: Cow<'static, str> = Cow::const_str("err");

@@ -78,7 +78,7 @@ impl Operator for History {
     fn on_event(
         &mut self,
         _uid: OperatorId,
-        _port: &str,
+        _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
@@ -181,7 +181,7 @@ mod test {
         let mut state = Value::null();
 
         let (out, event) = op
-            .on_event(operator_id, "in", &mut state, event)
+            .on_event(operator_id, &Port::In, &mut state, event)
             .expect("Failed to run pipeline")
             .events
             .pop()
@@ -189,7 +189,7 @@ mod test {
         assert_eq!(out, "out");
 
         let (out, _event) = op
-            .on_event(operator_id, "in", &mut state, event)
+            .on_event(operator_id, &Port::In, &mut state, event)
             .expect("Failed to run pipeline")
             .events
             .pop()

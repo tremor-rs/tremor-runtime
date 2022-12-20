@@ -21,7 +21,7 @@ use tremor_common::{
 use tremor_pipeline::{CbAction, Event, EventIdGenerator};
 use tremor_value::{literal, prelude::*, Value};
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn wal() -> Result<()> {
     let _ = env_logger::try_init();
     let temp_dir = tempfile::Builder::new().tempdir()?;
@@ -34,16 +34,11 @@ async fn wal() -> Result<()> {
             "max_chunks": 100
         }
     });
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &wal::Builder::default(), &config).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
-
-    let out = harness.out().expect("No pipeline connected to WAL out.");
-    let in_pipe = harness
-        .get_pipe(IN)
-        .expect("No pipeline connected to WAL in.");
 
     let source_id = SourceId::new(1);
     let mut id_gen = EventIdGenerator::new(source_id);
@@ -57,7 +52,7 @@ async fn wal() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event, IN).await?;
-    let event = out.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     // event is now transactional
     let ack_id = event.id.clone();
     assert!(event.transactional);
@@ -74,7 +69,7 @@ async fn wal() -> Result<()> {
     harness.send_to_sink(event, IN).await?;
 
     // check that we got an ack for the event
-    let cf = in_pipe.get_contraflow().await?;
+    let cf = harness.get_pipe(IN)?.get_contraflow().await?;
     assert_eq!(CbAction::Ack, cf.cb);
     assert!(
         cf.id.is_tracking(&another_id),
@@ -84,29 +79,25 @@ async fn wal() -> Result<()> {
     );
 
     // now we get the next event
-    let event = out.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     assert!(event.transactional);
     assert_eq!(&Value::from("snot"), event.data.suffix().value());
 
-    harness
-        .send_contraflow(CbAction::Ack, ack_id.clone())
-        .await?;
-    async_std::task::sleep(Duration::from_secs(2)).await;
+    harness.send_contraflow(CbAction::Ack, ack_id.clone())?;
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
 
     // start harness again with same config, expect the second event to be re-emitted
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &wal::Builder::default(), &config).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
-    let out = harness.out().expect("No pipeline connected to WAL out.");
-
     // now we get the next one
-    let event = out.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     assert!(event.transactional);
     assert_eq!(&Value::from("snot"), event.data.suffix().value());
 

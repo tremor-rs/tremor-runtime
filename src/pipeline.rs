@@ -12,20 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
+    channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
+    qsize,
+};
+use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
     errors::{pipe_send_e, Result},
     instance::State,
     primerge::PriorityMerge,
     system::flow,
 };
-use async_std::{
-    channel::{bounded, unbounded, Receiver, Sender},
-    stream::StreamExt,
-    task::{self, JoinHandle},
-};
-use beef::Cow;
-use std::{fmt, sync::atomic::Ordering, time::Duration};
-use tremor_common::{ids::OperatorIdGen, time::nanotime};
+use futures::StreamExt;
+use std::{fmt, time::Duration};
+use tokio::task::{self, JoinHandle};
+use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
+use tremor_common::{ids::OperatorIdGen, ports::Port, time::nanotime};
 use tremor_pipeline::{
     errors::ErrorKind as PipelineErrorKind, CbAction, Event, ExecutableGraph, SignalKind,
 };
@@ -33,8 +34,8 @@ use tremor_script::{ast::DeployEndpoint, highlighter::Dumb};
 
 const TICK_MS: u64 = 100;
 type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
-type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(DeployEndpoint, OutputTarget)>>;
-type EventSet = Vec<(Cow<'static, str>, Event)>;
+type Dests = halfbrown::HashMap<Port<'static>, Vec<(DeployEndpoint, OutputTarget)>>;
+type EventSet = Vec<(Port<'static>, Event)>;
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
 pub(crate) struct Alias {
@@ -53,9 +54,6 @@ impl Alias {
         }
     }
 
-    pub(crate) fn flow_alias(&self) -> &flow::Alias {
-        &self.flow_alias
-    }
     pub(crate) fn pipeline_alias(&self) -> &str {
         self.pipeline_alias.as_str()
     }
@@ -71,7 +69,7 @@ impl std::fmt::Display for Alias {
 #[derive(Clone)]
 pub struct Addr {
     addr: Sender<Box<Msg>>,
-    cf_addr: Sender<CfMsg>,
+    cf_addr: UnboundedSender<CfMsg>,
     mgmt_addr: Sender<MgmtMsg>,
     alias: Alias,
 }
@@ -81,7 +79,7 @@ impl Addr {
     #[must_use]
     pub(crate) fn new(
         addr: Sender<Box<Msg>>,
-        cf_addr: Sender<CfMsg>,
+        cf_addr: UnboundedSender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
         alias: Alias,
     ) -> Self {
@@ -94,9 +92,9 @@ impl Addr {
     }
 
     /// send a contraflow insight message back down the pipeline
-    pub(crate) async fn send_insight(&self, event: Event) -> Result<()> {
+    pub(crate) fn send_insight(&self, event: Event) -> Result<()> {
         use CfMsg::Insight;
-        self.cf_addr.send(Insight(event)).await.map_err(pipe_send_e)
+        self.cf_addr.send(Insight(event)).map_err(pipe_send_e)
     }
 
     /// send a data-plane message to the pipeline
@@ -146,10 +144,10 @@ pub(crate) enum InputTarget {
 }
 
 impl InputTarget {
-    async fn send_insight(&self, insight: Event) -> Result<()> {
+    fn send_insight(&self, insight: Event) -> Result<()> {
         match self {
-            InputTarget::Pipeline(addr) => addr.send_insight(insight).await,
-            InputTarget::Source(addr) => addr.send(SourceMsg::Cb(insight.cb, insight.id)).await,
+            InputTarget::Pipeline(addr) => addr.send_insight(insight),
+            InputTarget::Source(addr) => addr.send(SourceMsg::Cb(insight.cb, insight.id)),
         }
     }
 }
@@ -181,7 +179,7 @@ pub(crate) fn spawn(
     config: &tremor_pipeline::query::Query,
     operator_id_gen: &mut OperatorIdGen,
 ) -> Result<Addr> {
-    let qsize = crate::QSIZE.load(Ordering::Relaxed);
+    let qsize = qsize();
     let mut pipeline = config.to_executable_graph(operator_id_gen)?;
     pipeline.optimize();
 
@@ -208,20 +206,15 @@ pub(crate) fn spawn(
     let tick_handler = task::spawn(tick(tx.clone()));
 
     let addr = Addr::new(tx, cf_tx, mgmt_tx, pipeline_alias.clone());
-    task::Builder::new()
-        .name(format!(
-            "pipeline-{}-{}",
-            pipeline_alias.flow_alias(),
-            pipeline_alias.pipeline_alias()
-        ))
-        .spawn(pipeline_task(
-            pipeline_alias,
-            pipeline,
-            rx,
-            cf_rx,
-            mgmt_rx,
-            tick_handler,
-        ))?;
+
+    task::spawn(pipeline_task(
+        pipeline_alias,
+        pipeline,
+        rx,
+        cf_rx,
+        mgmt_rx,
+        tick_handler,
+    ));
     Ok(addr)
 }
 
@@ -231,7 +224,7 @@ pub(crate) enum MgmtMsg {
     /// connect a target to an input port
     ConnectInput {
         /// port to connect in
-        port: Cow<'static, str>,
+        port: Port<'static>,
         /// url of the input to connect
         endpoint: DeployEndpoint,
         /// sends the result
@@ -244,7 +237,7 @@ pub(crate) enum MgmtMsg {
     /// connect a target to an output port
     ConnectOutput {
         /// the port to connect to
-        port: Cow<'static, str>,
+        port: Port<'static>,
         /// the url of the output instance
         endpoint: DeployEndpoint,
         /// sends the result
@@ -267,6 +260,8 @@ pub(crate) enum MgmtMsg {
 #[cfg(test)]
 #[allow(dead_code)]
 mod report {
+    use tremor_common::ports::Port;
+
     use super::{DeployEndpoint, InputTarget, OutputTarget, State};
 
     #[derive(Debug, Clone)]
@@ -278,31 +273,31 @@ mod report {
 
     #[derive(Debug, Clone, PartialEq)]
     pub(crate) enum InputReport {
-        Pipeline { alias: String, port: String },
-        Source { alias: String, port: String },
+        Pipeline { alias: String, port: Port<'static> },
+        Source { alias: String, port: Port<'static> },
     }
 
     impl InputReport {
-        pub(crate) fn pipeline(alias: &str, port: &str) -> Self {
+        pub(crate) fn pipeline(alias: &str, port: Port<'static>) -> Self {
             Self::Pipeline {
                 alias: alias.to_string(),
-                port: port.to_string(),
+                port,
             }
         }
-        pub(crate) fn source(alias: &str, port: &str) -> Self {
+        pub(crate) fn source(alias: &str, port: Port<'static>) -> Self {
             Self::Source {
                 alias: alias.to_string(),
-                port: port.to_string(),
+                port,
             }
         }
 
         pub(crate) fn new(endpoint: &DeployEndpoint, target: &InputTarget) -> Self {
             match target {
                 InputTarget::Pipeline(_addr) => {
-                    InputReport::pipeline(endpoint.alias(), endpoint.port())
+                    InputReport::pipeline(endpoint.alias(), endpoint.port().clone())
                 }
                 InputTarget::Source(_addr) => {
-                    InputReport::source(endpoint.alias(), endpoint.port())
+                    InputReport::source(endpoint.alias(), endpoint.port().clone())
                 }
             }
         }
@@ -310,21 +305,21 @@ mod report {
 
     #[derive(Debug, Clone, PartialEq)]
     pub(crate) enum OutputReport {
-        Pipeline { alias: String, port: String },
-        Sink { alias: String, port: String },
+        Pipeline { alias: String, port: Port<'static> },
+        Sink { alias: String, port: Port<'static> },
     }
 
     impl OutputReport {
-        pub(crate) fn pipeline(alias: &str, port: &str) -> Self {
+        pub(crate) fn pipeline(alias: &str, port: Port<'static>) -> Self {
             Self::Pipeline {
                 alias: alias.to_string(),
-                port: port.to_string(),
+                port,
             }
         }
-        pub(crate) fn sink(alias: &str, port: &str) -> Self {
+        pub(crate) fn sink(alias: &str, port: Port<'static>) -> Self {
             Self::Sink {
                 alias: alias.to_string(),
-                port: port.to_string(),
+                port,
             }
         }
     }
@@ -332,10 +327,10 @@ mod report {
         fn from(target: &(DeployEndpoint, OutputTarget)) -> Self {
             match target {
                 (endpoint, OutputTarget::Pipeline(_)) => {
-                    OutputReport::pipeline(endpoint.alias(), endpoint.port())
+                    OutputReport::pipeline(endpoint.alias(), endpoint.port().clone())
                 }
                 (endpoint, OutputTarget::Sink(_)) => {
-                    OutputReport::sink(endpoint.alias(), endpoint.port())
+                    OutputReport::sink(endpoint.alias(), endpoint.port().clone())
                 }
             }
         }
@@ -350,7 +345,7 @@ pub enum Msg {
         /// the event
         event: Event,
         /// the port the event came in from
-        input: Cow<'static, str>,
+        input: Port<'static>,
     },
     /// a signal
     Signal(Event),
@@ -369,7 +364,7 @@ impl OutputTarget {
     ///
     /// # Errors
     ///  * when sending the event via the dest channel fails
-    pub async fn send_event(&mut self, input: Cow<'static, str>, event: Event) -> Result<()> {
+    pub async fn send_event(&mut self, input: Port<'static>, event: Event) -> Result<()> {
         match self {
             Self::Pipeline(addr) => addr.send(Box::new(Msg::Event { input, event })).await?,
             Self::Sink(addr) => {
@@ -439,7 +434,7 @@ async fn send_signal(own_id: &Alias, signal: Event, dests: &mut Dests) -> Result
 }
 
 #[inline]
-async fn handle_insight(
+fn handle_insight(
     skip_to: Option<usize>,
     insight: Event,
     pipeline: &mut ExecutableGraph,
@@ -452,7 +447,7 @@ async fn handle_insight(
         let always_deliver = insight.cb.always_deliver();
         for (url, (input_is_transactional, input)) in input_iter {
             if always_deliver || *input_is_transactional {
-                if let Err(e) = input.send_insight(insight.clone()).await {
+                if let Err(e) = input.send_insight(insight.clone()) {
                     error!(
                         "[Pipeline::{}] failed to send insight to input: {} {}",
                         pipeline.id, e, url
@@ -462,7 +457,7 @@ async fn handle_insight(
         }
         if let Some((url, (input_is_transactional, input))) = first {
             if always_deliver || *input_is_transactional {
-                if let Err(e) = input.send_insight(insight).await {
+                if let Err(e) = input.send_insight(insight) {
                     error!(
                         "[Pipeline::{}] failed to send insight to input: {} {}",
                         pipeline.id, e, url
@@ -474,12 +469,12 @@ async fn handle_insight(
 }
 
 #[inline]
-async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Inputs) {
+fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Inputs) {
     if !pipeline.insights.is_empty() {
         let mut insights = Vec::with_capacity(pipeline.insights.len());
         std::mem::swap(&mut insights, &mut pipeline.insights);
         for (skip_to, insight) in insights.drain(..) {
-            handle_insight(Some(skip_to), insight, pipeline, onramps).await;
+            handle_insight(Some(skip_to), insight, pipeline, onramps);
         }
     }
 }
@@ -487,16 +482,15 @@ async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Inputs) {
 pub(crate) async fn tick(tick_tx: Sender<Box<Msg>>) {
     let mut e = Event::signal_tick();
     while tick_tx.send(Box::new(Msg::Signal(e.clone()))).await.is_ok() {
-        task::sleep(Duration::from_millis(TICK_MS)).await;
+        tokio::time::sleep(Duration::from_millis(TICK_MS)).await;
         e.ingest_ns = nanotime();
     }
 }
 
-async fn handle_cf_msg(msg: CfMsg, pipeline: &mut ExecutableGraph, inputs: &Inputs) -> Result<()> {
+fn handle_cf_msg(msg: CfMsg, pipeline: &mut ExecutableGraph, inputs: &Inputs) {
     match msg {
-        CfMsg::Insight(insight) => handle_insight(None, insight, pipeline, inputs).await,
+        CfMsg::Insight(insight) => handle_insight(None, insight, pipeline, inputs),
     }
-    Ok(())
 }
 
 fn maybe_send(r: Result<()>) {
@@ -537,7 +531,7 @@ pub(crate) async fn pipeline_task(
     id: Alias,
     mut pipeline: ExecutableGraph,
     rx: Receiver<Box<Msg>>,
-    cf_rx: Receiver<CfMsg>,
+    cf_rx: UnboundedReceiver<CfMsg>,
     mgmt_rx: Receiver<MgmtMsg>,
     tick_handler: JoinHandle<()>,
 ) -> Result<()> {
@@ -553,21 +547,19 @@ pub(crate) async fn pipeline_task(
 
     info!("{ctx} Starting Pipeline.");
 
-    let ff = rx.map(|e| AnyMsg::Flow(*e));
-    let cf = cf_rx.map(AnyMsg::Contraflow);
-    let mf = mgmt_rx.map(AnyMsg::Mgmt);
+    let ff = ReceiverStream::new(rx).map(|e| AnyMsg::Flow(*e));
+    let cf = UnboundedReceiverStream::new(cf_rx).map(AnyMsg::Contraflow);
+    let mf = ReceiverStream::new(mgmt_rx).map(AnyMsg::Mgmt);
 
     // prioritize management flow over contra flow over forward event flow
     let mut s = PriorityMerge::new(mf, PriorityMerge::new(cf, ff));
     while let Some(msg) = s.next().await {
         match msg {
-            AnyMsg::Contraflow(msg) => {
-                handle_cf_msg(msg, &mut pipeline, &inputs).await?;
-            }
+            AnyMsg::Contraflow(msg) => handle_cf_msg(msg, &mut pipeline, &inputs),
             AnyMsg::Flow(Msg::Event { input, event }) => {
-                match pipeline.enqueue(input.clone(), event, &mut eventset).await {
+                match pipeline.enqueue(input.clone(), event, &mut eventset) {
                     Ok(()) => {
-                        handle_insights(&mut pipeline, &inputs).await;
+                        handle_insights(&mut pipeline, &inputs);
                         maybe_send(send_events(&mut eventset, &mut dests).await);
                     }
                     Err(e) => {
@@ -594,7 +586,7 @@ pub(crate) async fn pipeline_task(
                     error!("{ctx} Error handling signal: {err_str}");
                 } else {
                     maybe_send(send_signal(&id, signal, &mut dests).await);
-                    handle_insights(&mut pipeline, &inputs).await;
+                    handle_insights(&mut pipeline, &inputs);
                     maybe_send(send_events(&mut eventset, &mut dests).await);
                 }
             }
@@ -606,7 +598,7 @@ pub(crate) async fn pipeline_task(
                 is_transactional,
             }) => {
                 info!("{ctx} Connecting '{endpoint}' to port '{port}'");
-                if !input_does_exist(&port, &pipeline) {
+                if !pipeline.input_exists(&port) {
                     error!("{ctx} Error connecting input pipeline '{port}' as it does not exist",);
                     if tx
                         .send(Err("input port doesn't exist".into()))
@@ -631,7 +623,7 @@ pub(crate) async fn pipeline_task(
             }) => {
                 info!("{ctx} Connecting port '{port}' to {endpoint}",);
                 // add error statement for port out in pipeline, currently no error messages
-                if output_doesnt_exist(&port, &pipeline) {
+                if !pipeline.output_exists(&port) {
                     error!("{ctx} Error connecting output pipeline {port}");
                     if tx
                         .send(Err("output port doesn't exist".into()))
@@ -708,27 +700,19 @@ pub(crate) async fn pipeline_task(
         }
     }
     // stop ticks
-    tick_handler.cancel().await;
+    tick_handler.abort();
 
     info!("{ctx} Stopped.");
     Ok(())
 }
 
-fn output_doesnt_exist(port: &Cow<'static, str>, pipeline: &ExecutableGraph) -> bool {
-    // function checks if port is in pipeline
-    !pipeline.outputs.contains_key(port)
-}
-
-fn input_does_exist(port: &Cow<'static, str>, pipeline: &ExecutableGraph) -> bool {
-    // function checks if port is in pipeline
-    pipeline.inputs().contains_key(port)
-}
 #[cfg(test)]
 mod tests {
 
     use super::*;
     use crate::{
         connectors::{prelude::SinkAddr, source::SourceAddr},
+        errors::empty_error,
         pipeline::report::{InputReport, OutputReport},
     };
     use std::time::Instant;
@@ -741,7 +725,7 @@ mod tests {
     use tremor_script::{aggr_registry, lexer::Location, NodeMeta, FN_REGISTRY};
     use tremor_value::Value;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn report() -> Result<()> {
         let _ = env_logger::try_init();
         let mut operator_id_gen = OperatorIdGen::new();
@@ -766,52 +750,52 @@ mod tests {
         )?;
         println!("{addr:?}"); // coverage
         let yolo_mid = NodeMeta::new(Location::yolo(), Location::yolo());
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         // interconnect 3 pipelines
         addr.send_mgmt(MgmtMsg::ConnectOutput {
-            port: Cow::const_str("out"),
-            endpoint: DeployEndpoint::new("snot2", "in", &yolo_mid),
+            port: Port::Out,
+            endpoint: DeployEndpoint::new("snot2", IN, &yolo_mid),
             tx,
             target: OutputTarget::Pipeline(Box::new(addr2.clone())),
         })
         .await?;
-        rx.recv().await??;
-        let (tx, rx) = bounded(1);
+        rx.recv().await.ok_or_else(empty_error)??;
+        let (tx, mut rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectInput {
-                port: Cow::const_str("in"),
-                endpoint: DeployEndpoint::new("snot", "out", &yolo_mid),
+                port: Port::In,
+                endpoint: DeployEndpoint::new("snot", OUT, &yolo_mid),
                 tx,
                 target: InputTarget::Pipeline(Box::new(addr.clone())),
                 is_transactional: true,
             })
             .await?;
-        rx.recv().await??;
-        let (tx, rx) = bounded(1);
+        rx.recv().await.ok_or_else(empty_error)??;
+        let (tx, mut rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectOutput {
                 tx,
-                port: Cow::const_str("out"),
-                endpoint: DeployEndpoint::new("snot3", "in", &yolo_mid),
+                port: Port::Out,
+                endpoint: DeployEndpoint::new("snot3", IN, &yolo_mid),
                 target: OutputTarget::Pipeline(Box::new(addr3.clone())),
             })
             .await?;
-        rx.recv().await??;
-        let (tx, rx) = bounded(1);
+        rx.recv().await.ok_or_else(empty_error)??;
+        let (tx, mut rx) = bounded(1);
         addr3
             .send_mgmt(MgmtMsg::ConnectInput {
-                port: Cow::const_str("in"),
-                endpoint: DeployEndpoint::new("snot2", "out", &yolo_mid),
+                port: Port::In,
+                endpoint: DeployEndpoint::new("snot2", OUT, &yolo_mid),
                 tx,
                 target: InputTarget::Pipeline(Box::new(addr2.clone())),
                 is_transactional: false,
             })
             .await?;
-        rx.recv().await??;
+        rx.recv().await.ok_or_else(empty_error)??;
         // get a status report from every single one
-        let (tx, rx) = unbounded();
+        let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let mut report1 = rx.recv().await?;
+        let mut report1 = rx.recv().await.ok_or_else(empty_error)?;
         assert!(report1.inputs.is_empty());
         let mut output1 = report1
             .outputs
@@ -820,11 +804,11 @@ mod tests {
         assert!(report1.outputs.is_empty());
         assert_eq!(1, output1.len());
         let output1 = output1.pop().ok_or("no data")?;
-        assert_eq!(output1, OutputReport::pipeline("snot2", "in"));
+        assert_eq!(output1, OutputReport::pipeline("snot2", IN));
         addr2.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let mut report2 = rx.recv().await?;
+        let mut report2 = rx.recv().await.ok_or_else(empty_error)?;
         let input2 = report2.inputs.pop().expect("no input at port in");
-        assert_eq!(input2, InputReport::pipeline("snot", "out"));
+        assert_eq!(input2, InputReport::pipeline("snot", OUT));
         let mut output2 = report2
             .outputs
             .remove("out")
@@ -832,13 +816,13 @@ mod tests {
         assert!(report2.outputs.is_empty());
         assert_eq!(1, output2.len());
         let output2 = output2.pop().ok_or("no data")?;
-        assert_eq!(output2, OutputReport::pipeline("snot3", "in"));
+        assert_eq!(output2, OutputReport::pipeline("snot3", IN));
 
         addr3.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let mut report3 = rx.recv().await?;
+        let mut report3 = rx.recv().await.ok_or_else(empty_error)?;
         assert!(report3.outputs.is_empty());
         let input3 = report3.inputs.pop().expect("no inputs");
-        assert_eq!(input3, InputReport::pipeline("snot2", "out"));
+        assert_eq!(input3, InputReport::pipeline("snot2", OUT));
 
         addr.stop().await?;
         addr2.stop().await?;
@@ -846,7 +830,8 @@ mod tests {
         Ok(())
     }
 
-    #[async_std::test]
+    #[allow(clippy::too_many_lines)] // this is a test
+    #[tokio::test(flavor = "multi_thread")]
     async fn pipeline_spawn() -> Result<()> {
         let _ = env_logger::try_init();
         let mut operator_id_gen = OperatorIdGen::new();
@@ -857,65 +842,65 @@ mod tests {
             tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(pipeline_id, &query, &mut operator_id_gen)?;
 
-        let (tx, rx) = unbounded();
+        let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await?;
+        let report = rx.recv().await.ok_or_else(empty_error)?;
         assert_eq!(State::Initializing, report.state);
         assert!(report.inputs.is_empty());
         assert!(report.outputs.is_empty());
 
         addr.start().await?;
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await?;
+        let report = rx.recv().await.ok_or_else(empty_error)?;
         assert_eq!(State::Running, report.state);
         assert!(report.inputs.is_empty());
         assert!(report.outputs.is_empty());
 
         // connect a fake source as input
-        let (source_tx, source_rx) = unbounded();
+        let (source_tx, mut source_rx) = unbounded();
         let source_addr = SourceAddr { addr: source_tx };
         let target = InputTarget::Source(source_addr);
         let mid = NodeMeta::new(Location::yolo(), Location::yolo());
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::ConnectInput {
             port: IN,
-            endpoint: DeployEndpoint::new(&"source_01", &OUT, &mid),
+            endpoint: DeployEndpoint::new(&"source_01", OUT, &mid),
             tx,
             target,
             is_transactional: true,
         })
         .await?;
-        rx.recv().await??;
+        rx.recv().await.ok_or_else(empty_error)??;
 
-        let (tx, rx) = unbounded();
+        let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await?;
+        let report = rx.recv().await.ok_or_else(empty_error)?;
         assert_eq!(1, report.inputs.len());
         assert_eq!(
-            report::InputReport::source("source_01", &OUT),
+            report::InputReport::source("source_01", OUT),
             report.inputs[0]
         );
 
         // connect a fake sink as output
-        let (sink_tx, sink_rx) = unbounded();
+        let (sink_tx, mut sink_rx) = bounded(1);
         let sink_addr = SinkAddr { addr: sink_tx };
         let target = OutputTarget::Sink(sink_addr);
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::ConnectOutput {
-            endpoint: DeployEndpoint::new(&"sink_01", &IN, &mid),
+            endpoint: DeployEndpoint::new(&"sink_01", IN, &mid),
             port: OUT,
             tx,
             target,
         })
         .await?;
-        rx.recv().await??;
+        rx.recv().await.ok_or_else(empty_error)??;
 
-        let (tx, rx) = unbounded();
+        let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await?;
+        let report = rx.recv().await.ok_or_else(empty_error)?;
         assert_eq!(1, report.outputs.len());
         assert_eq!(
-            Some(&vec![report::OutputReport::sink("sink_01", &IN)]),
+            Some(&vec![report::OutputReport::sink("sink_01", IN)]),
             report.outputs.get(&OUT.to_string())
         );
 
@@ -926,9 +911,9 @@ mod tests {
         };
         addr.send(Box::new(Msg::Event { event, input: IN })).await?;
 
-        let mut sink_msg = sink_rx.recv().await?;
+        let mut sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
         while let SinkMsg::Signal { .. } = sink_msg {
-            sink_msg = sink_rx.recv().await?;
+            sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
         }
         match sink_msg {
             SinkMsg::Event { event, port: _ } => {
@@ -945,7 +930,7 @@ mod tests {
         .await?;
 
         let start = Instant::now();
-        let mut sink_msg = sink_rx.recv().await?;
+        let mut sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
 
         while !matches!(sink_msg, SinkMsg::Signal {
                 signal:
@@ -960,13 +945,12 @@ mod tests {
                 "Timed out waiting for drain signal on the sink"
             );
 
-            sink_msg = sink_rx.recv().await?;
+            sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
         }
 
         let event_id = EventId::from_id(1, 1, 1);
-        addr.send_insight(Event::cb_ack(0, event_id.clone(), OpMeta::default()))
-            .await?;
-        let source_msg = source_rx.recv().await?;
+        addr.send_insight(Event::cb_ack(0, event_id.clone(), OpMeta::default()))?;
+        let source_msg = source_rx.recv().await.ok_or_else(empty_error)?;
         if let SourceMsg::Cb(cb_action, cb_id) = source_msg {
             assert_eq!(event_id, cb_id);
             assert_eq!(CbAction::Ack, cb_action);
@@ -977,14 +961,14 @@ mod tests {
         // test pause and resume
         addr.pause().await?;
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await?;
+        let report = rx.recv().await.ok_or_else(empty_error)?;
         assert_eq!(State::Paused, report.state);
         assert_eq!(1, report.inputs.len());
         assert_eq!(1, report.outputs.len());
 
         addr.resume().await?;
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await?;
+        let report = rx.recv().await.ok_or_else(empty_error)?;
         assert_eq!(State::Running, report.state);
         assert_eq!(1, report.inputs.len());
         assert_eq!(1, report.outputs.len());
@@ -1003,7 +987,7 @@ mod tests {
                 "Pipeline didnt stop!"
             );
 
-            task::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
         Ok(())
     }

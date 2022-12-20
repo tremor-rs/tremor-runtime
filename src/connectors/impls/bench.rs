@@ -178,10 +178,10 @@ pub(crate) struct Bench {
 impl Connector for Bench {
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let s = Blaster {
+        let source = Blaster {
             acc: self.acc.clone(),
             origin_uri: self.origin_uri.clone(),
             is_transactional: self.config.is_transactional,
@@ -190,20 +190,16 @@ impl Connector for Bench {
             interval_ns: self.config.interval.map(Duration::from_nanos),
             finished: false,
         };
-        builder.spawn(s, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        builder
-            .spawn(
-                Blackhole::new(&self.config, self.stop_after, self.kill_switch.clone()),
-                sink_context,
-            )
-            .map(Some)
+        let sink = Blackhole::new(&self.config, self.stop_after, self.kill_switch.clone());
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -237,7 +233,7 @@ impl Source for Blaster {
             return Ok(SourceReply::Finished);
         }
         if let Some(interval) = self.interval_ns {
-            async_std::task::sleep(interval).await;
+            tokio::time::sleep(interval).await;
         }
         let res = if self.stop_at.iter().any(|stop_at| nanotime() >= *stop_at)
             || self
@@ -400,7 +396,7 @@ impl Blackhole {
 
         // this should stop the whole server process
         // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-        async_std::task::spawn(async move {
+        tokio::task::spawn(async move {
             info!("{stop_ctx} Exiting...");
             stop_ctx.swallow_err(
                 kill_switch.stop(ShutdownMode::Forceful).await,

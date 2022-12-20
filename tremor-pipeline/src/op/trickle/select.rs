@@ -92,7 +92,7 @@ pub(crate) fn execute_select_and_having(
     ctx: &SelectCtx,
     env: &Env,
     data: &ValueAndMeta,
-) -> TSResult<Option<(Cow<'static, str>, Event)>> {
+) -> TSResult<Option<(Port<'static>, Event)>> {
     let (event_payload, event_meta) = data.parts();
 
     let value = ctx.select.target.run(
@@ -173,7 +173,7 @@ impl Operator for Select {
     fn on_event(
         &mut self,
         _uid: OperatorId,
-        _port: &str,
+        _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {

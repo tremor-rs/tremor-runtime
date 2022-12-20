@@ -13,19 +13,17 @@
 // limitations under the License.
 
 use super::meta;
-
 use crate::connectors::google::{AuthInterceptor, ChannelFactory, TokenProvider};
 use crate::connectors::impls::gcl::writer::Config;
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::pb;
-use async_std::channel::Sender;
-use async_std::prelude::FutureExt;
 use googapis::google::logging::v2::log_entry::Payload;
 use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
 use googapis::google::logging::v2::{LogEntry, WriteLogEntriesRequest};
 use prost_types::Timestamp;
 use std::time::Duration;
+use tokio::time::timeout;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Code;
@@ -59,7 +57,7 @@ where
     client: Option<LoggingServiceV2Client<InterceptedService<TChannel, AuthInterceptor<T>>>>,
     config: Config,
     concurrency_cap: ConcurrencyCap,
-    reply_tx: Sender<AsyncSinkReply>,
+    reply_tx: ReplySender,
     channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
 }
 
@@ -100,7 +98,7 @@ impl<
 {
     pub fn new(
         config: Config,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: ReplySender,
         channel_factory: impl ChannelFactory<TChannel> + Send + Sync + 'static,
     ) -> Self {
         let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
@@ -156,7 +154,7 @@ where
         }
 
         let reply_tx = self.reply_tx.clone();
-        let guard = self.concurrency_cap.inc_for(&event).await?;
+        let guard = self.concurrency_cap.inc_for(&event)?;
         let log_name = self.config.log_name(None);
         let resource = super::value_to_monitored_resource(self.config.resource.as_ref())?;
         let labels = self.config.labels.clone();
@@ -167,17 +165,18 @@ where
         let mut task_client = client.clone();
 
         spawn_task(ctx.clone(), async move {
-            let log_entries_response = task_client
-                .write_log_entries(WriteLogEntriesRequest {
+            let log_entries_response = timeout(
+                request_timeout,
+                task_client.write_log_entries(WriteLogEntriesRequest {
                     log_name,
                     resource,
                     labels,
                     entries,
                     partial_success,
                     dry_run,
-                })
-                .timeout(request_timeout)
-                .await?;
+                }),
+            )
+            .await?;
 
             if let Err(error) = log_entries_response {
                 error!("Failed to write a log entries: {}", error);
@@ -194,21 +193,17 @@ where
                         | Code::Unknown
                 ) {
                     task_ctx.swallow_err(
-                        task_ctx.notifier.connection_lost().await,
+                        task_ctx.notifier().connection_lost().await,
                         "Failed to notify about Google Cloud Logging connection loss",
                     );
                 }
 
-                reply_tx
-                    .send(AsyncSinkReply::Fail(ContraflowData::from(event)))
-                    .await?;
+                reply_tx.send(AsyncSinkReply::Fail(ContraflowData::from(event)))?;
             } else {
-                reply_tx
-                    .send(AsyncSinkReply::Ack(
-                        ContraflowData::from(event),
-                        nanotime() - start,
-                    ))
-                    .await?;
+                reply_tx.send(AsyncSinkReply::Ack(
+                    ContraflowData::from(event),
+                    nanotime() - start,
+                ))?;
             }
 
             drop(guard);
@@ -251,13 +246,13 @@ where
 mod test {
     #![allow(clippy::cast_possible_wrap)]
     use super::*;
+    use crate::channel::bounded;
     use crate::connectors::impls::gcl;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
-    use async_std::channel::bounded;
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
@@ -325,7 +320,7 @@ mod test {
             let body = http_body::combinators::BoxBody::new(body).map_err(|err| match err {});
             let mut response = tonic::body::BoxBody::new(body);
             let (mut tx, body) = tonic::transport::Body::channel();
-            let jh = async_std::task::spawn(async move {
+            let jh = tokio::task::spawn(async move {
                 let response = response.data().await.unwrap().unwrap();
                 let len: [u8; 4] = (response.len() as u32).to_ne_bytes();
                 let len = Bytes::from(len.to_vec());
@@ -339,7 +334,7 @@ mod test {
                 trailers.insert("grpc-status", HeaderValue::from_static("0"));
                 tx.send_trailers(trailers).await.unwrap();
             });
-            async_std::task::spawn_blocking(|| jh);
+            tokio::task::spawn_blocking(|| jh);
 
             let response = http::Response::new(body);
 
@@ -347,9 +342,9 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn on_event_can_send_an_event() -> Result<()> {
-        let (tx, rx) = bounded(10);
+        let (tx, mut rx) = crate::channel::unbounded();
         let (connection_lost_tx, _connection_lost_rx) = bounded(10);
 
         let mut sink = GclSink::<TestTokenProvider, _>::new(
@@ -367,15 +362,15 @@ mod test {
             tx,
             MockChannelFactory,
         );
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("a", "b"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(connection_lost_tx),
-        };
+        let ctx = SinkContext::new(
+            SinkId::default(),
+            Alias::new("a", "b"),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(connection_lost_tx),
+        );
 
-        sink.connect(&sink_context, &Attempt::default()).await?;
+        sink.connect(&ctx, &Attempt::default()).await?;
 
         let event = Event {
             id: EventId::new(1, 2, 3, 4),
@@ -392,7 +387,7 @@ mod test {
         sink.on_event(
             "",
             event.clone(),
-            &sink_context,
+            &ctx,
             &mut EventSerializer::new(
                 None,
                 CodecReq::Structured,
@@ -404,7 +399,10 @@ mod test {
         )
         .await?;
 
-        assert!(matches!(rx.recv().await?, AsyncSinkReply::CB(_, Trigger)));
+        assert!(matches!(
+            rx.recv().await.expect("no msg"),
+            AsyncSinkReply::CB(_, Trigger)
+        ));
 
         Ok(())
     }
@@ -431,7 +429,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn sink_succeeds_if_config_is_empty() -> Result<()> {
         let config = literal!({
             "config": {}
@@ -446,10 +444,10 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn on_event_fails_if_client_is_not_connected() -> Result<()> {
-        let (rx, _tx) = async_std::channel::unbounded();
-        let (reply_tx, _reply_rx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
+        let (reply_tx, _reply_rx) = crate::channel::unbounded();
         let config = Config::new(&literal!({
             "connect_timeout": 1_000_000
         }))?;
@@ -460,13 +458,13 @@ mod test {
             .on_event(
                 "",
                 Event::signal_tick(),
-                &SinkContext {
-                    uid: SinkId::default(),
-                    alias: Alias::new("", ""),
-                    connector_type: ConnectorType::default(),
-                    quiescence_beacon: QuiescenceBeacon::default(),
-                    notifier: ConnectionLostNotifier::new(rx),
-                },
+                &SinkContext::new(
+                    SinkId::default(),
+                    Alias::new("", ""),
+                    ConnectorType::default(),
+                    QuiescenceBeacon::default(),
+                    ConnectionLostNotifier::new(rx),
+                ),
                 &mut EventSerializer::new(
                     None,
                     CodecReq::Structured,

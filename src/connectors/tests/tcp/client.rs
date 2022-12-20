@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::net::ToSocketAddrs;
-use std::time::Duration;
-
 use crate::{
     connectors::{
         impls::tcp,
@@ -22,18 +19,20 @@ use crate::{
     },
     errors::Result,
 };
+use std::time::Duration;
+use tokio::net::lookup_host;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, Value};
 use value_trait::{Builder, ValueAccess};
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn tls_client() -> Result<()> {
     setup_for_tls();
     tcp_client_test(true).await
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn tcp_client() -> Result<()> {
     tcp_client_test(false).await
 }
@@ -43,7 +42,7 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
 
     let free_port = free_port::find_free_tcp_port().await?;
 
-    let server_addr = format!("localhost:{}", free_port);
+    let server_addr = format!("localhost:{free_port}");
 
     // simple echo server
     let mut echo_server = EchoServer::new(server_addr.clone(), use_tls);
@@ -77,14 +76,8 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
             "tls": tls_config
         }
     });
-    let connector =
+    let mut connector =
         ConnectorHarness::new(function_name!(), &tcp::client::Builder::default(), &config).await?;
-    let out = connector
-        .out()
-        .expect("No pipeline connected to tcp_client OUT port.");
-    let in_pipe = connector
-        .get_pipe(IN)
-        .expect("No pipeline connected to tcp_client IN port");
     connector.start().await?;
     connector.wait_for_connected().await?;
     connector.consume_initial_sink_contraflow().await?;
@@ -97,9 +90,8 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
         ..Event::default()
     };
     connector.send_to_sink(event, IN).await?;
-    let response = out.get_event().await?;
-    let localhost_ip = ("localhost", 0)
-        .to_socket_addrs()
+    let response = connector.out()?.get_event().await?;
+    let localhost_ip = lookup_host(("localhost", 0))
         .await?
         .next()
         .expect("Expected an ip")
@@ -120,7 +112,7 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
     );
 
     // check for ack for transactional event
-    let cf = in_pipe.get_contraflow().await?;
+    let cf = connector.get_pipe("in")?.get_contraflow().await?;
     assert_eq!(CbAction::Ack, cf.cb);
     assert_eq!(id, cf.id);
 
@@ -136,17 +128,17 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
         ..Event::default()
     };
     connector.send_to_sink(event.clone(), IN).await?;
-    let mut cf = in_pipe.get_contraflow().await?;
+    let mut cf = connector.get_pipe("in")?.get_contraflow().await?;
     while matches!(cf.cb, CbAction::Ack) {
-        async_std::task::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
         connector.send_to_sink(event.clone(), IN).await?;
-        cf = in_pipe.get_contraflow().await?;
+        cf = connector.get_pipe("in")?.get_contraflow().await?;
     }
     assert_eq!(CbAction::Fail, cf.cb);
     assert_eq!(id, cf.id);
 
     // as the connection is closed we expect a CB close some time after the fail
-    let cf = in_pipe.get_contraflow().await?;
+    let cf = connector.get_pipe("in")?.get_contraflow().await?;
     assert_eq!(CbAction::Trigger, cf.cb);
 
     let (out, err) = connector.stop().await?;

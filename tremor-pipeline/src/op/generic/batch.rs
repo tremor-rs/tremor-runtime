@@ -100,7 +100,7 @@ impl Operator for Batch {
     fn on_event(
         &mut self,
         _uid: OperatorId,
-        _port: &str,
+        _port: &Port<'static>,
         _state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
@@ -241,7 +241,7 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event_1.clone())
+            .on_event(operator_id, &Port::In, &mut state, event_1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -253,7 +253,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event_2.clone())
+            .on_event(operator_id, &Port::In, &mut state, event_2.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
         let (out, event) = r.events.pop().expect("no results");
@@ -272,7 +272,7 @@ mod test {
         };
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event)
+            .on_event(operator_id, &Port::In, &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
@@ -301,7 +301,7 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event_1.clone())
+            .on_event(operator_id, &Port::In, &mut state, event_1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -314,7 +314,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event_2.clone())
+            .on_event(operator_id, &Port::In, &mut state, event_2.clone())
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -336,7 +336,7 @@ mod test {
         };
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event)
+            .on_event(operator_id, &Port::In, &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -348,7 +348,7 @@ mod test {
         };
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event)
+            .on_event(operator_id, &Port::In, &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
         Ok(())
@@ -382,7 +382,7 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event_1.clone())
+            .on_event(operator_id, &Port::In, &mut state, event_1.clone())
             .expect("failed to run peipeline");
         assert_eq!(r.len(), 0);
 
@@ -413,7 +413,7 @@ mod test {
         };
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event)
+            .on_event(operator_id, &Port::In, &mut state, event)
             .expect("failed to run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -425,7 +425,7 @@ mod test {
         };
 
         let r = op
-            .on_event(operator_id, "in", &mut state, event)
+            .on_event(operator_id, &Port::In, &mut state, event)
             .expect("failed to run piepeline");
         assert_eq!(r.len(), 0);
     }
@@ -465,7 +465,7 @@ mod test {
             data: Value::from("snot").into(),
             ..Event::default()
         };
-        let r = op.on_event(operator_id, "in", &mut state, event1)?;
+        let r = op.on_event(operator_id, &Port::In, &mut state, event1)?;
         assert_eq!(r.len(), 0);
 
         signal.ingest_ns = 3_000_000;

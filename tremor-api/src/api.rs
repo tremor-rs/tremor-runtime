@@ -17,13 +17,13 @@
 use std::time::Duration;
 
 use crate::errors::Error;
-use async_std::{prelude::*, task::JoinHandle};
 use http_types::{
     headers::{self, HeaderValue, ToHeaderValues},
     StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use tide::Response;
+use tokio::task::JoinHandle;
 use tremor_runtime::instance::State as InstanceState;
 use tremor_runtime::system::World;
 
@@ -152,20 +152,14 @@ async fn handle_api_request<
     let path = req.url().path().to_string();
     let method = req.method();
 
-    // Handle request. If any api error is returned, serialize it into a tide response
-    // as well, respecting the requested resource type. (and if there's error during
-    // this serialization, fall back to the error's conversion into tide response)
-    let r = match handler_func(req).timeout(DEFAULT_API_TIMEOUT).await {
+    let r = match handler_func(req).await {
         Err(e) => {
-            error!("[API {method} {path}] Timeout");
-            Err(e.into())
-        }
-        Ok(Err(e)) => {
             error!("[API {method} {path}] Error: {e}");
             Err(e)
         }
-        Ok(Ok(r)) => Ok(r),
+        Ok(r) => Ok(r),
     };
+
     r.or_else(|api_error| {
         serialize_error(resource_type, api_error).or_else(|e| Ok(Into::<tide::Response>::into(e)))
     })
@@ -202,7 +196,7 @@ pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
     app.at("/v1").nest(v1_app);
 
     // spawn API listener
-    async_std::task::spawn(async move {
+    tokio::task::spawn(async move {
         let res = app.listen(host).await;
         warn!("API stopped.");
         if let Err(e) = res {
@@ -216,11 +210,10 @@ pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-
-    use async_std::net::TcpListener;
     use http_types::Url;
     use simd_json::ValueAccess;
+    use std::time::Instant;
+    use tokio::net::TcpListener;
     use tremor_runtime::{
         errors::Result as RuntimeResult,
         instance::State as InstanceState,
@@ -233,11 +226,11 @@ mod tests {
 
     use super::*;
 
-    #[async_std::test]
+    #[allow(clippy::too_many_lines)] // this is a test
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_api() -> RuntimeResult<()> {
         let _ = env_logger::try_init();
         let config = WorldConfig {
-            qsize: 16,
             debug_connectors: true,
         };
         let (world, world_handle) = World::start(config).await?;
@@ -542,8 +535,8 @@ mod tests {
 
         // cleanup
         world.stop(ShutdownMode::Graceful).await?;
-        world_handle.cancel().await;
-        api_handle.cancel().await;
+        world_handle.abort();
+        api_handle.abort();
         Ok(())
     }
 }

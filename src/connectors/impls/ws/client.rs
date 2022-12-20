@@ -21,17 +21,18 @@ use crate::{
         prelude::*,
         utils::{
             socket::{tcp_client_socket, TcpSocketOptions},
-            tls::{tls_client_connector, TLSClientConfig},
+            tls::TLSClientConfig,
         },
     },
     errors::err_connector_def,
 };
-use async_std::sync::Arc;
-use async_tls::TlsConnector;
-use async_tungstenite::client_async;
 use either::Either;
 use futures::StreamExt;
-use std::net::SocketAddr;
+use rustls::ServerName;
+use std::sync::Arc;
+use std::{net::SocketAddr, sync::atomic::AtomicBool};
+use tokio_rustls::TlsConnector;
+use tokio_tungstenite::client_async;
 
 const URL_SCHEME: &str = "tremor-ws-client";
 
@@ -80,11 +81,11 @@ impl ConnectorBuilder for Builder {
 
         let (tls_connector, tls_domain) = match config.tls.as_ref() {
             Some(Either::Right(true)) => (
-                Some(tls_client_connector(&TLSClientConfig::default()).await?),
+                Some(TLSClientConfig::default().to_client_connector()?),
                 host,
             ),
             Some(Either::Left(tls_config)) => (
-                Some(tls_client_connector(tls_config).await?),
+                Some(tls_config.to_client_connector()?),
                 tls_config.domain.clone().unwrap_or(host),
             ),
             Some(Either::Right(false)) | None => (None, host),
@@ -127,27 +128,23 @@ impl WsClient {
 impl Connector for WsClient {
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(
-            builder.qsize(),
-            Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
-        );
+        // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+        let source = ChannelSource::new(Arc::new(AtomicBool::new(false)));
         self.source_runtime = Some(source.runtime());
-        let addr = builder.spawn(source, source_context)?;
-        Ok(Some(addr))
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = SingleStreamSink::new_with_meta(builder.qsize(), builder.reply_tx());
-        self.sink_runtime = Some(sink.runtime());
-        let addr = builder.spawn(sink, sink_context)?;
-        Ok(Some(addr))
+        let mut sink = SingleStreamSink::new_with_meta(builder.reply_tx());
+        self.sink_runtime = Some(sink.runtime()?);
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
@@ -155,9 +152,9 @@ impl Connector for WsClient {
             .source_runtime
             .as_ref()
             .ok_or("Source runtime not initialized")?;
-        let sink_runtime = self
+        let mut sink_runtime = self
             .sink_runtime
-            .as_ref()
+            .take()
             .ok_or("Sink runtime not initialized")?;
 
         let tcp_stream = tcp_client_socket(&self.config.url, &self.config.socket_options).await?;
@@ -166,7 +163,8 @@ impl Connector for WsClient {
         if let Some(tls_connector) = self.tls_connector.as_ref() {
             // TLS
             // wrap it into arcmutex, because we need to clone it in order to close it properly
-            let tls_stream = tls_connector.connect(&self.tls_domain, tcp_stream).await?;
+            let server_name = ServerName::try_from(self.tls_domain.as_str())?;
+            let tls_stream = tls_connector.connect(server_name, tcp_stream).await?;
             let (ws_stream, _http_response) =
                 client_async(self.config.url.as_str(), tls_stream).await?;
             let origin_uri = EventOriginUri {
@@ -179,15 +177,10 @@ impl Connector for WsClient {
             let meta = ctx.meta(WsClient::meta(peer_addr, true));
             let ws_writer = WsWriter::new_tls_client(writer);
 
-            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
+            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer)?;
 
-            let ws_reader = WsReader::new(
-                reader,
-                Some(sink_runtime.clone()),
-                origin_uri,
-                meta,
-                ctx.clone(),
-            );
+            let ws_reader =
+                WsReader::new(reader, Some(sink_runtime), origin_uri, meta, ctx.clone());
             source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
         } else {
             // No TLS
@@ -203,15 +196,10 @@ impl Connector for WsClient {
             let meta = ctx.meta(WsClient::meta(peer_addr, false));
 
             let ws_writer = WsWriter::new_tungstenite_client(writer);
-            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
+            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer)?;
 
-            let ws_reader = WsReader::new(
-                reader,
-                Some(sink_runtime.clone()),
-                origin_uri,
-                meta,
-                ctx.clone(),
-            );
+            let ws_reader =
+                WsReader::new(reader, Some(sink_runtime), origin_uri, meta, ctx.clone());
             source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
         }
 

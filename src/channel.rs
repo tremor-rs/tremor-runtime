@@ -12,30 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::op::prelude::*;
-
-#[derive(Debug, Clone, Hash)]
-struct Passthrough {}
-
-op!(PassthroughFactory (_uid, _node) {
-    Ok(Box::new(Passthrough{}))
-});
-
-impl Operator for Passthrough {
-    fn on_event(
-        &mut self,
-        _uid: OperatorId,
-        _port: &Port<'static>,
-        _state: &mut Value<'static>,
-        event: Event,
-    ) -> Result<EventAndInsights> {
-        Ok(event.into())
-    }
-    // this is just returning true
-
-    fn skippable(&self) -> bool {
-        // ALLOW: This is Ok
-        let _ = self;
-        true
-    }
-}
+pub(crate) type Sender<T> = tokio::sync::mpsc::Sender<T>;
+pub(crate) type Receiver<T> = tokio::sync::mpsc::Receiver<T>;
+pub(crate) type UnboundedSender<T> = tokio::sync::mpsc::UnboundedSender<T>;
+pub(crate) type UnboundedReceiver<T> = tokio::sync::mpsc::UnboundedReceiver<T>;
+#[cfg(test)]
+pub(crate) use tokio::sync::mpsc::error::TryRecvError;
+pub(crate) use tokio::sync::mpsc::{channel as bounded, unbounded_channel as unbounded};

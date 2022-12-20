@@ -33,23 +33,29 @@ use crate::pipeline;
 use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocessors};
 use crate::primerge::PriorityMerge;
 use crate::{
+    channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
+    qsize,
+};
+use crate::{
     codec::{self, Codec},
     config::NameWithConfig,
 };
-use async_std::channel::{bounded, unbounded, Receiver, Sender};
-use async_std::stream::StreamExt; // for .next() on PriorityMerge
-use async_std::task;
-use beef::Cow;
-pub(crate) use channel_sink::{ChannelSink, ChannelSinkRuntime};
-pub(crate) use single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime};
-use std::borrow::Borrow;
+use futures::StreamExt; // for .next() on PriorityMerge
 use std::collections::{btree_map::Entry, BTreeMap, HashSet};
 use std::fmt::Display;
-use tremor_common::ids::{SinkId, SourceId};
+use std::{borrow::Borrow, sync::Arc};
+use tokio::task;
+use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
 use tremor_common::time::nanotime;
+use tremor_common::{
+    ids::{SinkId, SourceId},
+    ports::Port,
+};
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
 use tremor_value::Value;
+
+pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
 
 /// Result for a sink function that may provide insights or response.
 ///
@@ -247,11 +253,11 @@ pub(crate) trait StreamWriter: Send + Sync {
 
 #[async_trait::async_trait]
 pub(crate) trait SinkRuntime: Send + Sync {
-    async fn unregister_stream_writer(&self, stream: u64) -> Result<()>;
+    async fn unregister_stream_writer(&mut self, stream: u64) -> Result<()>;
 }
 /// context for the connector sink
 #[derive(Clone)]
-pub(crate) struct SinkContext {
+pub(crate) struct SinkContextInner {
     /// the connector unique identifier
     pub(crate) uid: SinkId,
     /// the connector alias
@@ -265,28 +271,56 @@ pub(crate) struct SinkContext {
     /// notifier the connector runtime if we lost a connection
     pub(crate) notifier: ConnectionLostNotifier,
 }
+#[derive(Clone)]
+pub(crate) struct SinkContext(Arc<SinkContextInner>);
+impl SinkContext {
+    pub(crate) fn uid(&self) -> SinkId {
+        self.0.uid
+    }
+    pub(crate) fn notifier(&self) -> &ConnectionLostNotifier {
+        &self.0.notifier
+    }
+    pub(crate) fn new(
+        uid: SinkId,
+        alias: Alias,
+        connector_type: ConnectorType,
+        quiescence_beacon: QuiescenceBeacon,
+        notifier: ConnectionLostNotifier,
+    ) -> SinkContext {
+        Self(Arc::new(SinkContextInner {
+            uid,
+            alias,
+            connector_type,
+            quiescence_beacon,
+            notifier,
+        }))
+    }
+}
 
 impl Display for SinkContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Sink::{}]", &self.alias)
+        write!(f, "[Sink::{}]", &self.0.alias)
     }
 }
 
 impl Context for SinkContext {
+    // fn uid(&self) -> &SinkId {
+    //     &self.0.uid
+    // }
     fn alias(&self) -> &Alias {
-        &self.alias
+        &self.0.alias
     }
 
     fn quiescence_beacon(&self) -> &QuiescenceBeacon {
-        &self.quiescence_beacon
+        &self.0.quiescence_beacon
     }
 
     fn notifier(&self) -> &ConnectionLostNotifier {
-        &self.notifier
+        &self.0.notifier
     }
 
     fn connector_type(&self) -> &ConnectorType {
-        &self.connector_type
+        &self.0.connector_type
     }
 }
 
@@ -298,7 +332,7 @@ pub(crate) enum SinkMsg {
         /// the event
         event: Event,
         /// the port through which it came
-        port: Cow<'static, str>,
+        port: Port<'static>,
     },
     /// receive a signal
     Signal {
@@ -347,41 +381,32 @@ pub(crate) struct SinkAddr {
 
 /// Builder for the sink manager
 pub(crate) struct SinkManagerBuilder {
-    qsize: usize,
     serializer: EventSerializer,
-    reply_channel: (Sender<AsyncSinkReply>, Receiver<AsyncSinkReply>),
+    reply_tx: ReplySender,
+    reply_rx: UnboundedReceiver<AsyncSinkReply>,
     metrics_reporter: SinkReporter,
 }
 
 impl SinkManagerBuilder {
-    /// globally configured queue size
-    #[must_use]
-    pub(crate) fn qsize(&self) -> usize {
-        self.qsize
-    }
-
     /// Get yourself a sender to send replies back from your concrete sink.
     ///
     /// This is especially useful if your sink handles events asynchronously
     /// and you can't reply immediately.
     #[must_use]
-    pub(crate) fn reply_tx(&self) -> Sender<AsyncSinkReply> {
-        self.reply_channel.0.clone()
+    pub(crate) fn reply_tx(&self) -> ReplySender {
+        self.reply_tx.clone()
     }
 
     /// spawn your specific sink
-    pub(crate) fn spawn<S>(self, sink: S, ctx: SinkContext) -> Result<SinkAddr>
+    pub(crate) fn spawn<S>(self, sink: S, ctx: SinkContext) -> SinkAddr
     where
         S: Sink + Send + 'static,
     {
-        let qsize = self.qsize;
-        let name = format!("{}-sink", ctx.alias);
-        let (sink_tx, sink_rx) = bounded(qsize);
+        let (sink_tx, sink_rx) = bounded(qsize());
         let manager = SinkManager::new(sink, ctx, self, sink_rx);
-        // spawn manager task
-        task::Builder::new().name(name).spawn(manager.run())?;
+        task::spawn(manager.run());
 
-        Ok(SinkAddr { addr: sink_tx })
+        SinkAddr { addr: sink_tx }
     }
 }
 
@@ -392,7 +417,7 @@ pub(crate) fn builder(
     config: &ConnectorConfig,
     connector_codec_requirement: CodecReq,
     alias: &Alias,
-    qsize: usize,
+
     metrics_reporter: SinkReporter,
 ) -> Result<SinkManagerBuilder> {
     // resolve codec and processors
@@ -406,11 +431,11 @@ pub(crate) fn builder(
     )?;
     // the incoming channels for events are all bounded, so we can safely be unbounded here
     // TODO: actually we could have lots of CB events not bound to events here
-    let reply_channel = unbounded();
+    let (reply_tx, reply_rx) = unbounded();
     Ok(SinkManagerBuilder {
-        qsize,
         serializer,
-        reply_channel,
+        reply_tx,
+        reply_rx,
         metrics_reporter,
     })
 }
@@ -574,8 +599,8 @@ where
 {
     sink: S,
     ctx: SinkContext,
-    rx: Receiver<SinkMsg>,
-    reply_rx: Receiver<AsyncSinkReply>,
+    rx: ReceiverStream<SinkMsg>,
+    reply_rx: UnboundedReceiverStream<AsyncSinkReply>,
     serializer: EventSerializer,
     metrics_reporter: SinkReporter,
     /// tracking which operators incoming events visited
@@ -597,15 +622,15 @@ where
     fn new(sink: S, ctx: SinkContext, builder: SinkManagerBuilder, rx: Receiver<SinkMsg>) -> Self {
         let SinkManagerBuilder {
             serializer,
-            reply_channel,
+            reply_rx,
             metrics_reporter,
             ..
         } = builder;
         Self {
             sink,
             ctx,
-            rx,
-            reply_rx: reply_channel.1,
+            rx: ReceiverStream::new(rx),
+            reply_rx: UnboundedReceiverStream::new(reply_rx),
             serializer,
             metrics_reporter,
             merged_operator_meta: OpMeta::default(),
@@ -621,7 +646,7 @@ where
         use SinkState::{Drained, Draining, Initialized, Paused, Running, Stopped};
         let from_sink = self.reply_rx.map(SinkMsgWrapper::FromSink);
         let to_sink = self.rx.map(SinkMsgWrapper::ToSink);
-        let mut from_and_to_sink_channel = PriorityMerge::new(from_sink, to_sink);
+        let mut from_and_to_sink_channel = PriorityMerge::new(to_sink, from_sink);
         while let Some(msg_wrapper) = from_and_to_sink_channel.next().await {
             match msg_wrapper {
                 SinkMsgWrapper::ToSink(sink_msg) => {
@@ -637,11 +662,11 @@ where
                             );
                             let cf = Event {
                                 ingest_ns: nanotime(),
-                                cb: CbAction::SinkStart(self.ctx.uid),
+                                cb: CbAction::SinkStart(self.ctx.uid()),
                                 ..Event::default()
                             };
                             // send CB start to all pipes
-                            send_contraflow(&self.pipelines, &self.ctx, cf).await;
+                            send_contraflow(&self.pipelines, &self.ctx, cf);
                         }
                         SinkMsg::Connect(sender, attempt) => {
                             info!("{} Connecting...", &self.ctx);
@@ -727,7 +752,7 @@ where
                             );
                             let cf = Event::cb_open(nanotime(), self.merged_operator_meta.clone());
                             // send CB restore to all pipes
-                            send_contraflow(&self.pipelines, &self.ctx, cf).await;
+                            send_contraflow(&self.pipelines, &self.ctx, cf);
                         }
                         SinkMsg::ConnectionLost => {
                             // clean out all pending stream data from EventSerializer - we assume all streams closed at this point
@@ -738,7 +763,7 @@ where
                             );
                             // send CB trigger to all pipes
                             let cf = Event::cb_close(nanotime(), self.merged_operator_meta.clone());
-                            send_contraflow(&self.pipelines, &self.ctx, cf).await;
+                            send_contraflow(&self.pipelines, &self.ctx, cf);
                         }
                         SinkMsg::Event { event, port } => {
                             let cf_builder = ContraflowData::from(&event);
@@ -748,12 +773,14 @@ where
                                 self.metrics_reporter
                                     .send_sink_metrics(self.sink.metrics(t, &self.ctx).await);
                             }
+
                             // TODO: fix additional clones here for merge
                             //       (hg) - I don't think we can do this w/o a clone since we need
                             //              them here and in the on_event
                             self.merged_operator_meta.merge(event.op_meta.clone());
                             let transactional = event.transactional;
                             let start = nanotime();
+
                             let res = self
                                 .sink
                                 .on_event(
@@ -764,6 +791,7 @@ where
                                     start,
                                 )
                                 .await;
+
                             let duration = nanotime() - start;
                             match res {
                                 Ok(replies) => {
@@ -775,8 +803,7 @@ where
                                         &self.pipelines,
                                         &self.ctx,
                                         transactional && self.sink.auto_ack(),
-                                    )
-                                    .await;
+                                    );
                                 }
                                 Err(e) => {
                                     // sink error that is not signalled via SinkReply::Fail (not handled)
@@ -785,7 +812,7 @@ where
                                     error!("{} Error: {e}", &self.ctx);
                                     if transactional {
                                         let cf = cf_builder.into_fail();
-                                        send_contraflow(&self.pipelines, &self.ctx, cf).await;
+                                        send_contraflow(&self.pipelines, &self.ctx, cf);
                                     }
                                 }
                             };
@@ -811,8 +838,8 @@ where
 
                                     // send a cb Drained contraflow message back
                                     let cf = ContraflowData::from(&signal)
-                                        .into_cb(CbAction::Drained(source_uid, self.ctx.uid));
-                                    send_contraflow(&self.pipelines, &self.ctx, cf).await;
+                                        .into_cb(CbAction::Drained(source_uid, self.ctx.uid()));
+                                    send_contraflow(&self.pipelines, &self.ctx, cf);
                                 }
                                 Some(SignalKind::Start(source_uid)) => {
                                     debug!("{} Received Start signal from {source_uid}", self.ctx);
@@ -837,8 +864,7 @@ where
                                         &self.pipelines,
                                         &self.ctx,
                                         false,
-                                    )
-                                    .await;
+                                    );
                                 }
                                 Err(e) => {
                                     // logging here is ok, as this is mostly limited to ticks (every 100ms)
@@ -867,12 +893,12 @@ where
                             Event::insight(cb, data.event_id, data.ingest_ns, data.op_meta)
                         }
                     };
-                    send_contraflow(&self.pipelines, &self.ctx, cf).await;
+                    send_contraflow(&self.pipelines, &self.ctx, cf);
                 }
             }
         }
         // sink has been stopped
-        info!("[Sink::{}] Terminating Sink Task.", &self.ctx.alias);
+        info!("{} Terminating Sink Task.", &self.ctx);
         Ok(())
     }
 }
@@ -938,24 +964,24 @@ impl From<Event> for ContraflowData {
 }
 
 /// send contraflow back to pipelines
-async fn send_contraflow(
+fn send_contraflow(
     pipelines: &[(DeployEndpoint, pipeline::Addr)],
     connector_ctx: &impl Context,
     contraflow: Event,
 ) {
     if let Some(((last_url, last_addr), rest)) = pipelines.split_last() {
         for (url, addr) in rest {
-            if let Err(e) = addr.send_insight(contraflow.clone()).await {
+            if let Err(e) = addr.send_insight(contraflow.clone()) {
                 error!("{connector_ctx} Error sending contraflow to {url}: {e}",);
             }
         }
-        if let Err(e) = last_addr.send_insight(contraflow).await {
+        if let Err(e) = last_addr.send_insight(contraflow) {
             error!("{connector_ctx} Error sending contraflow to {last_url}: {e}",);
         }
     }
 }
 
-async fn handle_replies(
+fn handle_replies(
     reply: SinkReply,
     duration: u64,
     cf_builder: ContraflowData,
@@ -968,13 +994,13 @@ async fn handle_replies(
         // we do not maintain a merged op_meta here, to avoid the cost
         // the downside is, only operators which this event passed get to know this CB event
         // but worst case is, 1 or 2 more events are lost - totally worth it
-        send_contraflow(ps, ctx, cf_builder.cb(reply.cb)).await;
+        send_contraflow(ps, ctx, cf_builder.cb(reply.cb));
     }
     match reply.ack {
-        SinkAck::Ack => send_contraflow(ps, ctx, cf_builder.into_ack(duration)).await,
-        SinkAck::Fail => send_contraflow(ps, ctx, cf_builder.into_fail()).await,
+        SinkAck::Ack => send_contraflow(ps, ctx, cf_builder.into_ack(duration)),
+        SinkAck::Fail => send_contraflow(ps, ctx, cf_builder.into_fail()),
         SinkAck::None if send_auto_ack => {
-            send_contraflow(ps, ctx, cf_builder.into_ack(duration)).await;
+            send_contraflow(ps, ctx, cf_builder.into_ack(duration));
         }
         SinkAck::None => (),
     }

@@ -14,15 +14,10 @@
 
 //! Sink implementation that keeps track of multiple streams and keeps channels to send to each stream
 
+use crate::channel::{bounded, Receiver, Sender};
 use crate::{
     connectors::{prelude::*, Context, StreamDone},
     errors::Result,
-    QSIZE,
-};
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    prelude::FutureExt,
-    task::{self, JoinHandle},
 };
 use bimap::BiMap;
 use either::Either;
@@ -35,6 +30,10 @@ use std::{
         Arc,
     },
     time::Duration,
+};
+use tokio::{
+    task::{self, JoinHandle},
+    time::timeout,
 };
 use tremor_common::{ids::Id, time::nanotime};
 use tremor_pipeline::{CbAction, Event, SignalKind};
@@ -59,6 +58,7 @@ impl SinkMetaBehaviour for WithMeta {
     const NEEDS_META: bool = true;
 }
 
+#[derive(Debug)]
 /// messages a channel sink can receive
 pub(crate) enum ChannelSinkMsg<M>
 where
@@ -86,7 +86,7 @@ pub(crate) struct SinkData {
     /// data to send
     pub(crate) data: Vec<Vec<u8>>,
     /// async reply utils (if required)
-    pub(crate) contraflow: Option<(ContraflowData, Sender<AsyncSinkReply>)>,
+    pub(crate) contraflow: Option<(ContraflowData, ReplySender)>,
     /// Metadata for this request
     pub(crate) meta: Option<SinkMeta>,
     /// timestamp of processing start
@@ -106,7 +106,7 @@ where
     resolver: F,
     tx: Sender<ChannelSinkMsg<M>>,
     rx: Receiver<ChannelSinkMsg<M>>,
-    reply_tx: Sender<AsyncSinkReply>,
+    reply_tx: ReplySender,
     sink_is_connected: Arc<AtomicBool>,
 }
 
@@ -118,7 +118,7 @@ where
     /// Construct a new instance that redacts metadata with prepared `rx` and `tx`
     pub(crate) fn from_channel_no_meta(
         resolver: F,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: ReplySender,
         tx: Sender<ChannelSinkMsg<T>>,
         rx: Receiver<ChannelSinkMsg<T>>,
         sink_is_connected: Arc<AtomicBool>,
@@ -134,12 +134,11 @@ where
 {
     /// Construct a new instance of a channel sink with metadata support
     pub(crate) fn new_with_meta(
-        qsize: usize,
         resolver: F,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: ReplySender,
         sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
-        let (tx, rx) = bounded(qsize);
+        let (tx, rx) = bounded(qsize());
         ChannelSink::new(resolver, reply_tx, tx, rx, sink_is_connected)
     }
 }
@@ -155,7 +154,7 @@ where
     /// This costs a clone.
     pub(crate) fn new(
         resolver: F,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: ReplySender,
         tx: Sender<ChannelSinkMsg<T>>,
         rx: Receiver<ChannelSinkMsg<T>>,
         sink_is_connected: Arc<AtomicBool>,
@@ -218,9 +217,7 @@ where
     }
 
     fn remove_stream(&mut self, stream_id: u64) {
-        if let Some(sender) = self.streams.remove(&stream_id) {
-            sender.close();
-        }
+        self.streams.remove(&stream_id);
         self.streams_meta.remove_by_right(&stream_id);
     }
 
@@ -229,15 +226,11 @@ where
         meta: &'lt Value<'value>,
         ctx: &SinkContext,
     ) -> Option<(&u64, &Sender<SinkData>)> {
-        let sink_meta = get_sink_meta(meta, ctx);
-        sink_meta
-            .and_then(|sink_meta| (self.resolver)(sink_meta))
-            .and_then(|stream_meta| self.streams_meta.get_by_left(&stream_meta))
-            .and_then(|stream_id| {
-                self.streams
-                    .get(stream_id)
-                    .map(|sender| (stream_id, sender))
-            })
+        let sink_meta = get_sink_meta(meta, ctx)?;
+        let stream_meta = (self.resolver)(sink_meta)?;
+        let stream_id = self.streams_meta.get_by_left(&stream_meta)?;
+        let sender = self.streams.get(stream_id)?;
+        Some((stream_id, sender))
     }
 }
 
@@ -258,7 +251,7 @@ where
     /// This will cause the writer to stop as its receiving channel will be closed.
     /// The writer should receive an error when the channel is empty, so we safely drain all messages.
     /// We will get a double `RemoveStream` message, but this is fine
-    async fn unregister_stream_writer(&self, stream: u64) -> Result<()> {
+    async fn unregister_stream_writer(&mut self, stream: u64) -> Result<()> {
         Ok(self.tx.send(ChannelSinkMsg::RemoveStream(stream)).await?)
     }
 }
@@ -284,7 +277,7 @@ where
         W: StreamWriter + 'static,
         C: Context + Send + Sync + 'static,
     {
-        let (stream_tx, stream_rx) = bounded::<SinkData>(QSIZE.load(Ordering::Relaxed));
+        let (stream_tx, mut stream_rx) = bounded::<SinkData>(qsize());
         let stream_sink_tx = self.tx.clone();
         let ctx = ctx.clone();
         let tx = self.tx.clone();
@@ -302,14 +295,14 @@ where
             while let (true, sinkdata) = (
                 ctx.quiescence_beacon().continue_writing().await,
                 // we timeout to not hang here but to check the beacon from time to time
-                stream_rx.recv().timeout(Self::RECV_TIMEOUT).await,
+                timeout(Self::RECV_TIMEOUT, stream_rx.recv()).await,
             ) {
                 match sinkdata {
                     Err(_) => {
                         // timeout, just continue
                         continue;
                     }
-                    Ok(Ok(SinkData {
+                    Ok(Some(SinkData {
                         data,
                         meta,
                         contraflow,
@@ -324,7 +317,7 @@ where
                             } else {
                                 AsyncSinkReply::Ack(cf_data, nanotime() - start)
                             };
-                            if let Err(e) = sender.send(reply).await {
+                            if let Err(e) = sender.send(reply) {
                                 error!("{ctx} Error sending async sink reply: {e}");
                             }
                         }
@@ -332,8 +325,8 @@ where
                             break;
                         }
                     }
-                    Ok(Err(e)) => {
-                        warn!("{ctx} Error receiving data from ChannelSink: {e}");
+                    Ok(None) => {
+                        warn!("{ctx} Error receiving data from ChannelSink");
                         break;
                     }
                 }
@@ -362,7 +355,7 @@ fn get_sink_meta<'lt, 'value>(
     meta: &'lt Value<'value>,
     ctx: &SinkContext,
 ) -> Option<&'lt Value<'value>> {
-    meta.get(ctx.connector_type.to_string().as_str())
+    meta.get(ctx.connector_type().to_string().as_str())
 }
 
 #[async_trait::async_trait()]
@@ -394,7 +387,7 @@ where
         }
 
         let ingest_ns = event.ingest_ns;
-        let stream_ids = event.id.get_streams(ctx.uid.id());
+        let stream_ids = event.id.get_streams(ctx.uid().id());
         trace!("{ctx} on_event stream_ids: {stream_ids:?}");
 
         let contraflow_utils = if event.transactional {

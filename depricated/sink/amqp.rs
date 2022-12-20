@@ -18,9 +18,8 @@
 //!
 //! The `amqp` offramp allows producing events to an amqp broker.
 
+use crate::channel::{bounded, Receiver};
 use crate::sink::prelude::*;
-use tremor_common::url::TremorUrl;
-use async_std::channel::{bounded, Receiver};
 use halfbrown::HashMap;
 use lapin::{
     options::BasicPublishOptions, publisher_confirm::Confirmation, BasicProperties, Channel,
@@ -28,6 +27,7 @@ use lapin::{
 };
 use serde::Deserialize;
 use std::{fmt, time::Instant};
+use tremor_common::url::TremorUrl;
 
 #[derive(Deserialize, Debug, Clone)]
 pub(crate) struct Config {
@@ -80,7 +80,7 @@ impl offramp::Builder for Builder {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let (dummy_tx, _) = bounded(1);
-            let (error_tx, error_rx) = bounded(QSIZE.load(Ordering::Relaxed));
+            let (error_tx, error_rx) = bounded(qsize());
             Ok(SinkManager::new_box(Amqp {
                 sink_url: TremorUrl::from_offramp_id("amqp")?, // dummy
                 config,

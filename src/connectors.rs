@@ -34,25 +34,22 @@ use self::sink::{SinkAddr, SinkContext, SinkMsg};
 use self::source::{SourceAddr, SourceContext, SourceMsg};
 use self::utils::quiescence::QuiescenceBeacon;
 pub(crate) use crate::config::Connector as ConnectorConfig;
-use crate::pipeline;
-use crate::system::flow;
-use crate::system::{KillSwitch, World};
-use crate::{errors::connector_send_err, instance::State};
 use crate::{
-    errors::{Error, Kind as ErrorKind, Result},
-    log_error,
-};
-use async_std::task::{self};
-use async_std::{
     channel::{bounded, Sender},
-    task::JoinHandle,
+    errors::{connector_send_err, Error, Kind as ErrorKind, Result},
+    instance::State,
+    log_error, pipeline, qsize,
+    system::{flow, KillSwitch, World},
 };
 use beef::Cow;
 use futures::Future;
 use halfbrown::HashMap;
-use std::{fmt::Display, sync::atomic::Ordering, time::Duration};
-use tremor_common::ids::{ConnectorId, ConnectorIdGen, SourceId};
-use tremor_common::ports::{ERR, IN, OUT};
+use std::{fmt::Display, time::Duration};
+use tokio::task::{self, JoinHandle};
+use tremor_common::{
+    ids::{ConnectorId, ConnectorIdGen, SourceId},
+    ports::{Port, ERR, IN, OUT},
+};
 use tremor_pipeline::METRICS_CHANNEL;
 use tremor_script::ast::DeployEndpoint;
 use tremor_value::Value;
@@ -107,9 +104,9 @@ impl Addr {
     ///
     /// # Errors
     ///   * if sending failed
-    pub(crate) async fn send_source(&self, msg: SourceMsg) -> Result<()> {
+    pub(crate) fn send_source(&self, msg: SourceMsg) -> Result<()> {
         if let Some(source) = self.source.as_ref() {
-            source.addr.send(msg).await.map_err(connector_send_err)?;
+            source.addr.send(msg).map_err(connector_send_err)?;
         }
         Ok(())
     }
@@ -163,9 +160,9 @@ impl Addr {
     /// # Errors
     ///   * if sending or receiving failed
     pub async fn report_status(&self) -> Result<StatusReport> {
-        let (tx, rx) = bounded(1);
+        let (tx, rx) = tokio::sync::oneshot::channel();
         self.send(Msg::Report(tx)).await?;
-        Ok(rx.recv().await?)
+        Ok(rx.await?)
     }
 }
 
@@ -175,7 +172,7 @@ pub(crate) enum Msg {
     /// connect 1 or more pipelines to a port
     LinkInput {
         /// port to which to connect
-        port: Cow<'static, str>,
+        port: Port<'static>,
         /// pipelines to connect
         pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
         /// result receiver
@@ -184,7 +181,7 @@ pub(crate) enum Msg {
     /// connect 1 or more pipelines to a port
     LinkOutput {
         /// port to which to connect
-        port: Cow<'static, str>,
+        port: Port<'static>,
         /// pipeline to connect to
         pipeline: (DeployEndpoint, pipeline::Addr),
         /// result receiver
@@ -219,7 +216,7 @@ pub(crate) enum Msg {
     /// stop the connector
     Stop(Sender<ConnectorResult<()>>),
     /// request a status report
-    Report(Sender<StatusReport>),
+    Report(tokio::sync::oneshot::Sender<StatusReport>),
 }
 
 #[derive(Debug)]
@@ -266,7 +263,7 @@ pub(crate) trait Context: Display + Clone {
     #[inline]
     fn swallow_err<T, E, M>(&self, expr: std::result::Result<T, E>, msg: &M)
     where
-        E: std::error::Error,
+        E: Display,
         M: Display + ?Sized,
     {
         if let Err(e) = expr {
@@ -361,7 +358,7 @@ pub struct StatusReport {
     /// current connectivity
     pub(crate) connectivity: Connectivity,
     /// connected pipelines
-    pub(crate) pipelines: HashMap<Cow<'static, str>, Vec<DeployEndpoint>>,
+    pub(crate) pipelines: HashMap<Port<'static>, Vec<DeployEndpoint>>,
 }
 
 impl StatusReport {
@@ -385,7 +382,7 @@ impl StatusReport {
 
     /// connected pipelines
     #[must_use]
-    pub fn pipelines(&self) -> &HashMap<Cow<'static, str>, Vec<DeployEndpoint>> {
+    pub fn pipelines(&self) -> &HashMap<Port<'static>, Vec<DeployEndpoint>> {
         &self.pipelines
     }
 }
@@ -445,9 +442,9 @@ async fn connector_task(
     config: ConnectorConfig,
     uid: ConnectorId,
 ) -> Result<Addr> {
-    let qsize = crate::QSIZE.load(Ordering::Relaxed);
+    let qsize = qsize();
     // channel for connector-level control plane communication
-    let (msg_tx, msg_rx) = bounded(qsize);
+    let (msg_tx, mut msg_rx) = bounded(qsize);
 
     let mut connectivity = Connectivity::Disconnected;
     let mut quiescence_beacon = QuiescenceBeacon::default();
@@ -471,7 +468,6 @@ async fn connector_task(
         SourceId::from(uid),
         &config,
         codec_requirement,
-        qsize,
         source_metrics_reporter,
     )?;
     let source_ctx = SourceContext {
@@ -487,20 +483,14 @@ async fn connector_task(
         METRICS_CHANNEL.tx(),
         config.metrics_interval_s,
     );
-    let sink_builder = sink::builder(
-        &config,
-        codec_requirement,
-        &alias,
-        qsize,
-        sink_metrics_reporter,
-    )?;
-    let sink_ctx = SinkContext {
-        uid: uid.into(),
-        alias: alias.clone(),
-        connector_type: config.connector_type.clone(),
-        quiescence_beacon: quiescence_beacon.clone(),
-        notifier: notifier.clone(),
-    };
+    let sink_builder = sink::builder(&config, codec_requirement, &alias, sink_metrics_reporter)?;
+    let sink_ctx = SinkContext::new(
+        uid.into(),
+        alias.clone(),
+        config.connector_type.clone(),
+        quiescence_beacon.clone(),
+        notifier.clone(),
+    );
     // create source instance
     let source_addr = connector.create_source(source_ctx, source_builder).await?;
 
@@ -531,41 +521,39 @@ async fn connector_task(
     let mut start_sender: Option<Sender<ConnectorResult<()>>> = None;
 
     // TODO: add connector metrics reporter (e.g. for reconnect attempts, cb's received, uptime, etc.)
-    task::spawn::<_, Result<()>>(async move {
+    task::spawn(async move {
         // typical 1 pipeline connected to IN, OUT, ERR
-        let mut connected_pipelines: HashMap<
-            Cow<'static, str>,
-            Vec<(DeployEndpoint, pipeline::Addr)>,
-        > = HashMap::with_capacity(3);
+        let mut connected_pipelines: HashMap<Port<'static>, Vec<(DeployEndpoint, pipeline::Addr)>> =
+            HashMap::with_capacity(3);
         // connector control plane loop
-        while let Ok(msg) = msg_rx.recv().await {
+        while let Some(msg) = msg_rx.recv().await {
             match msg {
                 Msg::Report(tx) => {
                     // request a status report from this connector
-                    let pipes: HashMap<Cow<'static, str>, Vec<DeployEndpoint>> =
-                        connected_pipelines
-                            .iter()
-                            .map(|(port, connected)| {
-                                (
-                                    port.clone(),
-                                    connected
-                                        .iter()
-                                        .map(|(endpoint, _)| endpoint)
-                                        .cloned()
-                                        .collect::<Vec<_>>(),
-                                )
-                            })
-                            .collect();
-                    if let Err(e) = tx
+                    let pipes: HashMap<Port<'static>, Vec<DeployEndpoint>> = connected_pipelines
+                        .iter()
+                        .map(|(port, connected)| {
+                            (
+                                port.clone(),
+                                connected
+                                    .iter()
+                                    .map(|(endpoint, _)| endpoint)
+                                    .cloned()
+                                    .collect::<Vec<_>>(),
+                            )
+                        })
+                        .collect();
+
+                    if tx
                         .send(StatusReport {
                             alias: alias.clone(),
                             status: connector_state,
                             connectivity,
                             pipelines: pipes,
                         })
-                        .await
+                        .is_err()
                     {
-                        error!("{ctx} Error sending status report {e}.");
+                        error!("{ctx} Error sending status report.");
                     }
                 }
                 Msg::LinkInput {
@@ -633,7 +621,7 @@ async fn connector_task(
                                 tx: result_tx,
                                 pipeline: pipeline_to_link,
                             };
-                            let res = source.addr.send(m).await;
+                            let res = source.addr.send(m);
                             log_error!(res, "{ctx} Error sending to source: {e}");
                         } else {
                             let e = Err(ErrorKind::InvalidConnect(
@@ -662,9 +650,7 @@ async fn connector_task(
                     connectivity = Connectivity::Disconnected;
                     info!("{} Connection lost.", &ctx);
                     connector_addr.send_sink(SinkMsg::ConnectionLost).await?;
-                    connector_addr
-                        .send_source(SourceMsg::ConnectionLost)
-                        .await?;
+                    connector_addr.send_source(SourceMsg::ConnectionLost)?;
 
                     // reconnect if running - wait with reconnect if paused (until resume)
                     if connector_state == State::Running {
@@ -684,9 +670,7 @@ async fn connector_task(
                             connector_addr
                                 .send_sink(SinkMsg::ConnectionEstablished)
                                 .await?;
-                            connector_addr
-                                .send_source(SourceMsg::ConnectionEstablished)
-                                .await?;
+                            connector_addr.send_source(SourceMsg::ConnectionEstablished)?;
                             if let Some(start_sender) = start_sender.take() {
                                 ctx.swallow_err(
                                     start_sender.send(ConnectorResult::ok(&ctx)).await,
@@ -697,9 +681,7 @@ async fn connector_task(
                         (Connectivity::Connected, Connectivity::Disconnected) => {
                             info!("{} Disconnected.", &ctx);
                             connector_addr.send_sink(SinkMsg::ConnectionLost).await?;
-                            connector_addr
-                                .send_source(SourceMsg::ConnectionLost)
-                                .await?;
+                            connector_addr.send_source(SourceMsg::ConnectionLost)?;
                         }
                         _ => {
                             debug!("{} No change after reconnect: {:?}", &ctx, &new);
@@ -734,7 +716,7 @@ async fn connector_task(
                     };
                     info!("{ctx} Started. New state: {connector_state}",);
                     // forward to source/sink if available
-                    connector_addr.send_source(SourceMsg::Start).await?;
+                    connector_addr.send_source(SourceMsg::Start)?;
                     connector_addr.send_sink(SinkMsg::Start).await?;
 
                     // initiate connect asynchronously
@@ -761,7 +743,7 @@ async fn connector_task(
                     //
                     ctx.swallow_err(connector.on_pause(&ctx).await, "Error during on_pause");
 
-                    connector_addr.send_source(SourceMsg::Pause).await?;
+                    connector_addr.send_source(SourceMsg::Pause)?;
                     connector_addr.send_sink(SinkMsg::Pause).await?;
 
                     connector_state = State::Paused;
@@ -778,7 +760,7 @@ async fn connector_task(
                     connector_state = State::Running;
                     quiescence_beacon.resume();
 
-                    connector_addr.send_source(SourceMsg::Resume).await?;
+                    connector_addr.send_source(SourceMsg::Resume)?;
                     connector_addr.send_sink(SinkMsg::Resume).await?;
 
                     if connectivity == Connectivity::Disconnected {
@@ -807,8 +789,7 @@ async fn connector_task(
                     if let Some(source) = connector_addr.source.as_ref() {
                         source
                             .addr
-                            .send(SourceMsg::Drain(connector_addr.sender.clone()))
-                            .await?;
+                            .send(SourceMsg::Drain(connector_addr.sender.clone()))?;
                     } else {
                         // proceed to the next step, even without source
                         connector_addr.send(Msg::SourceDrained).await?;
@@ -873,13 +854,11 @@ async fn connector_task(
                     ctx.swallow_err(connector.on_stop(&ctx).await, "Error during on_stop");
                     connector_state = State::Stopped;
                     quiescence_beacon.full_stop();
-                    let (stop_tx, stop_rx) = bounded(2);
+                    let (stop_tx, mut stop_rx) = bounded(2);
                     let mut expect = usize::from(connector_addr.has_source())
                         + usize::from(connector_addr.has_sink());
                     ctx.swallow_err(
-                        connector_addr
-                            .send_source(SourceMsg::Stop(stop_tx.clone()))
-                            .await,
+                        connector_addr.send_source(SourceMsg::Stop(stop_tx.clone())),
                         "Error sending Stop msg to Source",
                     );
                     ctx.swallow_err(
@@ -887,10 +866,7 @@ async fn connector_task(
                         "Error sending Stop msg to Sink",
                     );
                     while expect > 0 {
-                        ctx.swallow_err(
-                            stop_rx.recv().await,
-                            "Error stopping sink and source part",
-                        );
+                        stop_rx.recv().await;
                         expect -= 1;
                     }
                     log_error!(
@@ -905,12 +881,12 @@ async fn connector_task(
         } // while
         info!("{ctx} Connector Stopped. Reason: {connector_state}");
         // TODO: inform registry that this instance is gone now
-        Ok(())
+        Result::Ok(())
     });
     Ok(send_addr)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum DrainState {
     None,
     Expect,
@@ -976,10 +952,10 @@ pub enum Connectivity {
     Disconnected,
 }
 
-const IN_PORTS: [Cow<'static, str>; 1] = [IN];
-const IN_PORTS_REF: &[Cow<'static, str>; 1] = &IN_PORTS;
-const OUT_PORTS: [Cow<'static, str>; 2] = [OUT, ERR];
-const OUT_PORTS_REF: &[Cow<'static, str>; 2] = &OUT_PORTS;
+const IN_PORTS: [Port<'static>; 1] = [IN];
+const IN_PORTS_REF: &[Port<'static>; 1] = &IN_PORTS;
+const OUT_PORTS: [Port<'static>; 2] = [OUT, ERR];
+const OUT_PORTS_REF: &[Port<'static>; 2] = &OUT_PORTS;
 
 /// A Connector connects the tremor runtime to the outside world.
 ///
@@ -997,19 +973,19 @@ const OUT_PORTS_REF: &[Cow<'static, str>; 2] = &OUT_PORTS;
 #[async_trait::async_trait]
 pub(crate) trait Connector: Send {
     /// Valid input ports for the connector, by default this is `in`
-    fn input_ports(&self) -> &[Cow<'static, str>] {
+    fn input_ports(&self) -> &[Port<'static>] {
         IN_PORTS_REF
     }
     /// Valid output ports for the connector, by default this is `out` and `err`
-    fn output_ports(&self) -> &[Cow<'static, str>] {
+    fn output_ports(&self) -> &[Port<'static>] {
         OUT_PORTS_REF
     }
 
     /// Tests if a input port is valid, by default does a case insensitive search against
     /// `self.input_ports()`
-    fn is_valid_input_port(&self, port: &str) -> bool {
+    fn is_valid_input_port(&self, port: &Port) -> bool {
         for valid in self.input_ports() {
-            if port.eq_ignore_ascii_case(valid.as_ref()) {
+            if port == valid {
                 return true;
             }
         }
@@ -1018,9 +994,9 @@ pub(crate) trait Connector: Send {
 
     /// Tests if a input port is valid, by default does a case insensitive search against
     /// `self.output_ports()`
-    fn is_valid_output_port(&self, port: &str) -> bool {
+    fn is_valid_output_port(&self, port: &Port) -> bool {
         for valid in self.output_ports() {
-            if port.eq_ignore_ascii_case(valid.as_ref()) {
+            if port == valid {
                 return true;
             }
         }
@@ -1033,7 +1009,7 @@ pub(crate) trait Connector: Send {
     /// If this connector does not act as a source, return `Ok(None)`.
     async fn create_source(
         &mut self,
-        _source_context: SourceContext,
+        _ctx: SourceContext,
         _builder: source::SourceManagerBuilder,
     ) -> Result<Option<source::SourceAddr>> {
         Ok(None)
@@ -1045,7 +1021,7 @@ pub(crate) trait Connector: Send {
     /// If this connector does not act as a sink, return `Ok(None)`.
     async fn create_sink(
         &mut self,
-        _sink_context: SinkContext,
+        _ctx: SinkContext,
         _builder: sink::SinkManagerBuilder,
     ) -> Result<Option<sink::SinkAddr>> {
         Ok(None)
@@ -1240,8 +1216,8 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::<impls::wal::Builder>::default(),
         Box::<impls::dns::client::Builder>::default(),
         Box::<impls::discord::Builder>::default(),
-        Box::<impls::ws::client::Builder>::default(),
-        Box::<impls::ws::server::Builder>::default(),
+        // Box::<impls::ws::client::Builder>::default(),
+        // Box::<impls::ws::server::Builder>::default(),
         Box::<impls::elastic::Builder>::default(),
         Box::<impls::crononome::Builder>::default(),
         Box::<impls::s3::streamer::Builder>::default(),
@@ -1252,8 +1228,8 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::<impls::unix_socket::server::Builder>::default(),
         #[cfg(unix)]
         Box::<impls::unix_socket::client::Builder>::default(),
-        Box::<impls::http::client::Builder>::default(),
-        Box::<impls::http::server::Builder>::default(),
+        // Box::<impls::http::client::Builder>::default(),
+        // Box::<impls::http::server::Builder>::default(),
         Box::<impls::otel::client::Builder>::default(),
         Box::<impls::otel::server::Builder>::default(),
         Box::<impls::gbq::writer::Builder>::default(),
@@ -1261,7 +1237,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::<impls::gpubsub::producer::Builder>::default(),
         Box::<impls::clickhouse::Builder>::default(),
         Box::<impls::gcl::writer::Builder>::default(),
-        Box::<impls::gcs::streamer::Builder>::default(),
+        // Box::<impls::gcs::streamer::Builder>::default(),
         Box::<impls::null::Builder>::default(),
     ]
 }
@@ -1366,9 +1342,9 @@ pub(crate) mod unit_tests {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn spawn_task_error() -> Result<()> {
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         let ctx = FakeContext::new(tx);
         // thanks coverage
         ctx.quiescence_beacon();
@@ -1376,16 +1352,15 @@ pub(crate) mod unit_tests {
         ctx.connector_type();
         ctx.alias();
         // end
-        spawn_task(ctx.clone(), async move { Err("snot".into()) }).await;
-        assert!(matches!(rx.recv().await, Ok(Msg::ConnectionLost)));
+        spawn_task(ctx.clone(), async move { Err("snot".into()) }).await?;
+        assert!(matches!(rx.recv().await, Some(Msg::ConnectionLost)));
 
-        spawn_task(ctx.clone(), async move { Ok(()) }).await;
-        assert!(rx.is_empty());
+        spawn_task(ctx.clone(), async move { Ok(()) }).await?;
 
         rx.close();
 
         // this one is just here for coverage for when the call to notify is failing
-        spawn_task(ctx, async move { Err("snot 2".into()) }).await;
+        spawn_task(ctx, async move { Err("snot 2".into()) }).await?;
 
         Ok(())
     }

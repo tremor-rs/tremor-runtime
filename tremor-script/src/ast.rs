@@ -417,6 +417,11 @@ impl<'script> Ident<'script> {
     pub fn as_str(&self) -> &str {
         &self.id
     }
+    /// As a string
+    #[must_use]
+    pub fn id(&self) -> &beef::Cow<'script, str> {
+        &self.id
+    }
 }
 impl_expr!(Ident);
 

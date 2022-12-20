@@ -13,11 +13,10 @@
 // limitations under the License.
 use crate::connectors::prelude::*;
 use crate::utils::hostname;
-use async_broadcast::{broadcast, Receiver, RecvError};
-use async_std::io::{stderr, stdin, stdout, ReadExt, Stderr, Stdout};
-use beef::Cow;
-use futures::AsyncWriteExt;
-
+use tokio::{
+    io::{stderr, stdin, stdout, AsyncReadExt, AsyncWriteExt, Stderr, Stdout},
+    sync::broadcast::{channel as broadcast, error::RecvError, Receiver},
+};
 use tremor_pipeline::{EventOriginUri, DEFAULT_STREAM_ID};
 
 const INPUT_SIZE_BYTES: usize = 8192;
@@ -26,11 +25,10 @@ lazy_static! {
     pub(crate) static ref STDIN: Receiver<Vec<u8>> = {
         // This gets initialized only once - the first time a stdio connector
         // is created, after that we simply clone the channel.
-        let (mut tx, rx) = broadcast(crate::QSIZE.load(Ordering::Relaxed));
+        let (tx, rx) = broadcast(qsize());
         // We user overflow so that non collected messages can be removed
         // is this what we want? for STDIO it should be good enough
-        tx.set_overflow(true);
-        async_std::task::spawn(async move {
+        tokio::task::spawn(async move {
             let mut stream = stdin();
             let mut buffer = [0_u8; INPUT_SIZE_BYTES];
             while let Ok(len) = stream.read(&mut buffer).await {
@@ -38,7 +36,7 @@ lazy_static! {
                     info!("STDIN done reading.");
                     break;
                     // ALLOW: we get len from read
-                } else if let Err(e) = tx.broadcast(buffer[0..len].to_vec()).await {
+                } else if let Err(e) = tx.send(buffer[0..len].to_vec()) {
                     error!("STDIN error: {}", e);
                     break;
                 }
@@ -97,7 +95,7 @@ impl Source for StdStreamSource {
         let reply = if self.done {
             SourceReply::Finished
         } else {
-            let stdin = self.stdin.get_or_insert_with(|| STDIN.clone());
+            let stdin = self.stdin.get_or_insert_with(|| STDIN.resubscribe());
             loop {
                 match stdin.recv().await {
                     Ok(data) => {
@@ -110,7 +108,7 @@ impl Source for StdStreamSource {
                             codec_overwrite: None,
                         }
                     }
-                    Err(RecvError::Overflowed(_)) => continue, // retry, this is expected
+                    Err(RecvError::Lagged(_)) => continue, // retry, this is expected
                     Err(RecvError::Closed) => {
                         // receive error from broadcast channel
                         // either the stream is done (in case of a pipe)
@@ -146,9 +144,8 @@ pub(crate) struct StdStreamSink {
 }
 
 impl StdStreamConnector {
-    const IN_PORTS: [Cow<'static, str>; 3] =
-        [IN, Cow::const_str("stdout"), Cow::const_str("stderr")];
-    const REF_IN_PORTS: &'static [Cow<'static, str>; 3] = &Self::IN_PORTS;
+    const IN_PORTS: [Port<'static>; 3] = [IN, Port::const_str("stdout"), Port::const_str("stderr")];
+    const REF_IN_PORTS: &'static [Port<'static>; 3] = &Self::IN_PORTS;
 }
 
 #[async_trait::async_trait()]
@@ -187,31 +184,30 @@ impl Sink for StdStreamSink {
 
 #[async_trait::async_trait()]
 impl Connector for StdStreamConnector {
-    fn input_ports(&self) -> &[Cow<'static, str>] {
+    fn input_ports(&self) -> &[Port<'static>] {
         Self::REF_IN_PORTS
     }
 
     /// create sink if we have a stdout or stderr stream
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = StdStreamSink {
             stdout: stdout(),
             stderr: stderr(),
         };
-        let addr = builder.spawn(sink, sink_context)?;
-        Ok(Some(addr))
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = StdStreamSource::new();
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {

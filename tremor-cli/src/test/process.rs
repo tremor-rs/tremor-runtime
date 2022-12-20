@@ -25,16 +25,16 @@ use crate::{
     errors::{Error, Result},
     report::TestReport,
 };
-use async_std::prelude::*;
-use async_std::sync::Arc;
+use futures::StreamExt;
 use globwalk::GlobWalkerBuilder;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
-use signal_hook_async_std::Signals;
+use signal_hook_tokio::Signals;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use tremor_common::{file::canonicalize, time::nanotime};
 
 fn test_env(tests_root_dir: &Path, test_dir: &Path) -> Result<HashMap<String, String>> {
@@ -135,7 +135,7 @@ pub(crate) async fn run_process(
 
     let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;
     let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(handle_signals(
+    let signal_handler_task = tokio::task::spawn(handle_signals(
         signals,
         test_dir.to_path_buf(),
         env.clone(),
@@ -180,7 +180,7 @@ pub(crate) async fn run_process(
     evidence.insert("test: stderr".to_string(), slurp_string(&fg_err_file)?);
 
     signal_handle.close();
-    signal_handler_task.cancel().await;
+    signal_handler_task.abort();
 
     let mut stats = stats::Stats::new();
     if let Some((report_stats, report)) = report {

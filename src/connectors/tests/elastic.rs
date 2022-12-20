@@ -18,7 +18,6 @@ use super::{setup_for_tls, ConnectorHarness};
 use crate::connectors::impls::elastic;
 use crate::connectors::impls::http::auth::Auth;
 use crate::errors::{Error, Result};
-use async_std::path::Path;
 use elasticsearch::auth::{ClientCertificate, Credentials};
 use elasticsearch::cert::{Certificate, CertificateValidation};
 use elasticsearch::http::response::Response;
@@ -28,16 +27,18 @@ use elasticsearch::{http::transport::Transport, Elasticsearch};
 use futures::TryFutureExt;
 use http_types::convert::json;
 use serial_test::serial;
+use std::path::Path;
 use testcontainers::core::WaitFor;
 use testcontainers::{clients, images::generic::GenericImage, RunnableImage};
+use tokio::process;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value::StaticValue};
 use value_trait::{Mutable, Value, ValueAccess};
 
-const ELASTICSEARCH_VERSION: &str = "8.4.1";
+const ELASTICSEARCH_VERSION: &str = "8.6.1";
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn connector_elastic() -> Result<()> {
     let _ = env_logger::try_init();
@@ -75,15 +76,13 @@ async fn connector_elastic() -> Result<()> {
             ]
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &elastic::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
-    let err = harness.err().expect("No pipe connected to port ERR");
-    let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
+
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
@@ -113,9 +112,9 @@ async fn connector_elastic() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event_not_batched, IN).await?;
-    let err_events = err.get_events();
-    assert!(err_events.is_empty(), "Received err msgs: {:?}", err_events);
-    let event = out.get_event().await?;
+    let err_events = harness.err()?.get_events();
+    assert!(err_events.is_empty(), "Received err msgs: {err_events:?}");
+    let event = harness.out()?.get_event().await?;
     assert_eq!(
         &literal!({
             "elastic": {
@@ -179,9 +178,9 @@ async fn connector_elastic() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event_not_batched, IN).await?;
-    let err_events = err.get_events();
-    assert!(err_events.is_empty(), "Received err msgs: {:?}", err_events);
-    let event = out.get_event().await?;
+    let err_events = harness.err()?.get_events();
+    assert!(err_events.is_empty(), "Received err msgs: {err_events:?}");
+    let event = harness.out()?.get_event().await?;
     assert_eq!(
         &literal!({
             "elastic": {
@@ -270,7 +269,7 @@ async fn connector_elastic() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event_batched, IN).await?;
-    let out_event1 = out.get_event().await?;
+    let out_event1 = harness.out()?.get_event().await?;
     let meta = out_event1.data.suffix().meta().clone_static();
 
     assert_eq!(
@@ -308,7 +307,7 @@ async fn connector_elastic() -> Result<()> {
         }),
         data
     );
-    let err_event2 = err.get_event().await?;
+    let err_event2 = harness.err()?.get_event().await?;
     let meta = err_event2.data.suffix().meta();
     assert_eq!(
         literal!({
@@ -326,7 +325,7 @@ async fn connector_elastic() -> Result<()> {
     let data = data.get("error");
     let reason = data.get_str("reason");
     assert_eq!(Some("failed to parse field [field3] of type [boolean] in document with id '123'. Preview of field's value: '12'"), reason);
-    let out_event3 = out.get_event().await?;
+    let out_event3 = harness.out()?.get_event().await?;
     let mut meta = out_event3.data.suffix().meta().clone_static();
     // remove _id, as it is random
     assert!(meta
@@ -350,7 +349,7 @@ async fn connector_elastic() -> Result<()> {
     );
 
     // a transactional event triggered a GD ACK
-    let cf = in_pipe.get_contraflow().await?;
+    let cf = harness.get_pipe(IN)?.get_contraflow().await?;
     assert_eq!(CbAction::Ack, cf.cb);
     assert_eq!(batched_id, cf.id);
 
@@ -377,7 +376,7 @@ async fn connector_elastic() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(update_event, IN).await?;
-    let out_event = out.get_event().await?;
+    let out_event = harness.out()?.get_event().await?;
     let meta = out_event.data.suffix().meta();
     assert_eq!(
         literal!({
@@ -432,13 +431,13 @@ async fn connector_elastic() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event.clone(), IN).await?;
-    let cf = in_pipe.get_contraflow().await?;
+    let cf = harness.get_pipe(IN)?.get_contraflow().await?;
     assert_eq!(CbAction::Fail, cf.cb);
-    let err_event = err.get_event().await?;
+    let err_event = harness.err()?.get_event().await?;
     let mut err_event_meta = err_event.data.suffix().meta().clone_static();
     let err_msg = err_event_meta.remove("error")?;
-    let err_msg_str = err_msg.unwrap();
-    let err = err_msg_str.as_str().unwrap();
+    let err_msg_str = err_msg.expect("No error message");
+    let err = err_msg_str.as_str().expect("Not a string");
     assert!(
         err.contains("tcp connect error: Connection refused"),
         "{err} does not contain Connection refused"
@@ -463,7 +462,7 @@ async fn connector_elastic() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn elastic_routing() -> Result<()> {
     let _ = env_logger::try_init();
@@ -515,13 +514,12 @@ async fn elastic_routing() -> Result<()> {
             ]
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &elastic::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
@@ -587,7 +585,7 @@ async fn elastic_routing() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event_batched, IN).await?;
-    let out_event1 = out.get_event().await?;
+    let out_event1 = harness.out()?.get_event().await?;
     let meta = out_event1.data.suffix().meta();
     assert_eq!(
         literal!({
@@ -621,7 +619,7 @@ async fn elastic_routing() -> Result<()> {
         out_event1.data.suffix().value()
     );
 
-    let out_event2 = out.get_event().await?;
+    let out_event2 = harness.out()?.get_event().await?;
     let meta = out_event2.data.suffix().meta();
     assert_eq!(
         literal!({
@@ -656,7 +654,7 @@ async fn elastic_routing() -> Result<()> {
         out_event2.data.suffix().value()
     );
 
-    let out_event3 = out.get_event().await?;
+    let out_event3 = harness.out()?.get_event().await?;
     let meta = out_event3.data.suffix().meta();
     assert_eq!(
         literal!({
@@ -789,7 +787,7 @@ async fn elastic_routing() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn auth_basic() -> Result<()> {
     let _ = env_logger::try_init();
@@ -836,7 +834,7 @@ async fn auth_basic() -> Result<()> {
             "index": index.to_string()
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &elastic::Builder::default(),
         &connector_config,
@@ -846,14 +844,14 @@ async fn auth_basic() -> Result<()> {
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
-    send_one_event(&harness).await?;
+    send_one_event(&mut harness).await?;
 
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn auth_api_key() -> Result<()> {
     let _ = env_logger::try_init();
@@ -891,8 +889,11 @@ async fn auth_api_key() -> Result<()> {
         .send()
         .await?;
     let json = res.json::<StaticValue>().await?.into_value();
-    let api_key_id = json.get_str("id").unwrap().to_string();
-    let api_key = json.get_str("api_key").unwrap().to_string();
+    let api_key_id = json.get_str("id").expect("id missing").to_string();
+    let api_key = json
+        .get_str("api_key")
+        .expect("api_key missing")
+        .to_string();
     let connector_config = literal!({
         "reconnect": {
             "retry": {
@@ -913,7 +914,7 @@ async fn auth_api_key() -> Result<()> {
             "index": index.to_string()
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &elastic::Builder::default(),
         &connector_config,
@@ -923,14 +924,14 @@ async fn auth_api_key() -> Result<()> {
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
-    send_one_event(&harness).await?;
+    send_one_event(&mut harness).await?;
 
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn auth_client_cert() -> Result<()> {
     let _ = env_logger::try_init();
@@ -943,7 +944,7 @@ async fn auth_client_cert() -> Result<()> {
         tmp.pop();
         tmp.pop();
         tmp.push("tests");
-        tmp.canonicalize().await?
+        tmp.canonicalize()?
     };
 
     let docker = clients::Cli::default();
@@ -984,9 +985,9 @@ async fn auth_client_cert() -> Result<()> {
     let container = docker.run(image);
     let port = container.get_host_port_ipv4(9200);
     let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
-    let ca = async_std::fs::read_to_string(&cafile).await?;
-    let mut cert = async_std::fs::read(&cafile).await?;
-    let mut key = async_std::fs::read(&keyfile).await?;
+    let ca = tokio::fs::read_to_string(&cafile).await?;
+    let mut cert = tokio::fs::read(&cafile).await?;
+    let mut key = tokio::fs::read(&keyfile).await?;
     key.append(&mut cert);
     let transport = TransportBuilder::new(conn_pool)
         .cert_validation(CertificateValidation::Full(Certificate::from_pem(
@@ -995,8 +996,8 @@ async fn auth_client_cert() -> Result<()> {
         .auth(Credentials::Certificate(ClientCertificate::Pem(key)));
     let elastic = Elasticsearch::new(transport.build()?);
     if let Err(e) = wait_for_es(&elastic).await {
-        let output = async_std::process::Command::new("docker")
-            .args(&["logs", container.id()])
+        let output = process::Command::new("docker")
+            .args(["logs", container.id()])
             .output()
             .await?;
         error!(
@@ -1017,7 +1018,7 @@ async fn auth_client_cert() -> Result<()> {
         password: "snot".to_string(),
     }
     .as_header_value()?
-    .unwrap();
+    .expect("auth header");
 
     let connector_config = literal!({
         "reconnect": {
@@ -1052,26 +1053,27 @@ async fn auth_client_cert() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &elastic::Builder::default(),
         &connector_config,
     )
     .await?;
-    let _out = harness.out().expect("No pipe connected to port OUT");
+
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
-    send_one_event(&harness).await?;
+    send_one_event(&mut harness).await?;
 
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
+#[allow(clippy::cast_possible_truncation)]
 async fn elastic_https() -> Result<()> {
     let _ = env_logger::try_init();
     setup_for_tls();
@@ -1083,7 +1085,7 @@ async fn elastic_https() -> Result<()> {
         tmp.pop();
         tmp.pop();
         tmp.push("tests");
-        tmp.canonicalize().await?
+        tmp.canonicalize()?
     };
 
     let docker = clients::Cli::default();
@@ -1097,6 +1099,7 @@ async fn elastic_https() -> Result<()> {
             .with_env_var("ELASTIC_PASSWORD", password)
             .with_env_var("xpack.security.enabled", "true")
             .with_env_var("xpack.security.http.ssl.enabled", "true")
+            .with_env_var("ingest.geoip.downloader.enabled", "false")
             .with_env_var(
                 "xpack.security.http.ssl.key",
                 "/usr/share/elasticsearch/config/certificates/localhost.key",
@@ -1109,7 +1112,8 @@ async fn elastic_https() -> Result<()> {
                 "xpack.security.http.ssl.certificate",
                 "/usr/share/elasticsearch/config/certificates/localhost.cert",
             )
-            .with_wait_for(WaitFor::message_on_stdout("[YELLOW] to [GREEN]")),
+            // .with_wait_for(WaitFor::message_on_stdout("[YELLOW] to [GREEN]")),
+            .with_wait_for(WaitFor::message_on_stdout("license mode is")),
     )
     .with_volume((
         tests_dir.display().to_string(),
@@ -1122,14 +1126,14 @@ async fn elastic_https() -> Result<()> {
     let container = docker.run(image);
     let port = container.get_host_port_ipv4(9200);
     let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
-    let ca = async_std::fs::read_to_string(&cafile).await?;
+    let ca = tokio::fs::read_to_string(&cafile).await?;
     let transport = TransportBuilder::new(conn_pool).cert_validation(CertificateValidation::Full(
         Certificate::from_pem(ca.as_bytes())?,
     ));
     let elastic = Elasticsearch::new(transport.build()?);
     if let Err(e) = wait_for_es(&elastic).await {
-        let output = async_std::process::Command::new("docker")
-            .args(&["logs", container.id()])
+        let output = process::Command::new("docker")
+            .args(["logs", container.id()])
             .output()
             .await?;
         error!(
@@ -1142,7 +1146,6 @@ async fn elastic_https() -> Result<()> {
         );
         return Err(e);
     }
-
     let index = "schmumbleglerp";
 
     let connector_config = literal!({
@@ -1172,25 +1175,26 @@ async fn elastic_https() -> Result<()> {
             "index": index.to_string()
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &elastic::Builder::default(),
         &connector_config,
     )
     .await?;
-    let _out = harness.out().expect("No pipe connected to port OUT");
+
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
-    send_one_event(&harness).await?;
+    send_one_event(&mut harness).await?;
 
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
+#[serial(elastic)]
 async fn elastic_https_invalid_url() -> Result<()> {
     let connector_config = literal!({
         "reconnect": {
@@ -1234,12 +1238,12 @@ async fn wait_for_es(elastic: &Elasticsearch) -> Result<()> {
                 Error::from(e).chain_err(|| "Waiting for elasticsearch container timed out.")
             );
         }
-        async_std::task::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
     Ok(())
 }
 
-async fn send_one_event(harness: &ConnectorHarness) -> Result<()> {
+async fn send_one_event(harness: &mut ConnectorHarness) -> Result<()> {
     let index = "fumbleschlonz";
     let data = literal!({"snot": "badger"});
     let meta = literal!({

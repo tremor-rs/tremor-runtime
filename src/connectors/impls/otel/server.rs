@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use super::{common::OtelDefaults, logs, metrics, trace};
-use crate::connectors::prelude::*;
+use crate::{connectors::prelude::*, errors::already_created_error};
 use async_std::channel::{bounded, Receiver, Sender};
-use async_std::task::JoinHandle;
+use tokio::task::JoinHandle;
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
 const CONNECTOR_TYPE: &str = "otel_server";
 
@@ -47,7 +47,7 @@ pub(crate) struct Server {
     origin_uri: EventOriginUri,
     accept_task: Option<JoinHandle<Result<()>>>,
     tx: Sender<OpenTelemetryEvents>,
-    rx: Receiver<OpenTelemetryEvents>,
+    rx: Option<Receiver<OpenTelemetryEvents>>,
 }
 
 // #[cfg_attr(coverage, no_coverage)]
@@ -86,7 +86,7 @@ impl ConnectorBuilder for Builder {
             origin_uri,
             accept_task: None,
             tx,
-            rx,
+            rx: Some(rx),
         }))
     }
 }
@@ -99,20 +99,20 @@ impl Connector for Server {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = OtelSource {
             origin_uri: self.origin_uri.clone(),
             config: self.config.clone(),
-            rx: self.rx.clone(),
+            rx: self.rx.take().ok_or_else(already_created_error)?,
         };
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        _sink_context: SinkContext,
+        _ctx: SinkContext,
         _builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         Ok(None)
@@ -132,7 +132,7 @@ impl Connector for Server {
         let endpoint = format!("{host}:{port}").parse()?;
 
         if let Some(previous_handle) = self.accept_task.take() {
-            previous_handle.cancel().await;
+            previous_handle.abort();
         }
 
         let tx = self.tx.clone();
@@ -198,7 +198,7 @@ mod tests {
     // use env_logger;
     // use http_types::Method;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn otel_client_builder() -> Result<()> {
         let alias = Alias::new("test", "my_otel_server");
         let with_processors = literal!({

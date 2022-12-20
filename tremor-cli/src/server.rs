@@ -17,11 +17,10 @@ use crate::{
     cli::{ServerCommand, ServerRun},
     errors::{Error, ErrorKind, Result},
 };
-use async_std::stream::StreamExt;
-use futures::future;
+use futures::{future, StreamExt};
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::low_level::signal_name;
-use signal_hook_async_std::Signals;
+use signal_hook_tokio::Signals;
 use std::io::Write;
 use std::sync::atomic::Ordering;
 use tremor_api as api;
@@ -36,9 +35,7 @@ macro_rules! log_and_print_error {
     };
 }
 
-async fn handle_signals(signals: Signals, world: World) {
-    let mut signals = signals.fuse();
-
+async fn handle_signals(mut signals: Signals, world: World) {
     while let Some(signal) = signals.next().await {
         info!(
             "Received SIGNAL: {}",
@@ -99,7 +96,6 @@ impl ServerRun {
         // TODO: Allow configuring this for offramps and pipelines
         let config = WorldConfig {
             debug_connectors: self.debug_connectors,
-            ..WorldConfig::default()
         };
 
         let (world, handle) = World::start(config).await?;
@@ -107,7 +103,7 @@ impl ServerRun {
         // signal handling
         let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;
         let signal_handle = signals.handle();
-        let signal_handler_task = async_std::task::spawn(handle_signals(signals, world.clone()));
+        let signal_handler_task = tokio::task::spawn(handle_signals(signals, world.clone()));
 
         let mut troy_files = Vec::with_capacity(16);
         // We process trickle files first
@@ -131,7 +127,7 @@ impl ServerRun {
 
         let api_handle = if self.no_api {
             // dummy task never finishing
-            async_std::task::spawn(async move {
+            tokio::task::spawn(async move {
                 future::pending::<()>().await;
                 Ok(())
             })
@@ -148,7 +144,7 @@ impl ServerRun {
                     error!("Manager failed with: {}", e);
                     result = 1;
                 }
-                api_handle.cancel().await;
+                api_handle.abort();
             }
             future::Either::Right((_api_res, manager_handle)) => {
                 // api stopped
@@ -156,11 +152,11 @@ impl ServerRun {
                     error!("Error shutting down gracefully: {}", e);
                     result = 2;
                 }
-                manager_handle.cancel().await;
+                manager_handle.abort();
             }
         };
         signal_handle.close();
-        signal_handler_task.cancel().await;
+        signal_handler_task.abort();
         warn!("Tremor stopped.");
         Ok(result)
     }

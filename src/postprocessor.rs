@@ -183,7 +183,6 @@ mod test {
     #[test]
     fn test_lookup() {
         for t in &LOOKUP_TABLE {
-            dbg!(t);
             assert!(lookup(t).is_ok());
         }
         let t = "snot";
@@ -345,14 +344,14 @@ mod test {
         b.name();
         c.name();
 
-        let _a = a.process(0, 0, &[]);
-        let _b = b.process(0, 0, &[]);
-        let _c = c.process(0, 0, &[]);
+        assert!(a.process(0, 0, &[]).is_err());
+        assert!(b.process(0, 0, &[]).is_ok());
+        assert!(c.process(0, 0, &[]).is_ok());
 
         let data: Vec<u8> = b"donotcare".to_vec();
-        let _af = a.finish(Some(&data));
-        let _bf = b.finish(Some(&data));
-        let _cf = c.finish(Some(&data));
+        assert!(a.finish(Some(&data)).is_ok());
+        assert!(b.finish(Some(&data)).is_err());
+        assert!(c.finish(Some(&data)).is_ok());
     }
 
     #[test]

@@ -13,20 +13,17 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use async_std::io::{BufReader, Read};
+use std::collections::HashMap;
+use std::env;
 use std::ffi::OsStr;
 use std::fmt::Display;
-use tremor_common::asy::file;
-
-use std::collections::HashMap;
-
-use async_std::channel::{unbounded, Receiver, Sender};
-use async_std::prelude::*;
-use async_std::process::{Child, Command, ExitStatus, Stdio};
-use async_std::task::{spawn, JoinHandle};
 use std::path::{Path, PathBuf};
-
-use std::env;
+use std::process::{ExitStatus, Stdio};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
+use tokio::process::{Child, Command};
+use tokio::sync::mpsc::{unbounded_channel as unbounded, UnboundedReceiver, UnboundedSender};
+use tokio::task::{spawn, JoinHandle};
+use tremor_common::asy::file;
 
 pub(crate) fn which<P>(exe_name: P) -> Result<PathBuf>
 where
@@ -57,15 +54,15 @@ where
 }
 
 /// Read until EOF.
-pub(crate) async fn readlines_until_eof<R: Read + std::marker::Unpin>(
+pub(crate) async fn readlines_until_eof<R: AsyncRead + std::marker::Unpin>(
     reader: R,
-    sender: Sender<String>,
+    sender: UnboundedSender<String>,
 ) -> Result<()> {
     let mut reader = BufReader::new(reader);
     loop {
         let mut buffy = String::new();
         let nread = reader.read_line(&mut buffy).await?;
-        sender.send(buffy).await?;
+        sender.send(buffy)?;
         if nread == 0 {
             break; // EOS
         }
@@ -81,8 +78,8 @@ pub(crate) struct TargetProcess {
     stdout_handle: Option<JoinHandle<Result<()>>>,
     stderr_handle: Option<JoinHandle<Result<()>>>,
     pub(crate) process: Child,
-    pub(crate) stderr_receiver: Receiver<String>,
-    pub(crate) stdout_receiver: Receiver<String>,
+    pub(crate) stderr_receiver: Option<UnboundedReceiver<String>>,
+    pub(crate) stdout_receiver: Option<UnboundedReceiver<String>>,
 }
 
 impl TargetProcess {
@@ -178,28 +175,27 @@ impl TargetProcess {
                     process: target_cmd,
                     stdout_handle,
                     stderr_handle,
-                    stdout_receiver: stdout_rx,
-                    stderr_receiver: stderr_rx,
+                    stdout_receiver: Some(stdout_rx),
+                    stderr_receiver: Some(stderr_rx),
                 })
             }
             None => Err("Unable to create stdout and stderr streams from target process".into()),
         }
     }
 
-    pub(crate) async fn write_to_stdin<R>(&mut self, content: R) -> Result<()>
+    pub(crate) async fn write_to_stdin<R>(&mut self, mut content: R) -> Result<()>
     where
-        R: async_std::io::Read + Unpin,
+        R: tokio::io::AsyncRead + Unpin,
     {
         if let Some(mut stdin) = self.process.stdin.take() {
-            async_std::io::copy(content, &mut stdin).await?;
-            futures::AsyncWriteExt::flush(&mut stdin).await?;
-            futures::AsyncWriteExt::close(&mut stdin).await?;
+            tokio::io::copy(&mut content, &mut stdin).await?;
+            stdin.flush().await?;
         }
         Ok(())
     }
 
     pub(crate) async fn wait(&mut self) -> Result<ExitStatus> {
-        Ok(self.process.status().await?)
+        Ok(self.process.wait().await?)
     }
 
     pub(crate) async fn stdio_tailer(
@@ -207,33 +203,33 @@ impl TargetProcess {
         stdout_path: &Path,
         stderr_path: &Path,
     ) -> Result<(JoinHandle<Result<()>>, JoinHandle<Result<()>>)> {
-        let stdout_rx = self.stdout_receiver.clone();
+        let mut stdout_rx = self.stdout_receiver.take().ok_or("already tailing")?;
         let stdout_path = stdout_path.to_path_buf();
-        let stdout_handle = spawn::<_, Result<()>>(async move {
+        let stdout_handle = spawn(async move {
             let mut tailout = file::create(&stdout_path).await?;
-            while let Ok(line) = stdout_rx.recv().await {
+            while let Some(line) = stdout_rx.recv().await {
                 tailout.write_all(line.as_bytes()).await?;
                 tailout.sync_data().await?;
             }
-            Ok(())
+            Result::Ok(())
         });
-        let stderr_rx = self.stderr_receiver.clone();
+        let mut stderr_rx = self.stderr_receiver.take().ok_or("already tailing")?;
         let stderr_path = stderr_path.to_path_buf();
-        let stderr_handle = spawn::<_, Result<()>>(async move {
+        let stderr_handle = spawn(async move {
             let mut tailerr = file::create(&stderr_path).await?;
-            while let Ok(line) = stderr_rx.recv().await {
+            while let Some(line) = stderr_rx.recv().await {
                 tailerr.write_all(line.as_bytes()).await?;
                 tailerr.sync_data().await?;
             }
-            Ok(())
+            Result::Ok(())
         });
 
         Ok((stdout_handle, stderr_handle))
     }
     pub(crate) async fn join(&mut self) -> Result<ExitStatus> {
-        let exit_status = self.process.status().await?;
+        let exit_status = self.process.wait().await?;
 
-        if self.process.kill().is_err() {
+        if self.process.kill().await.is_err() {
             // Do nothing
         };
         Ok(exit_status)
@@ -248,8 +244,8 @@ impl TargetProcess {
 
         let exit_status = self.join().await?;
 
-        stdout_handle.await?;
-        stderr_handle.await?;
+        stdout_handle.await??;
+        stderr_handle.await??;
         Ok(exit_status)
     }
 }
@@ -263,15 +259,15 @@ impl Display for TargetProcess {
 impl Drop for TargetProcess {
     fn drop(&mut self) {
         if let Some(handle) = self.stdout_handle.take() {
-            async_std::task::block_on(handle.cancel());
+            handle.abort();
         }
 
         if let Some(handle) = self.stderr_handle.take() {
-            async_std::task::block_on(handle.cancel());
+            handle.abort();
         }
         // this errors if the process is already killed, but this is fine for us
-        let _ = self.process.kill().is_err();
-        if let Err(e) = async_std::task::block_on(self.process.status()) {
+        let _ = futures::executor::block_on(self.process.kill()).is_err();
+        if let Err(e) = futures::executor::block_on(self.process.wait()) {
             eprintln!("target process drop error: {e:?}");
         }
     }

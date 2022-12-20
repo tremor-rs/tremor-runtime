@@ -52,7 +52,7 @@ impl Operator for SimpleSelect {
     fn on_event(
         &mut self,
         _uid: OperatorId,
-        _port: &str,
+        _port: &Port<'static>,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {

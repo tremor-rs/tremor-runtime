@@ -75,11 +75,11 @@ pub(crate) struct Crononome {
 impl Connector for Crononome {
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = CrononomeSource::new(self.entries.clone());
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {

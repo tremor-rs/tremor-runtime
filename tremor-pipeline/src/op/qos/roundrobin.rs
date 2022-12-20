@@ -33,7 +33,6 @@
 
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
-use beef::Cow;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -94,13 +93,11 @@ if let Some(map) = &node.config {
 
 }});
 
-const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
-
 impl Operator for RoundRobin {
     fn on_event(
         &mut self,
         uid: OperatorId,
-        _port: &str,
+        _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
@@ -207,7 +204,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event1)
+            .on_event(uid, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -222,7 +219,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event2)
+            .on_event(uid, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -253,7 +250,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event2)
+            .on_event(uid, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -267,7 +264,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event3)
+            .on_event(uid, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -298,7 +295,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event3)
+            .on_event(uid, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);

@@ -13,8 +13,13 @@
 // limitations under the License.
 
 use super::{
-    meta::{consolidate_mime, extract_request_meta, BodyData, HeaderValueValue},
-    utils::{FixedBodyReader, RequestId, StreamingBodyReader},
+    meta::{consolidate_mime, content_type, extract_request_meta, HeaderValueValue},
+    utils::RequestId,
+};
+use crate::{
+    channel::{bounded, Receiver, Sender},
+    connectors::utils::tls,
+    errors::empty_error,
 };
 use crate::{
     config::NameWithConfig,
@@ -25,23 +30,23 @@ use crate::{
     },
     errors::err_connector_def,
 };
-use async_std::{
-    channel::{bounded, unbounded, Receiver, Sender},
-    task::JoinHandle,
-};
 use dashmap::DashMap;
 use halfbrown::{Entry, HashMap};
-use http_types::{
-    headers::{self, HeaderValues},
-    StatusCode,
+use http::{header, Response};
+use http::{header::HeaderName, StatusCode};
+use hyper::{
+    body::to_bytes,
+    server::conn::{AddrIncoming, AddrStream},
+    service::{make_service_fn, service_fn},
+    Body, Request,
 };
 use simd_json::ValueAccess;
-use std::sync::Arc;
-use tide::{
-    listener::{Listener, ToListener},
-    Response,
+use std::{
+    convert::Infallible,
+    net::{SocketAddr, ToSocketAddrs},
+    sync::Arc,
 };
-use tide_rustls::TlsListener;
+use tokio::{sync::oneshot, task::JoinHandle};
 use tremor_common::ids::Id;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -115,7 +120,7 @@ pub(crate) struct HttpServer {
     config: Config,
     origin_uri: EventOriginUri,
     tls_server_config: Option<TLSServerConfig>,
-    inflight: Arc<DashMap<RequestId, Sender<Response>>>,
+    inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<Body>>>>,
     codec_map: MimeCodecMap,
 }
 
@@ -135,10 +140,10 @@ impl Connector for HttpServer {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let (request_tx, request_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (request_tx, request_rx) = bounded(qsize());
         let source = HttpServerSource {
             url: self.config.url.clone(),
             inflight: self.inflight.clone(),
@@ -151,23 +156,23 @@ impl Connector for HttpServer {
 
             codec_map: self.codec_map.clone(),
         };
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = HttpServerSink::new(self.inflight.clone(), self.codec_map.clone());
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 }
 
 struct HttpServerSource {
     url: Url,
     origin_uri: EventOriginUri,
-    inflight: Arc<DashMap<RequestId, Sender<Response>>>,
+    inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<Body>>>>,
     request_counter: u64,
     request_rx: Receiver<RawRequestData>,
     request_tx: Sender<RawRequestData>,
@@ -181,13 +186,13 @@ impl Source for HttpServerSource {
     async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
         if let Some(accept_task) = self.server_task.take() {
             // stop acceptin' new connections
-            accept_task.cancel().await;
+            accept_task.abort();
         }
         Ok(())
     }
 
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let host = self.url.host_or_local();
+        let host = self.url.host_or_local().to_string();
         let port = self.url.port().unwrap_or_else(|| {
             if self.url.scheme() == "https" {
                 443
@@ -195,11 +200,10 @@ impl Source for HttpServerSource {
                 80
             }
         });
-        let hostport = format!("{host}:{port}");
 
         // cancel last accept task if necessary, this will drop the previous listener
         if let Some(server_task) = self.server_task.take() {
-            server_task.cancel().await;
+            server_task.abort();
         }
         // TODO: clear out the inflight map. Q: How to drain the map without losing responses?
         // Answer all pending requests with a 503 status?
@@ -207,38 +211,72 @@ impl Source for HttpServerSource {
         let tx = self.request_tx.clone();
 
         let ctx = ctx.clone();
-        let tls_server_config = self.tls_server_config.clone();
+        let tls_server_config = self
+            .tls_server_config
+            .as_ref()
+            .map(TLSServerConfig::to_server_config)
+            .transpose()?
+            .map(Arc::new);
+
+        let server_context = HttpServerState::new(tx, ctx.clone(), "http");
+        let addr = (host, port).to_socket_addrs()?.next().ok_or("no address")?;
 
         // Server task - this is the main receive loop for http server instances
         self.server_task = Some(spawn_task(ctx.clone(), async move {
-            if let Some(tls_server_config) = tls_server_config {
-                let mut endpoint = tide::Server::with_state(HttpServerState::new(tx, ctx.clone()));
-                endpoint.at("/").all(handle_request);
-                endpoint.at("/*").all(handle_request);
+            if let Some(server_config) = tls_server_config {
+                let make_service = make_service_fn(move |conn: &tls::Stream| {
+                    // We have to clone the context to share it with each invocation of
+                    // `make_service`. If your data doesn't implement `Clone` consider using
+                    // an `std::sync::Arc`.
+                    let server_context = server_context.clone();
 
-                let mut listener = TlsListener::build()
-                    .addrs(&hostport)
-                    .cert(&tls_server_config.cert)
-                    .key(&tls_server_config.key)
-                    .finish()?;
-                listener.bind(endpoint).await?;
-                if let Some(info) = listener.info().into_iter().next() {
-                    info!(
-                        "{ctx} Listening for HTTPS requests on {}",
-                        info.connection()
-                    );
-                }
-                listener.accept().await?;
+                    // You can grab the address of the incoming connection like so.
+                    let maybe_addr = conn.remote_addr();
+                    async move {
+                        if let Some(addr) = maybe_addr {
+                            // Create a `Service` for responding to the request.
+                            let service = service_fn(move |req| {
+                                handle_request(server_context.clone(), addr, req)
+                            });
+
+                            // Return the service to hyper.
+                            Ok(service)
+                        } else {
+                            Err(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                "no remote address",
+                            ))
+                        }
+                    }
+                });
+                let incoming = AddrIncoming::bind(&addr)?;
+                let listener = hyper::Server::builder(tls::Acceptor::new(server_config, incoming))
+                    .serve(make_service);
+                listener.await?;
             } else {
-                let mut endpoint = tide::Server::with_state(HttpServerState::new(tx, ctx.clone()));
-                endpoint.at("/").all(handle_request);
-                endpoint.at("/*").all(handle_request);
-                let mut listener = (&hostport).to_listener()?;
-                listener.bind(endpoint).await?;
-                if let Some(info) = listener.info().into_iter().next() {
-                    info!("{ctx} Listening for HTTP requests on {}", info.connection());
-                }
-                listener.accept().await?;
+                let make_service = make_service_fn(move |conn: &AddrStream| {
+                    // We have to clone the context to share it with each invocation of
+                    // `make_service`. If your data doesn't implement `Clone` consider using
+                    // an `std::sync::Arc`.
+                    let server_context = server_context.clone();
+
+                    // You can grab the address of the incoming connection like so.
+                    let addr = conn.remote_addr();
+
+                    // Create a `Service` for responding to the request.
+                    let service =
+                        service_fn(move |req| handle_request(server_context.clone(), addr, req));
+
+                    // Return the service to hyper.
+                    async move { Ok::<_, Infallible>(service) }
+                });
+                let listener = hyper::Server::bind(&addr).serve(make_service);
+                info!(
+                    "{ctx} Listening for HTTP requests on {}",
+                    listener.local_addr()
+                );
+
+                listener.await?;
             };
             Ok(())
         }));
@@ -252,7 +290,7 @@ impl Source for HttpServerSource {
             request_meta,
             content_type,
             response_channel,
-        } = self.request_rx.recv().await?;
+        } = self.request_rx.recv().await.ok_or_else(empty_error)?;
 
         // assign request id, set pull_id
         let request_id = RequestId::new(self.request_counter);
@@ -308,7 +346,7 @@ impl Source for HttpServerSource {
 }
 
 struct HttpServerSink {
-    inflight: Arc<DashMap<RequestId, Sender<Response>>>,
+    inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<Body>>>>,
     codec_map: MimeCodecMap,
 }
 
@@ -316,7 +354,10 @@ impl HttpServerSink {
     const ERROR_MSG_EXTRACT_VALUE: &'static str = "Error turning Event into HTTP response";
     const ERROR_MSG_APPEND_RESPONSE: &'static str = "Error appending batched data to HTTP response";
 
-    fn new(inflight: Arc<DashMap<RequestId, Sender<Response>>>, codec_map: MimeCodecMap) -> Self {
+    fn new(
+        inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<Body>>>>,
+        codec_map: MimeCodecMap,
+    ) -> Self {
         Self {
             inflight,
             codec_map,
@@ -336,8 +377,12 @@ impl Sink for HttpServerSink {
         _start: u64,
     ) -> Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
-        let min_pull_id = event.id.get_min_by_stream(ctx.uid.id(), DEFAULT_STREAM_ID);
-        let max_pull_id = event.id.get_max_by_stream(ctx.uid.id(), DEFAULT_STREAM_ID);
+        let min_pull_id = event
+            .id
+            .get_min_by_stream(ctx.uid().id(), DEFAULT_STREAM_ID);
+        let max_pull_id = event
+            .id
+            .get_max_by_stream(ctx.uid().id(), DEFAULT_STREAM_ID);
 
         // batch handling:
         // - extract the request_id for each batch element
@@ -356,7 +401,7 @@ impl Sink for HttpServerSink {
                         if let Some((rid, sender)) = self.inflight.remove(&rid) {
                             debug!("{ctx} Building response for request_id {rid}");
                             let mut response = ctx.bail_err(
-                                SinkResponse::build(rid, sender, http_meta, &self.codec_map).await,
+                                SinkResponse::build(rid, sender, http_meta, &self.codec_map),
                                 Self::ERROR_MSG_EXTRACT_VALUE,
                             )?;
 
@@ -396,8 +441,7 @@ impl Sink for HttpServerSink {
                                             sender,
                                             http_meta,
                                             &self.codec_map,
-                                        )
-                                        .await,
+                                        ),
                                         Self::ERROR_MSG_EXTRACT_VALUE,
                                     )?;
 
@@ -432,8 +476,7 @@ impl Sink for HttpServerSink {
                                                 sender,
                                                 http_meta,
                                                 &self.codec_map,
-                                            )
-                                            .await,
+                                            ),
                                             Self::ERROR_MSG_EXTRACT_VALUE,
                                         )?;
 
@@ -496,20 +539,18 @@ impl Sink for HttpServerSink {
 
 struct SinkResponse {
     request_id: RequestId,
-    res: Option<Response>,
-    body_data: BodyData,
-    tx: Sender<Response>,
+    chunk_tx: Sender<Vec<u8>>,
     codec_overwrite: Option<NameWithConfig>,
 }
 
 impl SinkResponse {
-    async fn build<'event>(
+    fn build<'event>(
         request_id: RequestId,
-        tx: Sender<Response>,
+        tx: oneshot::Sender<Response<Body>>,
         http_meta: Option<&Value<'event>>,
         codec_map: &MimeCodecMap,
     ) -> Result<Self> {
-        let mut response = tide::Response::new(StatusCode::Ok);
+        let mut response = Response::builder();
 
         // build response headers and status etc.
         let request_meta = http_meta.get("request");
@@ -520,62 +561,57 @@ impl SinkResponse {
             if let Some(status) = response_meta.get_u16("status") {
                 StatusCode::try_from(status)?
             } else {
-                StatusCode::Ok
+                StatusCode::OK
             }
         } else {
             // Otherwise - Default status based on request method
-            request_meta.map_or(StatusCode::Ok, |request_meta| {
+            request_meta.map_or(StatusCode::OK, |request_meta| {
                 let method = request_meta.get_str("method").unwrap_or("error");
                 match method.to_lowercase().as_str() {
-                    "delete" => StatusCode::NoContent,
-                    "post" => StatusCode::Created,
-                    _otherwise => StatusCode::Ok,
+                    "delete" => StatusCode::NO_CONTENT,
+                    "post" => StatusCode::CREATED,
+                    _otherwise => StatusCode::OK,
                 }
             })
         };
-        response.set_status(status);
+        response = response.status(status);
         let headers = response_meta.get("headers");
 
         // build headers
         if let Some(headers) = headers.as_object() {
             for (name, values) in headers {
-                response.append_header(name.as_ref(), HeaderValueValue::new(values));
+                let name = HeaderName::from_bytes(name.as_bytes())?;
+                for value in HeaderValueValue::new(values) {
+                    response = response.header(&name, value);
+                }
             }
         }
 
-        let chunked = response
-            .header(headers::TRANSFER_ENCODING)
-            .map(HeaderValues::last)
-            .map_or(false, |te| te.as_str() == "chunked");
+        let header_content_type = content_type(response.headers_ref())?;
 
-        let header_content_type = response.content_type();
-
-        let (codec_overwrite, content_type) = consolidate_mime(header_content_type, codec_map);
+        let (codec_overwrite, content_type) =
+            consolidate_mime(header_content_type.clone(), codec_map);
 
         // set content-type if not explicitly set in the response headers meta
         // either from the configured or overwritten codec
-        if response.content_type().is_none() {
+        if header_content_type.is_none() {
             if let Some(ct) = content_type {
-                response.set_content_type(ct);
+                response = response.header(header::CONTENT_TYPE, ct.to_string());
             }
         }
-        let (body_data, res) = if chunked {
-            let (chunk_tx, chunk_rx) = unbounded();
-            let streaming_reader = StreamingBodyReader::new(chunk_rx);
-            response.set_body(tide::Body::from_reader(streaming_reader, None));
-            // chunked encoding and content-length cannot go together
-            response.remove_header(headers::CONTENT_LENGTH);
-            // we can already send out the response and stream the rest of the chunks upon calling `append`
-            tx.send(response).await?;
-            (BodyData::Chunked(chunk_tx), None)
-        } else {
-            (BodyData::Data(Vec::with_capacity(4)), Some(response))
-        };
+        let (chunk_tx, mut chunk_rx) = bounded(qsize());
+
+        // we can already send out the response and stream the rest of the chunks upon calling `append`
+        let body = Body::wrap_stream(async_stream::stream! {
+            while let Some(item) = chunk_rx.recv().await {
+                yield Ok::<_, Infallible>(item);
+            }
+        });
+        tx.send(response.body(body)?)
+            .map_err(|_| "Error sending response")?;
         Ok(Self {
             request_id,
-            res,
-            body_data,
-            tx,
+            chunk_tx,
             codec_overwrite,
         })
     }
@@ -595,14 +631,9 @@ impl SinkResponse {
         self.append_data(chunks).await
     }
 
-    async fn append_data(&mut self, mut chunks: Vec<Vec<u8>>) -> Result<()> {
-        match &mut self.body_data {
-            BodyData::Chunked(tx) => {
-                for chunk in chunks {
-                    tx.send(chunk).await?;
-                }
-            }
-            BodyData::Data(data) => data.append(&mut chunks),
+    async fn append_data(&mut self, chunks: Vec<Vec<u8>>) -> Result<()> {
+        for chunk in chunks {
+            self.chunk_tx.send(chunk).await?;
         }
         Ok(())
     }
@@ -615,26 +646,6 @@ impl SinkResponse {
         if !rest.is_empty() {
             self.append_data(rest).await?;
         }
-        // send response if necessary
-        match self.body_data {
-            BodyData::Data(data) => {
-                if let Some(mut response) = self.res.take() {
-                    // set body
-                    let reader = FixedBodyReader::new(data);
-                    let len = reader.len();
-                    response.set_body(tide::Body::from_reader(reader, Some(len)));
-                    // send off the response
-                    self.tx.send(response).await?;
-                }
-            }
-            BodyData::Chunked(tx) => {
-                // signal EOF to the `StreamingBodyReader`
-                tx.close();
-                // the response has been sent already, nothing left to do here
-            }
-        }
-        // close the channel. we are done here
-        self.tx.close();
         Ok(())
     }
 }
@@ -643,11 +654,12 @@ impl SinkResponse {
 struct HttpServerState {
     tx: Sender<RawRequestData>,
     ctx: SourceContext,
+    scheme: &'static str,
 }
 
 impl HttpServerState {
-    fn new(tx: Sender<RawRequestData>, ctx: SourceContext) -> Self {
-        Self { tx, ctx }
+    fn new(tx: Sender<RawRequestData>, ctx: SourceContext, scheme: &'static str) -> Self {
+        Self { tx, ctx, scheme }
     }
 }
 
@@ -657,30 +669,45 @@ struct RawRequestData {
     // metadata about the request, not the ready event meta, still needs to be wrapped
     request_meta: Value<'static>,
     content_type: Option<String>,
-    response_channel: Sender<Response>,
+    response_channel: oneshot::Sender<Response<Body>>,
 }
 
-async fn handle_request(mut req: tide::Request<HttpServerState>) -> tide::Result<tide::Response> {
+async fn handle_request(
+    mut context: HttpServerState,
+    addr: SocketAddr,
+    req: Request<Body>,
+) -> http::Result<Response<Body>> {
     // NOTE We wrap and crap as tide doesn't report donated route handler's errors
-    let result = _handle_request(&mut req).await;
-    if let Err(e) = result {
-        error!(
-            "{ctx} Error handling HTTP server request {e}",
-            ctx = req.state().ctx
-        );
-        Err(e)
-    } else {
-        result
+    let result = _handle_request(&mut context, addr, req).await;
+    match result {
+        Ok(response) => Ok(response),
+        Err(e) => {
+            error!(
+                "{ctx} Error handling HTTP server request {e}",
+                ctx = &context.ctx
+            );
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::empty())
+        }
     }
 }
-async fn _handle_request(req: &mut tide::Request<HttpServerState>) -> tide::Result<tide::Response> {
-    let request_meta = extract_request_meta(req.as_ref());
-    let content_type = req.content_type().map(|mime| mime.essence().to_string());
-    let data = req.body_bytes().await?;
+
+async fn _handle_request(
+    context: &mut HttpServerState,
+    _addr: SocketAddr,
+    req: Request<Body>,
+) -> Result<Response<Body>> {
+    let request_meta = extract_request_meta(&req, context.scheme)?;
+    let content_type =
+        content_type(Some(req.headers()))?.map(|mime| mime.essence_str().to_string());
+
+    let body = req.into_body();
+    let data: Vec<u8> = to_bytes(body).await?.to_vec(); // Vec::new();
 
     // Dispatch
-    let (response_tx, response_rx) = bounded(1);
-    req.state()
+    let (response_tx, response_rx) = oneshot::channel();
+    context
         .tx
         .send(RawRequestData {
             data,
@@ -690,5 +717,5 @@ async fn _handle_request(req: &mut tide::Request<HttpServerState>) -> tide::Resu
         })
         .await?;
 
-    Ok(response_rx.recv().await?)
+    Ok(response_rx.await?)
 }

@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use async_broadcast::{Receiver, RecvError, Sender, TrySendError};
 use beef::Cow;
+use tokio::sync::broadcast::{error::RecvError, Receiver, Sender};
 use tremor_pipeline::{MetricsMsg, METRICS_CHANNEL};
 use tremor_script::utils::hostname;
 
@@ -34,14 +34,12 @@ const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 ///
 pub(crate) struct MetricsConnector {
     tx: Sender<MetricsMsg>,
-    rx: Receiver<MetricsMsg>,
 }
 
 impl MetricsConnector {
     pub(crate) fn new() -> Self {
         Self {
             tx: METRICS_CHANNEL.tx(),
-            rx: METRICS_CHANNEL.rx(),
         }
     }
 }
@@ -68,27 +66,25 @@ impl ConnectorBuilder for Builder {
 #[async_trait::async_trait()]
 impl Connector for MetricsConnector {
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(!self.tx.is_closed())
+        Ok(true)
     }
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = MetricsSource::new(self.rx.clone());
-        let addr = builder.spawn(source, source_context)?;
-        Ok(Some(addr))
+        let source = MetricsSource::new(self.tx.subscribe());
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = MetricsSink::new(self.tx.clone());
-        let addr = builder.spawn(sink, sink_context)?;
-        Ok(Some(addr))
+        Ok(Some(builder.spawn(sink, ctx)))
     }
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Structured
@@ -127,7 +123,7 @@ impl Source for MetricsSource {
                         port: None,
                     })
                 }
-                Err(RecvError::Overflowed(_)) => continue, // try again, this is expected
+                Err(RecvError::Lagged(_)) => continue, // try again, this is expected
                 Err(e) => {
                     break Err(e.into());
                 }
@@ -213,15 +209,8 @@ impl Sink for MetricsSink {
         } = event;
 
         let metrics_msg = MetricsMsg::new(data, origin_uri);
-        let ack_or_fail = match self.tx.try_broadcast(metrics_msg) {
-            Err(TrySendError::Closed(_)) => {
-                // channel is closed
-                SinkReply {
-                    ack: SinkAck::Fail,
-                    cb: CbAction::Trigger,
-                }
-            }
-            Err(TrySendError::Full(_)) => SinkReply::FAIL,
+        let ack_or_fail = match self.tx.send(metrics_msg) {
+            Err(_) => SinkReply::FAIL,
             _ => SinkReply::ACK,
         };
 

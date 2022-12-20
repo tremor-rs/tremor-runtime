@@ -89,7 +89,6 @@ const BUCKETING: Cow<'static, str> = Cow::const_str("bucketing");
 const CLASS: Cow<'static, str> = Cow::const_str("class");
 const ACTION: Cow<'static, str> = Cow::const_str("action");
 const PASS: Cow<'static, str> = Cow::const_str("pass");
-const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
 op!(BucketGrouperFactory(_uid, node) {
     if node.config.is_none() {
@@ -159,7 +158,7 @@ impl Operator for Grouper {
     fn on_event(
         &mut self,
         _uid: OperatorId,
-        _port: &str,
+        _port: &Port<'static>,
         _state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
@@ -256,7 +255,7 @@ mod test {
         let mut state = Value::null();
 
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event1.clone())
+            .on_event(operator_id, &Port::In, &mut state, event1.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;
@@ -273,7 +272,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event2.clone())
+            .on_event(operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;
@@ -282,7 +281,7 @@ mod test {
         assert_eq!(e, event2);
 
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event2.clone())
+            .on_event(operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;
@@ -291,7 +290,7 @@ mod test {
         assert_eq!(e, event2);
 
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event2.clone())
+            .on_event(operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;
@@ -307,7 +306,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event3.clone())
+            .on_event(operator_id, &Port::In, &mut state, event3.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;

@@ -28,20 +28,16 @@
 //! ```
 //!
 //! We try to route the event to the connection with `stream_id` `123`.
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-
-use crate::connectors::prelude::*;
-use crate::connectors::sink::channel_sink::ChannelSinkMsg;
-use async_std::os::unix::net::UnixListener;
-use async_std::path::PathBuf;
-use async_std::task::JoinHandle;
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    prelude::FutureExt,
-};
-
 use super::{UnixSocketReader, UnixSocketWriter};
+use crate::connectors::sink::channel_sink::ChannelSinkMsg;
+use crate::{
+    channel::{bounded, Receiver, Sender},
+    errors::empty_error,
+};
+use crate::{connectors::prelude::*, errors::already_created_error};
+use std::sync::Arc;
+use std::{path::PathBuf, sync::atomic::AtomicBool};
+use tokio::{io::split, net::UnixListener, task::JoinHandle, time::timeout};
 
 const URL_SCHEME: &str = "tremor-unix-socket-server";
 
@@ -75,11 +71,11 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
-        let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (sink_tx, sink_rx) = bounded(qsize());
         Ok(Box::new(UnixSocketServer {
             config,
             sink_tx,
-            sink_rx,
+            sink_rx: Some(sink_rx),
             sink_is_connected: Arc::default(),
         }))
     }
@@ -105,7 +101,7 @@ fn resolve_connection_meta(meta: &Value) -> Option<ConnectionMeta> {
 struct UnixSocketServer {
     config: Config,
     sink_tx: Sender<ChannelSinkMsg<ConnectionMeta>>,
-    sink_rx: Receiver<ChannelSinkMsg<ConnectionMeta>>,
+    sink_rx: Option<Receiver<ChannelSinkMsg<ConnectionMeta>>>,
     sink_is_connected: Arc<AtomicBool>,
 }
 
@@ -117,7 +113,7 @@ impl Connector for UnixSocketServer {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let sink_runtime = ChannelSinkRuntime::new(self.sink_tx.clone());
@@ -126,7 +122,7 @@ impl Connector for UnixSocketServer {
             sink_runtime,
             self.sink_is_connected.clone(),
         );
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
@@ -138,10 +134,10 @@ impl Connector for UnixSocketServer {
             resolve_connection_meta,
             builder.reply_tx(),
             self.sink_tx.clone(),
-            self.sink_rx.clone(),
+            self.sink_rx.take().ok_or_else(already_created_error)?,
             self.sink_is_connected.clone(),
         );
-        builder.spawn(sink, ctx).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 }
 
@@ -160,7 +156,7 @@ impl UnixSocketSource {
         sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
         sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
-        let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (tx, rx) = bounded(qsize());
         let runtime = ChannelSourceRuntime::new(tx);
         Self {
             config,
@@ -177,13 +173,13 @@ impl UnixSocketSource {
 impl Source for UnixSocketSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         if let Some(listener_task) = self.listener_task.take() {
-            listener_task.cancel().await;
+            listener_task.abort();
         }
         let path = PathBuf::from(&self.config.path);
-        if path.exists().await {
-            async_std::fs::remove_file(&path).await?;
+        if path.exists() {
+            tokio::fs::remove_file(&path).await?;
         }
-        let listener = UnixListener::bind(&path).await?;
+        let listener = UnixListener::bind(&path)?;
         if let Some(mode_description) = self.config.permissions.as_ref() {
             let mut mode = file_mode::Mode::empty();
             mode.set_str_umask(mode_description, 0)?;
@@ -204,7 +200,7 @@ impl Source for UnixSocketSource {
                 path: vec![path.display().to_string()],
             };
             while ctx.quiescence_beacon().continue_reading().await {
-                match listener.accept().timeout(ACCEPT_TIMEOUT).await {
+                match timeout(ACCEPT_TIMEOUT, listener.accept()).await {
                     Ok(Ok((stream, _peer_addr))) => {
                         let stream_id: u64 = stream_id_gen.next_stream_id();
                         let connection_meta = ConnectionMeta(stream_id);
@@ -221,6 +217,7 @@ impl Source for UnixSocketSource {
                             "peer": stream_id
                         }));
 
+                        let (read_half, write_half) = split(stream);
                         // only register a writer, if any pipeline is connected to the sink
                         // otherwise we have a dead sink not consuming from channels and possibly dead-locking the source or other tasks
                         // complex shit...
@@ -230,7 +227,7 @@ impl Source for UnixSocketSource {
                                     stream_id,
                                     Some(connection_meta),
                                     &ctx,
-                                    UnixSocketWriter::new(stream.clone()),
+                                    UnixSocketWriter::new(write_half),
                                 )
                                 .await;
                             Some(sink_runtime.clone())
@@ -242,8 +239,8 @@ impl Source for UnixSocketSource {
                         };
 
                         let reader = UnixSocketReader::new(
-                            stream,
-                            vec![0; buf_size],
+                            read_half,
+                            buf_size,
                             ctx.alias().to_string(),
                             origin_uri.clone(),
                             meta,
@@ -260,13 +257,13 @@ impl Source for UnixSocketSource {
         Ok(true)
     }
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.connection_rx.recv().await?)
+        Ok(self.connection_rx.recv().await.ok_or_else(empty_error)?)
     }
 
     async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
         if let Some(listener_task) = self.listener_task.take() {
             // stop acceptin' new connections
-            listener_task.cancel().await;
+            listener_task.abort();
         }
         Ok(())
     }

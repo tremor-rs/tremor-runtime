@@ -34,7 +34,7 @@ pub(super) async fn wait_for_ok(port: u16) -> Result<()> {
             return Err(e.chain_err(|| "Waiting for the ClickHouse container timed out."));
         }
 
-        async_std::task::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
     Ok(())

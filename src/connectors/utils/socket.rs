@@ -15,8 +15,9 @@
 use crate::connectors::prelude::*;
 use crate::connectors::utils::url::{Defaults, Url};
 use crate::errors::{Error, Result};
-use async_std::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use tokio::net::{lookup_host, UdpSocket};
+use tokio::net::{TcpListener, TcpStream};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "UPPERCASE")]
@@ -52,7 +53,7 @@ pub(crate) async fn udp_socket<D: Defaults>(
 ) -> Result<UdpSocket> {
     let host_port = (url.host_or_local(), url.port_or_dflt());
     let mut last_err = None;
-    for addr in host_port.to_socket_addrs().await? {
+    for addr in lookup_host(host_port).await? {
         let sock_addr = SockAddr::from(addr);
         // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
         let socket_addr = sock_addr
@@ -70,7 +71,8 @@ pub(crate) async fn udp_socket<D: Defaults>(
         match sock.bind(&sock_addr) {
             Ok(()) => {
                 let socket: std::net::UdpSocket = sock.into();
-                return Ok(UdpSocket::from(socket)); // here the socket is set to non-blocking
+                socket.set_nonblocking(true)?;
+                return Ok(UdpSocket::from_std(socket)?);
             }
             Err(e) => {
                 last_err = Some(e);
@@ -121,7 +123,7 @@ pub(crate) async fn tcp_server_socket<D: Defaults>(
 ) -> Result<TcpListener> {
     let host_port = (url.host_or_local(), url.port_or_dflt());
     let mut last_err = None;
-    for addr in host_port.to_socket_addrs().await? {
+    for addr in lookup_host(host_port).await? {
         let sock_addr = SockAddr::from(addr);
         // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
         let socket_addr = sock_addr
@@ -139,7 +141,9 @@ pub(crate) async fn tcp_server_socket<D: Defaults>(
             Ok(()) => {
                 sock.listen(backlog)?;
                 let socket: std::net::TcpListener = sock.into();
-                return Ok(TcpListener::from(socket)); // here the socket is set to non-blocking
+                // here the socket is set to non-blocking
+                socket.set_nonblocking(true)?;
+                return Ok(TcpListener::from_std(socket)?);
             }
             Err(e) => {
                 last_err = Some(e);
@@ -158,7 +162,7 @@ pub(crate) async fn tcp_client_socket<D: Defaults>(
 ) -> Result<TcpStream> {
     let host_port = (url.host_or_local(), url.port_or_dflt());
     let mut last_err = None;
-    for addr in host_port.to_socket_addrs().await? {
+    for addr in lookup_host(host_port).await? {
         let sock_addr = SockAddr::from(addr);
         let socket_addr = sock_addr
             .as_socket()
@@ -174,7 +178,9 @@ pub(crate) async fn tcp_client_socket<D: Defaults>(
         match sock.connect(&sock_addr) {
             Ok(()) => {
                 let socket: std::net::TcpStream = sock.into();
-                return Ok(TcpStream::from(socket)); // here the socket is set to non-blocking
+                // here the socket is set to non-blocking
+                socket.set_nonblocking(true)?;
+                return Ok(TcpStream::from_std(socket)?);
             }
             Err(e) => {
                 last_err = Some(e);

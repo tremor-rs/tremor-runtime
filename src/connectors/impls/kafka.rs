@@ -15,44 +15,23 @@ pub(crate) mod consumer;
 pub(crate) mod producer;
 
 use crate::connectors::prelude::*;
-use async_broadcast::Sender as BroadcastSender;
-use async_std::{channel::Sender, task::JoinHandle};
 use beef::Cow;
-use core::future::Future;
-use futures::future;
 use halfbrown::HashMap;
-use rdkafka::{error::KafkaError, util::AsyncRuntime, ClientContext, Statistics};
+use rdkafka::{error::KafkaError, ClientContext, Statistics};
 use rdkafka_sys::RDKafkaErrorCode;
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
+use tokio::sync::broadcast::Sender as BroadcastSender;
+use tokio::task::JoinHandle;
 use tremor_script::EventPayload;
 use tremor_value::Value;
 
 const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
-
-pub(crate) struct SmolRuntime;
-
-impl AsyncRuntime for SmolRuntime {
-    type Delay = future::Map<smol::Timer, fn(Instant)>;
-
-    fn spawn<T>(task: T)
-    where
-        T: Future<Output = ()> + Send + 'static,
-    {
-        // This needs to be smol::spawn we can't use async_std::task::spawn
-        smol::spawn(task).detach();
-    }
-
-    fn delay_for(duration: Duration) -> Self::Delay {
-        // This needs to be smol::Timer we can't use async_io::Timer
-        futures::FutureExt::map(smol::Timer::after(duration), |_| ())
-    }
-}
 
 /// verify broker host:port pairs in kafka connector configs
 fn verify_brokers(alias: &Alias, brokers: &[String]) -> Result<(String, Option<u16>)> {
@@ -154,14 +133,14 @@ where
         // only actually notify the notifier if we didn't do so before
         // otherwise we would flood the connector and reconnect multiple times
         if self.active.swap(false, Ordering::AcqRel) {
-            async_std::task::spawn(async move {
+            tokio::task::spawn(async move {
                 if let Err(e) = ctx.notifier().connection_lost().await {
                     error!("{ctx} Error notifying the connector of a lost connection: {e}");
                 }
             })
         } else {
             // do nothing
-            async_std::task::spawn(async move {})
+            tokio::task::spawn(async move {})
         }
     }
 
@@ -207,7 +186,7 @@ where
                 return Err(format!("Unknown stats client_type \"{other}\"").into());
             }
         };
-        self.metrics_tx.try_broadcast(metrics_payload)?;
+        self.metrics_tx.send(metrics_payload)?;
         Ok(())
     }
 }
@@ -255,7 +234,6 @@ where
                     // if we error here, the queue is full, so we already notified the connector, ignore
                     warn!("{} Error sending connect message: {e}", self.ctx);
                 }
-                self.connect_tx.close();
             }
         } else if is_fatal_error(&error) {
             // we are out of connect phase
@@ -300,24 +278,23 @@ fn is_fatal_error(e: &KafkaError) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::{ClientContext, TremorRDKafkaContext};
+    use crate::channel::bounded;
+    use crate::connectors::unit_tests::FakeContext;
+    use crate::connectors::Msg;
+    use crate::errors::Result;
+    use rdkafka::Statistics;
     use std::collections::HashMap;
     use std::sync::atomic::AtomicU64;
     use std::sync::Arc;
     use std::time::Duration;
-
-    use super::{ClientContext, TremorRDKafkaContext};
-    use crate::connectors::unit_tests::FakeContext;
-    use crate::connectors::Msg;
-    use crate::errors::Result;
-    use async_broadcast::broadcast;
-    use async_std::channel::bounded;
-    use async_std::prelude::FutureExt;
-    use rdkafka::Statistics;
+    use tokio::sync::broadcast::channel as broadcast;
+    use tokio::time::timeout;
     use tremor_value::literal;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn context_on_connection_loss() -> Result<()> {
-        let (ctx_tx, ctx_rx) = bounded(1);
+        let (ctx_tx, mut ctx_rx) = bounded(1);
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, _metrics_rx) = broadcast(1);
         let fake_ctx = FakeContext::new(ctx_tx);
@@ -327,13 +304,14 @@ mod tests {
             metrics_tx,
             Arc::new(AtomicU64::new(0)),
         );
-        ctx.on_connection_lost().await;
-        let msg = ctx_rx.recv().timeout(Duration::from_secs(1)).await??;
+        ctx.on_connection_lost().await?;
+        let msg = timeout(Duration::from_secs(1), ctx_rx.recv())
+            .await?
+            .expect("no message");
         assert!(matches!(msg, Msg::ConnectionLost));
 
         // no second time
-        ctx.on_connection_lost().await;
-        assert!(ctx_rx.is_empty());
+        ctx.on_connection_lost().await?;
 
         Ok(())
     }
@@ -396,50 +374,6 @@ mod tests {
             metrics_msg.suffix().value()
         );
         Ok(())
-    }
-
-    #[test]
-    fn closed_metrics_rx() {
-        let (ctx_tx, _ctx_rx) = bounded(1);
-        let (connect_tx, _connect_rx) = bounded(1);
-        let (metrics_tx, metrics_rx) = broadcast(1);
-        metrics_rx.close();
-        let fake_ctx = FakeContext::new(ctx_tx);
-        let ctx = TremorRDKafkaContext::consumer(
-            fake_ctx,
-            connect_tx,
-            metrics_tx,
-            Arc::new(AtomicU64::new(0)),
-        );
-
-        let s = Statistics {
-            name: "snot".to_string(),
-            client_id: "snot".to_string(),
-            client_type: "consumer".to_string(),
-            ts: 100,
-            time: 100,
-            age: 0,
-            replyq: 2,
-            msg_cnt: 4,
-            msg_size: 5,
-            msg_max: 1000,
-            msg_size_max: 42,
-            tx: 2,
-            tx_bytes: 0,
-            rx: 1,
-            rx_bytes: 0,
-            txmsgs: 12,
-            txmsg_bytes: 42,
-            rxmsgs: 42,
-            rxmsg_bytes: 42,
-            simple_cnt: 42,
-            metadata_cache_cnt: 42,
-            brokers: HashMap::new(),
-            topics: HashMap::new(),
-            cgrp: None,
-            eos: None,
-        };
-        ctx.stats(s);
     }
 
     #[test]

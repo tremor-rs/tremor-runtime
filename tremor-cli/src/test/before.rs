@@ -12,20 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::prelude::FutureExt;
-use time::Instant;
-
 use crate::errors::{Error, ErrorKind, Result};
 use crate::util::slurp_string;
 use crate::{target_process, target_process::TargetProcess};
+use std::path::Path;
+use std::path::PathBuf;
 use std::{
     collections::HashMap,
     fs,
     time::{self, Duration},
 };
-
-use std::path::Path;
-use std::path::PathBuf;
+use time::Instant;
+use tokio::time::timeout;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct Before {
@@ -142,10 +140,11 @@ impl Before {
                         }
                         "http-ok" => {
                             for endpoint in v {
-                                let res = surf::get(endpoint)
-                                    .send()
-                                    .timeout(Duration::from_secs(self.until.min(5)))
-                                    .await?;
+                                let res = timeout(
+                                    Duration::from_secs(self.until.min(5)),
+                                    surf::get(endpoint).send(),
+                                )
+                                .await?;
                                 success &= match res {
                                     Ok(res) => res.status().is_success(),
                                     Err(_) => false,
@@ -176,13 +175,13 @@ impl Before {
                     break;
                 }
                 // do not overload the system, try a little (100ms) tenderness
-                async_std::task::sleep(Duration::from_millis(100)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
         if self.before_start_delay > 0 {
             let dur = Duration::from_secs(self.before_start_delay);
             debug!("Sleeping for {}s ...", self.before_start_delay);
-            async_std::task::sleep(dur).await;
+            tokio::time::sleep(dur).await;
         }
         Ok(())
     }
@@ -225,7 +224,7 @@ impl BeforeController {
                     for (i, before_def) in before_defs.into_iter().enumerate() {
                         let cmdline = before_def.cmdline();
                         let mut process = before_def.spawn(root, &self.env, i).await?;
-                        async_std::task::spawn(async move {
+                        tokio::task::spawn(async move {
                             let status = process.join().await?;
                             match status.code() {
                                 None => {

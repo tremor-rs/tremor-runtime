@@ -17,7 +17,7 @@ use crate::connectors::{
     prelude::*,
     utils::socket::{udp_socket, UdpSocketOptions},
 };
-use async_std::net::UdpSocket;
+use tokio::net::UdpSocket;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -69,11 +69,11 @@ impl Connector for UdpServer {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = UdpServerSource::new(self.config.clone());
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 }
 

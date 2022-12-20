@@ -22,19 +22,19 @@ use super::{
 use crate::connectors::impls::s3;
 use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
-use async_std::prelude::FutureExt;
 use aws_sdk_s3::Client;
 use bytes::Buf;
 use rand::{distributions::Alphanumeric, Rng};
 use serial_test::serial;
 use std::time::Duration;
 use testcontainers::clients;
+use tokio::time::timeout;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value};
 use value_trait::{Builder, Mutable, ValueAccess};
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn no_connection() -> Result<()> {
     let _ = env_logger::try_init();
@@ -63,7 +63,7 @@ async fn no_connection() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn no_credentials() -> Result<()> {
     let _ = env_logger::try_init();
@@ -102,7 +102,7 @@ async fn no_credentials() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn no_region() -> Result<()> {
     let _ = env_logger::try_init();
@@ -142,7 +142,7 @@ async fn no_region() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn no_bucket() -> Result<()> {
     let _ = env_logger::try_init();
@@ -178,7 +178,7 @@ async fn no_bucket() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_consistent() -> Result<()> {
     let _ = env_logger::try_init();
@@ -209,15 +209,12 @@ async fn connector_s3_consistent() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &s3::streamer::Builder::default(),
         &connector_yaml,
     )
     .await?;
-    let in_pipe = harness
-        .get_pipe(IN)
-        .expect("No pipe connectored to port IN");
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
@@ -225,14 +222,14 @@ async fn connector_s3_consistent() -> Result<()> {
     let (unbatched_event, unbatched_value) = get_unbatched_event();
     send_to_sink(&harness, &unbatched_event).await?;
     // upload not yet finished, hence no ack, also not transactional
-    let res = in_pipe.get_contraflow_events()?;
+    let res = harness.get_pipe(IN)?.get_contraflow_events();
     assert!(res.is_empty(), "Expected no contraflow, got: {:?}", &res);
 
     // batched event with 3 new keys, but not transactional
     let (batched_event, batched_value_0, batched_value_1, batched_value_2) = get_batched_event();
     send_to_sink(&harness, &batched_event).await?;
 
-    let res = in_pipe.get_contraflow_events()?;
+    let res = harness.get_pipe(IN)?.get_contraflow_events();
     assert!(res.is_empty(), "Expected no contraflow, got: {:?}", &res);
 
     // first transactional event
@@ -240,16 +237,17 @@ async fn connector_s3_consistent() -> Result<()> {
     send_to_sink(&harness, &large_unbatched_event).await?;
 
     // upload not yet finished, no ack yet
-    let res = in_pipe.get_contraflow_events()?;
+    let res = harness.get_pipe(IN)?.get_contraflow_events();
     assert!(res.is_empty(), "Expected no contraflow, got: {:?}", &res);
 
     let (large_batched_event, large_batched_value) = large_batched_event();
     send_to_sink(&harness, &large_batched_event).await?;
 
-    let cf_event = in_pipe
-        .get_contraflow()
-        .timeout(Duration::from_secs(5))
-        .await??;
+    let cf_event = timeout(
+        Duration::from_secs(5),
+        harness.get_pipe(IN)?.get_contraflow(),
+    )
+    .await??;
     assert_eq!(CbAction::Ack, cf_event.cb);
     assert!(cf_event.id.is_tracking(&large_unbatched_event.id));
     assert!(!cf_event.id.is_tracking(&large_batched_event.id)); // not yet
@@ -293,28 +291,28 @@ async fn send_to_sink(harness: &ConnectorHarness, event: &Event) -> Result<()> {
 async fn get_object(client: &Client, bucket: &str, key: &str) -> Vec<u8> {
     let resp = client
         .get_object()
-        .bucket(bucket.clone())
-        .key(key.clone())
+        .bucket(bucket)
+        .key(key)
         .send()
         .await
-        .unwrap();
+        .expect("get object failed");
 
     let mut v = Vec::new();
     let read_bytes = resp
         .body
         .collect()
         .await
-        .unwrap()
+        .expect("body collect failed")
         .reader()
         .read_to_end(&mut v)
-        .unwrap();
+        .expect("read failed");
     v.truncate(read_bytes);
     v
 }
 
 async fn get_object_value(client: &Client, bucket: &str, key: &str) -> value::Value<'static> {
     let mut v = get_object(client, bucket, key).await;
-    let obj = value::parse_to_value(&mut v).unwrap();
+    let obj = value::parse_to_value(&mut v).expect("parse failed");
     return obj.into_static();
 }
 
@@ -409,21 +407,18 @@ fn get_batched_event() -> (
         },
         batched_data[0]
             .get("data")
-            .unwrap()
             .get("value")
-            .unwrap()
+            .expect("no value")
             .clone(),
         batched_data[1]
             .get("data")
-            .unwrap()
             .get("value")
-            .unwrap()
+            .expect("no value")
             .clone(),
         batched_data[2]
             .get("data")
-            .unwrap()
             .get("value")
-            .unwrap()
+            .expect("no value")
             .clone(),
     )
 }
@@ -457,11 +452,11 @@ fn large_batched_event() -> (Event, Vec<u8>) {
     let batched_meta = literal!({});
 
     for idx in 0..1000 {
-        let field = format!("field{}", idx);
+        let field = format!("field{idx}");
         let field_val = random_alphanum_string(10000);
 
         let lit = literal! ({field.clone():field_val.clone()});
-        batched_value.append(&mut simd_json::to_vec(&lit).unwrap());
+        batched_value.append(&mut simd_json::to_vec(&lit).expect("failed to parse"));
 
         let event = literal!({
             "data": {
@@ -474,7 +469,7 @@ fn large_batched_event() -> (Event, Vec<u8>) {
             }
         });
 
-        batched_data.push(event).unwrap();
+        batched_data.try_push(event);
     }
 
     (

@@ -32,21 +32,23 @@ extern crate log;
 extern crate serde;
 
 use crate::errors::{ErrorKind, Result};
-use async_broadcast::{broadcast, Receiver, Sender};
-use beef::Cow;
 use either::Either;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use petgraph::graph;
 use simd_json::OwnedValue;
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
-use tremor_common::ids::{Id, OperatorId, SinkId, SourceId};
+use std::{borrow::Borrow, cmp::Ordering};
+use tokio::sync::broadcast::{self, Receiver, Sender};
+use tremor_common::{
+    ids::{Id, OperatorId, SinkId, SourceId},
+    ports::Port,
+};
 use tremor_script::{
     ast::{self, Helper},
     prelude::*,
@@ -72,8 +74,7 @@ pub use crate::executable_graph::{ExecutableGraph, OperatorNode};
 pub(crate) use crate::executable_graph::{NodeMetrics, State};
 pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
-pub(crate) type ExecPortIndexMap =
-    HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
+pub(crate) type ExecPortIndexMap = HashMap<(usize, Port<'static>), Vec<(usize, Port<'static>)>>;
 
 /// A configuration map
 pub type ConfigMap = Option<tremor_value::Value<'static>>;
@@ -90,17 +91,12 @@ pub type NodeLookupFn = fn(
 #[derive(Clone, Debug)]
 pub struct MetricsChannel {
     tx: Sender<MetricsMsg>,
-    rx: Receiver<MetricsMsg>,
 }
 
 impl MetricsChannel {
     pub(crate) fn new(qsize: usize) -> Self {
-        let (mut tx, rx) = broadcast(qsize);
-        // We user overflow so that non collected messages can be removed
-        // Ffor Metrics it should be good enough we consume them quickly
-        // and if not we got bigger problems
-        tx.set_overflow(true);
-        Self { tx, rx }
+        let (tx, _) = broadcast::channel(qsize);
+        Self { tx }
     }
 
     /// Get the sender
@@ -111,7 +107,7 @@ impl MetricsChannel {
     /// Get the receiver
     #[must_use]
     pub fn rx(&self) -> Receiver<MetricsMsg> {
-        self.rx.clone()
+        self.tx.subscribe()
     }
 }
 /// Metrics message
@@ -251,7 +247,7 @@ pub enum NodeKind {
     /// An input, this is the one end of the graph
     Input,
     /// An output, this is the other end of the graph
-    Output(Cow<'static, str>),
+    Output(Port<'static>),
     /// An operator
     Operator,
     /// A select statement
@@ -923,15 +919,15 @@ fn operator(uid: OperatorId, node: &NodeConfig) -> Result<Box<dyn Operator + 'st
     factory(node)?.node_to_operator(uid, node)
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct Connection {
-    from: Cow<'static, str>,
-    to: Cow<'static, str>,
+    from: Port<'static>,
+    to: Port<'static>,
 }
 impl Display for Connection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        let from: &str = &self.from;
-        let to: &str = &self.to;
+        let from: &str = self.from.borrow();
+        let to: &str = self.to.borrow();
         match (from, to) {
             ("out", "in") => write!(f, ""),
             ("out", to) => write!(f, "{to}"),

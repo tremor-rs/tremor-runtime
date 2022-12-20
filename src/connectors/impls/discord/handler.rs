@@ -14,10 +14,7 @@
 
 // #![cfg_attr(coverage, no_coverage)] // We need a life discord api for this
 use super::utils::{as_snowflake, get_snowflake, to_reactions, DiscordMessage};
-use async_std::{
-    channel::{Receiver, Sender},
-    task,
-};
+use crate::channel::{Receiver, Sender};
 use serenity::{
     model::{
         channel::{Channel, ChannelCategory, GuildChannel, Message, Reaction},
@@ -32,16 +29,15 @@ use serenity::{
     },
     prelude::*,
 };
-use std::{
-    collections::HashMap,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::collections::HashMap;
+use tokio::task;
 use tremor_value::{prelude::*, to_value};
 
 pub(crate) struct Handler {
     pub tx: Sender<Value<'static>>,
-    pub rx: Receiver<Value<'static>>,
-    pub is_loop_running: AtomicBool,
+    // We don't need a RwLock her but the EventHandler requires functions to take a non
+    // mut &self so during initiualisation we got to take the rx - meaning we need to RwLock it
+    pub rx: RwLock<Option<Receiver<Value<'static>>>>,
 }
 
 impl Handler {
@@ -68,17 +64,10 @@ impl EventHandler for Handler {
     async fn cache_ready(&self, ctx: Context, _guilds: Vec<GuildId>) {
         info!("Cache built successfully!");
 
-        if !self.is_loop_running.load(Ordering::Relaxed) {
-            // We have to clone the Arc, as it gets moved into the new thread.
-            // tokio::spawn creates a new green thread that can run in parallel with the rest of
-            // the application.
-            let rx = self.rx.clone();
+        if let Some(rx) = (*(self.rx.write().await)).take() {
             task::spawn(async move {
                 reply_loop(rx, ctx).await;
             });
-
-            // Now that the loop is running, we set the bool to true
-            self.is_loop_running.swap(true, Ordering::Relaxed);
         }
     }
 
@@ -365,8 +354,8 @@ impl EventHandler for Handler {
 }
 
 #[allow(clippy::too_many_lines)]
-async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
-    while let Ok(reply) = rx.recv().await {
+async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
+    while let Some(reply) = rx.recv().await {
         if let Some(reply) = reply.get("guild") {
             let guild = if let Some(id) = get_snowflake(reply, "id") {
                 GuildId(id)

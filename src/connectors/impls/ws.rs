@@ -16,10 +16,12 @@ pub(crate) mod client;
 pub(crate) mod server;
 
 use crate::connectors::prelude::*;
-use async_tungstenite::tungstenite::Message;
-use async_tungstenite::WebSocketStream;
 use futures::prelude::*;
 use futures::stream::{SplitSink, SplitStream};
+use tokio::net::TcpStream;
+use tokio_rustls::server::TlsStream;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::WebSocketStream;
 
 pub(crate) struct WsDefaults;
 impl Defaults for WsDefaults {
@@ -30,7 +32,7 @@ impl Defaults for WsDefaults {
 
 struct WsReader<Stream, Ctx, Runtime>
 where
-    Stream: futures::AsyncRead + futures::AsyncWrite + Send + Sync + Unpin,
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin,
     Ctx: Context + Send,
     Runtime: SinkRuntime,
 {
@@ -44,7 +46,7 @@ where
 
 impl<Stream, Ctx, Runtime> WsReader<Stream, Ctx, Runtime>
 where
-    Stream: futures::AsyncRead + futures::AsyncWrite + Send + Sync + Unpin,
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin,
     Ctx: Context + Send + Sync,
     Runtime: SinkRuntime,
 {
@@ -68,7 +70,7 @@ where
 #[async_trait::async_trait]
 impl<Stream, Ctx, Runtime> StreamReader for WsReader<Stream, Ctx, Runtime>
 where
-    Stream: futures::AsyncRead + futures::AsyncWrite + Send + Sync + Unpin,
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin,
     Ctx: Context + Send + Sync,
     Runtime: SinkRuntime,
 {
@@ -130,7 +132,7 @@ where
 
     async fn on_done(&mut self, stream: u64) -> StreamDone {
         // make the writer stop, otherwise the underlying socket will never be closed
-        if let Some(sink_runtime) = self.sink_runtime.as_ref() {
+        if let Some(sink_runtime) = self.sink_runtime.as_mut() {
             self.ctx.swallow_err(
                 sink_runtime.unregister_stream_writer(stream).await,
                 "Error unregistering stream",
@@ -142,42 +144,32 @@ where
 
 struct WsWriter<S>
 where
-    S: async_std::io::Read + async_std::io::Write + std::marker::Unpin + std::marker::Sync,
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + std::marker::Unpin + std::marker::Sync,
 {
     sink: SplitSink<WebSocketStream<S>, Message>,
 }
 
-impl WsWriter<async_std::net::TcpStream> {
-    fn new(sink: SplitSink<WebSocketStream<async_std::net::TcpStream>, Message>) -> Self {
+impl WsWriter<TcpStream> {
+    fn new(sink: SplitSink<WebSocketStream<TcpStream>, Message>) -> Self {
         Self { sink }
     }
 }
 
-impl WsWriter<async_tls::server::TlsStream<async_std::net::TcpStream>> {
-    fn new_tls_server(
-        sink: SplitSink<
-            WebSocketStream<async_tls::server::TlsStream<async_std::net::TcpStream>>,
-            Message,
-        >,
-    ) -> Self {
+impl WsWriter<TlsStream<TcpStream>> {
+    fn new_tls_server(sink: SplitSink<WebSocketStream<TlsStream<TcpStream>>, Message>) -> Self {
         Self { sink }
     }
 }
 
-impl WsWriter<async_std::net::TcpStream> {
-    fn new_tungstenite_client(
-        sink: SplitSink<WebSocketStream<async_std::net::TcpStream>, Message>,
-    ) -> Self {
+impl WsWriter<TcpStream> {
+    fn new_tungstenite_client(sink: SplitSink<WebSocketStream<TcpStream>, Message>) -> Self {
         Self { sink }
     }
 }
 
-impl WsWriter<async_tls::client::TlsStream<async_std::net::TcpStream>> {
+impl WsWriter<tokio_rustls::client::TlsStream<TcpStream>> {
     fn new_tls_client(
-        sink: SplitSink<
-            WebSocketStream<async_tls::client::TlsStream<async_std::net::TcpStream>>,
-            Message,
-        >,
+        sink: SplitSink<WebSocketStream<tokio_rustls::client::TlsStream<TcpStream>>, Message>,
     ) -> Self {
         Self { sink }
     }
@@ -186,11 +178,7 @@ impl WsWriter<async_tls::client::TlsStream<async_std::net::TcpStream>> {
 #[async_trait::async_trait]
 impl<S> StreamWriter for WsWriter<S>
 where
-    S: futures::io::AsyncWrite
-        + std::marker::Unpin
-        + std::marker::Sync
-        + std::marker::Send
-        + futures::io::AsyncRead,
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Sync + Send + Unpin,
 {
     async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()> {
         for chunk in data {

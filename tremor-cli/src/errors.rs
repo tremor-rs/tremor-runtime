@@ -32,8 +32,8 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
     }
 }
 
-impl<T> From<async_std::channel::SendError<T>> for Error {
-    fn from(_: async_std::channel::SendError<T>) -> Self {
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
+    fn from(_: tokio::sync::mpsc::error::SendError<T>) -> Self {
         Self::from("Send Error")
     }
 }
@@ -50,13 +50,14 @@ error_chain! {
         JsonError(simd_json::Error) #[doc = "Error during json parsing"];
         Io(std::io::Error) #[doc = "Error during std::io"];
         Fmt(std::fmt::Error) #[doc = "Error during std::fmt"];
-        FutureTimeoutError(async_std::future::TimeoutError) #[doc = "Error waiting for futures to complete"];
+        Timeout(tokio::time::error::Elapsed) #[doc = "Error waiting for futures to complete"];
         Globwalk(globwalk::GlobError) #[doc = "Glob walker error"];
         SendError(std::sync::mpsc::SendError<String>);
         AnyhowError(anyhow::Error);
         Url(url::ParseError) #[doc = "Error while parsing a url"];
         Common(tremor_common::Error);
         ParseIntError(std::num::ParseIntError);
+        JoinError(tokio::task::JoinError);
     }
     errors {
         TestFailures(stats: crate::test::stats::Stats) {

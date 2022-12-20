@@ -29,7 +29,7 @@ use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn no_connection() -> Result<()> {
     let _ = env_logger::try_init();
@@ -37,8 +37,8 @@ async fn no_connection() -> Result<()> {
         "codec": "binary",
         "config":{
             "url": "https://localhost:9090",
-            "ack_deadline": 30000000000u64,
-            "connect_timeout": 100000000,
+            "ack_deadline": 30_000_000_000u64,
+            "connect_timeout": 100_000_000,
             "subscription_id": "projects/xxx/subscriptions/test-subscription-a"
         }
     });
@@ -55,7 +55,7 @@ async fn create_subscription(endpoint: String, topic: &str, subscription: &str) 
     publisher
         .create_topic(Topic {
             name: topic.to_string(),
-            labels: Default::default(),
+            labels: HashMap::default(),
             message_storage_policy: None,
             kms_key_name: String::new(),
             schema_settings: None,
@@ -73,7 +73,7 @@ async fn create_subscription(endpoint: String, topic: &str, subscription: &str) 
             ack_deadline_seconds: 0,
             retain_acked_messages: false,
             message_retention_duration: None,
-            labels: Default::default(),
+            labels: HashMap::default(),
             enable_message_ordering: false,
             expiration_policy: None,
             filter: String::new(),
@@ -92,49 +92,39 @@ async fn create_subscription(endpoint: String, topic: &str, subscription: &str) 
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn simple_subscribe() -> Result<()> {
     let _ = env_logger::try_init();
-
     let runner = Cli::docker();
 
     let (pubsub, pubsub_args) =
         testcontainers::images::google_cloud_sdk_emulators::CloudSdk::pubsub();
     let runnable_image = RunnableImage::from((pubsub, pubsub_args));
     let container = runner.run(runnable_image);
-
     let port = container
         .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
-    let endpoint = format!("http://localhost:{}", port);
+    let endpoint = format!("http://localhost:{port}");
     let topic = "projects/test/topics/test";
     let subscription = "projects/test/subscriptions/test-subscription-a";
-
     let connector_yaml: Value = literal!({
         "metrics_interval_s": 1,
         "codec": "binary",
         "config":{
             "url": endpoint.clone(),
-            "ack_deadline": 30000000000u64,
-            "connect_timeout": 30000000000u64,
+            "ack_deadline": 30_000_000_000_u64,
+            "connect_timeout": 30_000_000_000_u64,
             "subscription_id": subscription,
         }
     });
     create_subscription(endpoint.clone(), topic, subscription).await?;
-
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
-
-    let out_pipe = harness
-        .out()
-        .expect("No pipelines connected to out port of s3-reader");
     harness.start().await?;
     harness.wait_for_connected().await?;
-    harness.consume_initial_sink_contraflow().await?;
-
+    // TODO: why has this to go away?!? harness.consume_initial_sink_contraflow().await?;
     let mut attributes = HashMap::new();
     attributes.insert("a".to_string(), "b".to_string());
-
     let channel = Channel::from_shared(endpoint)?.connect().await?;
     let mut publisher = PublisherClient::new(channel.clone());
     publisher
@@ -149,33 +139,21 @@ async fn simple_subscribe() -> Result<()> {
             }],
         })
         .await?;
-
-    let event = out_pipe.get_event().await?;
-    harness.send_contraflow(CbAction::Ack, event.id).await?;
+    let event = harness.out()?.get_event().await?;
+    harness.send_contraflow(CbAction::Ack, event.id)?;
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
 
     let (value, meta) = event.data.parts();
-
     assert_eq!(
         Some(Vec::from("abc1".as_bytes())),
-        value.as_bytes().map(|x| Vec::from(x))
+        value.as_bytes().map(Vec::from)
     );
 
     assert_eq!(
         Some(&Value::from("b")),
-        meta.as_object()
-            .unwrap()
-            .get("gpubsub_consumer")
-            .unwrap()
-            .as_object()
-            .unwrap()
-            .get("attributes")
-            .unwrap()
-            .as_object()
-            .unwrap()
-            .get("a")
+        meta.get("gpubsub_consumer").get("attributes").get("a")
     );
 
-    return Ok(());
+    Ok(())
 }

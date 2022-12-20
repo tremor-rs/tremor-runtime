@@ -82,8 +82,35 @@ where
 }
 
 // #[cfg_attr(coverage, no_coverage)]
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
+    // let thread_stack_size = std::env::var("RT_THREAD_STACK_SIZE")
+    //     .ok()
+    //     .unwrap_or_else(|| (1024 * 1024 * 2).to_string())
+    //     .parse()?;
+    // let global_queue_interval = std::env::var("RT_GLOBAL_QUEUE_INTERVAL")
+    //     .ok()
+    //     .unwrap_or_else(|| 61.to_string())
+    //     .parse()?;
+    // let event_interval = std::env::var("RT_EVENT_INTERVAL")
+    //     .ok()
+    //     .unwrap_or_else(|| 61.to_string())
+    //     .parse()?;
+    // println!("thread_stack_size: {thread_stack_size}");
+    // println!("thread_stack_size: {global_queue_interval}");
+    // println!("event_interval: {event_interval}");
+
+    // let runtime = tokio::runtime::Builder::new_multi_thread()
+    //     .enable_all()
+    //     .thread_stack_size(thread_stack_size) // dflt 2MiB
+    //     // Setting the interval to a smaller value increases the fairness of the scheduler, at the cost of more synchronization overhead
+    //     .global_queue_interval(global_queue_interval) // dflt 61
+    //     //A smaller value is useful when tasks frequently spend a long time in polling, or frequently yield,
+    //     //which can result in overly long delays picking up I/O events. Conversely, picking up new events
+    //     // requires extra synchronization and syscall overhead, so if tasks generally complete their polling
+    //     //quickly, a higher event interval will minimize that overhead while still keeping the scheduler responsive to events.
+    //     .event_interval(event_interval)
+    //     .build()?;
     let cli = cli::Cli::parse();
 
     tremor_runtime::functions::load()?;
@@ -99,10 +126,24 @@ async fn main() -> Result<()> {
         // rest of the program execution.
         tremor_runtime::INSTANCE = forget_s;
     }
-    if let Err(e) = run(cli).await {
+    let res = // runtime.block_on(async {
+    // let handle = tokio::runtime::Handle::current();
+    // let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+
+    // let frequency = std::time::Duration::from_millis(500);
+    // tokio::spawn(async move {
+    //     for metrics in runtime_monitor.intervals() {
+    //         println!("Metrics = {:?}", metrics);
+    //         tokio::time::sleep(frequency).await;
+    //     }
+    // });
+
+    run(cli).await;
+    // });
+    if let Err(e) = res {
         eprintln!("error: {e}");
         // ALLOW: this is supposed to exit
-        async_std::process::exit(1);
+        std::process::exit(1);
     }
     Ok(())
 }

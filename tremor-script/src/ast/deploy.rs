@@ -15,6 +15,8 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use tremor_common::ports::Port;
+
 use super::{
     docs::Docs, helper::Scope, node_id::BaseRef, raw::BaseExpr, CreationalWith, DefinitionalArgs,
     DefinitionalArgsWith, NodeMeta,
@@ -198,7 +200,7 @@ pub struct DeployEndpoint {
     /// as we currently do not allow inter-flow connection, this needs to change if we do
     alias: String,
     /// Refers to a local artefact being deployed in a troy definition
-    port: String,
+    port: Port<'static>,
     #[serde(skip_serializing)]
     mid: Box<NodeMeta>,
 }
@@ -212,14 +214,13 @@ impl std::fmt::Display for DeployEndpoint {
 
 impl DeployEndpoint {
     /// Creates a new endpoint
-    pub fn new<A, P>(alias: &A, port: &P, mid: &NodeMeta) -> Self
+    pub fn new<A>(alias: &A, port: Port<'static>, mid: &NodeMeta) -> Self
     where
         A: ToString + ?Sized,
-        P: ToString + ?Sized,
     {
         Self {
             alias: alias.to_string(),
-            port: port.to_string(),
+            port,
             mid: Box::new(mid.clone()),
         }
     }
@@ -230,7 +231,7 @@ impl DeployEndpoint {
     }
     /// The port
     #[must_use]
-    pub fn port(&self) -> &str {
+    pub fn port(&self) -> &Port<'static> {
         &self.port
     }
 }
@@ -310,20 +311,20 @@ mod test {
         let mid = NodeMeta::dummy();
         let stmt = ConnectStmt::ConnectorToPipeline {
             mid: mid.clone(),
-            from: DeployEndpoint::new("from", "from", &mid),
-            to: DeployEndpoint::new("to", "to", &mid),
+            from: DeployEndpoint::new("from", "from".into(), &mid),
+            to: DeployEndpoint::new("to", "to".into(), &mid),
         };
         assert_eq!(stmt.meta(), &*mid);
         let stmt = ConnectStmt::PipelineToConnector {
             mid: mid.clone(),
-            from: DeployEndpoint::new("from", "from", &mid),
-            to: DeployEndpoint::new("to", "to", &mid),
+            from: DeployEndpoint::new("from", "from".into(), &mid),
+            to: DeployEndpoint::new("to", "to".into(), &mid),
         };
         assert_eq!(stmt.meta(), &*mid);
         let stmt = ConnectStmt::PipelineToPipeline {
             mid: mid.clone(),
-            from: DeployEndpoint::new("from", "from", &mid),
-            to: DeployEndpoint::new("to", "to", &mid),
+            from: DeployEndpoint::new("from", "from".into(), &mid),
+            to: DeployEndpoint::new("to", "to".into(), &mid),
         };
         assert_eq!(stmt.meta(), &*mid);
     }

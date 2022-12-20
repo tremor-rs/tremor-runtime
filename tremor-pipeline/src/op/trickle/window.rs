@@ -14,9 +14,8 @@
 
 use super::select::execute_select_and_having;
 use crate::{Event, EventId, EventIdGenerator, OpMeta};
-use beef::Cow;
 use std::{borrow::Cow as SCow, convert::TryFrom};
-use tremor_common::{ids::OperatorId, stry};
+use tremor_common::{ids::OperatorId, ports::Port, stry};
 use tremor_script::{
     self,
     ast::{AggrSlice, Aggregates, Consts, RunConsts, Script, Select, WindowDefinition},
@@ -200,7 +199,7 @@ impl GroupWindow {
         ctx: &mut SelectCtx,
         consts: RunConsts,
         data: &mut ValueAndMeta,
-        events: &mut Vec<(Cow<'static, str>, Event)>,
+        events: &mut Vec<(Port<'static>, Event)>,
         prev: Option<(bool, &Aggregates<'static>)>,
         mut can_remove: bool,
     ) -> Result<bool> {
@@ -333,7 +332,7 @@ impl Group {
         mut ctx: SelectCtx,
         consts: &mut Consts,
         data: &mut ValueAndMeta,
-        events: &mut Vec<(Cow<'static, str>, Event)>,
+        events: &mut Vec<(Port<'static>, Event)>,
     ) -> Result<bool> {
         // Set the group value for the exeuction
         let mut run = consts.run();

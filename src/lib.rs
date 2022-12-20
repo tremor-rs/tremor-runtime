@@ -93,9 +93,15 @@ use tremor_script::{highlighter::Highlighter, FN_REGISTRY};
 /// Operator Config
 pub type OpConfig = tremor_value::Value<'static>;
 
+pub(crate) mod channel;
+
 lazy_static! {
     /// Default Q Size
-    pub static ref QSIZE: AtomicUsize = AtomicUsize::new(128);
+    static ref QSIZE: AtomicUsize = AtomicUsize::new(128);
+}
+
+pub(crate) fn qsize() -> usize {
+    QSIZE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Loads a Troy file
@@ -155,7 +161,7 @@ mod tests {
     use crate::system::{ShutdownMode, WorldConfig};
     use std::io::Write;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_load_troy_file() -> Result<()> {
         let (world, handle) = World::start(WorldConfig::default()).await?;
         let troy_file = tempfile::NamedTempFile::new()?;
@@ -176,7 +182,7 @@ mod tests {
         let num_deploys = load_troy_file(&world, &path).await?;
         assert_eq!(0, num_deploys);
         world.stop(ShutdownMode::Graceful).await?;
-        handle.cancel().await;
+        handle.abort();
         troy_file.close()?;
         Ok(())
     }

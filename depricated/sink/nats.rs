@@ -17,11 +17,11 @@
 use std::iter::FromIterator;
 use std::time::Instant;
 
+use crate::channel::{bounded, Receiver};
 use crate::sink::prelude::*;
 use async_nats::Connection as NatsConnection;
 use async_nats::Headers;
 use async_nats::Options as NatsOptions;
-use async_std::channel::{bounded, Receiver};
 use halfbrown::HashMap;
 use tremor_pipeline::OpMeta;
 
@@ -129,7 +129,7 @@ impl offramp::Builder for Builder {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let (dummy_tx, _) = bounded(1);
-            let (error_tx, error_rx) = bounded(QSIZE.load(Ordering::Relaxed));
+            let (error_tx, error_rx) = bounded(qsize());
             Ok(SinkManager::new_box(Nats {
                 sink_url: TremorUrl::from_offramp_id("nats")?,
                 config,

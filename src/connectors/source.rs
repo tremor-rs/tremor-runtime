@@ -17,25 +17,7 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
-pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
-
-use async_std::channel::unbounded;
-use async_std::task;
-use hashbrown::HashSet;
-use simd_json::Mutable;
-use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
-use std::fmt::Display;
-use tremor_common::{
-    ids::{Id, SinkId, SourceId},
-    time::nanotime,
-};
-use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
-
-use crate::config::{
-    self, Codec as CodecConfig, Connector as ConnectorConfig, NameWithConfig,
-    Preprocessor as PreprocessorConfig,
-};
+use crate::channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender};
 use crate::connectors::{
     metrics::SourceReporter,
     utils::reconnect::{Attempt, ConnectionLostNotifier},
@@ -48,12 +30,28 @@ use crate::{
     codec::{self, Codec},
     pipeline::InputTarget,
 };
-use async_std::channel::{Receiver, Sender};
-use beef::Cow;
-use tremor_common::ports::{ERR, OUT};
+use crate::{
+    config::{
+        self, Codec as CodecConfig, Connector as ConnectorConfig, NameWithConfig,
+        Preprocessor as PreprocessorConfig,
+    },
+    errors::empty_error,
+};
+pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
+use hashbrown::HashSet;
+use simd_json::Mutable;
+use std::collections::{btree_map::Entry, BTreeMap};
+use std::fmt::Display;
+use tokio::task;
+use tremor_common::{
+    ids::{Id, SinkId, SourceId},
+    ports::{Port, ERR, OUT},
+    time::nanotime,
+};
 use tremor_pipeline::{
     CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };
+use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
 use tremor_value::{literal, Value};
 use value_trait::Builder;
 
@@ -65,7 +63,7 @@ pub(crate) enum SourceMsg {
     /// connect a pipeline
     Link {
         /// port
-        port: Cow<'static, str>,
+        port: Port<'static>,
         /// sends the result
         tx: Sender<Result<()>>,
         /// pipeline to connect to
@@ -90,7 +88,7 @@ pub(crate) enum SourceMsg {
     /// drain the source - bears a sender for sending out a SourceDrained status notification
     Drain(Sender<Msg>),
     #[cfg(test)]
-    Ping(Sender<()>),
+    Synchronize(tokio::sync::oneshot::Sender<()>),
 }
 
 /// reply from `Source::on_event`
@@ -110,7 +108,7 @@ pub(crate) enum SourceReply {
         /// The event_id will have the `DEFAULT_STREAM_ID` set as stream_id.
         stream: Option<u64>,
         /// Port to send to, defaults to `out`
-        port: Option<Cow<'static, str>>,
+        port: Option<Port<'static>>,
         /// Overwrite the codec being used for deserializing this data.
         /// Should only be used when setting `stream` to `None`
         codec_overwrite: Option<NameWithConfig>,
@@ -124,7 +122,7 @@ pub(crate) enum SourceReply {
         /// stream id
         stream: u64,
         /// Port to send to, defaults to `out`
-        port: Option<Cow<'static, str>>,
+        port: Option<Port<'static>>,
     },
     /// A stream is closed
     /// This might result in additional events being flushed from
@@ -199,7 +197,7 @@ pub(crate) trait Source: Send {
     }
 
     /// called when the source is explicitly paused as result of a user/operator interaction
-    /// in contrast to `on_cb_close` which happens automatically depending on downstream pipeline or sink connector logic.
+    /// in contrast to `on_cb_trigger` which happens automatically depending on downstream pipeline or sink connector logic.
     async fn on_pause(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
@@ -217,13 +215,13 @@ pub(crate) trait Source: Send {
     /// Expected reaction is to pause receiving messages, which is handled automatically by the runtime
     /// Source implementations might want to close connections or signal a pause to the upstream entity it connects to if not done in the connector (the default)
     // TODO: add info of Cb event origin (port, origin_uri)?
-    async fn on_cb_close(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
     /// Called when we receive a `open` Circuit breaker event from any connected pipeline
     /// This means we can start/continue polling this source for messages
     /// Source implementations might want to start establishing connections if not done in the connector (the default)
-    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
 
@@ -324,7 +322,7 @@ impl Context for SourceContext {
 #[derive(Clone, Debug)]
 pub(crate) struct SourceAddr {
     /// the actual address
-    pub addr: Sender<SourceMsg>,
+    pub addr: UnboundedSender<SourceMsg>,
 }
 
 impl SourceAddr {
@@ -332,30 +330,23 @@ impl SourceAddr {
     ///
     /// # Errors
     ///  * If sending failed
-    pub(crate) async fn send(&self, msg: SourceMsg) -> Result<()> {
-        Ok(self.addr.send(msg).await?)
+    pub(crate) fn send(&self, msg: SourceMsg) -> Result<()> {
+        Ok(self.addr.send(msg)?)
     }
 }
 
 /// Builder for the `SourceManager`
 #[allow(clippy::module_name_repetitions)]
 pub(crate) struct SourceManagerBuilder {
-    qsize: usize,
     streams: Streams,
     source_metrics_reporter: SourceReporter,
 }
 
 impl SourceManagerBuilder {
-    /// queue size configured by the tremor runtime
-    #[must_use]
-    pub fn qsize(&self) -> usize {
-        self.qsize
-    }
-
     /// spawn a Manager with the given source implementation
     /// # Errors
     /// if the source can not be spawned into a own process
-    pub(crate) fn spawn<S>(self, source: S, ctx: SourceContext) -> Result<SourceAddr>
+    pub(crate) fn spawn<S>(self, source: S, ctx: SourceContext) -> SourceAddr
     where
         S: Source + Send + 'static,
     {
@@ -380,16 +371,13 @@ impl SourceManagerBuilder {
         // the pipeline is waiting for the source to process contraflow and the source waits for
         // the pipeline to process forward flow.
 
-        let name = format!("{}-src", ctx.alias);
         let (source_tx, source_rx) = unbounded();
         let source_addr = SourceAddr { addr: source_tx };
         let manager = SourceManager::new(source, ctx, self, source_addr.clone());
-        // spawn manager task
-        task::Builder::new()
-            .name(name)
-            .spawn(manager.run(source_rx))?;
 
-        Ok(source_addr)
+        task::spawn(manager.run(source_rx));
+
+        source_addr
     }
 }
 
@@ -403,7 +391,6 @@ pub(crate) fn builder(
     source_uid: SourceId,
     config: &ConnectorConfig,
     connector_default_codec: CodecReq,
-    qsize: usize,
     source_metrics_reporter: SourceReporter,
 ) -> Result<SourceManagerBuilder> {
     let preprocessor_configs = config.preprocessors.clone().unwrap_or_default();
@@ -430,7 +417,6 @@ pub(crate) fn builder(
     let streams = Streams::new(source_uid, codec_config, preprocessor_configs);
 
     Ok(SourceManagerBuilder {
-        qsize,
         streams,
         source_metrics_reporter,
     })
@@ -696,9 +682,11 @@ where
             }
             SourceMsg::Cb(cb, id) => Ok(self.handle_cb(cb, id).await),
             #[cfg(test)]
-            SourceMsg::Ping(sender) => {
-                self.ctx
-                    .swallow_err(sender.send(()).await, "Error sending Pong");
+            SourceMsg::Synchronize(sender) => {
+                self.ctx.swallow_err(
+                    sender.send(()).map_err(|_| "send err"),
+                    "Error sending Pong",
+                );
                 Ok(Control::Continue)
             }
             m @ (SourceMsg::Start | SourceMsg::Resume | SourceMsg::Pause) => {
@@ -788,15 +776,15 @@ where
             CbAction::Trigger => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("{ctx} Circuit Breaker: Trigger.");
-                let res = self.source.on_cb_close(ctx).await;
-                ctx.swallow_err(res, "on_cb_close failed");
+                let res = self.source.on_cb_trigger(ctx).await;
+                ctx.swallow_err(res, "on_cb_trigger failed");
                 self.state = SourceState::Paused;
                 Control::Continue
             }
             CbAction::Restore => {
                 info!("{ctx} Circuit Breaker: Restore.");
                 self.cb_restore_received += 1;
-                ctx.swallow_err(self.source.on_cb_open(ctx).await, "on_cb_open failed");
+                ctx.swallow_err(self.source.on_cb_restore(ctx).await, "on_cb_restore failed");
                 // avoid a race condition where the necessary start routine wasnt executed
                 // because a `CbAction::Restore` was there first, and thus the `Start` msg was ignored
                 if self.state != SourceState::Initialized {
@@ -839,13 +827,13 @@ where
 
     async fn handle_link(
         &mut self,
-        port: Cow<'static, str>,
+        port: Port<'static>,
         tx: Sender<Result<()>>,
         pipeline: (DeployEndpoint, pipeline::Addr),
     ) -> Result<Control> {
-        let pipes = if port.eq_ignore_ascii_case(OUT.as_ref()) {
+        let pipes = if port == OUT {
             &mut self.pipelines_out
-        } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
+        } else if port == ERR {
             &mut self.pipelines_err
         } else {
             error!("{} Tried to connect to invalid port: {}", &self.ctx, &port);
@@ -856,8 +844,8 @@ where
         let (pipeline_url, p) = &pipeline;
         // delegate error reporting to pipeline
         let msg = pipeline::MgmtMsg::ConnectInput {
-            endpoint: DeployEndpoint::new(&self.ctx.alias, &port, pipeline_url.meta()),
-            port: Cow::from(pipeline_url.port().to_string()),
+            endpoint: DeployEndpoint::new(&self.ctx.alias, port, pipeline_url.meta()),
+            port: Port::from(pipeline_url.port().to_string()),
             tx,
             target: InputTarget::Source(self.addr.clone()),
             is_transactional: self.is_transactional,
@@ -881,15 +869,15 @@ where
     }
 
     /// send events to pipelines
-    async fn route_events(&mut self, events: Vec<(Cow<'static, str>, Event)>) -> bool {
+    async fn route_events(&mut self, events: Vec<(Port<'static>, Event)>) -> bool {
         let mut send_error = false;
 
         let ctx = &self.ctx;
         for (port, event) in events {
-            let pipelines = if port.eq_ignore_ascii_case(OUT.as_ref()) {
+            let pipelines = if port == OUT {
                 self.metrics_reporter.increment_out();
                 &mut self.pipelines_out
-            } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
+            } else if port == ERR {
                 self.metrics_reporter.increment_err();
                 &mut self.pipelines_err
             } else {
@@ -1056,7 +1044,7 @@ where
         stream: u64,
         pull_id: u64,
         payload: EventPayload,
-        port: Option<Cow<'static, str>>,
+        port: Option<Port<'static>>,
         origin_uri: EventOriginUri,
     ) -> Result<()> {
         let ingest_ns = nanotime();
@@ -1085,7 +1073,7 @@ where
         stream: Option<u64>,
         pull_id: u64,
         origin_uri: EventOriginUri,
-        port: Option<Cow<'static, str>>,
+        port: Option<Port<'static>>,
         data: Vec<u8>,
         meta: Option<Value<'static>>,
         codec_overwrite: Option<NameWithConfig>,
@@ -1199,51 +1187,20 @@ where
     /// handling control plane and data plane in a loop
     // TODO: data plane
     #[allow(clippy::too_many_lines)]
-    async fn run(mut self, rx: Receiver<SourceMsg>) -> Result<()> {
-        // this one serves as simple counter for our pulls from the source
-        // we expect 1 source transport unit (stu) per pull, so this counter is equivalent to a stu counter
-        // it is not unique per stream only, but per source
-        // loop {
-        //     while !self.should_pull_data() {
-        //         if self.control_plane().await == Control::Terminate {
-        //             debug!("{} Terminating source task...", self.ctx);
-        //             return Ok(());
-        //         }
-        //     }
-
-        //     while let Ok(msg) = rx.try_recv() {
-        //         if self.handle_control_plane_msg(msg).await == Control::Terminate {
-        //             debug!("{} Terminating source task...", self.ctx);
-        //             return Ok(());
-        //         }
-        //     }
-
-        //     let mut pull_id = self.pull_counter;
-
-        //     if let Ok(data) = self
-        //         .source
-        //         .pull_data(&mut pull_id, &self.ctx)
-        //         .timeout(Duration::from_millis(100))
-        //         .await
-        //     {
-        //         self.handle_source_reply(data, pull_id).await?;
-        //         self.pull_counter += 1;
-        //     }
-        // }
-
-        let mut f1 = None;
+    async fn run(mut self, mut rx: UnboundedReceiver<SourceMsg>) -> Result<()> {
         loop {
             use futures::future::Either;
+
             while !self.should_pull_data() {
-                match f1.take().unwrap_or_else(|| rx.recv()).await {
-                    Ok(msg) => {
+                match rx.recv().await {
+                    Some(msg) => {
                         if self.handle_control_plane_msg(msg).await? == Control::Terminate {
                             debug!("{} Terminating source task...", self.ctx);
                             return Ok(());
                         }
                     }
-                    Err(e) => {
-                        debug!("{} Control Plane channel closed: {e}", self.ctx);
+                    None => {
+                        debug!("{} Control Plane channel closed", self.ctx);
                     }
                 }
             }
@@ -1252,16 +1209,10 @@ where
             let r = {
                 // TODO: we could specialize for sources that just use a queue for pull_data
                 //       and handle it the same as rx
-                let f2 = self.source.pull_data(&mut pull_id, &self.ctx);
-                match futures::future::select(f1.take().unwrap_or_else(|| rx.recv()), f2).await {
-                    Either::Left((msg, o)) => {
-                        drop(o);
-                        Either::Left(msg?)
-                    }
-                    Either::Right((data, o)) => {
-                        f1 = Some(o);
-                        Either::Right(data)
-                    }
+                let src_future = self.source.pull_data(&mut pull_id, &self.ctx);
+                match futures::future::select(Box::pin(rx.recv()), src_future).await {
+                    Either::Left((msg, _o)) => Either::Left(msg.ok_or_else(empty_error)?),
+                    Either::Right((data, _o)) => Either::Right(data),
                 }
             };
 
@@ -1295,11 +1246,11 @@ fn build_events(
     ingest_ns: &mut u64,
     pull_id: u64,
     origin_uri: &EventOriginUri,
-    port: Option<&Cow<'static, str>>,
+    port: Option<&Port<'static>>,
     data: Vec<u8>,
     meta: &Value<'static>,
     is_transactional: bool,
-) -> Vec<(Cow<'static, str>, Event)> {
+) -> Vec<(Port<'static>, Event)> {
     match preprocess(
         stream_state.preprocessors.as_mut_slice(),
         ingest_ns,
@@ -1364,10 +1315,10 @@ fn build_last_events(
     ingest_ns: &mut u64,
     pull_id: u64,
     origin_uri: &EventOriginUri,
-    port: Option<&Cow<'static, str>>,
+    port: Option<&Port<'static>>,
     meta: &Value<'static>,
     is_transactional: bool,
-) -> Vec<(Cow<'static, str>, Event)> {
+) -> Vec<(Port<'static>, Event)> {
     match finish(stream_state.preprocessors.as_mut_slice(), alias) {
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());

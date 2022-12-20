@@ -19,7 +19,7 @@ use crate::connectors::{
     prelude::*,
     utils::socket::{udp_socket, UdpSocketOptions},
 };
-use async_std::net::{ToSocketAddrs, UdpSocket};
+use tokio::net::UdpSocket;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -85,7 +85,7 @@ impl Connector for UdpClient {
             config: self.config.clone(),
             socket: None,
         };
-        builder.spawn(sink, ctx).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 }
 
@@ -106,13 +106,12 @@ impl UdpClientSink {
 #[async_trait::async_trait()]
 impl Sink for UdpClientSink {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let connect_addrs = (
+        let connect_addrs = tokio::net::lookup_host((
             self.config.url.host_or_local(),
             self.config.url.port_or_dflt(),
-        )
-            .to_socket_addrs()
-            .await?
-            .collect::<Vec<_>>();
+        ))
+        .await?
+        .collect::<Vec<_>>();
         let bind = if let Some(bind) = self.config.bind.clone() {
             bind
         } else {

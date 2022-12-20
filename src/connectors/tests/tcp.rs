@@ -16,20 +16,19 @@ mod client;
 mod server;
 
 use crate::{
-    connectors::utils::tls::{load_server_config, TLSServerConfig},
+    connectors::utils::tls::TLSServerConfig,
     errors::{Error, Result},
 };
-use async_std::{
-    io::{Read, Write},
-    net::{TcpListener, TcpStream},
-    prelude::*,
-    sync::Arc,
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::timeout;
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    net::TcpListener,
     task::{self, JoinHandle},
 };
-use async_tls::TlsAcceptor;
-use std::net::{Shutdown, SocketAddr};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
 
 use super::setup_for_tls;
 
@@ -50,19 +49,14 @@ impl EchoServer {
         }
     }
 
-    pub(crate) async fn handle_conn<Stream: Read + Write + Send + Sync + Unpin>(
+    pub(crate) async fn handle_conn<Stream: AsyncRead + AsyncWrite + Send + Sync + Unpin>(
         mut stream: Stream,
-        tcp: TcpStream,
         addr: SocketAddr,
         i_shall_continue: Arc<AtomicBool>,
     ) -> Result<()> {
         let mut buf = vec![0_u8; 1024];
         while i_shall_continue.load(Ordering::Acquire) {
-            match stream
-                .read(&mut buf)
-                .timeout(Duration::from_millis(100))
-                .await
-            {
+            match timeout(Duration::from_millis(100), stream.read(&mut buf)).await {
                 Err(_) => continue,
                 Ok(Ok(0)) => {
                     info!("[ECHO SERVER] EOF");
@@ -84,8 +78,6 @@ impl EchoServer {
             }
         }
         debug!("[ECHO SERVER] Closing connection from {addr}");
-        tcp.shutdown(Shutdown::Both)
-            .map_err(|e| Error::from(format!("Error shutting down the connection: {e}.")))?;
         Ok(())
     }
 
@@ -95,28 +87,31 @@ impl EchoServer {
         let addr = self.addr.clone();
         let tls_config = if self.tls {
             setup_for_tls();
-            Some(load_server_config(&TLSServerConfig {
-                cert: "./tests/localhost.cert".into(),
-                key: "./tests/localhost.key".into(),
-            })?)
+            Some(
+                TLSServerConfig {
+                    cert: "./tests/localhost.cert".into(),
+                    key: "./tests/localhost.key".into(),
+                }
+                .to_server_config()?,
+            )
         } else {
             None
         };
-        self.handle = Some(task::spawn::<_, Result<()>>(async move {
+        self.handle = Some(task::spawn(async move {
             let listener = TcpListener::bind(addr.clone()).await?;
             debug!("[ECHO SERVER] Listening on: {}", addr.clone());
             while server_run.load(Ordering::Acquire) {
-                let tls_acceptor = tls_config.as_ref().map(|c| TlsAcceptor::from(c.clone()));
+                let tls_acceptor = tls_config
+                    .as_ref()
+                    .map(|c| tokio_rustls::TlsAcceptor::from(Arc::new(c.clone())));
 
-                match listener.accept().timeout(Duration::from_millis(100)).await {
-                    Ok(Ok((stream, addr))) => {
-                        let tcp = stream.clone();
+                match timeout(Duration::from_millis(100), listener.accept()).await {
+                    Ok(Ok((tcp, addr))) => {
                         debug!("[ECHO SERVER] New connection from {addr}");
                         let conn = if let Some(tls_acceptor) = tls_acceptor {
-                            match tls_acceptor.accept(stream).await {
+                            match tls_acceptor.accept(tcp).await {
                                 Ok(tls_stream) => task::spawn(Self::handle_conn(
                                     tls_stream,
-                                    tcp,
                                     addr,
                                     server_run.clone(),
                                 )),
@@ -126,7 +121,7 @@ impl EchoServer {
                                 }
                             }
                         } else {
-                            task::spawn(Self::handle_conn(stream, tcp, addr, server_run.clone()))
+                            task::spawn(Self::handle_conn(tcp, addr, server_run.clone()))
                         };
                         conns.push(conn);
                     }
@@ -138,10 +133,10 @@ impl EchoServer {
                 }
             }
             for res in futures::future::join_all(conns).await {
-                res?;
+                res??;
             }
             info!("[ECHO SERVER] stopped.");
-            Ok(())
+            Result::Ok(())
         }));
         Ok(())
     }
@@ -149,7 +144,7 @@ impl EchoServer {
     pub(crate) async fn stop(&mut self) -> Result<()> {
         self.i_shall_run.store(false, Ordering::Release);
         if let Some(handle) = self.handle.take() {
-            handle.await?;
+            handle.await??;
         }
         Ok(())
     }

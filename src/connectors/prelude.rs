@@ -12,34 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub(crate) use crate::connectors::sink::{
-    AsyncSinkReply, ChannelSink, ChannelSinkRuntime, ContraflowData, EventSerializer,
-    SingleStreamSink, SingleStreamSinkRuntime, Sink, SinkAck, SinkAddr, SinkContext,
-    SinkManagerBuilder, SinkMeta, SinkReply, SinkRuntime, StreamWriter,
+pub(crate) use crate::{
+    channel::{bounded, Receiver, Sender},
+    connectors::{
+        metrics::make_metrics_payload,
+        sink::{
+            channel_sink::{ChannelSink, ChannelSinkRuntime},
+            single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime},
+            AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkAck, SinkAddr,
+            SinkContext, SinkManagerBuilder, SinkMeta, SinkReply, SinkRuntime, StreamWriter,
+        },
+        source::{
+            ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext,
+            SourceManagerBuilder, SourceReply, StreamReader,
+        },
+        spawn_task,
+        utils::{
+            reconnect::Attempt,
+            url::{Defaults, HttpsDefaults, Url},
+        },
+        Alias, CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context,
+        StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
+    },
+    errors::{err_connector_def, Error, Kind as ErrorKind, Result},
+    qsize,
+    system::KillSwitch,
+    utils::hostname,
+    Event,
 };
-
-pub(crate) use crate::connectors::source::{
-    ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
-    SourceReply, StreamReader,
-};
-pub(crate) use crate::connectors::utils::{
-    reconnect::Attempt,
-    url::{Defaults, HttpsDefaults, Url},
-};
-pub(crate) use crate::connectors::{
-    metrics::make_metrics_payload, spawn_task, Alias, CodecReq, Connector, ConnectorBuilder,
-    ConnectorContext, ConnectorType, Context, StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
-};
-pub(crate) use crate::errors::{err_connector_def, Error, Kind as ErrorKind, Result};
-pub(crate) use crate::system::KillSwitch;
-pub(crate) use crate::utils::hostname;
-pub(crate) use crate::{Event, QSIZE};
 pub(crate) use std::sync::atomic::Ordering;
-pub(crate) use tremor_common::ports::{ERR, IN, OUT};
+pub(crate) use tremor_common::ports::{Port, ERR, IN, OUT};
 pub use tremor_pipeline::{
     CbAction, ConfigImpl, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };
-
 pub(crate) use tremor_script::prelude::*;
 /// default buf size used for reading from files and streams (sockets etc)
 ///
