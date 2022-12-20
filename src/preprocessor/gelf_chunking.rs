@@ -259,6 +259,23 @@ fn assemble(key: u64, m: GelfMsgs) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn gelf_chunking_default() {
+        let g = GelfChunking::default();
+        assert!(g.buffer.is_empty());
+        assert!(g.last_buffer.is_empty());
+        assert_eq!(0, g.last_swap);
+        let mut g = g.clone();
+        assert!(g.buffer.is_empty());
+        assert!(g.last_buffer.is_empty());
+        assert_eq!(0, g.last_swap);
+        let d = br#"{"snot": "badger"}"#;
+        let r = g.process(&mut 0, d);
+        assert!(r.is_ok());
+        assert_eq!(r.unwrap(), vec![d.to_vec()]);
+    }
+
     #[test]
     fn bad_len() {
         let d = Vec::new();
