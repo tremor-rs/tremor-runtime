@@ -723,6 +723,9 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                 if let Some(if_seq_no) = self.get_if_seq_no() {
                     op = op.if_seq_no(if_seq_no);
                 }
+                if let Some(routing) = self.get_routing() {
+                    op = op.routing(routing);
+                }
                 ops.push(op).map_err(Into::into)
             }
             "delete" => {
@@ -745,6 +748,9 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                 if let Some(if_seq_no) = self.get_if_seq_no() {
                     op = op.if_seq_no(if_seq_no);
                 }
+                if let Some(routing) = self.get_routing() {
+                    op = op.routing(routing);
+                }
                 ops.push(op).map_err(Into::into)
             }
 
@@ -758,6 +764,9 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                     .ok_or_else(|| Error::from(Self::MISSING_ID))?;
                 if let Some(index) = self.get_index() {
                     op = op.index(index);
+                }
+                if let Some(routing) = self.get_routing() {
+                    op = op.routing(routing);
                 }
                 ops.push(op).map_err(Into::into)
             }
@@ -791,6 +800,9 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                 }
                 if let Some(retry_on_conflict) = self.get_retry_on_conflict() {
                     op = op.retry_on_conflict(retry_on_conflict);
+                }
+                if let Some(routing) = self.get_routing() {
+                    op = op.routing(routing);
                 }
                 ops.push(op).map_err(Into::into)
             }
