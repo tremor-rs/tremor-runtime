@@ -15,6 +15,7 @@
 
 ### Fixes
 * Fix google pub sub default api endpoint
+* Handle `routing` information for each bulk item in the `elastic` connector
 
 ### Breaking Changes
 
