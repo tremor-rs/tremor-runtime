@@ -47,6 +47,12 @@ pub(crate) mod metrics;
 pub(crate) mod metronome;
 /// Never send any events and swallow all events it receives into the void.
 pub(crate) mod null;
+
+/// `WebSockets`
+pub(crate) mod ws;
+
+/// Some common things for object storage connectors like gcs and s3
+pub(crate) mod object_storage;
 /// `OpenTelemetry`
 pub(crate) mod otel;
 /// AWS S3 connectors
@@ -62,8 +68,3 @@ pub(crate) mod udp;
 pub(crate) mod unix_socket;
 /// Write Ahead Log
 pub(crate) mod wal;
-/// `WebSockets`
-pub(crate) mod ws;
-
-/// Some common things for object storage connectors like gcs and s3
-pub(crate) mod object_storage;

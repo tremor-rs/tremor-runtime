@@ -19,11 +19,8 @@ use crate::{
     connectors::{prelude::*, utils::ConnectionMeta},
     log_error,
 };
-use async_std::net::TcpStream;
-use futures::{
-    io::{ReadHalf, WriteHalf},
-    AsyncReadExt, AsyncWriteExt,
-};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
+use tokio::net::TcpStream;
 
 pub(crate) struct TcpDefaults;
 impl Defaults for TcpDefaults {
@@ -34,10 +31,9 @@ impl Defaults for TcpDefaults {
 
 struct TcpReader<S>
 where
-    S: futures::io::AsyncRead + std::marker::Unpin + std::marker::Sync + std::marker::Send,
+    S: tokio::io::AsyncRead + std::marker::Unpin + std::marker::Sync + std::marker::Send,
 {
     wrapped_stream: S,
-    underlying_stream: TcpStream,
     buffer: Vec<u8>,
     alias: Alias,
     origin_uri: EventOriginUri,
@@ -47,9 +43,9 @@ where
     sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
 }
 
-impl TcpReader<TcpStream> {
+impl TcpReader<ReadHalf<TcpStream>> {
     fn new(
-        stream: TcpStream,
+        wrapped_stream: ReadHalf<TcpStream>,
         buffer: Vec<u8>,
         alias: Alias,
         origin_uri: EventOriginUri,
@@ -57,8 +53,7 @@ impl TcpReader<TcpStream> {
         sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
     ) -> Self {
         Self {
-            wrapped_stream: stream.clone(),
-            underlying_stream: stream,
+            wrapped_stream,
             buffer,
             alias,
             origin_uri,
@@ -68,10 +63,9 @@ impl TcpReader<TcpStream> {
     }
 }
 
-impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
+impl TcpReader<ReadHalf<tokio_rustls::server::TlsStream<TcpStream>>> {
     fn tls_server(
-        stream: ReadHalf<async_tls::server::TlsStream<TcpStream>>,
-        underlying_stream: TcpStream,
+        stream: ReadHalf<tokio_rustls::server::TlsStream<TcpStream>>,
         buffer: Vec<u8>,
         alias: Alias,
         origin_uri: EventOriginUri,
@@ -80,7 +74,6 @@ impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
     ) -> Self {
         Self {
             wrapped_stream: stream,
-            underlying_stream,
             buffer,
             alias,
             origin_uri,
@@ -90,10 +83,9 @@ impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
     }
 }
 
-impl TcpReader<ReadHalf<async_tls::client::TlsStream<TcpStream>>> {
+impl TcpReader<ReadHalf<tokio_rustls::client::TlsStream<TcpStream>>> {
     fn tls_client(
-        stream: ReadHalf<async_tls::client::TlsStream<TcpStream>>,
-        underlying_stream: TcpStream,
+        stream: ReadHalf<tokio_rustls::client::TlsStream<TcpStream>>,
         buffer: Vec<u8>,
         alias: Alias,
         origin_uri: EventOriginUri,
@@ -101,7 +93,6 @@ impl TcpReader<ReadHalf<async_tls::client::TlsStream<TcpStream>>> {
     ) -> Self {
         Self {
             wrapped_stream: stream,
-            underlying_stream,
             buffer,
             alias,
             origin_uri,
@@ -114,7 +105,7 @@ impl TcpReader<ReadHalf<async_tls::client::TlsStream<TcpStream>>> {
 #[async_trait::async_trait]
 impl<S> StreamReader for TcpReader<S>
 where
-    S: futures::io::AsyncRead + std::marker::Unpin + std::marker::Sync + std::marker::Send,
+    S: tokio::io::AsyncRead + std::marker::Unpin + std::marker::Sync + std::marker::Send,
 {
     async fn quiesce(&mut self, stream: u64) -> Option<SourceReply> {
         Some(SourceReply::EndStream {
@@ -149,14 +140,15 @@ where
 
     async fn on_done(&mut self, stream: u64) -> StreamDone {
         // THIS IS SHUTDOWN!
-        if let Err(e) = self.underlying_stream.shutdown(std::net::Shutdown::Read) {
-            warn!(
-                "[Connector::{}] Error shutting down reading half of stream {}: {}",
-                &self.alias, stream, e
-            );
-        }
+        // we do this in the connector
+        // if let Err(e) = self.underlying_stream.shutdown(std::net::Shutdown::Read) {
+        //     warn!(
+        //         "[Connector::{}] Error shutting down reading half of stream {}: {}",
+        //         &self.alias, stream, e
+        //     );
+        // }
         // notify the writer that we are closed, otherwise the socket will never be correctly closed on our side
-        if let Some(sink_runtime) = self.sink_runtime.as_ref() {
+        if let Some(sink_runtime) = self.sink_runtime.as_mut() {
             log_error!(
                 sink_runtime.unregister_stream_writer(stream).await,
                 "Error notifying the tcp_writer to close the socket: {e}"
@@ -168,28 +160,20 @@ where
 
 struct TcpWriter<S>
 where
-    S: futures::io::AsyncWrite + std::marker::Unpin + std::marker::Sync + std::marker::Send,
+    S: tokio::io::AsyncWrite + std::marker::Unpin + std::marker::Sync + std::marker::Send,
 {
     wrapped_stream: S,
-    underlying_stream: TcpStream,
 }
 
-impl TcpWriter<TcpStream> {
-    fn new(stream: TcpStream) -> Self {
-        Self {
-            wrapped_stream: stream.clone(),
-            underlying_stream: stream,
-        }
+impl TcpWriter<WriteHalf<TcpStream>> {
+    fn new(wrapped_stream: WriteHalf<TcpStream>) -> Self {
+        Self { wrapped_stream }
     }
 }
-impl TcpWriter<WriteHalf<async_tls::server::TlsStream<TcpStream>>> {
-    fn tls_server(
-        tls_stream: WriteHalf<async_tls::server::TlsStream<TcpStream>>,
-        underlying_stream: TcpStream,
-    ) -> Self {
+impl TcpWriter<WriteHalf<tokio_rustls::server::TlsStream<TcpStream>>> {
+    fn tls_server(tls_stream: WriteHalf<tokio_rustls::server::TlsStream<TcpStream>>) -> Self {
         Self {
             wrapped_stream: tls_stream,
-            underlying_stream,
         }
     }
 }
@@ -197,7 +181,7 @@ impl TcpWriter<WriteHalf<async_tls::server::TlsStream<TcpStream>>> {
 #[async_trait::async_trait]
 impl<S> StreamWriter for TcpWriter<S>
 where
-    S: futures::io::AsyncWrite + std::marker::Unpin + std::marker::Sync + std::marker::Send,
+    S: tokio::io::AsyncWrite + std::marker::Unpin + std::marker::Sync + std::marker::Send,
 {
     async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<SinkMeta>) -> Result<()> {
         for chunk in data {
@@ -207,7 +191,6 @@ where
         Ok(())
     }
     async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
-        self.underlying_stream.shutdown(std::net::Shutdown::Write)?;
         Ok(StreamDone::StreamClosed)
     }
 }

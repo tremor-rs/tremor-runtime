@@ -206,7 +206,7 @@ impl<'script> Upable<'script> for DeployEndpointRaw<'script> {
         self.mid.set_name(&name);
         Ok(DeployEndpoint {
             alias: self.alias.to_string(),
-            port: self.port.to_string(),
+            port: self.port.to_string().into(),
             mid: self.mid,
         })
     }

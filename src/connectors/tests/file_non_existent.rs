@@ -14,10 +14,10 @@
 
 use super::ConnectorHarness;
 use crate::{connectors::impls::file, errors::Result};
-use async_std::path::Path;
+use std::path::Path;
 use tremor_value::prelude::*;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn file_connector() -> Result<()> {
     let _ = env_logger::try_init();
 

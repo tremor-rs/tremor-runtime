@@ -46,10 +46,7 @@
 
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
-use beef::Cow;
 use tremor_script::prelude::*;
-
-const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -104,7 +101,7 @@ impl Operator for Percentile {
     fn on_event(
         &mut self,
         uid: OperatorId,
-        _port: &str,
+        _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
@@ -177,7 +174,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event1)
+            .on_event(uid, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -193,7 +190,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event2)
+            .on_event(uid, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -222,7 +219,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event1)
+            .on_event(uid, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -251,7 +248,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event2)
+            .on_event(uid, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -314,7 +311,7 @@ mod test {
         };
         let mut state = Value::null();
         let mut events = op
-            .on_event(uid, "in", &mut state, event)
+            .on_event(uid, &Port::In, &mut state, event)
             .expect("could not run pipeline")
             .events;
 

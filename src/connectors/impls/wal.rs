@@ -16,7 +16,7 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::connectors::prelude::*;
-use async_std::{sync::Mutex, task};
+use tokio::sync::Mutex;
 
 use simd_json_derive::{Deserialize, Serialize};
 
@@ -103,7 +103,7 @@ impl Source for WalSource {
                     port: None,
                 });
             }
-            task::sleep(Duration::from_millis(10)).await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
 
@@ -153,25 +153,25 @@ impl Sink for WalSink {
 impl Connector for Wal {
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let s = WalSource {
+        let source = WalSource {
             wal: self.wal.clone(),
             origin_uri: self.event_origin_uri.clone(),
         };
-        builder.spawn(s, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let s = WalSink {
+        let sink = WalSink {
             wal: self.wal.clone(),
         };
-        builder.spawn(s, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {

@@ -13,8 +13,10 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use async_std::os::unix::net::UnixStream;
-use futures::{AsyncReadExt, AsyncWriteExt};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
+    net::UnixStream,
+};
 use tremor_pipeline::EventOriginUri;
 use tremor_value::Value;
 
@@ -25,7 +27,7 @@ pub(crate) mod server;
 pub(crate) mod client;
 
 struct UnixSocketReader {
-    stream: UnixStream,
+    stream: ReadHalf<UnixStream>,
     buffer: Vec<u8>,
     alias: String,
     origin_uri: EventOriginUri,
@@ -35,8 +37,8 @@ struct UnixSocketReader {
 
 impl UnixSocketReader {
     fn new(
-        stream: UnixStream,
-        buffer: Vec<u8>,
+        stream: ReadHalf<UnixStream>,
+        buffer_size: usize,
         alias: String,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
@@ -44,7 +46,7 @@ impl UnixSocketReader {
     ) -> Self {
         Self {
             stream,
-            buffer,
+            buffer: vec![0; buffer_size],
             alias,
             origin_uri,
             meta,
@@ -93,13 +95,7 @@ impl StreamReader for UnixSocketReader {
     }
 
     async fn on_done(&mut self, stream: u64) -> StreamDone {
-        if let Err(e) = self.stream.shutdown(std::net::Shutdown::Read) {
-            warn!(
-                "[Connector::{}] Error shutting down reading half of stream {stream}: {e}",
-                &self.alias
-            );
-        }
-        if let Some(sink_runtime) = self.sink_runtime.as_ref() {
+        if let Some(sink_runtime) = self.sink_runtime.as_mut() {
             if let Err(e) = sink_runtime.unregister_stream_writer(stream).await {
                 warn!("[Connector::{}] Error notifying the unix_socket_server sink to close stream {stream}: {e}", &self.alias);
             }
@@ -109,11 +105,11 @@ impl StreamReader for UnixSocketReader {
 }
 
 struct UnixSocketWriter {
-    stream: UnixStream,
+    stream: WriteHalf<UnixStream>,
 }
 
 impl UnixSocketWriter {
-    fn new(stream: UnixStream) -> Self {
+    fn new(stream: WriteHalf<UnixStream>) -> Self {
         Self { stream }
     }
 }
@@ -134,7 +130,7 @@ impl StreamWriter for UnixSocketWriter {
         Ok(())
     }
     async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
-        self.stream.shutdown(std::net::Shutdown::Write)?;
+        self.stream.shutdown().await?;
         Ok(StreamDone::StreamClosed)
     }
 }

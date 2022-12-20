@@ -14,7 +14,7 @@
 
 use beef::Cow;
 use halfbrown::HashMap;
-use tremor_common::ports::{ERR, IN, OUT};
+use tremor_common::ports::{Port, ERR, IN, OUT};
 use tremor_pipeline::metrics::{value, value_count};
 use tremor_pipeline::MetricsSender;
 use tremor_script::EventPayload;
@@ -128,12 +128,10 @@ impl SinkReporter {
     }
 }
 
-// this is simple forwarding
-// #[cfg_attr(coverage, no_coverage)]
 pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &Alias) {
     use tremor_pipeline::MetricsMsg;
 
-    if let Err(_e) = tx.try_broadcast(MetricsMsg::new(metric, None)) {
+    if let Err(_e) = tx.send(MetricsMsg::new(metric, None)) {
         error!(
             "[Connector::{}] Error sending to system metrics connector.",
             &alias
@@ -144,7 +142,7 @@ pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &Alias) {
 #[must_use]
 pub(crate) fn make_event_count_metrics_payload(
     timestamp: u64,
-    port: Cow<'static, str>,
+    port: Port<'static>,
     count: u64,
     connector_id: &Alias,
 ) -> EventPayload {

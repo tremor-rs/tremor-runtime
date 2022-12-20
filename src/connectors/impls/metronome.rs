@@ -14,7 +14,6 @@ use std::time::Duration;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::connectors::prelude::*;
-use async_std::task;
 use tremor_common::time::nanotime;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -71,11 +70,11 @@ impl Connector for Metronome {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = MetronomeSource::new(self.interval, self.origin_uri.clone());
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 }
 
@@ -107,7 +106,7 @@ impl Source for MetronomeSource {
         let now = nanotime();
         // we need to wait here before we continue to fulfill the interval conditions
         if now < self.next {
-            task::sleep(Duration::from_nanos(self.next - now)).await;
+            tokio::time::sleep(Duration::from_nanos(self.next - now)).await;
         }
         self.next += self.interval_ns;
         *pull_id = self.id;
@@ -139,7 +138,7 @@ mod tests {
 
     use crate::{config::Reconnect, connectors::prelude::*};
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn missing_config() -> Result<()> {
         let alias = Alias::new("flow", "connector");
         let builder = super::Builder::default();

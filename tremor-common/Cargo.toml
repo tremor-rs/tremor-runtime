@@ -9,10 +9,14 @@ readme = "README.md"
 version = "0.13.0-rc.11"
 
 [dependencies]
-async-std = { version = "1", features = ["attributes"] }
+tokio = { version = "1.23", features = ["full"] }
 rand = { version = "0.8", features = ["small_rng"] }
 beef = { version = "0.5", features = ["impl_serde"] }
+serde = "*"
 url = "2.3"
 simd-json = { version = "0.7", features = ["known-key"] }
 simd-json-derive = "0.7"
 base64 = "0.21"
+
+[dev-dependencies]
+tokio = { version = "1.23", features = ["full"] }

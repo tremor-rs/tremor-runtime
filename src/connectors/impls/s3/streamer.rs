@@ -22,13 +22,12 @@ use crate::connectors::{
     },
     prelude::*,
 };
-use async_std::channel::Sender;
 use aws_sdk_s3::{
     model::{CompletedMultipartUpload, CompletedPart},
     Client as S3Client,
 };
 use tremor_common::time::nanotime;
-use tremor_pipeline::{Event, EventId, OpMeta};
+use tremor_pipeline::{EventId, OpMeta};
 
 pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";
 
@@ -110,7 +109,7 @@ impl Connector for S3Connector {
     /// Stream the events to the bucket
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         match self.config.mode {
@@ -118,14 +117,14 @@ impl Connector for S3Connector {
                 let sink_impl = S3ObjectStorageSinkImpl::yolo(self.config.clone());
                 let sink: YoloSink<S3ObjectStorageSinkImpl, S3Upload, S3Buffer> =
                     YoloSink::new(sink_impl);
-                builder.spawn(sink, sink_context).map(Some)
+                Ok(Some(builder.spawn(sink, ctx)))
             }
             Mode::Consistent => {
                 let sink_impl =
                     S3ObjectStorageSinkImpl::consistent(self.config.clone(), builder.reply_tx());
                 let sink: ConsistentSink<S3ObjectStorageSinkImpl, S3Upload, S3Buffer> =
                     ConsistentSink::new(sink_impl);
-                builder.spawn(sink, sink_context).map(Some)
+                Ok(Some(builder.spawn(sink, ctx)))
             }
         }
     }
@@ -139,7 +138,7 @@ impl Connector for S3Connector {
 pub(super) struct S3ObjectStorageSinkImpl {
     config: Config,
     client: Option<S3Client>,
-    reply_tx: Option<Sender<AsyncSinkReply>>,
+    reply_tx: Option<ReplySender>,
 }
 
 impl ObjectStorageCommon for S3ObjectStorageSinkImpl {
@@ -160,7 +159,7 @@ impl S3ObjectStorageSinkImpl {
             reply_tx: None,
         }
     }
-    pub(crate) fn consistent(config: Config, reply_tx: Sender<AsyncSinkReply>) -> Self {
+    pub(crate) fn consistent(config: Config, reply_tx: ReplySender) -> Self {
         Self {
             config,
             client: None,
@@ -378,7 +377,7 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
                 AsyncSinkReply::Fail(cf_data)
             };
             ctx.swallow_err(
-                reply_tx.send(reply).await,
+                reply_tx.send(reply),
                 &format!("Error sending ack/fail for upload {upload_id} to {object_id}"),
             );
         }
@@ -396,13 +395,11 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
         } = upload;
         if let (Some(reply_tx), true) = (self.reply_tx.as_ref(), upload.transactional) {
             ctx.swallow_err(
-                reply_tx
-                    .send(AsyncSinkReply::Fail(ContraflowData::new(
-                        event_id,
-                        nanotime(),
-                        op_meta,
-                    )))
-                    .await,
+                reply_tx.send(AsyncSinkReply::Fail(ContraflowData::new(
+                    event_id,
+                    nanotime(),
+                    op_meta,
+                ))),
                 &format!("Error sending fail for upload {upload_id} for {object_id}"),
             );
         }

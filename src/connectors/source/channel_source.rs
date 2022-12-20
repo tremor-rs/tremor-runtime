@@ -13,20 +13,21 @@
 // limitations under the License.
 
 use crate::{
+    channel::{bounded, Receiver, Sender},
+    errors::empty_error,
+    qsize,
+};
+use crate::{
     connectors::{
         source::{Source, SourceContext, SourceReply, SourceReplySender, StreamDone, StreamReader},
         Context,
     },
     errors::Result,
 };
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    prelude::*,
-    sync::Arc,
-    task,
-};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::{task, time::timeout};
 /// A source that receives `SourceReply` messages via a channel.
 /// It does not handle acks/fails.
 ///
@@ -42,8 +43,8 @@ pub(crate) struct ChannelSource {
 impl ChannelSource {
     /// constructor
     #[must_use]
-    pub fn new(qsize: usize, is_connected: Arc<AtomicBool>) -> Self {
-        let (tx, rx) = bounded(qsize);
+    pub fn new(is_connected: Arc<AtomicBool>) -> Self {
+        let (tx, rx) = bounded(qsize());
         Self::from_channel(tx, rx, is_connected)
     }
 
@@ -74,7 +75,7 @@ impl ChannelSource {
 #[async_trait::async_trait()]
 impl Source for ChannelSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.rx.recv().await?)
+        Ok(self.rx.recv().await.ok_or_else(empty_error)?)
     }
 
     /// this source is not handling acks/fails
@@ -86,7 +87,7 @@ impl Source for ChannelSource {
         true
     }
 
-    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
         // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
         // we will not send responses to out/err if we are not connected and this is determined by this variable
         self.is_connected.store(true, Ordering::Release);
@@ -124,7 +125,7 @@ impl ChannelSourceRuntime {
                         break;
                     }
                 };
-                let sc_data = reader.read(stream).timeout(Self::READ_TIMEOUT_MS).await;
+                let sc_data = timeout(Self::READ_TIMEOUT_MS, reader.read(stream)).await;
 
                 let sc_data = match sc_data {
                     Err(_) => {

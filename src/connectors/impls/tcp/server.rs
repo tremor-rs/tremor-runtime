@@ -13,27 +13,26 @@
 // limitations under the License.
 use super::{TcpDefaults, TcpReader, TcpWriter};
 use crate::{
+    channel::{bounded, Receiver, Sender},
+    errors::{already_created_error, empty_error},
+};
+use crate::{
     connectors::{
         prelude::*,
         sink::channel_sink::ChannelSinkMsg,
         utils::{
             socket::{tcp_server_socket, TcpSocketOptions},
-            tls::{load_server_config, TLSServerConfig},
+            tls::TLSServerConfig,
             ConnectionMeta,
         },
     },
     errors::err_connector_def,
 };
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    prelude::*,
-    task::JoinHandle,
-};
-use async_tls::TlsAcceptor;
-use futures::io::AsyncReadExt;
 use rustls::ServerConfig;
 use simd_json::ValueAccess;
 use std::sync::{atomic::AtomicBool, Arc};
+use tokio::{task::JoinHandle, time::timeout};
+use tokio_rustls::TlsAcceptor;
 
 const URL_SCHEME: &str = "tremor-tcp-server";
 
@@ -61,7 +60,7 @@ pub(crate) struct TcpServer {
     config: Config,
     tls_server_config: Option<ServerConfig>,
     sink_tx: Sender<ChannelSinkMsg<ConnectionMeta>>,
-    sink_rx: Receiver<ChannelSinkMsg<ConnectionMeta>>,
+    sink_rx: Option<Receiver<ChannelSinkMsg<ConnectionMeta>>>,
     /// marker that the sink is connected
     sink_is_connected: Arc<AtomicBool>,
 }
@@ -86,16 +85,16 @@ impl ConnectorBuilder for Builder {
             return Err(err_connector_def(id, "Missing port for TCP server"));
         }
         let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
-            Some(load_server_config(tls_config)?)
+            Some(tls_config.to_server_config()?)
         } else {
             None
         };
-        let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (sink_tx, sink_rx) = bounded(qsize());
         Ok(Box::new(TcpServer {
             config,
             tls_server_config,
             sink_tx,
-            sink_rx,
+            sink_rx: Some(sink_rx),
             sink_is_connected: Arc::default(),
         }))
     }
@@ -127,7 +126,7 @@ impl Connector for TcpServer {
             sink_runtime,
             self.sink_is_connected.clone(),
         );
-        builder.spawn(source, ctx).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
@@ -140,10 +139,10 @@ impl Connector for TcpServer {
             resolve_connection_meta,
             builder.reply_tx(),
             self.sink_tx.clone(),
-            self.sink_rx.clone(),
+            self.sink_rx.take().ok_or_else(already_created_error)?,
             self.sink_is_connected.clone(),
         );
-        builder.spawn(sink, ctx).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -168,7 +167,7 @@ impl TcpServerSource {
         sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
         sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
-        let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (tx, rx) = bounded(qsize());
         let runtime = ChannelSourceRuntime::new(tx);
         Self {
             config,
@@ -191,7 +190,7 @@ impl Source for TcpServerSource {
 
         // cancel last accept task if necessary, this will drop the previous listener
         if let Some(previous_handle) = self.accept_task.take() {
-            previous_handle.cancel().await;
+            previous_handle.abort();
         }
 
         let listener = tcp_server_socket(
@@ -213,7 +212,7 @@ impl Source for TcpServerSource {
             let mut stream_id_gen = StreamIdGen::default();
 
             while ctx.quiescence_beacon().continue_reading().await {
-                match listener.accept().timeout(ACCEPT_TIMEOUT).await {
+                match timeout(ACCEPT_TIMEOUT, listener.accept()).await {
                     Ok(Ok((stream, peer_addr))) => {
                         debug!("{accept_ctx} new connection from {peer_addr}");
                         let stream_id: u64 = stream_id_gen.next_stream_id();
@@ -231,8 +230,8 @@ impl Source for TcpServerSource {
                             .clone()
                             .map(|sc| TlsAcceptor::from(Arc::new(sc)));
                         if let Some(acceptor) = tls_acceptor {
-                            let tls_stream = acceptor.accept(stream.clone()).await?;
-                            let (tls_read_stream, tls_write_sink) = tls_stream.split();
+                            let tls_stream = acceptor.accept(stream).await?;
+                            let (tls_read_stream, tls_write_sink) = tokio::io::split(tls_stream);
                             let meta = ctx.meta(literal!({
                                 "tls": true,
                                 "peer": {
@@ -249,7 +248,7 @@ impl Source for TcpServerSource {
                                         stream_id,
                                         Some(connection_meta.clone()),
                                         &ctx,
-                                        TcpWriter::tls_server(tls_write_sink, stream.clone()),
+                                        TcpWriter::tls_server(tls_write_sink),
                                     )
                                     .await;
                                 Some(sink_runtime.clone())
@@ -259,7 +258,6 @@ impl Source for TcpServerSource {
                             };
                             let tls_reader = TcpReader::tls_server(
                                 tls_read_stream,
-                                stream,
                                 vec![0; buf_size],
                                 ctx.alias.clone(),
                                 origin_uri.clone(),
@@ -277,6 +275,7 @@ impl Source for TcpServerSource {
                                 }
                             }));
 
+                            let (read_stream, write_stream) = tokio::io::split(stream);
                             // we only register a writer when we actually have something connected to the sink
                             // the connected sink will not be driven by the sink task anyways (no calls to on_event/on_signal)
                             let reader_runtime = if sink_is_connected.load(Ordering::Acquire) {
@@ -285,7 +284,7 @@ impl Source for TcpServerSource {
                                         stream_id,
                                         Some(connection_meta.clone()),
                                         &ctx,
-                                        TcpWriter::new(stream.clone()),
+                                        TcpWriter::new(write_stream),
                                     )
                                     .await;
                                 Some(sink_runtime.clone())
@@ -294,7 +293,7 @@ impl Source for TcpServerSource {
                                 None
                             };
                             let tcp_reader = TcpReader::new(
-                                stream,
+                                read_stream,
                                 vec![0; buf_size],
                                 ctx.alias.clone(),
                                 origin_uri.clone(),
@@ -320,13 +319,13 @@ impl Source for TcpServerSource {
     }
 
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.connection_rx.recv().await?)
+        Ok(self.connection_rx.recv().await.ok_or_else(empty_error)?)
     }
 
     async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
         if let Some(accept_task) = self.accept_task.take() {
             // stop acceptin' new connections
-            accept_task.cancel().await;
+            accept_task.abort();
         }
         Ok(())
     }

@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use async_std::prelude::FutureExt;
 use serial_test::serial;
 use std::io::prelude::*;
 use std::time::Duration;
@@ -34,7 +33,7 @@ macro_rules! test_cases {
         mod flows {
             use super::*;
             $(
-                #[async_std::test]
+                #[tokio::test(flavor = "multi_thread")]
                 #[serial(flow)]
                 async fn $file() -> Result<()> {
 
@@ -52,14 +51,13 @@ macro_rules! test_cases {
                         Ok(deployable) => {
                             let config = WorldConfig{
                                 debug_connectors: true,
-                                ..WorldConfig::default()
                             };
                             let (world, h) = World::start(config).await?;
                             for flow in deployable.iter_flows() {
                                 world.start_flow(flow).await?;
                             }
                             // this isn't good
-                            h.timeout(Duration::from_secs(10)).await??;
+                            tokio::time::timeout(Duration::from_secs(10), h).await???;
                         },
                         otherwise => {
                             println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);

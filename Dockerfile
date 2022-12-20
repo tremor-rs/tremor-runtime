@@ -13,7 +13,7 @@ RUN apt-get update \
 
 # Switch back to dialog for any ad-hoc use of apt-get
 ENV DEBIAN_FRONTEND=dialog
-ENV RUSTFLAGS="-C target-feature=+avx,+avx2,+sse4.2"
+ENV RUSTFLAGS="-C target-feature=+avx,+avx2,+sse4.2 --cfg tokio_unstable"
 
 WORKDIR /app
 

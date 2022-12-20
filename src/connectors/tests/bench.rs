@@ -16,13 +16,13 @@ use crate::{
     errors::Result,
     system::{flow_supervisor, World, WorldConfig},
 };
-use async_std::{channel::bounded, prelude::FutureExt};
 use std::{io::Write, time::Duration};
 use tempfile::NamedTempFile;
+use tokio::time::timeout;
 use tremor_common::ports::IN;
 use tremor_value::prelude::*;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn stop_after_events() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -41,20 +41,20 @@ async fn stop_after_events() -> Result<()> {
       }
     });
     let (world, world_handle) = World::start(WorldConfig::default()).await?;
-    let harness = ConnectorHarness::new_with_kill_switch(
+    let mut harness = ConnectorHarness::new_with_kill_switch(
         function_name!(),
         &bench::Builder::default(),
         &defn,
         world.kill_switch,
     )
     .await?;
-    let out = harness.out().expect("No out pipeline connected");
+
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    let bg_out = out.clone();
-    let bg_addr = harness.addr.clone();
-    let handle = async_std::task::spawn::<_, Result<()>>(async move {
+    let handle = tokio::task::spawn(async move {
+        let bg_addr = harness.addr.clone();
+        let bg_out = harness.out()?;
         // echo pipeline
         for _ in 0..6 {
             let event = bg_out.get_event().await?;
@@ -62,16 +62,16 @@ async fn stop_after_events() -> Result<()> {
                 .send_sink(SinkMsg::Event { event, port: IN })
                 .await?;
         }
-        Ok(())
+        Result::Ok(())
     });
 
     // the bench connector should shut the world down
-    world_handle.await?;
-    handle.cancel().await;
+    world_handle.await??;
+    handle.abort();
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn stop_after_secs() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -90,27 +90,31 @@ async fn stop_after_secs() -> Result<()> {
       }
     });
 
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = crate::channel::bounded(1);
     let kill_switch = KillSwitch::new(tx);
-    let harness = ConnectorHarness::new_with_kill_switch(
+    let mut harness = ConnectorHarness::new_with_kill_switch(
         function_name!(),
         &bench::Builder::default(),
         &defn,
         kill_switch,
     )
     .await?;
-    let out = harness.out().expect("No out pipeline connected");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
     // echo pipeline
-    let bg_out = out.clone();
-    let bg_addr = harness.addr.clone();
-    let handle = async_std::task::spawn::<_, Result<()>>(async move {
+    let handle = tokio::task::spawn(async move {
         // echo pipeline
         loop {
-            let event = bg_out.get_event().await?;
-            if let Err(e) = bg_addr.send_sink(SinkMsg::Event { event, port: IN }).await {
+            let event = match harness.out()?.get_event().await {
+                Ok(r) => r,
+                Err(e) => return Result::<()>::Err(e),
+            };
+            if let Err(e) = harness
+                .addr
+                .send_sink(SinkMsg::Event { event, port: IN })
+                .await
+            {
                 error!("Error sending event to sink: {e}");
             }
         }
@@ -118,14 +122,12 @@ async fn stop_after_secs() -> Result<()> {
 
     // the bench connector should trigger the kill switch
     let two_secs = Duration::from_secs(2);
-    let msg = rx.recv().timeout(two_secs).await??;
+    let msg = timeout(two_secs, rx.recv()).await?.expect("failed to recv");
     assert!(matches!(msg, flow_supervisor::Msg::Stop));
     info!("Flow supervisor finished");
-    let (_out, err) = harness.stop().await?;
     info!("Harness stopped");
-    handle.cancel().await; // stopping the pipeline after the connector to ensure it is draining the source
+    handle.abort(); // stopping the pipeline after the connector to ensure it is draining the source
     info!("Echo pipeline finished");
-    assert!(err.is_empty());
 
     Ok(())
 }

@@ -16,6 +16,7 @@ use super::{Object, Value};
 use beef::Cow;
 use simd_json::{BorrowedValue, OwnedValue, StaticNode};
 use std::iter::FromIterator;
+use tremor_common::ports::Port;
 
 impl<'value> From<OwnedValue> for Value<'value> {
     #[inline]
@@ -239,6 +240,19 @@ impl<'value> From<Object<'value>> for Value<'value> {
     #[must_use]
     fn from(v: Object<'value>) -> Self {
         Self::Object(Box::new(v))
+    }
+}
+
+impl<'port> From<Port<'port>> for Value<'port> {
+    fn from(val: Port<'port>) -> Self {
+        match val {
+            Port::In => Value::from("in"),
+            Port::Out => Value::from("out"),
+            Port::Err => Value::from("err"),
+            Port::Metrics => Value::from("metrics"),
+            Port::Overflow => Value::from("overflow"),
+            Port::Custom(c) => Value::from(c),
+        }
     }
 }
 

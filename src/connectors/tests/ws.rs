@@ -13,18 +13,30 @@
 // limitations under the License.
 
 use super::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness};
-use crate::connectors::impls::ws;
+use crate::channel::{bounded, Receiver, Sender, TryRecvError};
+use crate::connectors::{impls::ws, utils::tls::TLSClientConfig};
 use crate::connectors::{impls::ws::WsDefaults, utils::url::Url};
-use crate::errors::{Error, Result, ResultExt};
-use async_std::{
-    channel::{bounded, Receiver, Sender, TryRecvError},
+use crate::errors::{Result, ResultExt};
+use futures::SinkExt;
+use futures::StreamExt;
+use rustls::ServerName;
+use std::{
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
+use tokio::{
     net::{TcpListener, TcpStream},
-    path::Path,
-    prelude::StreamExt,
     task,
 };
-use async_tls::TlsConnector;
-use async_tungstenite::{
+use tokio_rustls::TlsConnector;
+use tokio_tungstenite::{
     accept_async, client_async,
     tungstenite::{
         protocol::{frame::coding::CloseCode, CloseFrame},
@@ -32,16 +44,6 @@ use async_tungstenite::{
         Message, WebSocket,
     },
     WebSocketStream,
-};
-use futures::SinkExt;
-use rustls::ClientConfig;
-use std::time::{Duration, Instant};
-use std::{
-    net::SocketAddr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
 };
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
@@ -59,21 +61,19 @@ enum ExpectMessage {
     Unexpected(Message),
 }
 
-impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::TcpStream>>> {
+impl TestClient<WebSocketStream<tokio_rustls::client::TlsStream<TcpStream>>> {
     async fn new_tls(url: &str, port: u16) -> Result<Self> {
-        let mut config = ClientConfig::new();
+        let config = TLSClientConfig {
+            cafile: Some(PathBuf::from("./tests/localhost.cert")),
+            ..Default::default()
+        };
+        let config = config.to_client_config()?;
 
-        let cafile = Path::new("./tests/localhost.cert");
-        let file = std::fs::File::open(cafile)?;
-        let mut pem = std::io::BufReader::new(file);
-        let (certs, _) = config
-            .root_store
-            .add_pem_file(&mut pem)
-            .map_err(|_e| Error::from("Error adding pem file to root store"))?;
-        assert_eq!(1, certs);
         let tcp_stream = TcpStream::connect(("localhost", port)).await?;
         let tls_connector = TlsConnector::from(Arc::new(config));
-        let tls_stream = tls_connector.connect("localhost", tcp_stream).await?;
+        let tls_stream = tls_connector
+            .connect(ServerName::try_from("localhost")?, tcp_stream)
+            .await?;
         let (client, _http_response) = client_async(url, tls_stream).await?;
 
         Ok(Self { client })
@@ -88,7 +88,7 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
     }
 
     fn port(&mut self) -> Result<u16> {
-        Ok(self.client.get_ref().get_ref().local_addr()?.port())
+        Ok(self.client.get_ref().get_ref().0.local_addr()?.port())
     }
 
     async fn expect(&mut self) -> Result<ExpectMessage> {
@@ -117,7 +117,7 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
 
 impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
     fn new(url: &str) -> Result<Self> {
-        use async_tungstenite::tungstenite::connect;
+        use tokio_tungstenite::tungstenite::connect;
 
         let (client, _http_response) = connect(Url::<WsDefaults>::parse(url)?.url())?;
         Ok(Self { client })
@@ -187,7 +187,7 @@ impl TestServer {
     fn new(host: &str, port: u16) -> Self {
         let (tx, rx) = bounded(128);
         Self {
-            endpoint: format!("{}:{}", host, port),
+            endpoint: format!("{host}:{port}"),
             tx,
             rx,
             stopped: Arc::new(AtomicBool::new(false)),
@@ -257,7 +257,7 @@ impl TestServer {
     }
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn ws_client_bad_config() -> Result<()> {
     setup_for_tls();
 
@@ -278,7 +278,7 @@ async fn ws_client_bad_config() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn ws_server_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -297,11 +297,8 @@ async fn ws_server_text_routing() -> Result<()> {
       }
     });
 
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &ws::server::Builder::default(), &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of ws_server connector");
 
     harness.start().await?;
     harness.wait_for_connected().await?;
@@ -317,7 +314,7 @@ async fn ws_server_text_routing() -> Result<()> {
                     )
                     .into());
                 }
-                async_std::task::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
             Ok(client) => {
                 break client;
@@ -330,7 +327,7 @@ async fn ws_server_text_routing() -> Result<()> {
     //
     c1.send("\"Hello WebSocket Server\"")?;
 
-    let event = out_pipeline.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
@@ -363,7 +360,7 @@ async fn ws_server_text_routing() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn ws_client_binary_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -374,7 +371,7 @@ async fn ws_client_binary_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-          "url": format!("ws://127.0.0.1:{}", free_port),
+          "url": format!("ws://127.0.0.1:{free_port}"),
           "socket_options": {} // enforcing defaults during serialization
       }
     });
@@ -384,21 +381,13 @@ async fn ws_client_binary_routing() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    let _out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of tcp_server connector");
-
-    let _in_pipeline = harness
-        .in_port()
-        .expect("No pipeline connected to 'in' port of tcp_server connector");
-
     let meta = literal!({
         "binary": true,
         "ws_client": {
             "peer": {
                 "host": "127.0.0.1",
                 "port": free_port,
-                "url": format!("ws://127.0.0.1:{}", free_port),
+                "url": format!("ws://127.0.0.1:{free_port}"),
             }
         }
     });
@@ -420,7 +409,7 @@ async fn ws_client_binary_routing() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn ws_client_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -431,30 +420,21 @@ async fn ws_client_text_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-          "url": format!("ws://127.0.0.1:{}", free_port),
+          "url": format!("ws://127.0.0.1:{free_port}"),
       }
     });
 
     let harness =
         ConnectorHarness::new(function_name!(), &ws::client::Builder::default(), &defn).await?;
-
     harness.start().await?;
     harness.wait_for_connected().await?;
-
-    let _out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of tcp_server connector");
-
-    let _in_pipeline = harness
-        .in_port()
-        .expect("No pipeline connected to 'in' port of tcp_server connector");
 
     let meta = literal!({
         "ws_client": {
             "peer": {
                 "host": "127.0.0.1",
                 "port": free_port,
-                "url": format!("ws://127.0.0.1:{}", free_port),
+                "url": format!("ws://127.0.0.1:{free_port}"),
             }
         }
     });
@@ -475,7 +455,7 @@ async fn ws_client_text_routing() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn wss_server_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -496,11 +476,8 @@ async fn wss_server_text_routing() -> Result<()> {
         }
     });
 
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &ws::server::Builder::default(), &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of ws_server connector");
 
     harness.start().await?;
     harness.wait_for_connected().await?;
@@ -518,7 +495,7 @@ async fn wss_server_text_routing() -> Result<()> {
                     )
                     .into());
                 }
-                async_std::task::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
             Ok(client) => {
                 break client;
@@ -531,7 +508,7 @@ async fn wss_server_text_routing() -> Result<()> {
     //
     c1.send("\"Hello WebSocket Server\"").await?;
 
-    let event = out_pipeline.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
@@ -568,7 +545,7 @@ async fn wss_server_text_routing() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn wss_server_binary_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -589,11 +566,8 @@ async fn wss_server_binary_routing() -> Result<()> {
         }
     });
 
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &ws::server::Builder::default(), &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of ws_server connector");
 
     harness.start().await?;
     harness.wait_for_connected().await?;
@@ -611,7 +585,7 @@ async fn wss_server_binary_routing() -> Result<()> {
                     )
                     .into());
                 }
-                async_std::task::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
             Ok(client) => {
                 break client;
@@ -624,7 +598,7 @@ async fn wss_server_binary_routing() -> Result<()> {
     //
     c1.send("\"Hello WebSocket Server\"").await?;
 
-    let event = out_pipeline.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
@@ -662,7 +636,7 @@ async fn wss_server_binary_routing() -> Result<()> {
 }
 
 #[cfg(feature = "flaky-test")]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn server_control_frames() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -676,9 +650,6 @@ async fn server_control_frames() -> Result<()> {
     });
 
     let harness = ConnectorHarness::new(function_name!(), "ws_server", &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of ws_server connector");
 
     harness.start().await?;
     harness.wait_for_connected().await?;
@@ -694,7 +665,7 @@ async fn server_control_frames() -> Result<()> {
                     )
                     .into());
                 }
-                async_std::task::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
             Ok(client) => {
                 break client;
@@ -708,7 +679,8 @@ async fn server_control_frames() -> Result<()> {
     assert_eq!(Message::Pong(vec![1, 2, 3, 4]), pong);
 
     // we ignore pings, they shouldn't get through as events
-    assert!(out_pipeline
+    assert!(harness
+        .out()?
         .expect_no_event_for(Duration::from_secs(1))
         .await
         .is_ok());
@@ -716,7 +688,8 @@ async fn server_control_frames() -> Result<()> {
     // check pong
     c1.pong()?;
     // expect no response and no event, as we ignore pong frames
-    assert!(out_pipeline
+    assert!(harness
+        .out()?
         .expect_no_event_for(Duration::from_secs(1))
         .await
         .is_ok());
@@ -744,7 +717,8 @@ async fn server_control_frames() -> Result<()> {
         ))
     ));
     // expect no response and no event, the stream should have been closed though
-    assert!(out_pipeline
+    assert!(harness
+        .out()?
         .expect_no_event_for(Duration::from_secs(1))
         .await
         .is_ok());

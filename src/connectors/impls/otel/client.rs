@@ -100,7 +100,7 @@ impl Connector for Client {
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = OtelSink {
@@ -108,7 +108,7 @@ impl Connector for Client {
             config: self.config.clone(),
             remote: None,
         };
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 }
 
@@ -210,7 +210,7 @@ impl Sink for OtelSink {
 mod tests {
     use super::*;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn otel_client_builder() -> Result<()> {
         let alias = Alias::new("flow", "my_otel_client");
         let with_processors = literal!({

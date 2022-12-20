@@ -35,7 +35,7 @@ macro_rules! test_cases {
 
     ($($file:ident),* ,) => {
         $(
-            #[async_std::test]
+            #[tokio::test(flavor = "multi_thread")]
             #[serial(query)]
             async fn $file() -> Result<()> {
 
@@ -79,7 +79,7 @@ macro_rules! test_cases {
                         ..Event::default()
                     };
                     let mut r = vec![];
-                    pipeline.enqueue(IN, event, &mut r).await?;
+                    pipeline.enqueue(IN, event, &mut r)?;
                     results.append(&mut r);
                 }
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");

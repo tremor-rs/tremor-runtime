@@ -16,18 +16,11 @@
 //!
 //! With some shenanigans removed, compared to `ChannelSink`.
 
-use crate::connectors::{sink::SinkReply, sink::SinkRuntime, ConnectorContext, StreamDone};
-use crate::errors::Result;
-use async_std::task::JoinHandle;
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    task,
-};
+use super::channel_sink::{SinkMetaBehaviour, WithMeta};
+use crate::{connectors::prelude::*, errors::already_created_error};
 use std::marker::PhantomData;
+use tokio::task::{self, JoinHandle};
 use tremor_common::time::nanotime;
-
-use super::channel_sink::{SinkMeta, SinkMetaBehaviour, WithMeta};
-use super::{AsyncSinkReply, ContraflowData, EventSerializer, Sink, SinkContext, StreamWriter};
 
 /// simple Sink implementation that is handling only a single stream
 pub(crate) struct SingleStreamSink<B>
@@ -36,14 +29,14 @@ where
 {
     _b: PhantomData<B>,
     tx: Sender<SinkData>,
-    rx: Receiver<SinkData>,
-    reply_tx: Sender<AsyncSinkReply>,
+    rx: Option<Receiver<SinkData>>,
+    reply_tx: ReplySender,
 }
 
 impl SingleStreamSink<WithMeta> {
     /// Constructs a new single stream sink with metadata support enabled
-    pub(crate) fn new_with_meta(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
-        SingleStreamSink::new(qsize, reply_tx)
+    pub(crate) fn new_with_meta(reply_tx: ReplySender) -> Self {
+        SingleStreamSink::new(reply_tx)
     }
 }
 
@@ -52,22 +45,21 @@ where
     B: SinkMetaBehaviour + Send + Sync,
 {
     /// constructs a sink that requires metadata
-    pub(crate) fn new(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
-        let (tx, rx) = bounded(qsize);
+    pub(crate) fn new(reply_tx: ReplySender) -> Self {
+        let (tx, rx) = bounded(qsize());
         Self {
             tx,
-            rx,
+            rx: Some(rx),
             reply_tx,
             _b: PhantomData::default(),
         }
     }
     /// hand out a `ChannelSinkRuntime` instance in order to register stream writers
-    #[must_use]
-    pub(crate) fn runtime(&self) -> SingleStreamSinkRuntime {
-        SingleStreamSinkRuntime {
-            rx: self.rx.clone(),
+    pub(crate) fn runtime(&mut self) -> Result<SingleStreamSinkRuntime> {
+        Ok(SingleStreamSinkRuntime {
+            rx: Some(self.rx.take().ok_or_else(already_created_error)?),
             reply_tx: self.reply_tx.clone(),
-        }
+        })
     }
 }
 
@@ -79,37 +71,38 @@ pub(crate) struct SinkData {
 }
 
 /// The runtime receiving and writing data out
-#[derive(Clone)]
 pub(crate) struct SingleStreamSinkRuntime {
-    rx: Receiver<SinkData>,
-    reply_tx: Sender<AsyncSinkReply>,
+    rx: Option<Receiver<SinkData>>,
+    reply_tx: ReplySender,
 }
 
 #[async_trait::async_trait()]
 impl SinkRuntime for SingleStreamSinkRuntime {
-    async fn unregister_stream_writer(&self, _stream: u64) -> Result<()> {
-        self.rx.close();
+    async fn unregister_stream_writer(&mut self, _stream: u64) -> Result<()> {
+        if let Some(mut rx) = self.rx.take() {
+            rx.close();
+        }
         Ok(())
     }
 }
 
 impl SingleStreamSinkRuntime {
     pub(crate) fn register_stream_writer<W>(
-        &self,
+        &mut self,
         stream: u64,
         ctx: &ConnectorContext,
         mut writer: W,
-    ) -> JoinHandle<Result<()>>
+    ) -> Result<JoinHandle<Result<()>>>
     where
         W: StreamWriter + 'static,
     {
         let ctx = ctx.clone();
-        let rx = self.rx.clone();
+        let mut rx = self.rx.take().ok_or_else(already_created_error)?;
         let reply_tx = self.reply_tx.clone();
-        task::spawn(async move {
+        Ok(task::spawn(async move {
             while let (
                 true,
-                Ok(SinkData {
+                Some(SinkData {
                     data,
                     meta,
                     contraflow,
@@ -127,7 +120,7 @@ impl SingleStreamSinkRuntime {
                     } else {
                         AsyncSinkReply::Ack(cf_data, nanotime() - start)
                     };
-                    if let Err(e) = reply_tx.send(reply).await {
+                    if let Err(e) = reply_tx.send(reply) {
                         error!(
                             "[Connector::{}] Error sending async sink reply: {}",
                             ctx.alias, e
@@ -147,7 +140,7 @@ impl SingleStreamSinkRuntime {
                 );
             }
             Result::Ok(())
-        })
+        }))
     }
 }
 
@@ -188,7 +181,7 @@ where
                     start,
                 };
                 if self.tx.send(sink_data).await.is_err() {
-                    error!("[Sink::{}] Error sending to closed stream: 0", &ctx.alias);
+                    error!("{ctx} Error sending to closed stream: 0");
                     return Ok(SinkReply::FAIL);
                 }
             }
@@ -206,7 +199,7 @@ where
                 start,
             };
             if self.tx.send(sink_data).await.is_err() {
-                error!("[Sink::{}] Error sending to closed stream: 0", &ctx.alias);
+                error!("{ctx} Error sending to closed stream: 0");
                 Ok(SinkReply::FAIL)
             } else {
                 Ok(SinkReply::NONE)

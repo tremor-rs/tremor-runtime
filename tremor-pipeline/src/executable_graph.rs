@@ -23,7 +23,7 @@ use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
 use std::{fmt, fmt::Display};
-use tremor_common::{ids::OperatorId, stry};
+use tremor_common::{ids::OperatorId, ports::Port, stry};
 use tremor_script::{ast::Helper, ast::Stmt};
 use tremor_value::Value;
 
@@ -126,7 +126,7 @@ impl Operator for OperatorNode {
     fn on_event(
         &mut self,
         _uid: OperatorId,
-        port: &str,
+        port: &Port<'static>,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
@@ -167,22 +167,22 @@ impl Operator for OperatorNode {
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeMetrics {
-    inputs: HashMap<Cow<'static, str>, u64>,
-    outputs: HashMap<Cow<'static, str>, u64>,
+    inputs: HashMap<Port<'static>, u64>,
+    outputs: HashMap<Port<'static>, u64>,
 }
 
 impl NodeMetrics {
     // this makes sense since we might not need to clone the cow and
     // it might be owned so cloning early would be costly
     #[allow(clippy::ptr_arg)]
-    pub(crate) fn inc_input(&mut self, input: &Cow<'static, str>) {
+    pub(crate) fn inc_input(&mut self, input: &Port<'static>) {
         self.inc_input_n(input, 1);
     }
 
     // this makes sense since we might not need to clone the cow and
     // it might be owned so cloning early would be costly
     #[allow(clippy::ptr_arg)]
-    fn inc_input_n(&mut self, input: &Cow<'static, str>, increment: u64) {
+    fn inc_input_n(&mut self, input: &Port<'static>, increment: u64) {
         let (_, v) = self
             .inputs
             .raw_entry_mut()
@@ -193,14 +193,14 @@ impl NodeMetrics {
     // this makes sense since we might not need to clone the cow and
     // it might be owned so cloning early would be costly
     #[allow(clippy::ptr_arg)]
-    pub(crate) fn inc_output(&mut self, output: &Cow<'static, str>) {
+    pub(crate) fn inc_output(&mut self, output: &Port<'static>) {
         self.inc_output_n(output, 1);
     }
 
     // this makes sense since we might not need to clone the cow and
     // it might be owned so cloning early would be costly
     #[allow(clippy::ptr_arg)]
-    fn inc_output_n(&mut self, output: &Cow<'static, str>, increment: u64) {
+    fn inc_output_n(&mut self, output: &Port<'static>, increment: u64) {
         let (_, v) = self
             .outputs
             .raw_entry_mut()
@@ -248,8 +248,8 @@ pub struct ExecutableGraph {
     pub id: String,
     pub(crate) graph: Vec<OperatorNode>,
     pub(crate) states: State,
-    pub(crate) inputs: HashMap<Cow<'static, str>, usize>,
-    pub(crate) stack: Vec<(usize, Cow<'static, str>, Event)>,
+    pub(crate) inputs: HashMap<Port<'static>, usize>,
+    pub(crate) stack: Vec<(usize, Port<'static>, Event)>,
     pub(crate) signalflow: Vec<usize>,
     pub(crate) contraflow: Vec<usize>,
     pub(crate) port_indexes: ExecPortIndexMap,
@@ -258,7 +258,7 @@ pub struct ExecutableGraph {
     pub(crate) metric_interval: Option<u64>,
     pub(crate) metrics_channel: MetricsSender,
     /// outputs in pipeline
-    pub outputs: HashMap<Cow<'static, str>, usize>,
+    pub outputs: HashMap<Port<'static>, usize>,
     /// snot
     pub insights: Vec<(usize, Event)>,
     /// the dot representation of the graph
@@ -266,12 +266,23 @@ pub struct ExecutableGraph {
 }
 
 /// The return of a graph execution
-pub type Returns = Vec<(Cow<'static, str>, Event)>;
+pub type Returns = Vec<(Port<'static>, Event)>;
 
 impl ExecutableGraph {
+    /// function checks if port is in pipeline
+    #[must_use]
+    pub fn output_exists(&self, port: &Port<'static>) -> bool {
+        self.outputs.contains_key(port)
+    }
+    /// function checks if port is in pipeline
+    #[must_use]
+    pub fn input_exists(&self, port: &Port<'static>) -> bool {
+        self.inputs().contains_key(port)
+    }
+
     /// returns inputs of the `ExecutableGraph`
     #[must_use]
-    pub fn inputs(&self) -> &HashMap<Cow<'static, str>, usize> {
+    pub fn inputs(&self) -> &HashMap<Port<'static>, usize> {
         &self.inputs
     }
     /// Tries to optimise a pipeline
@@ -427,9 +438,9 @@ impl ExecutableGraph {
     ///
     /// # Errors
     /// Errors if the event can not be processed, or an operator fails
-    pub async fn enqueue(
+    pub fn enqueue(
         &mut self,
-        stream_name: Cow<'static, str>,
+        stream_name: Port<'static>,
         event: Event,
         returns: &mut Returns,
     ) -> Result<()> {
@@ -441,7 +452,7 @@ impl ExecutableGraph {
         {
             let mut tags = HashMap::with_capacity(8);
             tags.insert("pipeline".into(), common_cow(&self.id).into());
-            self.send_metrics("events", tags, event.ingest_ns).await;
+            self.send_metrics("events", tags, event.ingest_ns);
             self.last_metrics = event.ingest_ns;
         }
         let input = *stry!(self.inputs.get(&stream_name).ok_or_else(|| {
@@ -504,7 +515,7 @@ impl ExecutableGraph {
         }
     }
 
-    async fn send_metrics(
+    fn send_metrics(
         &mut self,
         metric_name: &str,
         mut tags: HashMap<Cow<'static, str>, Value<'static>>,
@@ -516,28 +527,20 @@ impl ExecutableGraph {
             });
             if let Ok(metrics) = unsafe { self.graph.get_unchecked(i) }.metrics(&tags, ingest_ns) {
                 for value in metrics {
-                    if let Err(e) = self
-                        .metrics_channel
-                        .broadcast(MetricsMsg {
-                            payload: value.into(),
-                            origin_uri: None,
-                        })
-                        .await
-                    {
+                    if let Err(e) = self.metrics_channel.send(MetricsMsg {
+                        payload: value.into(),
+                        origin_uri: None,
+                    }) {
                         error!("Failed to send metrics: {}", e);
                     };
                 }
             }
 
             for value in m.to_value(metric_name, &mut tags, ingest_ns) {
-                if let Err(e) = self
-                    .metrics_channel
-                    .broadcast(MetricsMsg {
-                        payload: value.into(),
-                        origin_uri: None,
-                    })
-                    .await
-                {
+                if let Err(e) = self.metrics_channel.send(MetricsMsg {
+                    payload: value.into(),
+                    origin_uri: None,
+                }) {
                     error!("Failed to send metrics: {}", e);
                 };
             }
@@ -547,7 +550,7 @@ impl ExecutableGraph {
     // for the connected operators to pick up.
     // If the output is not connected we register this as a dropped event
     #[inline]
-    fn enqueue_events(&mut self, idx: usize, events: Vec<(Cow<'static, str>, Event)>) {
+    fn enqueue_events(&mut self, idx: usize, events: Vec<(Port<'static>, Event)>) {
         for (out_port, event) in events {
             if let Some((last, rest)) = self
                 .port_indexes
@@ -660,7 +663,7 @@ mod test {
     #[test]
     fn node_metrics() {
         let mut m = NodeMetrics::default();
-        let port: Cow<'static, str> = Cow::from("port");
+        let port: Port<'static> = Port::from("port");
         m.inc_input_n(&port, 41);
         m.inc_input(&port);
         m.inc_output(&port);
@@ -685,7 +688,7 @@ mod test {
         fn on_event(
             &mut self,
             _uid: OperatorId,
-            _port: &str,
+            _port: &Port<'static>,
             _state: &mut Value<'static>,
             event: Event,
         ) -> Result<EventAndInsights> {
@@ -781,7 +784,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn eg_metrics() -> Result<()> {
         let mut in_n = pass(OperatorId::new(1), "in")?;
         in_n.kind = NodeKind::Input;
@@ -843,11 +846,11 @@ mod test {
         // Test with one event
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue(IN, e, &mut returns).await?;
+        g.enqueue(IN, e, &mut returns)?;
         assert_eq!(returns.len(), 1);
         returns.clear();
 
-        g.send_metrics("test-metric", HashMap::new(), 123).await;
+        g.send_metrics("test-metric", HashMap::new(), 123);
         let mut metrics = Vec::new();
         while let Ok(m) = rx.try_recv() {
             metrics.push(m);
@@ -857,17 +860,17 @@ mod test {
         // Test with two events
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue(IN, e, &mut returns).await?;
+        g.enqueue(IN, e, &mut returns)?;
         assert_eq!(returns.len(), 1);
         returns.clear();
 
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue(IN, e, &mut returns).await?;
+        g.enqueue(IN, e, &mut returns)?;
         assert_eq!(returns.len(), 1);
         returns.clear();
 
-        g.send_metrics("test-metric", HashMap::new(), 123).await;
+        g.send_metrics("test-metric", HashMap::new(), 123);
         let mut metrics = Vec::new();
         while let Ok(m) = rx.try_recv() {
             metrics.push(m);
@@ -876,7 +879,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn eg_optimize() -> Result<()> {
         let mut in_n = pass(OperatorId::new(0), "in")?;
         in_n.kind = NodeKind::Input;
@@ -945,7 +948,7 @@ mod test {
         // Test with one event
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue(IN, e, &mut returns).await?;
+        g.enqueue(IN, e, &mut returns)?;
         assert_eq!(returns.len(), 1);
         returns.clear();
 

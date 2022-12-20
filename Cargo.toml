@@ -32,18 +32,13 @@ lto = "thin"
 opt-level = 3
 
 [dependencies]
+tokio = { version = "1.23", features = ["full"] }
+tokio-stream = "0.1"
 anyhow = "1"
-async-broadcast = "0.5"
-async-compat = "0.2"
-async-compression = { version = "0.3", features = [
-  "xz",
-  "futures-io",
-  "stream",
-] }
-async-std = { version = "1.12.0", features = [
-  "unstable",
-  "attributes",
-  "tokio1",
+async-compression = { version = "0.3", features = ["xz", "stream", "tokio"] }
+async-std = { version = "1.12.0", default-features = false, features = [
+  "std",
+  "async-io",
 ] }
 async-stream = "0.3"
 async-trait = "0.1"
@@ -68,9 +63,7 @@ clickhouse-chrono-tz = { version = "0.6", package = "chrono-tz" }
 # Releases can be tracked at [1].
 #
 # [1]: https://crates.io/crates/clickhouse-rs/versions
-clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "553f3aa", default-features = false, features = [
-  "async_std",
-] }
+clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "553f3aa" }
 csv = "1.1"
 dashmap = "5.4"
 either = { version = "1.8", features = ["serde"] }
@@ -115,54 +108,28 @@ zstd = "0.12"
 hdrhistogram = "7"
 xz2 = "0.1"
 
-# postgres
-#postgres = { version = "0.19", features = [
-#  "with-serde_json-1",
-#  "with-chrono-0_4",
-#] }
-#postgres-protocol = "0.6"
-#tokio-postgres = "0.7"
-
-# amqp
-#lapin = { version = "2.1.0", default-features = false, features = [
-#  "rustls",
-#  "rustls-native-certs",
-#] }
-
-# http_client
-surf = { version = "=2.3.2", default-features = false, features = [
-  "h1-client-rustls",  # this will stop us from doing http2 :(
-  "encoding",          # this was a default feature, so we keep it
-  "middleware-logger", # default feature, so we keep it
-] }
-# We use our fork until: https://github.com/http-rs/http-client/pull/100 is merged
-http-client = { git = "https://github.com/tremor-rs/http-client", rev = "059b23e", default-features = false, features = [
-  "h1_client",
-  "rustls",
-] }
-#http-client = { version = "6.5", default-features = false, features = [
-#  "h1_client",
-#  "rustls",
-#] }
-
+# http
+hyper = { version = "*", features = ["full"] }
+hyper-rustls = "0.23"
+mime = "*"
 # elasticsearch
 elasticsearch = { version = "=8.5.0-alpha.1", default-features = false, features = [
   "rustls-tls",
 ] }
 
 # ws
-async-tungstenite = { version = "0.19.0", features = [
-  "async-std-runtime",
-  "async-tls",
-] }
+
 
 # for tcp & ws
-async-tls = "0.11"
-rustls = "0.19"
+tokio-rustls = "0.23"
+async-channel = "1.6"
+rustls = "0.20"
+rustls-pemfile = "1"
 rustls-native-certs = "0.6"
+tokio-tungstenite = "0.18"
 
 # dns
-async-std-resolver = "0.22"
+trust-dns-resolver = { version = "0.22" }
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
 # we stick with git until we have a release with https://github.com/fede1024/rust-rdkafka/pull/417
@@ -176,19 +143,12 @@ rdkafka-sys = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f
   "cmake-build",
   "libz-static",
 ], default-features = false } # tracking the version rdkafka depends on
-smol = "1.3.0"
 
 # crononome
 cron = "0.12.0"
 
 # logstash grok patterns
 grok = "2"
-
-# rest onramp
-tide = { version = "0.16", default-features = false, features = [
-  "h1-server",
-] } # no logger, no session, no cookies
-tide-rustls = "0.3"
 
 # sse-onramp
 #surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0", default-features = false }
@@ -261,7 +221,7 @@ regex = "1"
 # We downgraded to 0.6 because:
 # in the face of high concurrency serial_test 0.7.0 panics after 60 seconds
 signal-hook = "0.3"
-signal-hook-async-std = "0.2"
+signal-hook-tokio = "0.3"
 tempfile = { version = "3.2" }
 test-case = "2.2"
 testcontainers = { version = "0.14", features = ["watchdog"] }

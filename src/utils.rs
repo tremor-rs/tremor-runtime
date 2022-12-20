@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::errors::{Error, Kind as ErrorKind};
+
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
-
 pub fn hostname() -> String {
     hostname::get()
         .map_err(Error::from)
@@ -24,4 +24,10 @@ pub fn hostname() -> String {
             })
         })
         .unwrap_or_else(|_| "tremor_host.local".to_string())
+}
+
+#[must_use]
+pub(crate) fn task_id() -> String {
+    // tokio::task::try_id().map_or_else(|| String::from("<no-task>"), |i| i.to_string())
+    String::from("<no-task>")
 }

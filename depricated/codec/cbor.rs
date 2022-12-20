@@ -62,8 +62,6 @@ mod test {
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0)?;
 
-        let _ = dbg!(as_json);
-
         Ok(())
     }
 }

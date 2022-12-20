@@ -14,14 +14,14 @@
 
 // #![cfg_attr(coverage, no_coverage)] // This is for benchmarking and testing
 
-use std::{path::PathBuf, time::Duration};
-
 use crate::connectors::prelude::*;
 use crate::system::{KillSwitch, ShutdownMode};
-use async_std::io::prelude::BufReadExt;
-use async_std::stream::StreamExt;
-use async_std::{fs::File, io};
 use halfbrown::HashMap;
+use std::{path::PathBuf, time::Duration};
+use tokio::{
+    fs::File,
+    io::{AsyncBufReadExt, BufReader, Lines},
+};
 use tremor_common::asy::file::open;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -93,34 +93,27 @@ impl Connector for Cb {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         if self.config.paths.is_empty() {
             return Err(ErrorKind::InvalidConfiguration(
-                source_context.alias().to_string(),
+                ctx.alias().to_string(),
                 "\"paths\" config missing".to_string(),
             )
             .into());
         }
-        let source = CbSource::new(
-            &self.config,
-            source_context.alias(),
-            self.kill_switch.clone(),
-        )
-        .await?;
-        let source_addr = builder.spawn(source, source_context)?;
-        Ok(Some(source_addr))
+        let source = CbSource::new(&self.config, ctx.alias(), self.kill_switch.clone()).await?;
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = CbSink {};
-        let sink_addr = builder.spawn(sink, sink_context)?;
-        Ok(Some(sink_addr))
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 }
 
@@ -218,7 +211,7 @@ impl ReceivedCbs {
 
 #[derive(Debug)]
 struct CbSource {
-    files: Vec<io::Lines<io::BufReader<File>>>,
+    files: Vec<Lines<BufReader<File>>>,
     num_sent: usize,
     last_sent: HashMap<u64, u64>,
     received_cbs: ReceivedCbs,
@@ -247,7 +240,7 @@ impl CbSource {
         let mut files = vec![];
         for path in &config.paths {
             let file = open(path).await?;
-            files.push(io::BufReader::new(file).lines());
+            files.push(BufReader::new(file).lines());
         }
 
         Ok(Self {
@@ -276,7 +269,7 @@ impl Source for CbSource {
             let kill_switch = self.kill_switch.clone();
 
             if self.config.timeout > 0 && !self.did_receive_all() {
-                async_std::task::sleep(Duration::from_nanos(self.config.timeout)).await;
+                tokio::time::sleep(Duration::from_nanos(self.config.timeout)).await;
             }
 
             if self.did_receive_all() {
@@ -289,9 +282,9 @@ impl Source for CbSource {
                 eprintln!("Got acks: {:?}", self.received_cbs.ack);
                 eprintln!("Got fails: {:?}", self.received_cbs.fail);
             }
-            async_std::task::spawn::<_, Result<()>>(async move {
+            tokio::task::spawn(async move {
                 kill_switch.stop(ShutdownMode::Graceful).await?;
-                Ok(())
+                Result::Ok(())
             });
 
             Ok(SourceReply::Finished)
@@ -301,7 +294,7 @@ impl Source for CbSource {
                 .files
                 .get_mut(idx) // this is safe as we do the module above
                 .ok_or(ErrorKind::ClientNotAvailable("cb", "No file available"))?;
-            let res = if let Some(line) = file.next().await {
+            let res = if let Some(line) = file.next_line().await? {
                 self.num_sent += 1;
                 self.last_sent
                     .entry(idx as u64)
@@ -309,7 +302,7 @@ impl Source for CbSource {
                     .or_insert(*pull_id);
 
                 SourceReply::Data {
-                    data: line?.into_bytes(),
+                    data: line.into_bytes(),
                     meta: None,
                     stream: Some(idx as u64),
                     port: None,
@@ -318,7 +311,9 @@ impl Source for CbSource {
                 }
             } else {
                 // file is exhausted, remove it from our list
-                self.files.remove(idx);
+                // lines claims to require being used but there are no lines left
+                drop(self.files.remove(idx));
+
                 SourceReply::EndStream {
                     stream: idx as u64,
                     origin_uri: self.origin_uri.clone(),
@@ -329,11 +324,11 @@ impl Source for CbSource {
         }
     }
 
-    async fn on_cb_close(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> Result<()> {
         self.received_cbs.trigger += 1;
         Ok(())
     }
-    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
         self.received_cbs.restore += 1;
         Ok(())
     }

@@ -16,7 +16,6 @@ use super::super::ConnectorHarness;
 use super::redpanda_container;
 use crate::connectors::tests::free_port::find_free_tcp_port;
 use crate::{connectors::impls::kafka, errors::Result, Event};
-use async_std::prelude::FutureExt;
 use futures::StreamExt;
 use rdkafka::{
     admin::{AdminClient, AdminOptions, NewTopic, TopicReplication},
@@ -28,11 +27,12 @@ use rdkafka::{
 use serial_test::serial;
 use std::time::Duration;
 use testcontainers::clients::Cli as DockerCli;
+use tokio::time::timeout;
 use tremor_common::ports::IN;
 use tremor_pipeline::EventId;
 use tremor_value::literal;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_producer() -> Result<()> {
     let _ = env_logger::try_init();
@@ -41,7 +41,7 @@ async fn connector_kafka_producer() -> Result<()> {
 
     let port = container.get_host_port_ipv4(9092);
     let mut admin_config = ClientConfig::new();
-    let broker = format!("127.0.0.1:{}", port);
+    let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test";
     let num_partitions = 3;
     let num_replicas = 1;
@@ -90,13 +90,12 @@ async fn connector_kafka_producer() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::producer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
@@ -114,7 +113,9 @@ async fn connector_kafka_producer() -> Result<()> {
         //.set("debug", "all")
         .create::<StreamConsumer>()
         .expect("Consumer creation error");
-    consumer.subscribe(&[topic]).unwrap();
+    consumer
+        .subscribe(&[topic])
+        .expect("Can't subscribe to specified topic");
     let mut message_stream = consumer.stream();
 
     let data = literal!({
@@ -128,15 +129,15 @@ async fn connector_kafka_producer() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(e1, IN).await?;
-    match message_stream
-        .next()
-        .timeout(Duration::from_secs(30)) // first message, we might need to wait a little longer for the consumer to boot up and settle things with redpanda
+    match timeout(Duration::from_secs(30), message_stream.next()) // first message, we might need to wait a little longer for the consumer to boot up and settle things with redpanda
         .await?
     {
         Some(Ok(msg)) => {
             assert_eq!(msg.key(), Some("snot".as_bytes()));
             assert_eq!(msg.payload(), Some("{\"snot\":\"badger\"}".as_bytes()));
-            consumer.commit_message(&msg, CommitMode::Sync).unwrap();
+            consumer
+                .commit_message(&msg, CommitMode::Sync)
+                .expect("Commit failed");
         }
         Some(Err(e)) => {
             return Err(e.into());
@@ -145,7 +146,7 @@ async fn connector_kafka_producer() -> Result<()> {
             return Err("Topic Stream unexpectedly finished.".into());
         }
     };
-    assert!(in_pipe.get_contraflow_events()?.is_empty());
+    assert!(harness.get_pipe(IN)?.get_contraflow_events().is_empty());
 
     let data2 = literal!([1, 2, 3]);
     let meta2 = literal!({
@@ -165,20 +166,18 @@ async fn connector_kafka_producer() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(e2, IN).await?;
-    match message_stream
-        .next()
-        .timeout(Duration::from_secs(5))
-        .await?
-    {
+    match timeout(Duration::from_secs(5), message_stream.next()).await? {
         Some(Ok(msg)) => {
             assert_eq!(Some("badger".as_bytes()), msg.key());
             assert_eq!(Some("[1,2,3]".as_bytes()), msg.payload());
             assert_eq!(0_i32, msg.partition());
             assert_eq!(Some(123), msg.timestamp().to_millis());
-            let headers = msg.headers().unwrap();
+            let headers = msg.headers().expect("No headers found");
             assert_eq!(1, headers.count());
             assert_eq!(Some(("foo", "baz".as_bytes())), headers.get(0));
-            consumer.commit_message(&msg, CommitMode::Sync).unwrap();
+            consumer
+                .commit_message(&msg, CommitMode::Sync)
+                .expect("Commit failed");
         }
         Some(Err(e)) => {
             return Err(e.into());
@@ -218,27 +217,23 @@ async fn connector_kafka_producer() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(batched_event, IN).await?;
-    let borrowed_batchman_msg = message_stream
-        .next()
-        .timeout(Duration::from_secs(2))
+    let borrowed_batchman_msg = timeout(Duration::from_secs(2), message_stream.next())
         .await?
-        .unwrap()
-        .unwrap();
+        .expect("timeout waiting for batchman message")
+        .expect("error waiting for batchman message");
     consumer
         .commit_message(&borrowed_batchman_msg, CommitMode::Sync)
-        .unwrap();
+        .expect("commit failed");
     let mut batchman_msg = borrowed_batchman_msg.detach();
     drop(borrowed_batchman_msg);
 
-    let borrowed_snot_msg = message_stream
-        .next()
-        .timeout(Duration::from_secs(2))
+    let borrowed_snot_msg = timeout(Duration::from_secs(2), message_stream.next())
         .await?
-        .unwrap()
-        .unwrap();
+        .expect("timeout waiting for batchman message")
+        .expect("error waiting for batchman message");
     consumer
         .commit_message(&borrowed_snot_msg, CommitMode::Sync)
-        .unwrap();
+        .expect("commit failed");
     let mut snot_msg = borrowed_snot_msg.detach();
     drop(borrowed_snot_msg);
     if batchman_msg.key().eq(&Some("snot".as_bytes())) {
@@ -274,7 +269,7 @@ async fn connector_kafka_producer() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn producer_unreachable() -> Result<()> {
     let _ = env_logger::try_init();
@@ -304,7 +299,7 @@ async fn producer_unreachable() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn producer_unresolvable() -> Result<()> {
     let _ = env_logger::try_init();

@@ -124,9 +124,9 @@ fn test_select(uid: OperatorId, stmt: &SelectStmt<'static>) -> Select {
     Select::from_stmt(uid, windows, stmt)
 }
 
-fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str>, Event)>> {
+fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Port<'static>, Event)>> {
     let mut state = Value::null();
-    let mut action = op.on_event(test_uid(), "in", &mut state, event)?;
+    let mut action = op.on_event(test_uid(), &Port::In, &mut state, event)?;
     let first = action.events.pop();
     if action.events.is_empty() {
         Ok(first)
@@ -136,12 +136,9 @@ fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str
 }
 
 #[allow(clippy::type_complexity)]
-fn try_enqueue_two(
-    op: &mut Select,
-    event: Event,
-) -> Result<Option<[(Cow<'static, str>, Event); 2]>> {
+fn try_enqueue_two(op: &mut Select, event: Event) -> Result<Option<[(Port<'static>, Event); 2]>> {
     let mut state = Value::null();
-    let mut action = op.on_event(test_uid(), "in", &mut state, event)?;
+    let mut action = op.on_event(test_uid(), &Port::In, &mut state, event)?;
     let r = action
         .events
         .pop()
@@ -274,7 +271,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
         .into(),
         ..Event::default()
     };
-    eis = select.on_event(uid, "in", &mut state, event)?;
+    eis = select.on_event(uid, &Port::In, &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -295,7 +292,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
         .into(),
         ..Event::default()
     };
-    eis = select.on_event(uid, "IN", &mut state, event)?;
+    eis = select.on_event(uid, &Port::In, &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
     assert_eq!("1", sorted_serialize(eis.events[0].1.data.parts().0)?);
@@ -330,7 +327,7 @@ fn select_single_win_on_signal() -> Result<()> {
         .into(),
         ..Event::default()
     };
-    eis = select.on_event(uid, "IN", &mut state, event)?;
+    eis = select.on_event(uid, &Port::In, &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -409,7 +406,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
         transactional: true,
         ..Event::default()
     };
-    eis = select.on_event(uid, "in", &mut state, event)?;
+    eis = select.on_event(uid, &Port::In, &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -449,7 +446,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
         transactional: false,
         ..Event::default()
     };
-    eis = select.on_event(uid, "in", &mut state, event2)?;
+    eis = select.on_event(uid, &Port::In, &mut state, event2)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
     let mut tick6 = test_tick(600);
@@ -486,13 +483,13 @@ fn test_transactional_single_window() -> Result<()> {
     let mut state = Value::null();
     let event1 = test_event_tx(0, false, 0);
     let id1 = event1.id.clone();
-    let res = op.on_event(uid, "in", &mut state, event1)?;
+    let res = op.on_event(uid, &Port::In, &mut state, event1)?;
 
     assert!(res.events.is_empty());
 
     let event2 = test_event_tx(1, true, 0);
     let id2 = event2.id.clone();
-    let mut res = op.on_event(uid, "in", &mut state, event2)?;
+    let mut res = op.on_event(uid, &Port::In, &mut state, event2)?;
     assert_eq!(1, res.events.len());
     let (_, event) = res.events.pop().ok_or("no data")?;
     assert!(event.transactional);
@@ -501,12 +498,12 @@ fn test_transactional_single_window() -> Result<()> {
 
     let event3 = test_event_tx(2, false, 0);
     let id3 = event3.id.clone();
-    let res = op.on_event(uid, "in", &mut state, event3)?;
+    let res = op.on_event(uid, &Port::In, &mut state, event3)?;
     assert!(res.events.is_empty());
 
     let event4 = test_event_tx(3, false, 0);
     let id4 = event4.id.clone();
-    let mut res = op.on_event(uid, "in", &mut state, event4)?;
+    let mut res = op.on_event(uid, &Port::In, &mut state, event4)?;
     assert_eq!(1, res.events.len());
     let (_, event) = res.events.pop().ok_or("no data")?;
     assert!(!event.transactional);
@@ -536,17 +533,17 @@ fn test_transactional_multiple_windows() -> Result<()> {
     let mut state = Value::null();
     let event0 = test_event_tx(0, true, 0);
     let id0 = event0.id.clone();
-    let res = op.on_event(uid, "in", &mut state, event0)?;
+    let res = op.on_event(uid, &Port::In, &mut state, event0)?;
     assert_eq!(0, res.len());
 
     let event1 = test_event_tx(1, false, 1);
     let id1 = event1.id.clone();
-    let res = op.on_event(uid, "in", &mut state, event1)?;
+    let res = op.on_event(uid, &Port::In, &mut state, event1)?;
     assert_eq!(0, res.len());
 
     let event2 = test_event_tx(2, false, 0);
     let id2 = event2.id.clone();
-    let mut res = op.on_event(uid, "in", &mut state, event2)?;
+    let mut res = op.on_event(uid, &Port::In, &mut state, event2)?;
     assert_eq!(1, res.len());
     let (_, event) = res.events.pop().ok_or("no data")?;
     assert!(event.transactional);
@@ -555,7 +552,7 @@ fn test_transactional_multiple_windows() -> Result<()> {
 
     let event3 = test_event_tx(3, false, 1);
     let id3 = event3.id.clone();
-    let mut res = op.on_event(uid, "in", &mut state, event3)?;
+    let mut res = op.on_event(uid, &Port::In, &mut state, event3)?;
     assert_eq!(1, res.len());
     let (_, event) = res.events.remove(0);
     assert!(!event.transactional);
@@ -564,12 +561,12 @@ fn test_transactional_multiple_windows() -> Result<()> {
 
     let event4 = test_event_tx(4, false, 0);
     let id4 = event4.id.clone();
-    let res = op.on_event(uid, "in", &mut state, event4)?;
+    let res = op.on_event(uid, &Port::In, &mut state, event4)?;
     assert_eq!(0, res.len());
 
     let event5 = test_event_tx(5, false, 0);
     let id5 = event5.id.clone();
-    let mut res = op.on_event(uid, "in", &mut state, event5)?;
+    let mut res = op.on_event(uid, &Port::In, &mut state, event5)?;
     assert_eq!(2, res.len());
 
     // first event from event5 and event6 - none of the source events are transactional
@@ -855,7 +852,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     };
     let mut params = halfbrown::HashMap::with_capacity(1);
     params.insert("size".to_string(), Value::from(3));
-    let with = dbg!(window_defn.params.render())?;
+    let with = window_defn.params.render()?;
     let interval = with
         .get("interval")
         .and_then(Value::as_u64)

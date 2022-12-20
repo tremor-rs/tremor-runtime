@@ -14,6 +14,10 @@
 
 // #![cfg_attr(coverage, no_coverage)]
 use crate::{
+    channel::{bounded, Receiver, Sender},
+    errors::already_created_error,
+};
+use crate::{
     codec::{
         json::{Json, Sorted},
         Codec,
@@ -21,13 +25,10 @@ use crate::{
     connectors::prelude::*,
     errors::err_connector_def,
 };
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    path::PathBuf,
-    sync::Arc,
-};
 use serde::Deserialize;
 use sled::{CompareAndSwapError, Db, IVec};
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::{boxed::Box, convert::TryFrom, sync::atomic::AtomicBool};
 
 #[derive(Debug)]
@@ -190,14 +191,14 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
-        if !PathBuf::from(&config.path).is_dir().await {
+        if !PathBuf::from(&config.path).is_dir() {
             return Err(err_connector_def(id, Builder::INVALID_DIR));
         }
 
-        let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (tx, rx) = bounded(qsize());
         Ok(Box::new(Kv {
             config,
-            rx,
+            rx: Some(rx),
             tx,
             source_is_connected: Arc::default(),
         }))
@@ -209,7 +210,7 @@ impl ConnectorBuilder for Builder {
 /// Receiving commands via its sink and emitting responses to those commands via its source.
 pub(crate) struct Kv {
     config: Config,
-    rx: Receiver<SourceReply>,
+    rx: Option<Receiver<SourceReply>>,
     tx: Sender<SourceReply>,
     source_is_connected: Arc<AtomicBool>,
 }
@@ -218,20 +219,20 @@ pub(crate) struct Kv {
 impl Connector for Kv {
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = ChannelSource::from_channel(
             self.tx.clone(),
-            self.rx.clone(),
+            self.rx.take().ok_or_else(already_created_error)?,
             self.source_is_connected.clone(),
         );
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let db = sled::open(&self.config.path)?;
@@ -247,14 +248,14 @@ impl Connector for Kv {
                 .map(ToString::to_string)
                 .collect(),
         };
-        let s = KvSink {
+        let sink = KvSink {
             db,
             tx: self.tx.clone(),
             codec,
             origin_uri,
             source_is_connected: self.source_is_connected.clone(),
         };
-        builder.spawn(s, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {

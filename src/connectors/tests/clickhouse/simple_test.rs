@@ -35,7 +35,7 @@ use tremor_value::literal;
 // ClickHouse sink and use that sink to save a bunch of super simple events.
 // Once all these events are inserted, we use the regular ClickHouse client to
 // ensure that all the data was actually written.
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn simple_insertion() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -80,9 +80,8 @@ async fn simple_insertion() -> Result<()> {
             ]
         },
     });
-    let harness =
+    let mut harness =
         ConnectorHarness::new("clickhouse", &clickhouse::Builder {}, &connector_config).await?;
-    let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
@@ -123,7 +122,7 @@ async fn simple_insertion() -> Result<()> {
     // Once the data has been inserted, we wait for the "I handled everything"
     // signal and check its properties.
 
-    let cf = in_pipe.get_contraflow().await?;
+    let cf = harness.get_pipe(IN)?.get_contraflow().await?;
     assert_eq!(CbAction::Ack, cf.cb);
     assert_eq!(batched_id, cf.id);
 
@@ -168,7 +167,7 @@ async fn simple_insertion() -> Result<()> {
             ));
         }
 
-        async_std::task::sleep(delay).await;
+        tokio::time::sleep(delay).await;
     };
 
     // Now that we fetched everything we want, we can extract the meaningful

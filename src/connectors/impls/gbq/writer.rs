@@ -47,7 +47,7 @@ struct Gbq {
 impl Connector for Gbq {
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = GbqSink::<GouthTokenProvider, _, _>::new(
@@ -55,7 +55,7 @@ impl Connector for Gbq {
             Box::new(TonicChannelFactory),
         );
 
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -83,6 +83,7 @@ impl ConnectorBuilder for Builder {
 
 #[cfg(test)]
 mod tests {
+    use tokio::sync::{broadcast, mpsc};
     use tremor_common::ids::SinkId;
 
     use super::*;
@@ -90,7 +91,7 @@ mod tests {
     use crate::connectors::sink::builder;
     use crate::connectors::{metrics::SinkReporter, utils::quiescence::QuiescenceBeacon};
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn can_spawn_sink() -> Result<()> {
         let mut connector = Gbq {
             config: Config {
@@ -103,19 +104,18 @@ mod tests {
 
         let sink_address = connector
             .create_sink(
-                SinkContext {
-                    uid: SinkId::default(),
-                    alias: Alias::new("a", "b"),
-                    connector_type: ConnectorType::default(),
-                    quiescence_beacon: QuiescenceBeacon::default(),
-                    notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
-                },
+                SinkContext::new(
+                    SinkId::default(),
+                    Alias::new("a", "b"),
+                    ConnectorType::default(),
+                    QuiescenceBeacon::default(),
+                    ConnectionLostNotifier::new(mpsc::channel(128).0),
+                ),
                 builder(
                     &ConnectorConfig::default(),
                     CodecReq::Structured,
                     &Alias::new("a", "b"),
-                    128,
-                    SinkReporter::new(Alias::new("a", "b"), async_broadcast::broadcast(1).0, None),
+                    SinkReporter::new(Alias::new("a", "b"), broadcast::channel(1).0, None),
                 )?,
             )
             .await?;

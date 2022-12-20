@@ -18,7 +18,7 @@ use crate::{
             gcs::{
                 chunked_buffer::ChunkedBuffer,
                 resumable_upload_client::{
-                    create_client, DefaultClient, ExponentialBackoffRetryStrategy,
+                    create_client, DefaultClient, ExponentialBackoffRetryStrategy, GcsHttpClient,
                     ResumableUploadClient,
                 },
             },
@@ -32,8 +32,6 @@ use crate::{
     errors::err_gcs,
     system::KillSwitch,
 };
-use async_std::channel::Sender;
-use http_client::h1::H1Client;
 use std::time::Duration;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{ConfigImpl, EventId, OpMeta};
@@ -139,11 +137,11 @@ struct GCSStreamerConnector {
 impl Connector for GCSStreamerConnector {
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let client_factory = Box::new(|config: &Config| {
-            let http_client = create_client(Duration::from_nanos(config.connect_timeout))?;
+            let http_client = create_client(Duration::from_nanos(config.connect_timeout));
             let backoff_strategy = ExponentialBackoffRetryStrategy::new(
                 config.max_retries,
                 Duration::from_nanos(config.backoff_base_time),
@@ -152,7 +150,7 @@ impl Connector for GCSStreamerConnector {
         });
 
         info!(
-            "{sink_context} Starting {CONNECTOR_TYPE} in {} mode",
+            "{ctx} Starting {CONNECTOR_TYPE} in {} mode",
             &self.config.mode
         );
         match self.config.mode {
@@ -160,12 +158,12 @@ impl Connector for GCSStreamerConnector {
                 let sink_impl = GCSObjectStorageSinkImpl::yolo(self.config.clone(), client_factory);
                 let sink: YoloSink<
                     GCSObjectStorageSinkImpl<
-                        DefaultClient<H1Client, ExponentialBackoffRetryStrategy>,
+                        DefaultClient<GcsHttpClient, ExponentialBackoffRetryStrategy>,
                     >,
                     GCSUpload,
                     ChunkedBuffer,
                 > = YoloSink::new(sink_impl);
-                builder.spawn(sink, sink_context).map(Some)
+                Ok(Some(builder.spawn(sink, ctx)))
             }
             Mode::Consistent => {
                 let sink_impl = GCSObjectStorageSinkImpl::consistent(
@@ -175,12 +173,12 @@ impl Connector for GCSStreamerConnector {
                 );
                 let sink: ConsistentSink<
                     GCSObjectStorageSinkImpl<
-                        DefaultClient<H1Client, ExponentialBackoffRetryStrategy>,
+                        DefaultClient<GcsHttpClient, ExponentialBackoffRetryStrategy>,
                     >,
                     GCSUpload,
                     ChunkedBuffer,
                 > = ConsistentSink::new(sink_impl);
-                builder.spawn(sink, sink_context).map(Some)
+                Ok(Some(builder.spawn(sink, ctx)))
             }
         }
     }
@@ -240,7 +238,7 @@ struct GCSObjectStorageSinkImpl<Client: ResumableUploadClient> {
     config: Config,
     upload_client: Option<Client>,
     upload_client_factory: UploadClientFactory<Client>,
-    reply_tx: Option<Sender<AsyncSinkReply>>,
+    reply_tx: Option<ReplySender>,
 }
 
 impl<Client: ResumableUploadClient + Send> GCSObjectStorageSinkImpl<Client> {
@@ -255,7 +253,7 @@ impl<Client: ResumableUploadClient + Send> GCSObjectStorageSinkImpl<Client> {
     fn consistent(
         config: Config,
         upload_client_factory: UploadClientFactory<Client>,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: ReplySender,
     ) -> Self {
         Self {
             config,
@@ -363,7 +361,7 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
                 AsyncSinkReply::Fail(cf_data)
             };
             ctx.swallow_err(
-                reply_tx.send(reply).await,
+                reply_tx.send(reply),
                 &format!("Error sending ack/fail for upload to {object_id}"),
             );
         }
@@ -384,13 +382,11 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
             .ok_or_else(|| err_gcs("No client available"))?;
         if let (Some(reply_tx), true) = (self.reply_tx.as_ref(), transactional) {
             ctx.swallow_err(
-                reply_tx
-                    .send(AsyncSinkReply::Fail(ContraflowData::new(
-                        event_id,
-                        nanotime(),
-                        op_meta,
-                    )))
-                    .await,
+                reply_tx.send(AsyncSinkReply::Fail(ContraflowData::new(
+                    event_id,
+                    nanotime(),
+                    op_meta,
+                ))),
                 &format!("Error sending fail for upload for {object_id}"),
             );
         }
@@ -405,14 +401,15 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::channel::bounded;
     use crate::{
+        channel::unbounded,
         config::{Codec as CodecConfig, Reconnect},
         connectors::{
             impls::gcs::streamer::Mode, reconnect::ConnectionLostNotifier,
             utils::quiescence::QuiescenceBeacon,
         },
     };
-    use async_std::channel::bounded;
     use halfbrown::HashMap;
     use tremor_common::ids::{ConnectorIdGen, SinkId};
     use tremor_pipeline::EventId;
@@ -544,7 +541,8 @@ pub(crate) mod tests {
             .expect("No upload client available")
     }
 
-    #[async_std::test]
+    #[allow(clippy::too_many_lines)] // this is a test
+    #[tokio::test(flavor = "multi_thread")]
     async fn yolo_happy_path() -> Result<()> {
         _ = env_logger::try_init();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
@@ -570,13 +568,13 @@ pub(crate) mod tests {
         let (connection_lost_tx, _) = bounded(10);
 
         let alias = Alias::new("a", "b");
-        let context = SinkContext {
-            uid: SinkId::default(),
-            alias: alias.clone(),
-            connector_type: "gcs_streamer".into(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(connection_lost_tx),
-        };
+        let context = SinkContext::new(
+            SinkId::default(),
+            alias.clone(),
+            "gcs_streamer".into(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(connection_lost_tx),
+        );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
             CodecReq::Required,
@@ -729,7 +727,8 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[async_std::test]
+    #[allow(clippy::too_many_lines)] // this is a test
+    #[tokio::test(flavor = "multi_thread")]
     async fn yolo_on_failure() -> Result<()> {
         // ensure that failures on calls to google don't fail events
         _ = env_logger::try_init();
@@ -754,13 +753,13 @@ pub(crate) mod tests {
         let (connection_lost_tx, _) = bounded(10);
 
         let alias = Alias::new("a", "b");
-        let context = SinkContext {
-            uid: SinkId::default(),
-            alias: alias.clone(),
-            connector_type: "gcs_streamer".into(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(connection_lost_tx),
-        };
+        let context = SinkContext::new(
+            SinkId::default(),
+            alias.clone(),
+            "gcs_streamer".into(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(connection_lost_tx),
+        );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
             CodecReq::Required,
@@ -903,7 +902,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn yolo_invalid_event() -> Result<()> {
         _ = env_logger::try_init();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
@@ -927,13 +926,13 @@ pub(crate) mod tests {
         let (connection_lost_tx, _) = bounded(10);
 
         let alias = Alias::new("a", "b");
-        let context = SinkContext {
-            uid: SinkId::default(),
-            alias: alias.clone(),
-            connector_type: "gcs_streamer".into(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(connection_lost_tx),
-        };
+        let context = SinkContext::new(
+            SinkId::default(),
+            alias.clone(),
+            "gcs_streamer".into(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(connection_lost_tx),
+        );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
             CodecReq::Required,
@@ -993,7 +992,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn yolo_bucket_exists_error() -> Result<()> {
         _ = env_logger::try_init();
         let upload_client_factory = Box::new(|_config: &Config| {
@@ -1021,13 +1020,13 @@ pub(crate) mod tests {
         let (connection_lost_tx, _) = bounded(10);
 
         let alias = Alias::new("a", "b");
-        let context = SinkContext {
-            uid: SinkId::default(),
-            alias: alias.clone(),
-            connector_type: "gcs_streamer".into(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(connection_lost_tx),
-        };
+        let context = SinkContext::new(
+            SinkId::default(),
+            alias.clone(),
+            "gcs_streamer".into(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(connection_lost_tx),
+        );
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
@@ -1047,11 +1046,11 @@ pub(crate) mod tests {
             .as_mut()
             .expect("No upload client available")
     }
-
-    #[async_std::test]
+    #[allow(clippy::too_many_lines)] // this is a test
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn consistent_happy_path() -> Result<()> {
         _ = env_logger::try_init();
-        let (reply_tx, reply_rx) = bounded(10);
+        let (reply_tx, mut reply_rx) = unbounded();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
             url: Url::default(),
@@ -1074,13 +1073,13 @@ pub(crate) mod tests {
         let (connection_lost_tx, _) = bounded(10);
 
         let alias = Alias::new("a", "b");
-        let context = SinkContext {
-            uid: SinkId::default(),
-            alias: alias.clone(),
-            connector_type: "gcs_streamer".into(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(connection_lost_tx),
-        };
+        let context = SinkContext::new(
+            SinkId::default(),
+            alias.clone(),
+            "gcs_streamer".into(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(connection_lost_tx),
+        );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
             CodecReq::Required,
@@ -1120,7 +1119,6 @@ pub(crate) mod tests {
         assert_eq!(1, test_client(&mut sink).count());
         assert!(test_client(&mut sink).finished_uploads().is_empty());
         assert!(test_client(&mut sink).deleted_uploads().is_empty());
-        assert!(reply_rx.is_empty()); // no ack/fail sent by now
 
         let id2 = EventId::from_id(0, 0, 2);
         let event = Event {
@@ -1163,7 +1161,6 @@ pub(crate) mod tests {
         assert_eq!(1, test_client(&mut sink).count());
         assert!(test_client(&mut sink).finished_uploads().is_empty());
         assert!(test_client(&mut sink).deleted_uploads().is_empty());
-        assert!(reply_rx.is_empty()); // no ack/fail sent by now
 
         // finishes upload on filename change - bucket changes
         let id3 = EventId::from_id(1, 1, 1);
@@ -1273,10 +1270,11 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[async_std::test]
+    #[allow(clippy::too_many_lines)] // this is a test
+    #[tokio::test(flavor = "multi_thread")]
     async fn consistent_on_failure() -> Result<()> {
         _ = env_logger::try_init();
-        let (reply_tx, reply_rx) = bounded(10);
+        let (reply_tx, mut reply_rx) = unbounded();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
             url: Url::default(),
@@ -1299,13 +1297,13 @@ pub(crate) mod tests {
         let (connection_lost_tx, _) = bounded(10);
 
         let alias = Alias::new("a", "b");
-        let context = SinkContext {
-            uid: SinkId::default(),
-            alias: alias.clone(),
-            connector_type: "gcs_streamer".into(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(connection_lost_tx),
-        };
+        let context = SinkContext::new(
+            SinkId::default(),
+            alias.clone(),
+            "gcs_streamer".into(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(connection_lost_tx),
+        );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
             CodecReq::Required,
@@ -1429,7 +1427,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn connector_yolo_mode() -> Result<()> {
         _ = env_logger::try_init();
         let config = literal!({
@@ -1453,13 +1451,13 @@ pub(crate) mod tests {
         let addr =
             crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
                 .await?;
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         addr.stop(tx).await?;
-        assert!(rx.recv().await?.res.is_ok());
+        assert!(rx.recv().await.expect("rx empty").res.is_ok());
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn connector_consistent_mode() -> Result<()> {
         _ = env_logger::try_init();
         let config = literal!({
@@ -1483,9 +1481,9 @@ pub(crate) mod tests {
         let addr =
             crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
                 .await?;
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         addr.stop(tx).await?;
-        assert!(rx.recv().await?.res.is_ok());
+        assert!(rx.recv().await.expect("rx empty").res.is_ok());
         Ok(())
     }
 }

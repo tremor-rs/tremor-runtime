@@ -13,6 +13,11 @@
 // limitations under the License.
 
 use crate::{
+    channel::{bounded, Sender},
+    errors::empty_error,
+    qsize,
+};
+use crate::{
     connectors::{self, ConnectorResult, Known},
     errors::{Error, Kind as ErrorKind, Result},
     instance::State,
@@ -21,14 +26,12 @@ use crate::{
     primerge::PriorityMerge,
     system::KillSwitch,
 };
-use async_std::prelude::*;
-use async_std::{
-    channel::{bounded, unbounded, Sender},
-    task,
-};
+use futures::StreamExt;
 use hashbrown::HashMap;
 use std::collections::HashSet;
-use std::{sync::atomic::Ordering, time::Duration};
+use std::time::Duration;
+use tokio::{task, time::timeout};
+use tokio_stream::wrappers::ReceiverStream;
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::{
     ast::{self, ConnectStmt, DeployFlow, Helper},
@@ -134,9 +137,9 @@ impl Flow {
     /// # Errors
     /// if the flow is not running anymore and can't be reached
     pub async fn report_status(&self) -> Result<StatusReport> {
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         self.addr.send(Msg::Report(tx)).await?;
-        rx.recv().await?
+        rx.recv().await.ok_or_else(empty_error)?
     }
 
     /// get the Address used to send messages of a connector within this flow, identified by `connector_id`
@@ -145,11 +148,11 @@ impl Flow {
     /// if the flow is not running anymore and can't be reached or if the connector is not part of the flow
     pub async fn get_connector(&self, connector_alias: String) -> Result<connectors::Addr> {
         let connector_alias = connectors::Alias::new(self.id().clone(), connector_alias);
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         self.addr
             .send(Msg::GetConnector(connector_alias, tx))
             .await?;
-        rx.recv().await?
+        rx.recv().await.ok_or_else(empty_error)?
     }
 
     /// Get the Addresses of all connectors of this flow
@@ -157,9 +160,9 @@ impl Flow {
     /// # Errors
     /// if the flow is not running anymore and can't be reached
     pub async fn get_connectors(&self) -> Result<Vec<connectors::Addr>> {
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         self.addr.send(Msg::GetConnectors(tx)).await?;
-        rx.recv().await?
+        rx.recv().await.ok_or_else(empty_error)?
     }
 
     /// Pause this flow and all connectors in it.
@@ -272,7 +275,7 @@ async fn link(
     link: &ConnectStmt,
 ) -> Result<()> {
     // this is some odd stuff to have here
-    let timeout = Duration::from_secs(2);
+    static TIMEOUT: Duration = Duration::from_secs(2);
     match link {
         ConnectStmt::ConnectorToPipeline { from, to, .. } => {
             let connector = connectors
@@ -288,7 +291,7 @@ async fn link(
                 ))?
                 .clone();
 
-            let (tx, rx) = bounded(1);
+            let (tx, mut rx) = bounded(1);
 
             let msg = connectors::Msg::LinkOutput {
                 port: from.port().to_string().into(),
@@ -297,9 +300,9 @@ async fn link(
             };
             connector.send(msg).await?;
 
-            rx.recv()
-                .timeout(timeout)
-                .await??
+            timeout(TIMEOUT, rx.recv())
+                .await?
+                .ok_or_else(empty_error)?
                 .map_err(|e| error_generic(link, from, &e))?;
         }
         ConnectStmt::PipelineToConnector { from, to, .. } => {
@@ -319,7 +322,7 @@ async fn link(
                 .clone();
 
             // first link the pipeline to the connector
-            let (tx, rx) = bounded(1);
+            let (tx, mut rx) = bounded(1);
             let msg = crate::pipeline::MgmtMsg::ConnectOutput {
                 tx,
                 port: from.port().to_string().into(),
@@ -327,14 +330,14 @@ async fn link(
                 target: connector.clone().try_into()?,
             };
             pipeline.send_mgmt(msg).await?;
-            rx.recv()
-                .timeout(timeout)
-                .await??
+            timeout(TIMEOUT, rx.recv())
+                .await?
+                .ok_or_else(empty_error)?
                 .map_err(|e| error_generic(link, from, &e))?;
 
             // then link the connector to the pipeline
 
-            let (tx, rx) = bounded(1);
+            let (tx, mut rx) = bounded(1);
 
             let msg = connectors::Msg::LinkInput {
                 port: to.port().to_string().into(),
@@ -342,9 +345,9 @@ async fn link(
                 result_tx: tx.clone(),
             };
             connector.send(msg).await?;
-            rx.recv()
-                .timeout(timeout)
-                .await??
+            timeout(TIMEOUT, rx.recv())
+                .await?
+                .ok_or_else(empty_error)?
                 .map_err(|e| error_generic(link, to, &e))?;
         }
         ConnectStmt::PipelineToPipeline { from, to, .. } => {
@@ -358,14 +361,14 @@ async fn link(
                 from.alias(),
                 key_list(pipelines)
             ))?;
-            let (tx_from, rx_from) = bounded(1);
+            let (tx_from, mut rx_from) = bounded(1);
             let msg_from = crate::pipeline::MgmtMsg::ConnectOutput {
                 port: from.port().to_string().into(),
                 endpoint: to.clone(),
                 tx: tx_from,
                 target: to_pipeline.clone().into(),
             };
-            let (tx_to, rx_to) = bounded(1);
+            let (tx_to, mut rx_to) = bounded(1);
             let msg_to = crate::pipeline::MgmtMsg::ConnectInput {
                 port: to.port().to_string().into(),
                 endpoint: from.clone(),
@@ -375,16 +378,14 @@ async fn link(
             };
 
             from_pipeline.send_mgmt(msg_from).await?;
-            rx_from
-                .recv()
-                .timeout(timeout)
-                .await??
+            timeout(TIMEOUT, rx_from.recv())
+                .await?
+                .ok_or_else(empty_error)?
                 .map_err(|e| error_generic(link, to, &e))?;
             to_pipeline.send_mgmt(msg_to).await?;
-            rx_to
-                .recv()
-                .timeout(timeout)
-                .await??
+            timeout(TIMEOUT, rx_to.recv())
+                .await?
+                .ok_or_else(empty_error)?
                 .map_err(|e| error_generic(link, from, &e))?;
         }
     }
@@ -408,18 +409,18 @@ async fn spawn_task(
         StopResult(ConnectorResult<()>),
     }
 
-    let (msg_tx, msg_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-    let (drain_tx, drain_rx) = unbounded();
-    let (stop_tx, stop_rx) = unbounded();
-    let (start_tx, start_rx) = unbounded();
+    let (msg_tx, msg_rx) = bounded(qsize());
+    let (drain_tx, drain_rx) = bounded(qsize());
+    let (stop_tx, stop_rx) = bounded(qsize());
+    let (start_tx, start_rx) = bounded(qsize());
 
     let mut input_channel = PriorityMerge::new(
-        msg_rx.map(MsgWrapper::Msg),
+        ReceiverStream::new(msg_rx).map(MsgWrapper::Msg),
         PriorityMerge::new(
-            drain_rx.map(MsgWrapper::DrainResult),
+            ReceiverStream::new(drain_rx).map(MsgWrapper::DrainResult),
             PriorityMerge::new(
-                stop_rx.map(MsgWrapper::StopResult),
-                start_rx.map(MsgWrapper::StartResult),
+                ReceiverStream::new(stop_rx).map(MsgWrapper::StopResult),
+                ReceiverStream::new(start_rx).map(MsgWrapper::StartResult),
             ),
         ),
     );
@@ -477,7 +478,7 @@ async fn spawn_task(
 
     let prefix = format!("[Flow::{id}]");
 
-    task::spawn::<_, Result<()>>(async move {
+    task::spawn(async move {
         let mut wait_for_start_responses: usize = 0;
         while let Some(wrapped) = input_channel.next().await {
             match wrapped {
@@ -710,47 +711,46 @@ async fn spawn_task(
             }
         }
         info!("{prefix} Stopped.");
-        Ok(())
+        Result::Ok(())
     });
     Ok(addr)
 }
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::{connectors::ConnectorBuilder, instance};
+
     use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
     use tremor_script::{ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
     use tremor_value::literal;
 
     mod connector {
 
-        use async_std::channel::Sender;
-
+        use crate::channel::UnboundedSender;
         use crate::connectors::prelude::*;
 
         struct FakeConnector {
-            tx: Sender<Event>,
+            tx: UnboundedSender<Event>,
         }
         #[async_trait::async_trait]
         impl Connector for FakeConnector {
             async fn create_source(
                 &mut self,
-                source_context: SourceContext,
+                ctx: SourceContext,
                 builder: SourceManagerBuilder,
             ) -> Result<Option<SourceAddr>> {
                 let source = FakeSource {};
-                builder.spawn(source, source_context).map(Some)
+                Ok(Some(builder.spawn(source, ctx)))
             }
 
             async fn create_sink(
                 &mut self,
-                sink_context: SinkContext,
+                ctx: SinkContext,
                 builder: SinkManagerBuilder,
             ) -> Result<Option<SinkAddr>> {
                 let sink = FakeSink::new(self.tx.clone());
-                builder.spawn(sink, sink_context).map(Some)
+                Ok(Some(builder.spawn(sink, ctx)))
             }
 
             fn codec_requirements(&self) -> CodecReq {
@@ -785,11 +785,11 @@ mod tests {
         }
 
         struct FakeSink {
-            tx: Sender<Event>,
+            tx: UnboundedSender<Event>,
         }
 
         impl FakeSink {
-            fn new(tx: Sender<Event>) -> Self {
+            fn new(tx: UnboundedSender<Event>) -> Self {
                 Self { tx }
             }
         }
@@ -804,7 +804,7 @@ mod tests {
                 _serializer: &mut EventSerializer,
                 _start: u64,
             ) -> Result<SinkReply> {
-                self.tx.send(event).await?;
+                self.tx.send(event)?;
                 Ok(SinkReply::NONE)
             }
 
@@ -815,7 +815,7 @@ mod tests {
 
         #[derive(Debug)]
         pub(crate) struct FakeBuilder {
-            pub(crate) tx: Sender<Event>,
+            pub(crate) tx: UnboundedSender<Event>,
         }
 
         #[async_trait::async_trait]
@@ -836,7 +836,7 @@ mod tests {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn flow_spawn() -> Result<()> {
         let mut operator_id_gen = OperatorIdGen::default();
         let mut connector_id_gen = ConnectorIdGen::default();
@@ -863,7 +863,7 @@ mod tests {
         end;
         deploy flow test;
         "#;
-        let (tx, _rx) = bounded(1);
+        let (tx, _rx) = bounded(128);
         let kill_switch = KillSwitch(tx);
         let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let deploy = deployable
@@ -876,7 +876,7 @@ mod tests {
             })
             .expect("No deploy in the given troy file");
         let mut known_connectors = Known::new();
-        let (connector_tx, connector_rx) = unbounded();
+        let (connector_tx, mut connector_rx) = crate::channel::unbounded();
         let builder = connector::FakeBuilder { tx: connector_tx };
         known_connectors.insert(builder.connector_type(), Box::new(builder));
         let flow = Flow::start(
@@ -887,7 +887,6 @@ mod tests {
             &kill_switch,
         )
         .await?;
-
         let connector = flow.get_connector("foo".to_string()).await?;
         assert_eq!(String::from("test::foo"), connector.alias.to_string());
 
@@ -896,17 +895,16 @@ mod tests {
         assert_eq!(String::from("test::foo"), connectors[0].alias.to_string());
 
         // assert the flow has started and events are flowing
-        let event = connector_rx.recv().await?;
+        let event = connector_rx.recv().await.ok_or("empty")?;
         assert_eq!(
             &literal!({
                 "snot": "badger"
             }),
             event.data.suffix().value()
         );
-
         let mut report = flow.report_status().await?;
         while report.status == instance::State::Initializing {
-            task::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
             report = flow.report_status().await?;
         }
         assert_eq!(instance::State::Running, report.status);
@@ -923,13 +921,12 @@ mod tests {
         assert_eq!(1, report.connectors.len());
 
         // drain and stop the flow
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(128);
         flow.drain(tx.clone()).await?;
-        rx.recv().await??;
+        rx.recv().await.ok_or("empty")??;
 
         flow.stop(tx).await?;
-        rx.recv().await??;
-
+        rx.recv().await.ok_or("empty")??;
         Ok(())
     }
 }

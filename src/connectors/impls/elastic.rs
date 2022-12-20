@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::time::Duration;
-use std::{fmt::Display, sync::atomic::AtomicBool};
-
+use super::http::auth::Auth;
 use crate::system::KillSwitch;
 use crate::{
     connectors::{
@@ -22,10 +20,6 @@ use crate::{
         utils::tls::TLSClientConfig,
     },
     errors::{err_connector_def, Error, Result},
-};
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    sync::Arc,
 };
 use either::Either;
 use elasticsearch::{
@@ -41,12 +35,14 @@ use elasticsearch::{
     Elasticsearch,
 };
 use halfbrown::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+use std::{fmt::Display, sync::atomic::AtomicBool};
+use tokio::task;
 use tremor_common::time::nanotime;
 use tremor_script::utils::sorted_serialize;
 use tremor_value::value::StaticValue;
 use value_trait::Mutable;
-
-use super::http::auth::Auth;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -125,8 +121,8 @@ impl ConnectorBuilder for Builder {
                 .as_ref()
                 .and_then(|tls| tls.cert.as_ref().zip(tls.key.as_ref()))
             {
-                let mut cert_chain = async_std::fs::read(certfile).await?;
-                let mut key = async_std::fs::read(keyfile).await?;
+                let mut cert_chain = tokio::fs::read(certfile).await?;
+                let mut key = tokio::fs::read(keyfile).await?;
                 key.append(&mut cert_chain);
                 let client_certificate = ClientCertificate::Pem(key);
                 Some(Credentials::Certificate(client_certificate))
@@ -145,21 +141,21 @@ impl ConnectorBuilder for Builder {
             };
             let cert_validation =
                 if let Some(cafile) = tls_config.as_ref().and_then(|tls| tls.cafile.as_ref()) {
-                    let file = async_std::fs::read(cafile).await?;
+                    let file = tokio::fs::read(cafile).await?;
                     CertValidation::Full(file)
                 } else if tls_config.is_some() {
                     CertValidation::Default
                 } else {
                     CertValidation::None
                 };
-            let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+            let (response_tx, response_rx) = bounded(qsize());
             let source_is_connected = Arc::new(AtomicBool::new(false));
             Ok(Box::new(Elastic {
                 config,
                 cert_validation,
                 credentials,
                 response_tx,
-                response_rx,
+                response_rx: Some(response_rx),
                 source_is_connected,
             }))
         }
@@ -172,7 +168,7 @@ struct Elastic {
     cert_validation: CertValidation,
     credentials: Option<Credentials>,
     response_tx: Sender<SourceReply>,
-    response_rx: Receiver<SourceReply>,
+    response_rx: Option<Receiver<SourceReply>>,
     source_is_connected: Arc<AtomicBool>,
 }
 
@@ -184,19 +180,22 @@ impl Connector for Elastic {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = ElasticSource {
             source_is_connected: self.source_is_connected.clone(),
-            response_rx: self.response_rx.clone(),
+            response_rx: self
+                .response_rx
+                .take()
+                .ok_or("Elasticsearch source can only be created once.")?,
         };
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = ElasticSink::new(
@@ -207,7 +206,7 @@ impl Connector for Elastic {
             self.credentials.clone(),
             self.cert_validation.clone(),
         );
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 }
 
@@ -219,10 +218,10 @@ struct ElasticSource {
 #[async_trait::async_trait]
 impl Source for ElasticSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.response_rx.recv().await?)
+        Ok(self.response_rx.recv().await.ok_or("channel broken")?)
     }
 
-    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
         // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
         // we will not send responses to out/err if we are not connected and this is determined by this variable
         self.source_is_connected.store(true, Ordering::Release);
@@ -294,7 +293,7 @@ impl ElasticClients {
 struct ElasticSink {
     clients: ElasticClients,
     response_tx: Sender<SourceReply>,
-    reply_tx: Sender<AsyncSinkReply>,
+    reply_tx: ReplySender,
     concurrency_cap: ConcurrencyCap,
     source_is_connected: Arc<AtomicBool>,
     config: Config,
@@ -306,7 +305,7 @@ struct ElasticSink {
 impl ElasticSink {
     fn new(
         response_tx: Sender<SourceReply>,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: ReplySender,
         source_is_connected: Arc<AtomicBool>,
         config: &Config,
         es_credentials: Option<Credentials>,
@@ -419,7 +418,7 @@ impl Sink for ElasticSink {
         // The result is a complete hang and no progress. :(
         let source_is_connected = self.source_is_connected.load(Ordering::Relaxed);
         // if we exceed the maximum concurrency here, we issue a CB close, but carry on anyhow
-        let guard = self.concurrency_cap.inc_for(&event).await?;
+        let guard = self.concurrency_cap.inc_for(&event)?;
 
         if let Some(client) = self.clients.next() {
             trace!("{ctx} sending event [{}] to {}", event.id, client.url);
@@ -432,83 +431,65 @@ impl Sink for ElasticSink {
             origin_uri.host = client.cluster_name;
             let default_index = self.config.index.clone();
             let task_ctx = ctx.clone();
-            async_std::task::Builder::new()
-                .name(format!(
-                    "Elasticsearch Connector {}#{}",
-                    ctx.alias(),
-                    guard.num()
-                ))
-                .spawn::<_, Result<()>>(async move {
-                    let r: Result<Value> = (|| async {
-                        // build bulk request (we can't do that in a separate function)
-                        let mut ops = BulkOperations::new();
-                        // per request options - extract from event metadata (ignoring batched)
-                        let event_es_meta = ESMeta::new(event.data.suffix().meta());
+            task::spawn(async move {
+                let r: Result<Value> = (|| async {
+                    // build bulk request (we can't do that in a separate function)
+                    let mut ops = BulkOperations::new();
+                    // per request options - extract from event metadata (ignoring batched)
+                    let event_es_meta = ESMeta::new(event.data.suffix().meta());
 
-                        for (data, meta) in event.value_meta_iter() {
-                            ESMeta::new(meta).insert_op(data, &mut ops)?;
-                        }
-
-                        let parts = event_es_meta.parts(default_index.as_deref());
-
-                        // apply request scoped options
-                        let bulk =
-                            event_es_meta.apply_to(client.client.bulk(parts).body(vec![ops]))?;
-
-                        let response = bulk
-                            .send()
-                            .await
-                            .and_then(Response::error_for_status_code)?;
-                        let value = response.json::<StaticValue>().await?;
-                        Ok(value.into_value())
-                    })()
-                    .await;
-                    match r {
-                        Err(e) => {
-                            debug!("{task_ctx} Error sending Elasticsearch Bulk Request: {e}");
-                            if source_is_connected {
-                                task_ctx.swallow_err(
-                                    handle_error(
-                                        e,
-                                        &event,
-                                        &origin_uri,
-                                        &response_tx,
-                                        include_payload,
-                                    )
-                                    .await,
-                                    "Error handling ES error",
-                                );
-                            }
-                            task_ctx.swallow_err(
-                                send_fail(event, &reply_tx).await,
-                                "Error sending fail CB",
-                            );
-                        }
-                        Ok(v) => {
-                            if source_is_connected {
-                                task_ctx.swallow_err(
-                                    handle_response(
-                                        v,
-                                        &event,
-                                        &origin_uri,
-                                        response_tx,
-                                        include_payload,
-                                    )
-                                    .await,
-                                    "Error handling ES response",
-                                );
-                            }
-
-                            task_ctx.swallow_err(
-                                send_ack(event, start, &reply_tx).await,
-                                "Error sending ack CB",
-                            );
-                        }
+                    for (data, meta) in event.value_meta_iter() {
+                        ESMeta::new(meta).insert_op(data, &mut ops)?;
                     }
-                    drop(guard);
 
-                    Ok(())
-                })?;
+                    let parts = event_es_meta.parts(default_index.as_deref());
+
+                    // apply request scoped options
+                    let bulk = event_es_meta.apply_to(client.client.bulk(parts).body(vec![ops]))?;
+
+                    let response = bulk
+                        .send()
+                        .await
+                        .and_then(Response::error_for_status_code)?;
+                    let value = response.json::<StaticValue>().await?;
+                    Ok(value.into_value())
+                })()
+                .await;
+                match r {
+                    Err(e) => {
+                        debug!("{task_ctx} Error sending Elasticsearch Bulk Request: {e}");
+                        if source_is_connected {
+                            task_ctx.swallow_err(
+                                handle_error(e, &event, &origin_uri, &response_tx, include_payload)
+                                    .await,
+                                "Error handling ES error",
+                            );
+                        }
+                        task_ctx.swallow_err(send_fail(event, &reply_tx), "Error sending fail CB");
+                    }
+                    Ok(v) => {
+                        if source_is_connected {
+                            task_ctx.swallow_err(
+                                handle_response(
+                                    v,
+                                    &event,
+                                    &origin_uri,
+                                    response_tx,
+                                    include_payload,
+                                )
+                                .await,
+                                "Error handling ES response",
+                            );
+                        }
+
+                        task_ctx
+                            .swallow_err(send_ack(event, start, &reply_tx), "Error sending ack CB");
+                    }
+                }
+                drop(guard);
+
+                Result::Ok(())
+            });
             Ok(SinkReply::NONE)
         } else {
             // shouldn't happen actually
@@ -662,23 +643,19 @@ where
     Ok(())
 }
 
-async fn send_ack(event: Event, start: u64, reply_tx: &Sender<AsyncSinkReply>) -> Result<()> {
+fn send_ack(event: Event, start: u64, reply_tx: &ReplySender) -> Result<()> {
     if event.transactional {
-        reply_tx
-            .send(AsyncSinkReply::Ack(
-                ContraflowData::from(event),
-                nanotime() - start,
-            ))
-            .await?;
+        reply_tx.send(AsyncSinkReply::Ack(
+            ContraflowData::from(event),
+            nanotime() - start,
+        ))?;
     }
     Ok(())
 }
 
-async fn send_fail(event: Event, reply_tx: &Sender<AsyncSinkReply>) -> Result<()> {
+fn send_fail(event: Event, reply_tx: &ReplySender) -> Result<()> {
     if event.transactional {
-        reply_tx
-            .send(AsyncSinkReply::Fail(ContraflowData::from(event)))
-            .await?;
+        reply_tx.send(AsyncSinkReply::Fail(ContraflowData::from(event)))?;
     }
     Ok(())
 }
@@ -985,7 +962,7 @@ mod tests {
     use super::*;
     use crate::config::Connector as ConnectorConfig;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn connector_builder_empty_nodes() -> Result<()> {
         let config = literal!({
             "config": {
@@ -1011,7 +988,7 @@ mod tests {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn connector_builder_invalid_url() -> Result<()> {
         let config = literal!({
             "config": {

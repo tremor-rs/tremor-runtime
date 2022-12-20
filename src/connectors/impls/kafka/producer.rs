@@ -17,20 +17,23 @@
 
 use std::time::Duration;
 
-use crate::connectors::impls::kafka::{
-    is_fatal_error, SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT,
-};
 use crate::connectors::prelude::*;
-use async_broadcast::{broadcast, Receiver as BroadcastReceiver, TryRecvError};
-use async_std::channel::{bounded, Sender};
-use async_std::prelude::FutureExt;
-use async_std::task;
+use crate::errors::empty_error;
+use crate::{
+    connectors::impls::kafka::{is_fatal_error, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT},
+    utils::task_id,
+};
 use halfbrown::HashMap;
 use rdkafka::config::{ClientConfig, FromClientConfigAndContext};
 use rdkafka::producer::{DeliveryFuture, Producer};
 use rdkafka::{
     message::OwnedHeaders,
     producer::{FutureProducer, FutureRecord},
+};
+use tokio::{
+    sync::broadcast::{channel as broadcast, error::TryRecvError, Receiver as BroadcastReceiver},
+    task,
+    time::timeout,
 };
 use tremor_common::time::nanotime;
 
@@ -87,8 +90,8 @@ impl ConnectorBuilder for Builder {
         // ENABLE LIBRDKAFKA DEBUGGING:
         // - set librdkafka logger to debug in logger.yaml
         // - configure: debug: "all" for this onramp
-        let tid = task::current().id();
-        let client_id = format!("tremor-{}-{alias}-{tid:?}", hostname());
+        let tid = task_id();
+        let client_id = format!("tremor-{}-{alias}-{tid}", hostname());
         producer_config
             .set("client.id", &client_id)
             .set("bootstrap.servers", config.brokers.join(","));
@@ -127,7 +130,7 @@ struct KafkaProducerConnector {
 impl Connector for KafkaProducerConnector {
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = KafkaProducerSink::new(
@@ -135,7 +138,7 @@ impl Connector for KafkaProducerConnector {
             self.producer_config.clone(),
             builder.reply_tx(),
         );
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -143,22 +146,18 @@ impl Connector for KafkaProducerConnector {
     }
 }
 
-type TremorProducer = FutureProducer<TremorRDKafkaContext<SinkContext>, SmolRuntime>;
+type TremorProducer = FutureProducer<TremorRDKafkaContext<SinkContext>>;
 
 struct KafkaProducerSink {
     config: Config,
     producer_config: ClientConfig,
     producer: Option<TremorProducer>,
-    reply_tx: Sender<AsyncSinkReply>,
+    reply_tx: ReplySender,
     metrics_rx: Option<BroadcastReceiver<EventPayload>>,
 }
 
 impl KafkaProducerSink {
-    fn new(
-        config: Config,
-        producer_config: ClientConfig,
-        reply_tx: Sender<AsyncSinkReply>,
-    ) -> Self {
+    fn new(config: Config, producer_config: ClientConfig, reply_tx: ReplySender) -> Self {
         Self {
             config,
             producer_config,
@@ -229,7 +228,7 @@ impl Sink for KafkaProducerSink {
                         error!("{ctx} Failed to produce message: {e}");
                         if is_fatal_error(&e) {
                             error!("{ctx} Fatal Kafka Error: {e}. Attempting a reconnect.");
-                            ctx.notifier.connection_lost().await?;
+                            ctx.notifier().connection_lost().await?;
                         }
                         return Err(e.into());
                     }
@@ -264,9 +263,8 @@ impl Sink for KafkaProducerSink {
             drop(old_producer);
         };
 
-        let (tx, rx) = bounded(1);
-        let (mut metrics_tx, metrics_rx) = broadcast(1);
-        metrics_tx.set_overflow(true);
+        let (tx, mut rx) = bounded(1);
+        let (metrics_tx, metrics_rx) = broadcast(1);
         self.metrics_rx = Some(metrics_rx);
         let context = TremorRDKafkaContext::producer(ctx.clone(), tx, metrics_tx);
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
@@ -276,17 +274,17 @@ impl Sink for KafkaProducerSink {
         let producer: TremorProducer =
             FutureProducer::from_config_and_context(&producer_config, context)?;
         // check if we receive any error callbacks
-        match rx.recv().timeout(KAFKA_CONNECT_TIMEOUT).await {
+        match timeout(KAFKA_CONNECT_TIMEOUT, rx.recv()).await {
             Err(_timeout) => {
                 // timeout error, everything is ok, no error
                 self.producer = Some(producer);
                 Ok(true)
             }
-            Ok(Err(e)) => {
+            Ok(None) => {
                 // receive error - we cannot tell what happened, better error here to trigger a retry
-                Err(e.into())
+                Err(empty_error())
             }
-            Ok(Ok(kafka_error)) => {
+            Ok(Some(kafka_error)) => {
                 // we received an error from rdkafka - fail it big time
                 Err(kafka_error.into())
             }
@@ -315,8 +313,8 @@ impl Sink for KafkaProducerSink {
             loop {
                 match metrics_rx.try_recv() {
                     Ok(payload) => vec.push(payload),
-                    Err(TryRecvError::Overflowed(_)) => continue, // try again
-                    Err(_) => break,                              // on all other errors, stop
+                    Err(TryRecvError::Lagged(_)) => continue, // try again
+                    Err(_) => break,                          // on all other errors, stop
                 }
             }
             vec
@@ -331,7 +329,7 @@ async fn wait_for_delivery(
     cf_data: Option<ContraflowData>,
     start: u64,
     futures: Vec<DeliveryFuture>,
-    reply_tx: Sender<AsyncSinkReply>,
+    reply_tx: ReplySender,
 ) -> Result<()> {
     let cb = match futures::future::try_join_all(futures).await {
         Ok(results) => {
@@ -351,7 +349,7 @@ async fn wait_for_delivery(
         }
     };
     if let Some(cb) = cb {
-        if reply_tx.send(cb).await.is_err() {
+        if reply_tx.send(cb).is_err() {
             error!("{ctx} Error sending insight for kafka record delivery");
         };
     }

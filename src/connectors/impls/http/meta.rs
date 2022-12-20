@@ -12,37 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{
-    client,
-    utils::{FixedBodyReader, RequestId, StreamingBodyReader},
-};
+use std::convert::Infallible;
+
+use super::{client, utils::RequestId};
+use crate::channel::{bounded, Sender};
 use crate::{
     config::NameWithConfig,
     connectors::{prelude::*, utils::mime::MimeCodecMap},
 };
-use async_std::channel::{unbounded, Sender};
 use either::Either;
-use http_types::{
-    headers::{self, HeaderValue, HeaderValues},
-    mime::BYTE_STREAM,
-    Method, Mime, Request, Response,
+use http::{
+    header::{self, HeaderName},
+    HeaderMap, Uri,
 };
-use std::str::FromStr;
+use hyper::{header::HeaderValue, Body, Method, Request, Response};
+use mime::Mime;
 use tremor_value::Value;
 use value_trait::{Builder, ValueAccess};
-
-/// Body data enum for chunked or non-chunked data
-pub(crate) enum BodyData {
-    Data(Vec<Vec<u8>>),
-    Chunked(Sender<Vec<u8>>),
-}
 
 /// Utility for building an HTTP request from a possibly batched event
 /// and some configuration values
 pub(crate) struct HttpRequestBuilder {
     request_id: RequestId,
-    request: Option<Request>,
-    body_data: BodyData,
+    request: Option<hyper::Request<Body>>,
+    chunk_tx: Sender<Vec<u8>>,
     codec_overwrite: Option<NameWithConfig>,
 }
 
@@ -96,14 +89,6 @@ impl<'v> Iterator for HeaderValueValue<'v> {
     }
 }
 
-impl<'v> headers::ToHeaderValues for HeaderValueValue<'v> {
-    type Iter = HeaderValueValue<'v>;
-
-    fn to_header_values(&self) -> http_types::Result<Self::Iter> {
-        Ok(self.clone())
-    }
-}
-
 // TODO: do some deduplication with SinkResponse
 impl HttpRequestBuilder {
     pub(super) fn new(
@@ -114,83 +99,73 @@ impl HttpRequestBuilder {
     ) -> Result<Self> {
         let request_meta = meta.get("request");
         let method = if let Some(method_v) = request_meta.get("method") {
-            if let Some(method_str) = method_v.as_str() {
-                Method::from_str(method_str)?
-            } else {
-                return Err("Invalid HTTP Method".into());
-            }
+            Method::from_bytes(method_v.as_bytes().ok_or("Invalid HTTP Method")?)?
         } else {
-            config.method
+            config.method.0.clone()
         };
-        let url = if let Some(url_v) = request_meta.get("url") {
-            if let Some(url_str) = url_v.as_str() {
-                Url::parse(url_str)?
-            } else {
-                return Err("Invalid HTTP URL".into());
-            }
+        let uri: Uri = if let Some(url_v) = request_meta.get("url") {
+            url_v.as_str().ok_or("Invalid HTTP URL")?.parse()?
         } else {
-            config.url.clone()
+            config.url.to_string().parse()?
         };
-        let mut request = Request::new(method, url.url().clone());
+        let mut request = Request::builder().method(method).uri(uri);
 
         // first insert config headers
         for (config_header_name, config_header_values) in &config.headers {
             match &config_header_values.0 {
                 Either::Left(config_header_values) => {
                     for header_value in config_header_values {
-                        request.append_header(config_header_name.as_str(), header_value.as_str());
+                        request =
+                            request.header(config_header_name.as_str(), header_value.as_str());
                     }
                 }
                 Either::Right(header_value) => {
-                    request.append_header(config_header_name.as_str(), header_value.as_str());
+                    request = request.header(config_header_name.as_str(), header_value.as_str());
                 }
             }
         }
         let headers = request_meta.get("headers");
+
         // build headers
         if let Some(headers) = headers.as_object() {
             for (name, values) in headers {
-                request.append_header(name.as_ref(), HeaderValueValue::new(values));
+                let name = HeaderName::from_bytes(name.as_bytes())?;
+                for value in HeaderValueValue::new(values) {
+                    request = request.header(&name, value);
+                }
             }
         }
 
-        let chunked = request
-            .header(headers::TRANSFER_ENCODING)
-            .map(HeaderValues::last)
-            .map_or(false, |te| te.as_str() == "chunked");
+        let header_content_type = content_type(request.headers_ref())?;
 
-        let header_content_type = request.content_type();
-
-        let (codec_overwrite, content_type) = consolidate_mime(header_content_type, codec_map);
+        let (codec_overwrite, content_type) =
+            consolidate_mime(header_content_type.clone(), codec_map);
 
         // set the content type if it is not set yet
-        if request.content_type().is_none() {
+        if header_content_type.is_none() {
             if let Some(ct) = content_type {
-                request.set_content_type(ct);
+                request = request.header(header::CONTENT_TYPE, ct.to_string());
             }
         }
         // handle AUTH
         if let Some(auth_header) = config.auth.as_header_value()? {
-            request.insert_header(headers::AUTHORIZATION, auth_header);
+            request = request.header(hyper::header::AUTHORIZATION, auth_header);
         }
 
-        let body_data = if chunked {
-            let (chunk_tx, chunk_rx) = unbounded();
-            let streaming_reader = StreamingBodyReader::new(chunk_rx);
-            request.set_body(surf::Body::from_reader(streaming_reader, None));
-            // chunked encoding and content-length cannot go together
-            request.remove_header(headers::CONTENT_LENGTH);
-            BodyData::Chunked(chunk_tx)
-        } else {
-            BodyData::Data(Vec::with_capacity(4))
-        };
+        let (chunk_tx, mut chunk_rx) = bounded(qsize());
+        let body = Body::wrap_stream(async_stream::stream! {
+            while let Some(item) = chunk_rx.recv().await {
+                yield Ok::<_, Infallible>(item);
+            }
+        });
+        let request = request.body(body)?;
 
         // extract headers
         // determine content-type, override codec and chunked encoding
         Ok(Self {
             request_id,
             request: Some(request),
-            body_data,
+            chunk_tx,
             codec_overwrite,
         })
     }
@@ -210,58 +185,43 @@ impl HttpRequestBuilder {
         self.append_data(chunks).await
     }
 
-    async fn append_data(&mut self, mut chunks: Vec<Vec<u8>>) -> Result<()> {
-        match &mut self.body_data {
-            BodyData::Chunked(tx) => {
-                for chunk in chunks {
-                    tx.send(chunk).await?;
-                }
-            }
-            BodyData::Data(data) => data.append(&mut chunks),
+    async fn append_data(&mut self, chunks: Vec<Vec<u8>>) -> Result<()> {
+        for chunk in chunks {
+            self.chunk_tx.send(chunk).await?;
         }
         Ok(())
     }
 
+    pub(super) fn take_request(&mut self) -> Result<Request<Body>> {
+        Ok(self.request.take().ok_or("Request already consumed")?)
+    }
     /// Finalize and send the response.
     /// In the chunked case we have already sent it before.
     ///
     /// After calling this function this instance shouldn't be used anymore
-    pub(super) async fn finalize(
-        &mut self,
-        serializer: &mut EventSerializer,
-    ) -> Result<Option<Request>> {
+    pub(super) async fn finalize(&mut self, serializer: &mut EventSerializer) -> Result<()> {
         // finalize the stream
         let rest = serializer.finish_stream(self.request_id.get())?;
         if !rest.is_empty() {
             self.append_data(rest).await?;
         }
-        let mut swap = BodyData::Data(vec![]);
-        std::mem::swap(&mut swap, &mut self.body_data);
-        // send response if necessary
-        match swap {
-            BodyData::Data(data) => {
-                // set body
-                let reader = FixedBodyReader::new(data);
-                let len = reader.len();
-                if let Some(req) = self.request.as_mut() {
-                    req.set_body(surf::Body::from_reader(reader, Some(len)));
-                }
-            }
-            BodyData::Chunked(tx) => {
-                // signal EOF to the reader
-                tx.close();
-            }
-        }
-        Ok(self.request.take())
+        Ok(())
     }
+}
 
-    /// Return the ready request if it is chunked
-    pub(super) fn get_chunked_request(&mut self) -> Option<Request> {
-        if matches!(self.body_data, BodyData::Chunked(_)) {
-            self.request.take()
-        } else {
-            None
-        }
+pub(crate) fn content_type(
+    headers: Option<&HeaderMap>,
+) -> std::result::Result<Option<Mime>, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    if let Some(headers) = headers {
+        let header_content_type = headers
+            .get(hyper::header::CONTENT_TYPE)
+            .map(|v| String::from_utf8(v.as_bytes().to_vec()))
+            .transpose()?
+            .map(|v| v.parse())
+            .transpose()?;
+        Ok(header_content_type)
+    } else {
+        Ok(None)
     }
 }
 
@@ -275,7 +235,7 @@ pub(crate) fn consolidate_mime(
     codec_map: &MimeCodecMap,
 ) -> (Option<NameWithConfig>, Option<Mime>) {
     let codec_overwrite = if let Some(header_content_type) = &header_content_type {
-        codec_map.get_codec_name(header_content_type.essence())
+        codec_map.get_codec_name(header_content_type.essence_str())
     } else {
         codec_map.get_codec_name("*/*")
     }
@@ -283,103 +243,65 @@ pub(crate) fn consolidate_mime(
     let codec_content_type = codec_overwrite
         .as_ref()
         .and_then(|codec| codec_map.get_mime_type(codec.name.as_str()))
-        .and_then(|mime| Mime::from_str(mime).ok());
+        .and_then(|mime| mime.parse::<Mime>().ok());
     let content_type = Some(
         header_content_type
             .or(codec_content_type)
-            .unwrap_or(BYTE_STREAM),
+            .unwrap_or(mime::APPLICATION_OCTET_STREAM),
     );
     (codec_overwrite, content_type)
 }
 
-/// Extract request metadata
-pub(super) fn extract_request_meta(request: &Request) -> Value<'static> {
-    // collect header values into an array for each header
-    let headers = request
-        .header_names()
+fn extract_headers(headers: &HeaderMap) -> Result<Value<'static>> {
+    headers
+        .keys()
         .map(|name| {
-            (
+            Ok((
                 name.to_string(),
                 // a header name has the potential to take multiple values:
                 // https://tools.ietf.org/html/rfc7230#section-3.2.2
-                request
-                    .header(name)
+                headers
+                    .get_all(name)
                     .iter()
-                    .flat_map(|value| {
-                        let mut a: Vec<Value> = Vec::new();
-                        for v in (*value).iter() {
-                            a.push(v.as_str().to_string().into());
-                        }
-                        a.into_iter()
-                    })
-                    .collect::<Value>(),
-            )
+                    .map(|v| Ok(Value::from(v.to_str()?.to_string())))
+                    .collect::<Result<Value<'static>>>()?,
+            ))
         })
-        .collect::<Value>();
+        .collect::<Result<Value<'static>>>()
+}
+/// Extract request metadata
+pub(super) fn extract_request_meta(
+    request: &Request<Body>,
+    scheme: &'static str,
+) -> Result<Value<'static>> {
+    // collect header values into an array for each header
+    let headers: Value<'static> = extract_headers(request.headers())?;
 
-    let mut url_meta = Value::object_with_capacity(7);
-    let url = request.url();
-    url_meta.try_insert("scheme", url.scheme().to_string());
-    if !url.username().is_empty() {
-        url_meta.try_insert("username", url.username().to_string());
-    }
-    url.password()
-        .and_then(|p| url_meta.try_insert("password", p.to_string()));
-    url.host_str()
-        .and_then(|h| url_meta.try_insert("host", h.to_string()));
-    url.port().and_then(|p| url_meta.try_insert("port", p));
-    url_meta.try_insert("path", url.path().to_string());
-    url.query()
-        .and_then(|q| url_meta.try_insert("query", q.to_string()));
-    url.fragment()
-        .and_then(|f| url_meta.try_insert("fragment", f.to_string()));
-
-    literal!({
-        "method": request.method().to_string(),
+    Ok(literal!({
         "headers": headers,
-        "url_parts": url_meta, // TODO: naming. `url_meta`, `parsed_url`, `url_data` ?
-        "url": url.to_string()
-    })
+        "method": request.method().to_string(),
+        "protocol": Value::from(scheme),
+        "uri": request.uri().to_string(),
+        "version": format!("{:?}", request.version()),
+    }))
 }
 
 /// extract response metadata
-pub(super) fn extract_response_meta(response: &Response) -> Value<'static> {
+pub(super) fn extract_response_meta<B>(response: &Response<B>) -> Result<Value<'static>> {
     // collect header values into an array for each header
-    let headers = response
-        .header_names()
-        .map(|name| {
-            (
-                name.to_string(),
-                // a header name has the potential to take multiple values:
-                // https://tools.ietf.org/html/rfc7230#section-3.2.2
-                response
-                    .header(name)
-                    .iter()
-                    .flat_map(|value| {
-                        let mut a: Vec<Value> = Vec::new();
-                        for v in (*value).iter() {
-                            a.push(v.as_str().to_string().into());
-                        }
-                        a.into_iter()
-                    })
-                    .collect::<Value>(),
-            )
-        })
-        .collect::<Value>();
+    let headers = extract_headers(response.headers())?;
 
     let mut meta = Value::object_with_capacity(3);
-    meta.try_insert("status", response.status() as u16);
+    meta.try_insert("status", response.status().as_u16());
     meta.try_insert("headers", headers);
-    response
-        .version()
-        .map(|version| meta.try_insert("version", version.to_string()));
-    meta
+    meta.try_insert("version", format!("{:?}", response.version()));
+    Ok(meta)
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn builder() -> Result<()> {
         let request_id = RequestId::new(42);
         let meta = None;
@@ -399,19 +321,10 @@ mod test {
 
         let mut b = HttpRequestBuilder::new(request_id, meta, &codec_map, &config)?;
 
-        let r = b.finalize(&mut s).await?.ok_or("no data")?;
-        assert_eq!(
-            r.header("pie")
-                .map(|h| h.iter().count())
-                .unwrap_or_default(),
-            1
-        );
-        assert_eq!(
-            r.header("cake")
-                .map(|h| h.iter().count())
-                .unwrap_or_default(),
-            2
-        );
+        let r = b.take_request()?;
+        b.finalize(&mut s).await?;
+        assert_eq!(r.headers().get_all("pie").iter().count(), 1);
+        assert_eq!(r.headers().get_all("cake").iter().count(), 2);
         Ok(())
     }
 }

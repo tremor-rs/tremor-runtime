@@ -16,7 +16,7 @@ use super::ConnectorHarness;
 use crate::{connectors::impls::crononome, errors::Result};
 use tremor_value::prelude::*;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn connector_crononome_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -30,16 +30,13 @@ async fn connector_crononome_routing() -> Result<()> {
       },
     });
 
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &crononome::Builder::default(), &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'in' port of ws_server connector");
 
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    let event = out_pipeline.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     let (data, _meta) = event.data.parts();
 
     assert_eq!(Some("test"), data.get("trigger").get_str("name"));

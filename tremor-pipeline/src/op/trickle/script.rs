@@ -40,7 +40,7 @@ impl Operator for Script {
     fn on_event(
         &mut self,
         _uid: OperatorId,
-        port: &str,
+        port: &Port<'static>,
         state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
@@ -48,7 +48,7 @@ impl Operator for Script {
 
         let dst_port = event.data.rent_mut(|data| {
             let (unwind_event, event_meta): (&mut Value, &mut Value) = data.parts_mut();
-            let value = if port == IN {
+            let value = if port == &IN {
                 self.script.run(
                     &context,
                     AggrType::Emit,
@@ -75,10 +75,10 @@ impl Operator for Script {
             };
 
             match value {
-                Ok(Return::EmitEvent { port }) => Some(port.map_or(OUT, Cow::from)),
+                Ok(Return::EmitEvent { port }) => Some(port.unwrap_or(OUT)),
                 Ok(Return::Emit { value, port }) => {
                     *unwind_event = value;
-                    Some(port.map_or(OUT, Cow::from))
+                    Some(port.unwrap_or(OUT))
                 }
                 Ok(Return::Drop) => None,
                 Err(e) => {

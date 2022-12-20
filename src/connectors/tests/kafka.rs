@@ -26,7 +26,7 @@ const IMAGE: &str = "vectorized/redpanda";
 const VERSION: &str = "v22.1.7";
 pub(crate) const PRODUCE_TIMEOUT: Duration = Duration::from_secs(5);
 
-async fn redpanda_container<'d>(docker: &'d DockerCli) -> Result<Container<'d, GenericImage>> {
+async fn redpanda_container(docker: &DockerCli) -> Result<Container<GenericImage>> {
     let kafka_port = find_free_tcp_port().await?;
     let args = vec![
         "redpanda",
@@ -59,6 +59,5 @@ async fn redpanda_container<'d>(docker: &'d DockerCli) -> Result<Container<'d, G
         // .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
         // .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16))
         .with_mapped_port((kafka_port, 9092_u16));
-    dbg!(kafka_port);
     Ok(docker.run(image))
 }

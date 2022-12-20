@@ -18,8 +18,7 @@ use crate::connectors::{
     impls::gbq::writer::Config,
     prelude::*,
 };
-use async_std::prelude::{FutureExt, StreamExt};
-use futures::stream;
+use futures::{stream, StreamExt};
 use googapis::google::cloud::bigquery::storage::v1::append_rows_request::Rows;
 use googapis::google::cloud::bigquery::storage::v1::{
     append_rows_request::{self, ProtoData},
@@ -35,6 +34,7 @@ use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto}
 use std::collections::hash_map::Entry;
 use std::marker::PhantomData;
 use std::{collections::HashMap, time::Duration};
+use tokio::time::timeout;
 use tonic::{
     codegen::InterceptedService,
     transport::{Certificate, Channel, ClientTlsConfig},
@@ -363,10 +363,8 @@ where
 
         for request in request_data {
             let req_timeout = Duration::from_nanos(self.config.request_timeout);
-            let append_response = client
-                .append_rows(stream::iter(vec![request]))
-                .timeout(req_timeout)
-                .await;
+            let append_response =
+                timeout(req_timeout, client.append_rows(stream::iter(vec![request]))).await;
 
             let append_response = if let Ok(append_response) = append_response {
                 append_response
@@ -376,17 +374,12 @@ where
                     "{ctx} GBQ request timed out after {}ms",
                     req_timeout.as_millis()
                 );
-                ctx.notifier.connection_lost().await?;
+                ctx.notifier().connection_lost().await?;
 
                 return Ok(SinkReply::FAIL);
             };
 
-            if let Ok(x) = append_response?
-                .into_inner()
-                .next()
-                .timeout(req_timeout)
-                .await
-            {
+            if let Ok(x) = timeout(req_timeout, append_response?.into_inner().next()).await {
                 match x {
                     Some(Ok(res)) => {
                         if let Some(updated_schema) = res.updated_schema.as_ref() {
@@ -427,7 +420,7 @@ where
                     "{ctx} Receiving GBQ response timeout after {}ms",
                     req_timeout.as_millis()
                 );
-                ctx.notifier.connection_lost().await?;
+                ctx.notifier().connection_lost().await?;
 
                 return Ok(SinkReply::FAIL);
             }
@@ -759,7 +752,7 @@ mod test {
             let buffer = self.responses.write().unwrap().pop_front().unwrap();
 
             let (mut tx, body) = tonic::transport::Body::channel();
-            let jh = async_std::task::spawn(async move {
+            let jh = tokio::task::spawn(async move {
                 let len: [u8; 4] = (buffer.len() as u32).to_be_bytes();
 
                 let mut response_buffer = vec![0u8];
@@ -777,7 +770,7 @@ mod test {
 
                 tx.send_trailers(trailers).await.unwrap();
             });
-            async_std::task::spawn_blocking(|| jh);
+            tokio::task::spawn_blocking(|| jh);
 
             let response = http::Response::new(body);
 
@@ -787,7 +780,7 @@ mod test {
 
     #[test]
     fn skips_unknown_field_types() {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = crate::channel::bounded(1024);
 
         let result = map_field(
             "name",
@@ -801,13 +794,13 @@ mod test {
                 precision: 0,
                 scale: 0,
             }],
-            &SinkContext {
-                uid: SinkId::default(),
-                alias: Alias::new("flow", "connector"),
-                connector_type: ConnectorType::default(),
-                quiescence_beacon: QuiescenceBeacon::default(),
-                notifier: ConnectionLostNotifier::new(rx),
-            },
+            &SinkContext::new(
+                SinkId::default(),
+                Alias::new("flow", "connector"),
+                ConnectorType::default(),
+                QuiescenceBeacon::default(),
+                ConnectionLostNotifier::new(rx),
+            ),
         );
 
         assert_eq!(result.0.field.len(), 0);
@@ -816,7 +809,7 @@ mod test {
 
     #[test]
     fn skips_fields_of_unspecified_type() {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
 
         let result = map_field(
             "name",
@@ -830,13 +823,13 @@ mod test {
                 precision: 0,
                 scale: 0,
             }],
-            &SinkContext {
-                uid: SinkId::default(),
-                alias: Alias::new("flow", "connector"),
-                connector_type: ConnectorType::default(),
-                quiescence_beacon: QuiescenceBeacon::default(),
-                notifier: ConnectionLostNotifier::new(rx),
-            },
+            &SinkContext::new(
+                SinkId::default(),
+                Alias::new("flow", "connector"),
+                ConnectorType::default(),
+                QuiescenceBeacon::default(),
+                ConnectionLostNotifier::new(rx),
+            ),
         );
 
         assert_eq!(result.0.field.len(), 0);
@@ -854,7 +847,7 @@ mod test {
         ];
 
         for item in data {
-            let (rx, _tx) = async_std::channel::unbounded();
+            let (rx, _tx) = bounded(1024);
 
             let result = map_field(
                 "name",
@@ -868,13 +861,13 @@ mod test {
                     precision: 0,
                     scale: 0,
                 }],
-                &SinkContext {
-                    uid: SinkId::default(),
-                    alias: Alias::new("flow", "connector"),
-                    connector_type: ConnectorType::default(),
-                    quiescence_beacon: QuiescenceBeacon::default(),
-                    notifier: ConnectionLostNotifier::new(rx),
-                },
+                &SinkContext::new(
+                    SinkId::default(),
+                    Alias::new("flow", "connector"),
+                    ConnectorType::default(),
+                    QuiescenceBeacon::default(),
+                    ConnectionLostNotifier::new(rx),
+                ),
             );
 
             assert_eq!(result.1.len(), 1);
@@ -885,7 +878,7 @@ mod test {
 
     #[test]
     fn can_map_a_struct() {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
 
         let result = map_field(
             "name",
@@ -908,13 +901,13 @@ mod test {
                 precision: 0,
                 scale: 0,
             }],
-            &SinkContext {
-                uid: SinkId::default(),
-                alias: Alias::new("flow", "connector"),
-                connector_type: ConnectorType::default(),
-                quiescence_beacon: QuiescenceBeacon::default(),
-                notifier: ConnectionLostNotifier::new(rx),
-            },
+            &SinkContext::new(
+                SinkId::default(),
+                Alias::new("flow", "connector"),
+                ConnectorType::default(),
+                QuiescenceBeacon::default(),
+                ConnectionLostNotifier::new(rx),
+            ),
         );
 
         assert_eq!(result.1.len(), 1);
@@ -1131,15 +1124,15 @@ mod test {
 
     #[test]
     pub fn mapping_generates_a_correct_descriptor() {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
 
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(rx),
-        };
+        let ctx = SinkContext::new(
+            SinkId::default(),
+            Alias::new("flow", "connector"),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(rx),
+        );
         let mapping = JsonToProtobufMapping::new(
             &vec![
                 TableFieldSchema {
@@ -1163,7 +1156,7 @@ mod test {
                     scale: 0,
                 },
             ],
-            &sink_context,
+            &ctx,
         );
 
         let descriptor = mapping.descriptor();
@@ -1180,15 +1173,15 @@ mod test {
 
     #[test]
     pub fn can_map_json_to_protobuf() -> Result<()> {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
 
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(rx),
-        };
+        let ctx = SinkContext::new(
+            SinkId::default(),
+            Alias::new("flow", "connector"),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(rx),
+        );
         let mapping = JsonToProtobufMapping::new(
             &vec![
                 TableFieldSchema {
@@ -1212,7 +1205,7 @@ mod test {
                     scale: 0,
                 },
             ],
-            &sink_context,
+            &ctx,
         );
         let mut fields = halfbrown::HashMap::new();
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
@@ -1225,15 +1218,15 @@ mod test {
 
     #[test]
     fn map_field_ignores_fields_that_are_not_in_definition() -> Result<()> {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
 
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(rx),
-        };
+        let ctx = SinkContext::new(
+            SinkId::default(),
+            Alias::new("flow", "connector"),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(rx),
+        );
         let mapping = JsonToProtobufMapping::new(
             &vec![
                 TableFieldSchema {
@@ -1257,7 +1250,7 @@ mod test {
                     scale: 0,
                 },
             ],
-            &sink_context,
+            &ctx,
         );
         let mut fields = halfbrown::HashMap::new();
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
@@ -1271,15 +1264,15 @@ mod test {
 
     #[test]
     fn map_field_ignores_struct_fields_that_are_not_in_definition() -> Result<()> {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
 
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(rx),
-        };
+        let ctx = SinkContext::new(
+            SinkId::default(),
+            Alias::new("flow", "connector"),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(rx),
+        );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
                 name: "a".to_string(),
@@ -1300,7 +1293,7 @@ mod test {
                 precision: 0,
                 scale: 0,
             }],
-            &sink_context,
+            &ctx,
         );
         let mut inner_fields = halfbrown::HashMap::new();
         inner_fields.insert("x".into(), Value::Static(StaticNode::I64(10)));
@@ -1315,15 +1308,15 @@ mod test {
 
     #[test]
     fn fails_on_bytes_type_mismatch() {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
 
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(rx),
-        };
+        let ctx = SinkContext::new(
+            SinkId::default(),
+            Alias::new("flow", "connector"),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(rx),
+        );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
                 name: "a".to_string(),
@@ -1335,7 +1328,7 @@ mod test {
                 precision: 0,
                 scale: 0,
             }],
-            &sink_context,
+            &ctx,
         );
         let mut fields = halfbrown::HashMap::new();
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
@@ -1350,15 +1343,15 @@ mod test {
 
     #[test]
     fn fails_if_the_event_is_not_an_object() {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
 
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(rx),
-        };
+        let ctx = SinkContext::new(
+            SinkId::default(),
+            Alias::new("flow", "connector"),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(rx),
+        );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
                 name: "a".to_string(),
@@ -1370,7 +1363,7 @@ mod test {
                 precision: 0,
                 scale: 0,
             }],
-            &sink_context,
+            &ctx,
         );
         let result = mapping.map(&Value::Static(StaticNode::I64(123)));
 
@@ -1381,7 +1374,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn sink_fails_if_config_is_missing() -> Result<()> {
         let config = literal!({
             "config": {}
@@ -1396,9 +1389,9 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn on_event_fails_if_client_is_not_conected() -> Result<()> {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
         let config = Config::new(&literal!({
             "table_id": "doesnotmatter",
             "connect_timeout": 1_000_000,
@@ -1412,13 +1405,13 @@ mod test {
             .on_event(
                 "",
                 Event::signal_tick(),
-                &SinkContext {
-                    uid: SinkId::default(),
-                    alias: Alias::new("flow", "connector"),
-                    connector_type: ConnectorType::default(),
-                    quiescence_beacon: QuiescenceBeacon::default(),
-                    notifier: ConnectionLostNotifier::new(rx),
-                },
+                &SinkContext::new(
+                    SinkId::default(),
+                    Alias::new("flow", "connector"),
+                    ConnectorType::default(),
+                    QuiescenceBeacon::default(),
+                    ConnectionLostNotifier::new(rx),
+                ),
                 &mut EventSerializer::new(
                     None,
                     CodecReq::Structured,
@@ -1434,9 +1427,9 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn on_event_fails_if_write_stream_is_not_conected() -> Result<()> {
-        let (rx, _tx) = async_std::channel::unbounded();
+        let (rx, _tx) = bounded(1024);
         let config = Config::new(&literal!({
             "table_id": "doesnotmatter",
             "connect_timeout": 1_000_000,
@@ -1454,13 +1447,13 @@ mod test {
             .on_event(
                 "",
                 Event::signal_tick(),
-                &SinkContext {
-                    uid: SinkId::default(),
-                    alias: Alias::new("flow", "connector"),
-                    connector_type: ConnectorType::default(),
-                    quiescence_beacon: QuiescenceBeacon::default(),
-                    notifier: ConnectionLostNotifier::new(rx),
-                },
+                &SinkContext::new(
+                    SinkId::default(),
+                    Alias::new("flow", "connector"),
+                    ConnectorType::default(),
+                    QuiescenceBeacon::default(),
+                    ConnectionLostNotifier::new(rx),
+                ),
                 &mut EventSerializer::new(
                     None,
                     CodecReq::Structured,
@@ -1476,7 +1469,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn fails_on_error_response() -> Result<()> {
         let mut buffer_write_stream = vec![];
         let mut buffer_append_rows_response = vec![];
@@ -1527,21 +1520,21 @@ mod test {
             }),
         );
 
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
-        };
+        let ctx = SinkContext::new(
+            SinkId::default(),
+            Alias::new("flow", "connector"),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
+        );
 
-        sink.connect(&sink_context, &Attempt::default()).await?;
+        sink.connect(&ctx, &Attempt::default()).await?;
 
         let result = sink
             .on_event(
                 "",
                 Event::default(),
-                &sink_context,
+                &ctx,
                 &mut EventSerializer::new(
                     None,
                     CodecReq::Structured,
@@ -1558,7 +1551,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn splits_large_requests() -> Result<()> {
         let mut buffer_write_stream = vec![];
         let mut buffer_append_rows_response = vec![];
@@ -1609,15 +1602,15 @@ mod test {
             }),
         );
 
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
-        };
+        let ctx = SinkContext::new(
+            SinkId::default(),
+            Alias::new("flow", "connector"),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
+        );
 
-        sink.connect(&sink_context, &Attempt::default()).await?;
+        sink.connect(&ctx, &Attempt::default()).await?;
 
         let value = literal!([
             {
@@ -1648,7 +1641,7 @@ mod test {
                     is_batch: true,
                     ..Default::default()
                 },
-                &sink_context,
+                &ctx,
                 &mut EventSerializer::new(
                     None,
                     CodecReq::Structured,
@@ -1665,7 +1658,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn does_not_auto_ack() {
         let sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {

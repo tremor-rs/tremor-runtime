@@ -14,14 +14,16 @@
 
 use super::ConnectorHarness;
 use crate::{connectors::impls::unix_socket, errors::Result};
-use async_std::os::unix::net::UnixStream;
-use async_std::prelude::*;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::UnixStream,
+};
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 use value_trait::Builder;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn unix_socket() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -50,36 +52,29 @@ async fn unix_socket() -> Result<()> {
       }
     });
 
-    let server_harness = ConnectorHarness::new(
+    let mut server_harness = ConnectorHarness::new(
         "unix_socket_server",
         &unix_socket::server::Builder::default(),
         &server_defn,
     )
     .await?;
-    let server_out = server_harness
-        .out()
-        .expect("No pipeline connected to 'out' port of unix_socket_server connector");
     server_harness.start().await?;
     server_harness.wait_for_connected().await?;
 
-    let client_harness = ConnectorHarness::new(
+    let mut client_harness = ConnectorHarness::new(
         "unix_socket_client",
         &unix_socket::client::Builder::default(),
         &client_defn,
     )
     .await?;
-    let client_out = client_harness
-        .out()
-        .expect("No pipeline connected to 'out' port of unix_socket_server connector");
     client_harness.start().await?;
-
     client_harness.wait_for_connected().await?;
 
     // connect 2 client sockets
     let mut socket1 = UnixStream::connect(&socket_path).await?;
 
     socket1.write_all("snot\n".as_bytes()).await?;
-    let event = server_out.get_event().await?;
+    let event = server_harness.out()?.get_event().await?;
     let (_data, meta) = event.data.parts();
 
     let socket1_meta = meta.get("unix_socket_server");
@@ -115,7 +110,7 @@ async fn unix_socket() -> Result<()> {
 
     client_harness.send_to_sink(event, IN).await?;
     // send something to socket 2
-    let server_event = server_out.get_event().await?;
+    let server_event = server_harness.out()?.get_event().await?;
     // send an event and route it via eventid to socket 2
     let mut id2 = EventId::default();
     id2.track(&server_event.id);
@@ -125,7 +120,7 @@ async fn unix_socket() -> Result<()> {
         ..Event::default()
     };
     server_harness.send_to_sink(event2, IN).await?;
-    let client_event = client_out.get_event().await?;
+    let client_event = client_harness.out()?.get_event().await?;
     assert_eq!("fleek", client_event.data.parts().0.to_string());
     debug!("Received event 2 via client");
 

@@ -13,16 +13,14 @@
 // limitations under the License.
 
 //NOTE: error_chain
-#![allow(deprecated)]
-#![allow(missing_docs)]
-#![allow(clippy::large_enum_variant)]
+#![allow(deprecated, missing_docs, clippy::large_enum_variant)]
 
-use beef::Cow;
 use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
-use value_trait::prelude::*;
-
+use tokio::sync::broadcast;
+use tremor_common::ports::Port;
 use tremor_influx as influx;
+use value_trait::prelude::*;
 
 pub type Kind = ErrorKind;
 
@@ -80,6 +78,18 @@ impl From<glob::PatternError> for Error {
     }
 }
 
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
+    fn from(e: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        Self::from(format!("{e}"))
+    }
+}
+
+impl From<tokio::sync::mpsc::error::TryRecvError> for Error {
+    fn from(e: tokio::sync::mpsc::error::TryRecvError) -> Self {
+        Self::from(format!("{e}"))
+    }
+}
+
 impl<T> From<async_std::channel::SendError<T>> for Error {
     fn from(e: async_std::channel::SendError<T>) -> Self {
         Self::from(format!("{e:?}"))
@@ -92,20 +102,21 @@ impl<T> From<async_std::channel::TrySendError<T>> for Error {
     }
 }
 
-impl<T> From<async_broadcast::TrySendError<T>> for Error {
-    fn from(e: async_broadcast::TrySendError<T>) -> Self {
+impl<T> From<broadcast::error::SendError<T>> for Error
+where
+    T: std::fmt::Debug,
+{
+    fn from(e: broadcast::error::SendError<T>) -> Self {
         Self::from(format!("{e:?}"))
     }
 }
-
-impl From<async_broadcast::TryRecvError> for Error {
-    fn from(e: async_broadcast::TryRecvError) -> Self {
+impl From<broadcast::error::TryRecvError> for Error {
+    fn from(e: broadcast::error::TryRecvError) -> Self {
         Self::from(format!("{e:?}"))
     }
 }
-
-impl From<async_broadcast::RecvError> for Error {
-    fn from(e: async_broadcast::RecvError) -> Self {
+impl From<broadcast::error::RecvError> for Error {
+    fn from(e: broadcast::error::RecvError) -> Self {
         Self::from(format!("{e:?}"))
     }
 }
@@ -153,7 +164,8 @@ error_chain! {
         CronError(cron::error::Error);
         CsvError(csv::Error);
         DateTimeParseError(chrono::ParseError);
-        DnsError(async_std_resolver::ResolveError);
+        DnsError(trust_dns_resolver::error::ResolveError);
+        InvalidTLSClientName(rustls::client::InvalidDnsNameError);
         ElasticError(elasticsearch::Error);
         ElasticTransportBuildError(elasticsearch::http::transport::BuildError);
         FromUtf8Error(std::string::FromUtf8Error);
@@ -178,15 +190,14 @@ error_chain! {
         RustlsError(rustls::TLSError);
         Sled(sled::Error);
         SnappyError(snap::Error);
-        Timeout(async_std::future::TimeoutError);
         TonicStatusError(tonic::Status);
         TonicTransportError(tonic::transport::Error);
+        Ws(tokio_tungstenite::tungstenite::Error);
         TryFromIntError(std::num::TryFromIntError);
         ValueError(tremor_value::Error);
         UrlParserError(url::ParseError);
         UriParserError(http::uri::InvalidUri);
         Utf8Error(std::str::Utf8Error);
-        WsError(async_tungstenite::tungstenite::Error);
         EnvVarError(std::env::VarError);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         WalJson(qwal::Error<simd_json::Error>);
@@ -199,6 +210,15 @@ error_chain! {
         TremorCodec(crate::codec::tremor::Error);
         S3Endpoint(aws_smithy_http::endpoint::error::InvalidEndpointError);
         S3ByteStream(aws_smithy_http::byte_stream::error::Error);
+        JoinError(tokio::task::JoinError);
+        Timeout(tokio::time::error::Elapsed);
+        OneShotRecv(tokio::sync::oneshot::error::RecvError);
+        InvalidMethod(http::method::InvalidMethod);
+        Http(http::Error);
+        Hyper(hyper::Error);
+        HeaderToStringError(http::header::ToStrError);
+        MimeParsingError(mime::FromStrError);
+        InvalidStatusCode(http::status::InvalidStatusCode);
     }
 
     errors {
@@ -301,11 +321,11 @@ error_chain! {
             description("Invalid Connector Definition")
                 display("Invalid Definition for connector \"{}\": {}", connector_id, msg)
         }
-        InvalidConnect(target: String, port: Cow<'static, str>) {
+        InvalidConnect(target: String, port: Port<'static>) {
             description("Invalid Connect attempt")
                 display("Invalid Connect to {} via port {}", target, port)
         }
-        InvalidDisconnect(target: String, entity: String, port: Cow<'static, str>) {
+        InvalidDisconnect(target: String, entity: String, port: Port<'static>) {
             description("Invalid Disonnect attempt")
                 display("Invalid Disconnect of {} from {} via port {}", entity, target, port)
         }
@@ -413,15 +433,29 @@ error_chain! {
             description("Pipeline send error")
                 display("Pipeline send error: {}", s)
         }
+        ChannelEmpty {
+            description("Channel empty")
+                display("Channel empty")
+        }
+        AlreadyCreated {
+            description("Connector already created")
+                display("Connector already created")
+        }
     }
 }
 
+pub(crate) fn empty_error() -> Error {
+    ErrorKind::ChannelEmpty.into()
+}
+pub(crate) fn already_created_error() -> Error {
+    ErrorKind::AlreadyCreated.into()
+}
 #[allow(clippy::needless_pass_by_value)]
-pub(crate) fn pipe_send_e<T>(e: async_std::channel::SendError<T>) -> Error {
+pub(crate) fn pipe_send_e<T>(e: tokio::sync::mpsc::error::SendError<T>) -> Error {
     ErrorKind::PipelineSendError(e.to_string()).into()
 }
 #[allow(clippy::needless_pass_by_value)]
-pub(crate) fn connector_send_err<T>(e: async_std::channel::SendError<T>) -> Error {
+pub(crate) fn connector_send_err<T>(e: tokio::sync::mpsc::error::SendError<T>) -> Error {
     format!("could not send to connector: {e}").into()
 }
 

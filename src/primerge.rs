@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Based on merge from async_std
-use core::pin::Pin;
-use core::task::{Context, Poll};
-
+// Based on merge from async-std
+use core::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+use futures::{
+    stream::{Fuse, Stream},
+    StreamExt,
+};
 use pin_project_lite::pin_project;
-
-use async_std::stream::Fuse;
-use async_std::stream::Stream;
-use async_std::stream::StreamExt;
 
 pin_project! {
     /// A stream that merges two other streams into a single stream.

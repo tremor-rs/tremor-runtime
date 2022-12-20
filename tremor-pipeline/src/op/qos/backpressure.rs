@@ -47,10 +47,7 @@
 
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
-use beef::Cow;
 use tremor_script::prelude::*;
-
-const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -156,7 +153,7 @@ impl Operator for Backpressure {
     fn on_event(
         &mut self,
         uid: OperatorId,
-        _port: &str,
+        _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
@@ -263,7 +260,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event1)
+            .on_event(operator_id, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -279,7 +276,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event2)
+            .on_event(operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -308,7 +305,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event1)
+            .on_event(operator_id, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -346,7 +343,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event2)
+            .on_event(operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -361,7 +358,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event3)
+            .on_event(operator_id, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -377,7 +374,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, "in", &mut state, event3)
+            .on_event(operator_id, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -404,7 +401,9 @@ mod test {
             ingest_ns: 1_000_000,
             ..Event::default()
         };
-        let mut r = op.on_event(operator_id, "in", &mut state, event1)?.events;
+        let mut r = op
+            .on_event(operator_id, &Port::In, &mut state, event1)?
+            .events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -438,7 +437,9 @@ mod test {
             ingest_ns: 2_000_000 - 1,
             ..Event::default()
         };
-        let mut r = op.on_event(operator_id, "in", &mut state, event2)?.events;
+        let mut r = op
+            .on_event(operator_id, &Port::In, &mut state, event2)?
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         // since we are in CB mode we will STILL pass an event even if we're triggered
@@ -451,7 +452,9 @@ mod test {
             ingest_ns: 2_000_000,
             ..Event::default()
         };
-        let mut r = op.on_event(operator_id, "in", &mut state, event3)?.events;
+        let mut r = op
+            .on_event(operator_id, &Port::In, &mut state, event3)?
+            .events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -464,7 +467,9 @@ mod test {
             ingest_ns: 2_000_000 + 1,
             ..Event::default()
         };
-        let mut r = op.on_event(operator_id, "in", &mut state, event3)?.events;
+        let mut r = op
+            .on_event(operator_id, &Port::In, &mut state, event3)?
+            .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);

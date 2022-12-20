@@ -45,6 +45,7 @@ use crate::{
 };
 use beef::Cow;
 use simd_json::ValueAccess;
+use tremor_common::ports::Port;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
@@ -393,7 +394,7 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
                 return err_generic(&ex, &n, &"port `in` is reserved for the `script` section");
             }
             let script = script.up_script(helper)?;
-            if named.insert(n.clone().to_string(), script).is_some() {
+            if named.insert(Port::from(n.id.clone()), script).is_some() {
                 return err_generic(&ex, &n, &"script port already defined");
             }
         }

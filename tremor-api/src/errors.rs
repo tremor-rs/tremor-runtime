@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::channel::RecvError;
 use http_types::{headers, StatusCode};
 use serde::Serialize;
 use std::sync::{MutexGuard, PoisonError};
@@ -79,17 +78,8 @@ impl From<tremor_common::Error> for Error {
     }
 }
 
-impl From<RecvError> for Error {
-    fn from(e: RecvError) -> Self {
-        Self::new(
-            StatusCode::InternalServerError,
-            format!("Error receiving from channel: {e}"),
-        )
-    }
-}
-
-impl From<async_std::future::TimeoutError> for Error {
-    fn from(_e: async_std::future::TimeoutError) -> Self {
+impl From<tokio::time::error::Elapsed> for Error {
+    fn from(_e: tokio::time::error::Elapsed) -> Self {
         Self::new(StatusCode::InternalServerError, "Request timed out".into())
     }
 }

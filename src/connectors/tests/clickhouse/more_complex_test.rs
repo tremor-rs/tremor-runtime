@@ -80,7 +80,8 @@ macro_rules! assert_row_equals {
     };
 }
 
-#[async_std::test]
+#[allow(clippy::too_many_lines)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -197,9 +198,9 @@ async fn test() -> Result<()> {
             ]
         },
     });
-    let harness =
+    let mut harness =
         ConnectorHarness::new("clickhouse", &clickhouse::Builder {}, &connector_config).await?;
-    let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
+
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
@@ -220,7 +221,7 @@ async fn test() -> Result<()> {
                     "g": -32_000,
                     "h": -33_000,
                     "i": "hello",
-                    "j": 1634400000,
+                    "j": 1_634_400_000,
                     // "k": 1634400000,
                     // "l": 1634400000_000_u64,
                     // "m": 1634400000_000_000_u64,
@@ -245,7 +246,7 @@ async fn test() -> Result<()> {
                     "g": -32_000,
                     "h": -33_000,
                     "i": "hello",
-                    "j": 1634400000,
+                    "j": 1_634_400_000,
                     // "k": 1634400000,
                     // "l": 1634400000_000_u64,
                     // "m": 1634400000_000_000_u64,
@@ -276,7 +277,7 @@ async fn test() -> Result<()> {
     // Once the data has been inserted, we wait for the "I handled everything"
     // signal and check its properties.
 
-    let cf = in_pipe.get_contraflow().await?;
+    let cf = harness.get_pipe(IN)?.get_contraflow().await?;
     assert_eq!(CbAction::Ack, cf.cb);
     assert_eq!(batched_id, cf.id);
 
@@ -321,7 +322,7 @@ async fn test() -> Result<()> {
             ));
         }
 
-        async_std::task::sleep(delay).await;
+        tokio::time::sleep(delay).await;
     };
 
     // Now that we fetched everything we want, we can extract the meaningful
@@ -340,11 +341,11 @@ async fn test() -> Result<()> {
                 g: i32 = -32_000,
                 h: i64 = -33_000,
                 i: &str = "hello",
-                j: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp_opt(1634400000, 0).expect("valid timestamp literal"), Utc),
-                // k: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1634400000, 0), Utc),
-                // l: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1634400000, 0), Utc),
-                // m: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1634400000, 0), Utc),
-                // n: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1634400000, 0), Utc),
+                j: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp_opt(1_634_400_000, 0).expect("valid timestamp literal"), Utc),
+                // k: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1_634_400_000, 0), Utc),
+                // l: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1_634_400_000, 0), Utc),
+                // m: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1_634_400_000, 0), Utc),
+                // n: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1_634_400_000, 0), Utc),
                 o: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 10),
                 p: Ipv6Addr = Ipv6Addr::from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
                 // Any type here must implement the FromSql trait. The problem is

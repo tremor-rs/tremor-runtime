@@ -20,24 +20,23 @@
 
 use super::TcpReader;
 use crate::{
+    channel::{bounded, Receiver, Sender},
+    errors::already_created_error,
+};
+use crate::{
     connectors::{
         prelude::*,
         utils::{
             socket::{tcp_client_socket, TcpSocketOptions},
-            tls::{tls_client_connector, TLSClientConfig},
+            tls::TLSClientConfig,
         },
     },
     errors::err_connector_def,
 };
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    net::TcpStream,
-    prelude::*,
-    sync::Arc,
-};
-use async_tls::TlsConnector;
 use either::Either;
-use futures::io::AsyncReadExt;
+use std::sync::Arc;
+use tokio::{io::AsyncWriteExt, net::TcpStream};
+use tokio_rustls::TlsConnector;
 
 const URL_SCHEME: &str = "tremor-tcp-client";
 
@@ -62,7 +61,7 @@ pub(crate) struct TcpClient {
     tls_connector: Option<TlsConnector>,
     tls_domain: Option<String>,
     source_tx: Sender<SourceReply>,
-    source_rx: Receiver<SourceReply>,
+    source_rx: Option<Receiver<SourceReply>>,
 }
 
 #[derive(Debug, Default)]
@@ -96,23 +95,23 @@ impl ConnectorBuilder for Builder {
             Some(Either::Right(true)) => {
                 // default config
                 (
-                    Some(tls_client_connector(&TLSClientConfig::default()).await?),
+                    Some(TLSClientConfig::default().to_client_connector()?),
                     Some(host),
                 )
             }
             Some(Either::Left(tls_config)) => (
-                Some(tls_client_connector(tls_config).await?),
+                Some(tls_config.to_client_connector()?),
                 tls_config.domain.clone(),
             ),
             Some(Either::Right(false)) | None => (None, None),
         };
-        let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (source_tx, source_rx) = bounded(qsize());
         Ok(Box::new(TcpClient {
             config,
             tls_connector,
             tls_domain,
             source_tx,
-            source_rx,
+            source_rx: Some(source_rx),
         }))
     }
 }
@@ -121,7 +120,7 @@ impl ConnectorBuilder for Builder {
 impl Connector for TcpClient {
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         if let Some(tls_connector) = self.tls_connector.as_ref() {
@@ -131,25 +130,25 @@ impl Connector for TcpClient {
                 self.config.clone(),
                 self.source_tx.clone(),
             );
-            builder.spawn(sink, sink_context).map(Some)
+            Ok(Some(builder.spawn(sink, ctx)))
         } else {
             let sink = TcpClientSink::plain(self.config.clone(), self.source_tx.clone());
-            builder.spawn(sink, sink_context).map(Some)
+            Ok(Some(builder.spawn(sink, ctx)))
         }
     }
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         // this source is wired up to the ending channel that is forwarding data received from the TCP (or TLS) connection
         let source = ChannelSource::from_channel(
             self.source_tx.clone(),
-            self.source_rx.clone(),
+            self.source_rx.take().ok_or_else(already_created_error)?,
             Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
         );
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -163,12 +162,7 @@ struct TcpClientSink {
     tls_domain: Option<String>,
     config: Config,
     wrapped_stream: Option<
-        Box<
-            dyn futures::io::AsyncWrite
-                + std::marker::Unpin
-                + std::marker::Send
-                + std::marker::Sync,
-        >,
+        Box<dyn tokio::io::AsyncWrite + std::marker::Unpin + std::marker::Send + std::marker::Sync>,
     >,
     tcp_stream: Option<TcpStream>,
     source_runtime: ChannelSourceRuntime,
@@ -244,11 +238,12 @@ impl Sink for TcpClientSink {
                 .connect(
                     self.tls_domain
                         .as_ref()
-                        .map_or_else(|| self.config.url.host_or_local(), String::as_str),
-                    stream.clone(),
+                        .map_or_else(|| self.config.url.host_or_local(), String::as_str)
+                        .try_into()?,
+                    stream,
                 )
                 .await?;
-            let (read, write) = tls_stream.split();
+            let (read, write) = tokio::io::split(tls_stream);
             let meta = ctx.meta(literal!({
                 "tls": true,
                 "peer": {
@@ -258,13 +253,11 @@ impl Sink for TcpClientSink {
             }));
             // register writer
             self.wrapped_stream = Some(Box::new(write));
-            self.tcp_stream = Some(stream.clone());
             // register reader
             let tls_reader = TcpReader::tls_client(
                 read,
-                stream,
                 vec![0; buf_size],
-                ctx.alias.clone(),
+                ctx.alias().clone(),
                 origin_uri,
                 meta,
             );
@@ -280,15 +273,16 @@ impl Sink for TcpClientSink {
                     "port": peer_addr.port()
                 }
             }));
-            // register writer
-            self.wrapped_stream = Some(Box::new(stream.clone()));
-            self.tcp_stream = Some(stream.clone());
+            // self.tcp_stream = Some(stream.clone());
 
-            // register reader for receiving from the connection via the source
+            let (read_stream, write_stream) = tokio::io::split(stream);
+            // register writer
+            self.wrapped_stream = Some(Box::new(write_stream));
+            //  register reader for receiving from the connection via the source
             let reader = TcpReader::new(
-                stream,
+                read_stream,
                 vec![0; buf_size],
-                ctx.alias.clone(),
+                ctx.alias().clone(),
                 origin_uri,
                 meta,
                 None, // we don't need to notify any writer, we know if shit goes south from on_event here
@@ -324,8 +318,8 @@ impl Sink for TcpClientSink {
 
     /// when writing is done
     async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
-        if let Some(stream) = self.tcp_stream.as_ref() {
-            if let Err(e) = stream.shutdown(std::net::Shutdown::Write) {
+        if let Some(stream) = self.tcp_stream.as_mut() {
+            if let Err(e) = stream.shutdown().await {
                 error!("{ctx} stopping: {e}...",);
             }
         }

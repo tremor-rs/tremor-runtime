@@ -23,8 +23,6 @@ use crate::{
     },
     errors::Result,
 };
-use async_std::prelude::FutureExt;
-use async_std::task;
 use beef::Cow;
 use rdkafka::{
     admin::{AdminClient, AdminOptions, NewTopic, TopicReplication},
@@ -39,11 +37,12 @@ use serial_test::serial;
 use std::collections::HashMap;
 use std::time::Duration;
 use testcontainers::clients::Cli as DockerCli;
+use tokio::time::timeout;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::Builder;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn transactional_retry() -> Result<()> {
     let _ = env_logger::try_init();
@@ -52,7 +51,7 @@ async fn transactional_retry() -> Result<()> {
     let container = redpanda_container(&docker).await?;
 
     let port = container.get_host_port_ipv4(9092);
-    let broker = format!("127.0.0.1:{}", port);
+    let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test";
     let group_id = "transactional_retry";
 
@@ -87,14 +86,13 @@ async fn transactional_retry() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
-    let err = harness.err().expect("No pipe connected to port ERR");
+
     harness.start().await?;
     harness.wait_for_connected().await?;
 
@@ -108,7 +106,7 @@ async fn transactional_retry() -> Result<()> {
         return Err("Unable to send record to kafka".into());
     }
 
-    let e1 = out.get_event().await?;
+    let e1 = harness.out()?.get_event().await?;
     assert_eq!(
         literal!({
             "snot": "badger"
@@ -125,16 +123,14 @@ async fn transactional_retry() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 1,
-                "timestamp": 42000000
+                "timestamp": 42_000_000
             }
         }),
         e1.data.suffix().meta()
     );
 
     // ack event
-    harness
-        .send_contraflow(CbAction::Ack, e1.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, e1.id.clone())?;
 
     // second event
     let record2 = FutureRecord::to(topic)
@@ -145,7 +141,7 @@ async fn transactional_retry() -> Result<()> {
     if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    let e2 = out.get_event().await?;
+    let e2 = harness.out()?.get_event().await?;
     assert_eq!(Value::null(), e2.data.suffix().value());
     assert_eq!(
         &literal!({
@@ -155,18 +151,16 @@ async fn transactional_retry() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 0,
-                "timestamp": 12000000
+                "timestamp": 12_000_000
             }
         }),
         e2.data.suffix().meta()
     );
     // fail -> ensure it is replayed
-    harness
-        .send_contraflow(CbAction::Fail, e2.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Fail, e2.id.clone())?;
 
     // we get the same event again
-    let e3 = out.get_event().await?;
+    let e3 = harness.out()?.get_event().await?;
     assert_eq!(Value::null(), e3.data.suffix().value());
     assert_eq!(
         &literal!({
@@ -176,7 +170,7 @@ async fn transactional_retry() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 0,
-                "timestamp": 12000000
+                "timestamp": 12_000_000
             }
         }),
         e3.data.suffix().meta()
@@ -185,9 +179,7 @@ async fn transactional_retry() -> Result<()> {
     assert_eq!(e2.id.stream_id(), e3.id.stream_id());
 
     // ack the event
-    harness
-        .send_contraflow(CbAction::Ack, e3.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, e3.id.clone())?;
 
     // send another event and check that the previous one isn't replayed
     let record3 = FutureRecord::to(topic)
@@ -200,7 +192,7 @@ async fn transactional_retry() -> Result<()> {
     }
 
     // next event
-    let e4 = out.get_event().await?;
+    let e4 = harness.out()?.get_event().await?;
     assert_eq!(Value::from(false), e4.data.suffix().value());
     assert_eq!(
         &literal!({
@@ -210,7 +202,7 @@ async fn transactional_retry() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 2,
-                "timestamp": 123000000
+                "timestamp": 123_000_000
             }
 
         }),
@@ -227,12 +219,12 @@ async fn transactional_retry() -> Result<()> {
         return Err("Could not send to kafka".into());
     }
 
-    let e5 = err.get_event().await?;
+    let e5 = harness.err()?.get_event().await?;
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
             "source": "test::transactional_retry",
-            "stream_id": 8589934592_u64,
+            "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
         e5.data.suffix().value()
@@ -246,7 +238,7 @@ async fn transactional_retry() -> Result<()> {
                 "topic": topic,
                 "partition": 2,
                 "offset": 1,
-                "timestamp": 1234000000
+                "timestamp": 1_234_000_000
             }
         }),
         e5.data.suffix().meta()
@@ -273,8 +265,9 @@ async fn transactional_retry() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
+
 async fn custom_no_retry() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -282,7 +275,7 @@ async fn custom_no_retry() -> Result<()> {
     let container = redpanda_container(&docker).await?;
 
     let port = container.get_host_port_ipv4(9092);
-    let broker = format!("127.0.0.1:{}", port);
+    let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_no_retry";
     let group_id = "test1";
 
@@ -316,14 +309,12 @@ async fn custom_no_retry() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
-    let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
@@ -342,7 +333,7 @@ async fn custom_no_retry() -> Result<()> {
         return Err("Unable to send record to kafka".into());
     }
 
-    let e1 = out.get_event().await?;
+    let e1 = harness.out()?.get_event().await?;
     assert_eq!(
         literal!({
             "snot": "badger"
@@ -359,16 +350,14 @@ async fn custom_no_retry() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 1,
-                "timestamp": 42000000
+                "timestamp": 42_000_000
             }
         }),
         e1.data.suffix().meta()
     );
 
     // ack event
-    harness
-        .send_contraflow(CbAction::Ack, e1.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, e1.id.clone())?;
 
     // produce second event
     let record2 = FutureRecord::to(topic)
@@ -381,7 +370,7 @@ async fn custom_no_retry() -> Result<()> {
     }
 
     // get second event
-    let e2 = out.get_event().await?;
+    let e2 = harness.out()?.get_event().await?;
     assert_eq!(Value::null(), e2.data.suffix().value());
     assert_eq!(
         &literal!({
@@ -391,18 +380,17 @@ async fn custom_no_retry() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 0,
-                "timestamp": 12000000
+                "timestamp": 12_000_000
             }
         }),
         e2.data.suffix().meta()
     );
     // fail -> ensure it is not replayed
-    harness
-        .send_contraflow(CbAction::Fail, e2.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Fail, e2.id.clone())?;
 
     // we don't get no event
-    assert!(out
+    assert!(harness
+        .out()?
         .expect_no_event_for(Duration::from_millis(200))
         .await
         .is_ok());
@@ -418,7 +406,7 @@ async fn custom_no_retry() -> Result<()> {
     }
 
     // we only get the next event, no previous one
-    let e3 = out.get_event().await?;
+    let e3 = harness.out()?.get_event().await?;
     assert_eq!(Value::from(false), e3.data.suffix().value());
     assert_eq!(
         &literal!({
@@ -428,7 +416,7 @@ async fn custom_no_retry() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 2,
-                "timestamp": 123000000
+                "timestamp": 123_000_000
             }
 
         }),
@@ -445,12 +433,12 @@ async fn custom_no_retry() -> Result<()> {
         return Err("Could not send to kafka".into());
     }
 
-    let e5 = err.get_event().await?;
+    let e5 = harness.err()?.get_event().await?;
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
             "source": "test::custom_no_retry",
-            "stream_id": 8589934592_u64,
+            "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
         e5.data.suffix().value()
@@ -464,7 +452,7 @@ async fn custom_no_retry() -> Result<()> {
                 "topic": topic,
                 "partition": 2,
                 "offset": 1,
-                "timestamp": 1234000000
+                "timestamp": 1_234_000_000
             }
         }),
         e5.data.suffix().meta()
@@ -486,8 +474,9 @@ async fn custom_no_retry() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
+
 async fn performance() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -495,7 +484,7 @@ async fn performance() -> Result<()> {
     let container = redpanda_container(&docker).await?;
 
     let port = container.get_host_port_ipv4(9092);
-    let broker = format!("127.0.0.1:{}", port);
+    let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_no_retry";
     let group_id = "group123";
 
@@ -523,14 +512,12 @@ async fn performance() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
-    let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
@@ -548,7 +535,7 @@ async fn performance() -> Result<()> {
         return Err("Unable to send record to kafka".into());
     }
 
-    let e1 = out.get_event().await?;
+    let e1 = harness.out()?.get_event().await?;
     assert_eq!(
         literal!({
             "snot": "badger"
@@ -565,16 +552,14 @@ async fn performance() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 1,
-                "timestamp": 42000000
+                "timestamp": 42_000_000
             }
         }),
         e1.data.suffix().meta()
     );
 
     // ack event
-    harness
-        .send_contraflow(CbAction::Ack, e1.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, e1.id.clone())?;
 
     // produce second event
     let record2 = FutureRecord::to(topic)
@@ -587,7 +572,7 @@ async fn performance() -> Result<()> {
     }
 
     // get second event
-    let e2 = out.get_event().await?;
+    let e2 = harness.out()?.get_event().await?;
     assert_eq!(Value::null(), e2.data.suffix().value());
     assert_eq!(
         &literal!({
@@ -597,19 +582,18 @@ async fn performance() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 0,
-                "timestamp": 12000000
+                "timestamp": 12_000_000
             }
         }),
         e2.data.suffix().meta()
     );
 
     // fail -> ensure it is not replayed
-    harness
-        .send_contraflow(CbAction::Fail, e2.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Fail, e2.id.clone())?;
 
     // we don't get no event
-    assert!(out
+    assert!(harness
+        .out()?
         .expect_no_event_for(Duration::from_millis(200))
         .await
         .is_ok());
@@ -625,7 +609,7 @@ async fn performance() -> Result<()> {
     }
 
     // we only get the next event, no previous one
-    let e3 = out.get_event().await?;
+    let e3 = harness.out()?.get_event().await?;
     assert_eq!(Value::from(false), e3.data.suffix().value());
     assert_eq!(
         &literal!({
@@ -635,7 +619,7 @@ async fn performance() -> Result<()> {
                 "topic": topic,
                 "offset": 0,
                 "partition": 2,
-                "timestamp": 123000000
+                "timestamp": 123_000_000
             }
 
         }),
@@ -652,12 +636,12 @@ async fn performance() -> Result<()> {
         return Err("Could not send to kafka".into());
     }
 
-    let e5 = err.get_event().await?;
+    let e5 = harness.err()?.get_event().await?;
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
             "source": "test::performance",
-            "stream_id": 8589934592_u64,
+            "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
         e5.data.suffix().value()
@@ -671,7 +655,7 @@ async fn performance() -> Result<()> {
                 "topic": topic,
                 "partition": 2,
                 "offset": 1,
-                "timestamp": 1234000000
+                "timestamp": 1_234_000_000
             }
         }),
         e5.data.suffix().meta()
@@ -700,7 +684,7 @@ async fn performance() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
     let kafka_port = free_port::find_free_tcp_port().await?;
@@ -738,7 +722,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn invalid_rdkafka_options() -> Result<()> {
     let _ = env_logger::try_init();
     let kafka_port = free_port::find_free_tcp_port().await?;
@@ -783,7 +767,7 @@ async fn invalid_rdkafka_options() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     let _ = env_logger::try_init();
@@ -793,7 +777,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
 
     let port = container.get_host_port_ipv4(9092);
 
-    let broker = format!("127.0.0.1:{}", port);
+    let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_pause_resume";
     let group_id = "group_pause_resume";
 
@@ -820,13 +804,12 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
 
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
@@ -839,7 +822,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         return Err("Unable to send record to Kafka".into());
     }
     debug!("BEFORE GET EVENT 1");
-    let e1 = out.get_event().await?;
+    let e1 = harness.out()?.get_event().await?;
     assert_eq!(
         literal!({
             "snot": true
@@ -859,14 +842,15 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         return Err("Unable to send record to Kafka".into());
     }
     // we didn't receive shit because we are paused
-    assert!(out
+    assert!(harness
+        .out()?
         .expect_no_event_for(Duration::from_millis(200))
         .await
         .is_ok());
 
     harness.resume().await?;
     debug!("BEFORE GET EVENT 2");
-    let e2 = out.get_event().await?;
+    let e2 = harness.out()?.get_event().await?;
     debug!("AFTER GET EVENT 2");
     assert_eq!(Value::from("R.I.P."), e2.data.suffix().value());
 
@@ -879,7 +863,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn transactional_store_offset_handling() -> Result<()> {
     let _ = env_logger::try_init();
@@ -889,7 +873,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
 
     let port = container.get_host_port_ipv4(9092);
 
-    let broker = format!("127.0.0.1:{}", port);
+    let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_store_offsets";
     let group_id = "group_transactional_store_offsets";
 
@@ -920,13 +904,12 @@ async fn transactional_store_offset_handling() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
@@ -960,21 +943,17 @@ async fn transactional_store_offset_handling() -> Result<()> {
     }
 
     // receive events
-    let event1 = out.get_event().await?;
+    let event1 = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(1), event1.data.suffix().value());
-    let event2 = out.get_event().await?;
+    let event2 = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(2), event2.data.suffix().value());
-    let event3 = out.get_event().await?;
+    let event3 = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(3), event3.data.suffix().value());
 
     // ack message 3
-    harness
-        .send_contraflow(CbAction::Ack, event3.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, event3.id.clone())?;
     // ack message 1
-    harness
-        .send_contraflow(CbAction::Ack, event1.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, event1.id.clone())?;
 
     // stop harness
     let (out_events, err_events) = harness.stop().await?;
@@ -1009,13 +988,12 @@ async fn transactional_store_offset_handling() -> Result<()> {
     });
 
     // start new harness
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;
     debug!("connected");
@@ -1023,26 +1001,24 @@ async fn transactional_store_offset_handling() -> Result<()> {
     // give the background librdkafka time to start fetching the partitions before we fail
     // otherwise it will fail silently in the background
     // consider this a cry for help!
-    task::sleep(Duration::from_millis(200)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
     // fail message 2
-    harness
-        .send_contraflow(CbAction::Fail, event2.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Fail, event2.id.clone())?;
 
     debug!("failed event2");
 
     // ensure message 2 and 3 are received
     // for some strange reason rdkafka might consumer event2 twice
-    let mut event_again = out.get_event().await?;
+    let mut event_again = harness.out()?.get_event().await?;
     let mut data = event_again.data.suffix().value();
     while data == &Value::from(2) {
-        event_again = out.get_event().await?;
+        event_again = harness.out()?.get_event().await?;
         data = event_again.data.suffix().value();
     }
     assert_eq!(&Value::from(3), data);
 
     // stop harness
-    let _ = harness.stop().await?;
+    harness.stop().await?;
 
     // check that fail did reset the offset correctly
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
@@ -1053,30 +1029,27 @@ async fn transactional_store_offset_handling() -> Result<()> {
     drop(offsets);
 
     // start new harness
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
     // ensure message 2 and 3 are received - yet again
     // for some strange reason rdkafka might consumer event2 twice
-    let mut event_again = out.get_event().await?;
+    let mut event_again = harness.out()?.get_event().await?;
     let mut data = event_again.data.suffix().value();
     while data == &Value::from(2) {
-        event_again = out.get_event().await?;
+        event_again = harness.out()?.get_event().await?;
         data = event_again.data.suffix().value();
     }
     assert_eq!(&Value::from(3), data);
 
     // ack message 3 only
-    harness
-        .send_contraflow(CbAction::Ack, event_again.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, event_again.id.clone())?;
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
     assert_eq!(
@@ -1085,13 +1058,13 @@ async fn transactional_store_offset_handling() -> Result<()> {
     );
 
     // stop harness
-    let _ = harness.stop().await?;
+    harness.stop().await?;
 
     drop(container);
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn transactional_commit_offset_handling() -> Result<()> {
     let _ = env_logger::try_init();
@@ -1100,7 +1073,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     let container = redpanda_container(&docker).await?;
 
     let port = container.get_host_port_ipv4(9092);
-    let broker = format!("127.0.0.1:{}", port);
+    let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_commit_offset";
     let group_id = "group_commit_offset";
 
@@ -1131,13 +1104,12 @@ async fn transactional_commit_offset_handling() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
@@ -1171,21 +1143,17 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     }
 
     // receive events
-    let event1 = out.get_event().await?;
+    let event1 = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(1), event1.data.suffix().value());
-    let event2 = out.get_event().await?;
+    let event2 = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(2), event2.data.suffix().value());
-    let event3 = out.get_event().await?;
+    let event3 = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(3), event3.data.suffix().value());
 
     // ack message 3
-    harness
-        .send_contraflow(CbAction::Ack, event3.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, event3.id.clone())?;
     // ack message 1
-    harness
-        .send_contraflow(CbAction::Ack, event1.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, event1.id.clone())?;
 
     // stop harness
     let (out_events, err_events) = harness.stop().await?;
@@ -1217,34 +1185,29 @@ async fn transactional_commit_offset_handling() -> Result<()> {
         }
     });
     // start new harness
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
     // ensure no message is received
-    assert!(out
-        .get_event()
-        .timeout(Duration::from_secs(1))
+    assert!(timeout(Duration::from_secs(1), harness.out()?.get_event())
         .await
         .is_err());
 
     // fail message 2
-    harness
-        .send_contraflow(CbAction::Fail, event2.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Fail, event2.id.clone())?;
 
     // ensure message 2 is the next - seek was effective
-    let event2_again = out.get_event().await?;
+    let event2_again = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(2), event2_again.data.suffix().value());
 
     // stop harness
-    let _ = harness.stop().await?;
+    harness.stop().await?;
 
     // check that fail did reset the offset correctly - commit was effective
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
@@ -1277,30 +1240,27 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     });
 
     // start new harness
-    let harness = ConnectorHarness::new(
+    let mut harness = ConnectorHarness::new(
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
     )
     .await?;
-    let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
     // ensure message 2 and 3 are received
     // for some strange reason rdkafka might consumer event2 twice
-    let mut event_again = out.get_event().await?;
+    let mut event_again = harness.out()?.get_event().await?;
     let mut data = event_again.data.suffix().value();
     while data == &Value::from(2) {
-        event_again = out.get_event().await?;
+        event_again = harness.out()?.get_event().await?;
         data = event_again.data.suffix().value();
     }
     assert_eq!(&Value::from(3), data);
 
     // ack message 3 only
-    harness
-        .send_contraflow(CbAction::Ack, event_again.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, event_again.id.clone())?;
 
     // expected order of things: event5, event6, ack6, fail5, event5, event6
     let record5 = FutureRecord::to(topic)
@@ -1323,30 +1283,26 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     // discard old repeated events (We don't know why they come again)
     // rdkafka consumer seems to fetch them again when its internal state got updated
     // or something
-    let mut event5 = dbg!(out.get_event().await?);
+    let mut event5 = harness.out()?.get_event().await?;
     while event5.data.suffix().value() != &Value::from(5) {
-        event5 = dbg!(out.get_event().await?);
+        event5 = harness.out()?.get_event().await?;
     }
 
     assert_eq!(&Value::from(5), event5.data.suffix().value());
-    let event6 = dbg!(out.get_event().await?);
+    let event6 = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(6), event6.data.suffix().value());
 
-    harness
-        .send_contraflow(CbAction::Ack, event6.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Ack, event6.id.clone())?;
 
-    harness
-        .send_contraflow(CbAction::Fail, event5.id.clone())
-        .await?;
+    harness.send_contraflow(CbAction::Fail, event5.id.clone())?;
 
-    let event5_again = out.get_event().await?;
+    let event5_again = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(5), event5_again.data.suffix().value());
-    let event6_again = out.get_event().await?;
+    let event6_again = harness.out()?.get_event().await?;
     assert_eq!(&Value::from(6), event6_again.data.suffix().value());
 
     // stop harness
-    let _ = harness.stop().await?;
+    harness.stop().await?;
 
     // offset should be back to where it was before
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
@@ -1401,7 +1357,7 @@ async fn get_offsets(
     consumer.subscribe(&[topic])?;
     let mut assignment = consumer.assignment()?;
     while assignment.count() == 0 {
-        task::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
         consumer.poll(Duration::ZERO);
         assignment = consumer.assignment()?;
     }

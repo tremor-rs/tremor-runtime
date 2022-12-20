@@ -14,16 +14,25 @@
 
 use super::flow::{Alias, Flow};
 use super::KillSwitch;
-use crate::errors::{Kind as ErrorKind, Result};
 use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
+use crate::{
+    channel::{bounded, Sender},
+    errors::empty_error,
+};
 use crate::{
     connectors::{self, ConnectorBuilder, ConnectorType},
     log_error,
 };
-use async_std::channel::{bounded, Sender};
-use async_std::prelude::*;
-use async_std::task::{self, JoinHandle};
+use crate::{
+    errors::{Kind as ErrorKind, Result},
+    qsize,
+};
 use hashbrown::{hash_map::Entry, HashMap};
+use tokio::{
+    sync::oneshot,
+    task::{self, JoinHandle},
+    time::timeout,
+};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::ast::DeployFlow;
 
@@ -37,7 +46,7 @@ pub(crate) enum Msg {
         /// deploy flow
         flow: Box<DeployFlow<'static>>,
         /// result sender
-        sender: Sender<Result<()>>,
+        sender: oneshot::Sender<Result<()>>,
     },
     RegisterConnectorType {
         /// the type of connector
@@ -45,10 +54,10 @@ pub(crate) enum Msg {
         /// the builder
         builder: Box<dyn ConnectorBuilder>,
     },
-    GetFlows(Sender<Result<Vec<Flow>>>),
-    GetFlow(Alias, Sender<Result<Flow>>),
+    GetFlows(oneshot::Sender<Result<Vec<Flow>>>),
+    GetFlow(Alias, oneshot::Sender<Result<Flow>>),
     /// Initiate the Quiescence process
-    Drain(Sender<Result<()>>),
+    Drain(oneshot::Sender<Result<()>>),
     /// stop this manager
     Stop,
 }
@@ -59,17 +68,15 @@ pub(crate) struct FlowSupervisor {
     operator_id_gen: OperatorIdGen,
     connector_id_gen: ConnectorIdGen,
     known_connectors: connectors::Known,
-    qsize: usize,
 }
 
 impl FlowSupervisor {
-    pub fn new(qsize: usize) -> Self {
+    pub fn new() -> Self {
         Self {
             flows: HashMap::new(),
             known_connectors: connectors::Known::new(),
             operator_id_gen: OperatorIdGen::new(),
             connector_id_gen: ConnectorIdGen::new(),
-            qsize,
         }
     }
 
@@ -86,7 +93,7 @@ impl FlowSupervisor {
     async fn handle_start_deploy(
         &mut self,
         flow: DeployFlow<'static>,
-        sender: Sender<Result<()>>,
+        sender: oneshot::Sender<Result<()>>,
         kill_switch: &KillSwitch,
     ) {
         let id = Alias::from(&flow);
@@ -105,28 +112,28 @@ impl FlowSupervisor {
             }),
         };
         log_error!(
-            sender.send(res).await,
+            sender.send(res).map_err(|_| "send error"),
             "Error sending StartDeploy Err Result: {e}"
         );
     }
-    async fn handle_get_flows(&self, reply_tx: Sender<Result<Vec<Flow>>>) {
+    fn handle_get_flows(&self, reply_tx: oneshot::Sender<Result<Vec<Flow>>>) {
         let flows = self.flows.values().cloned().collect();
         log_error!(
-            reply_tx.send(Ok(flows)).await,
+            reply_tx.send(Ok(flows)).map_err(|_| "send error"),
             "Error sending ListFlows response: {e}"
         );
     }
-    async fn handle_get_flow(&self, id: Alias, reply_tx: Sender<Result<Flow>>) {
+    fn handle_get_flow(&self, id: &Alias, reply_tx: oneshot::Sender<Result<Flow>>) {
         log_error!(
             reply_tx
                 .send(
                     self.flows
-                        .get(&id)
+                        .get(id)
                         .cloned()
                         .ok_or_else(|| ErrorKind::FlowNotFound(id.to_string()).into()),
                 )
-                .await,
-            "Error sending GetFlow response {e}"
+                .map_err(|_| "send error"),
+            "Error sending GetFlow response: {e}"
         );
     }
 
@@ -134,7 +141,7 @@ impl FlowSupervisor {
         info!("Stopping Manager ...");
         if !self.flows.is_empty() {
             // send stop to each deployment
-            let (tx, rx) = bounded(self.flows.len());
+            let (tx, mut rx) = bounded(self.flows.len());
             let mut expected_stops: usize = 0;
             for flow in self.flows.values() {
                 log_error!(
@@ -145,29 +152,34 @@ impl FlowSupervisor {
                 expected_stops += 1;
             }
 
-            task::spawn::<_, Result<()>>(async move {
-                while expected_stops > 0 {
-                    log_error!(rx.recv().await?, "Error during Stopping: {e}");
-                    expected_stops = expected_stops.saturating_sub(1);
-                }
-                Ok(())
-            })
-            .timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
-            .await??;
+            timeout(
+                DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
+                task::spawn(async move {
+                    while expected_stops > 0 {
+                        log_error!(
+                            rx.recv().await.ok_or_else(empty_error)?,
+                            "Error during Stopping: {e}"
+                        );
+                        expected_stops = expected_stops.saturating_sub(1);
+                    }
+                    Result::Ok(())
+                }),
+            )
+            .await???;
         }
         Ok(())
     }
-    async fn handle_drain(&self, sender: Sender<Result<()>>) {
+    async fn handle_drain(&self, sender: oneshot::Sender<Result<()>>) {
         if self.flows.is_empty() {
             log_error!(
-                sender.send(Ok(())).await,
+                sender.send(Ok(())).map_err(|_| "send error"),
                 "Failed to send drain result: {e}"
             );
         } else {
             let num_flows = self.flows.len();
             info!("Draining all {num_flows} Flows ...");
             let mut alive_flows = 0_usize;
-            let (tx, rx) = bounded(num_flows);
+            let (tx, mut rx) = bounded(num_flows);
             for (_, flow) in &self.flows {
                 if !log_error!(
                     flow.drain(tx.clone()).await,
@@ -177,29 +189,29 @@ impl FlowSupervisor {
                     alive_flows += 1;
                 }
             }
-            task::spawn::<_, Result<()>>(async move {
-                let rx_futures = std::iter::repeat_with(|| rx.recv()).take(alive_flows);
-                for result in futures::future::join_all(rx_futures).await {
-                    match result {
-                        Ok(Err(e)) => {
-                            error!("Error during Draining: {}", e);
+            task::spawn(async move {
+                while alive_flows > 0 {
+                    match rx.recv().await {
+                        Some(Err(e)) => {
+                            error!("Error during Draining: {e}");
                         }
-                        Err(_) | Ok(Ok(())) => {}
-                    }
+                        None | Some(_) => {}
+                    };
+                    alive_flows -= 1;
                 }
                 info!("Flows drained.");
-                sender.send(Ok(())).await?;
-                Ok(())
+                sender.send(Ok(())).map_err(|_| "Failed to send reply")?;
+                Result::Ok(())
             });
         }
     }
 
     pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel, KillSwitch) {
-        let (tx, rx) = bounded(self.qsize);
+        let (tx, mut rx) = bounded(qsize());
         let kill_switch = KillSwitch(tx.clone());
         let task_kill_switch = kill_switch.clone();
         let system_h = task::spawn(async move {
-            while let Ok(msg) = rx.recv().await {
+            while let Some(msg) = rx.recv().await {
                 match msg {
                     Msg::RegisterConnectorType {
                         connector_type,
@@ -210,8 +222,8 @@ impl FlowSupervisor {
                         self.handle_start_deploy(*flow, sender, &task_kill_switch)
                             .await;
                     }
-                    Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx).await,
-                    Msg::GetFlow(id, reply_tx) => self.handle_get_flow(id, reply_tx).await,
+                    Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx),
+                    Msg::GetFlow(id, reply_tx) => self.handle_get_flow(&id, reply_tx),
                     Msg::Stop => {
                         self.handle_stop().await?;
                         break;

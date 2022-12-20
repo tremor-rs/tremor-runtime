@@ -17,19 +17,23 @@ use std::time::Duration;
 use crate::connectors::impls::tcp;
 use crate::connectors::tests::{free_port, ConnectorHarness};
 use crate::errors::Result;
-use async_std::{io::WriteExt, net::TcpStream, prelude::*};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    time::timeout,
+};
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 use value_trait::Builder;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn server_event_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
     let free_port = free_port::find_free_tcp_port().await?;
 
-    let server_addr = format!("127.0.0.1:{}", free_port);
+    let server_addr = format!("127.0.0.1:{free_port}");
 
     let defn = literal!({
       "codec": "string",
@@ -39,18 +43,16 @@ async fn server_event_routing() -> Result<()> {
         "buf_size": 4096
       }
     });
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &tcp::server::Builder::default(), &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of tcp_server connector");
+
     harness.start().await?;
     harness.wait_for_connected().await?;
     // connect 2 client sockets
     let mut socket1 = TcpStream::connect(&server_addr).await?;
     let mut socket2 = TcpStream::connect(&server_addr).await?;
     socket1.write_all("snot\n".as_bytes()).await?;
-    let event = out_pipeline.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     let (_data, meta) = event.data.parts();
     let tcp_server_meta = meta.get("tcp_server");
     assert_eq!(Some(false), tcp_server_meta.get_bool("tls"));
@@ -74,10 +76,7 @@ async fn server_event_routing() -> Result<()> {
     };
     harness.send_to_sink(event1, IN).await?;
     let mut buf = vec![0_u8; 8192];
-    let bytes_read = socket1
-        .read(&mut buf)
-        .timeout(Duration::from_secs(2))
-        .await??;
+    let bytes_read = timeout(Duration::from_secs(2), socket1.read(&mut buf)).await??;
     let data = &buf[0..bytes_read];
     assert_eq!("badger", &String::from_utf8_lossy(data));
     debug!("Received event 1 via socket1");
@@ -85,7 +84,7 @@ async fn server_event_routing() -> Result<()> {
     // send something to socket 2
     socket2.write_all("carfuffle\n".as_bytes()).await?;
 
-    let event = out_pipeline.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     // send an event and route it via eventid to socket 2
     let mut id2 = EventId::default();
     id2.track(&event.id);
@@ -96,10 +95,7 @@ async fn server_event_routing() -> Result<()> {
     };
 
     harness.send_to_sink(event2, IN).await?;
-    let bytes_read = socket2
-        .read(&mut buf)
-        .timeout(Duration::from_secs(5))
-        .await??;
+    let bytes_read = timeout(Duration::from_secs(5), socket2.read(&mut buf)).await??;
     let data = &buf[0..bytes_read];
     assert_eq!("fleek", &String::from_utf8_lossy(data));
     debug!("Received event 2 via socket1");
@@ -111,13 +107,13 @@ async fn server_event_routing() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn client_disconnect() -> Result<()> {
     let _ = env_logger::try_init();
 
     let free_port = free_port::find_free_tcp_port().await?;
 
-    let server_addr = format!("127.0.0.1:{}", free_port);
+    let server_addr = format!("127.0.0.1:{free_port}");
 
     let defn = literal!({
       "codec": "string",
@@ -127,11 +123,8 @@ async fn client_disconnect() -> Result<()> {
         "buf_size": 4096
       }
     });
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &tcp::server::Builder::default(), &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of tcp_server connector");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
@@ -142,10 +135,7 @@ async fn client_disconnect() -> Result<()> {
         let msg = format!("snot{i}\n");
         socket.write_all(msg.as_bytes()).await?;
 
-        let event = out_pipeline
-            .get_event()
-            .timeout(Duration::from_secs(1))
-            .await??;
+        let event = timeout(Duration::from_secs(1), harness.out()?.get_event()).await??;
         let (data, _meta) = event.data.parts();
         assert_eq!(&Value::from(msg.trim_end()), data);
 

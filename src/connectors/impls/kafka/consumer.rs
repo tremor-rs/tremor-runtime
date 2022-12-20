@@ -12,20 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-use std::time::Duration;
-use tremor_common::time::nanotime;
-use tremor_value::value::StaticValue;
-
-use crate::connectors::impls::kafka::{
-    SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR,
+use crate::connectors::{
+    impls::kafka::{TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR},
+    prelude::*,
 };
-use crate::connectors::prelude::*;
-use async_broadcast::{broadcast, Receiver as BroadcastReceiver, TryRecvError};
-use async_std::channel::{bounded, Receiver, Sender};
-use async_std::prelude::{FutureExt, StreamExt};
-use async_std::task::{self, JoinHandle};
+use crate::errors::empty_error;
+use futures::StreamExt;
 use halfbrown::HashMap;
 use indexmap::IndexMap;
 use log::Level::Debug;
@@ -35,6 +27,16 @@ use rdkafka::error::{KafkaError, KafkaResult};
 use rdkafka::message::{BorrowedMessage, Headers, Message};
 use rdkafka::{Offset, TopicPartitionList};
 use rdkafka_sys::RDKafkaErrorCode;
+use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::{
+    sync::broadcast::{channel as broadcast, error::TryRecvError, Receiver as BroadcastReceiver},
+    task::{self, JoinHandle},
+    time::timeout,
+};
+use tremor_common::time::nanotime;
+use tremor_value::value::StaticValue;
 
 const KAFKA_CONSUMER_META_KEY: &str = "kafka_consumer";
 
@@ -417,7 +419,7 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
     }
 }
 type TremorConsumerContext = TremorRDKafkaContext<SourceContext>;
-type TremorConsumer = StreamConsumer<TremorConsumerContext, SmolRuntime>;
+type TremorConsumer = StreamConsumer<TremorConsumerContext>;
 
 struct KafkaConsumerConnector {
     config: Config,
@@ -429,7 +431,7 @@ struct KafkaConsumerConnector {
 impl Connector for KafkaConsumerConnector {
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = KafkaConsumerSource::new(
@@ -437,7 +439,7 @@ impl Connector for KafkaConsumerConnector {
             self.client_config.clone(),
             self.origin_uri.clone(),
         );
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -502,7 +504,7 @@ impl KafkaConsumerSource {
             .map(Duration::from_millis)
             .unwrap_or(Self::DEFAULT_SEEK_TIMEOUT);
 
-        let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let (source_tx, source_rx) = bounded(qsize());
         let offsets = if mode.is_transactional() {
             Some(HashMap::new())
         } else {
@@ -569,7 +571,7 @@ impl Source for KafkaConsumerSource {
                 drop(consumer);
             }
             // terminate the consumer task
-            consumer_task.cancel().await;
+            consumer_task.abort();
         }
 
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
@@ -577,12 +579,11 @@ impl Source for KafkaConsumerSource {
             "{} Connecting using rdkafka 0x{:08x}, {}",
             &ctx, version_n, version_s
         );
-        let (connect_result_tx, connect_result_rx) = bounded(1);
+        let (connect_result_tx, mut connect_result_rx) = bounded(1);
 
         // we only ever want to report on the latest metrics and discard old ones
         // if no messages arrive, no metrics will be reported, so be it.
-        let (mut metrics_tx, metrics_rx) = broadcast(1);
-        metrics_tx.set_overflow(true);
+        let (metrics_tx, metrics_rx) = broadcast(1);
         self.metrics_rx = Some(metrics_rx);
         let consumer_context = TremorConsumerContext::consumer(
             ctx.clone(),
@@ -620,30 +621,27 @@ impl Source for KafkaConsumerSource {
         ));
         self.consumer_task = Some(handle);
 
-        let res = connect_result_rx
-            .recv()
-            .timeout(KAFKA_CONNECT_TIMEOUT)
-            .await;
+        let res = timeout(KAFKA_CONNECT_TIMEOUT, connect_result_rx.recv()).await;
         match res {
             Err(_timeout) => {
                 // all good, we didn't receive an error, so let's assume we are fine
                 debug!("{ctx} Waiting for initial assignment timed out...");
                 Ok(true)
             }
-            Ok(Err(e)) => {
+            Ok(None) => {
                 // receive error - bail out
-                Err(e.into())
+                Err(empty_error())
             }
-            Ok(Ok(KafkaError::Global(RDKafkaErrorCode::NoError))) => {
+            Ok(Some(KafkaError::Global(RDKafkaErrorCode::NoError))) => {
                 debug!("{ctx} Consumer connected.");
                 Ok(true) // connected
             }
-            Ok(Ok(err)) => Err(err.into()), // any other error
+            Ok(Some(err)) => Err(err.into()), // any other error
         }
     }
 
     async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        let (reply, custom_pull_id) = self.source_rx.recv().await?;
+        let (reply, custom_pull_id) = self.source_rx.recv().await.ok_or_else(empty_error)?;
         if let Some(custom_pull_id) = custom_pull_id {
             *pull_id = custom_pull_id;
         }
@@ -744,14 +742,14 @@ impl Source for KafkaConsumerSource {
         Ok(())
     }
 
-    async fn on_cb_close(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> Result<()> {
         let assignment = self.get_assignment()?;
         if let Some(consumer) = self.consumer.as_ref() {
             consumer.pause(&assignment)?;
         }
         Ok(())
     }
-    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
         let assignment = self.get_assignment()?;
         if let Some(consumer) = self.consumer.as_mut() {
             consumer.resume(&assignment)?;
@@ -788,7 +786,7 @@ impl Source for KafkaConsumerSource {
 
         // stop the consumer task
         if let Some(consumer_task) = self.consumer_task.take() {
-            consumer_task.cancel().await;
+            consumer_task.abort();
         }
 
         info!("{ctx} Consumer stopped.");
@@ -809,8 +807,8 @@ impl Source for KafkaConsumerSource {
             loop {
                 match metrics_rx.try_recv() {
                     Ok(payload) => vec.push(payload),
-                    Err(TryRecvError::Overflowed(_)) => continue, // try again, this is expected
-                    Err(_) => break,                              // on all other errors, stop
+                    Err(TryRecvError::Lagged(_)) => continue, // try again, this is expected
+                    Err(_) => break,                          // on all other errors, stop
                 }
             }
             vec
@@ -822,7 +820,7 @@ impl Source for KafkaConsumerSource {
 
 /// Kafka consumer main loop - consuming from a kafka stream
 async fn consumer_task(
-    task_consumer: Arc<StreamConsumer<TremorConsumerContext, SmolRuntime>>,
+    task_consumer: Arc<StreamConsumer<TremorConsumerContext>>,
     topic_resolver: TopicResolver,
     consumer_origin_uri: EventOriginUri,
     connect_result_tx: Sender<KafkaError>,

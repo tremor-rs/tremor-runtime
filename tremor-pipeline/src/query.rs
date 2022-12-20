@@ -34,9 +34,15 @@ use petgraph::{
     Graph,
 };
 use rand::Rng;
-use std::collections::{BTreeSet, HashSet};
 use std::iter;
-use tremor_common::ids::{OperatorId, OperatorIdGen};
+use std::{
+    borrow::Borrow,
+    collections::{BTreeSet, HashSet},
+};
+use tremor_common::{
+    ids::{OperatorId, OperatorIdGen},
+    ports::Port,
+};
 use tremor_script::ast::optimizer::Optimizer;
 use tremor_script::{
     ast::{
@@ -56,7 +62,7 @@ use tremor_script::{
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct InputPort {
     pub id: Cow<'static, str>,
-    pub port: Cow<'static, str>,
+    pub port: Port<'static>,
     pub had_port: bool,
     pub mid: Box<NodeMeta>,
 }
@@ -68,7 +74,7 @@ impl BaseExpr for InputPort {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct OutputPort {
     pub id: Cow<'static, str>,
-    pub port: Cow<'static, str>,
+    pub port: Port<'static>,
     pub had_port: bool,
     pub mid: Box<NodeMeta>,
 }
@@ -81,7 +87,7 @@ impl BaseExpr for OutputPort {
 fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
     InputPort {
         id: common_cow(port.0.as_str()),
-        port: common_cow(port.1.as_str()),
+        port: Port::from(port.1.as_str().to_string()),
         had_port: true,
         mid: Box::new(port.0.meta().clone()),
     }
@@ -90,7 +96,7 @@ fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
 fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
     OutputPort {
         id: common_cow(port.0.as_str()),
-        port: common_cow(port.1.as_str()),
+        port: Port::from(port.1.as_str().to_string()),
         had_port: true,
         mid: Box::new(port.0.meta().clone()),
     }
@@ -202,7 +208,7 @@ impl Query {
 
         for name in &self.0.query.into {
             let name = name.id.clone();
-            let kind = NodeKind::Output(name.clone());
+            let kind = NodeKind::Output(Port::from(name.clone()));
             let id = pipe_graph.add_node(NodeConfig {
                 id: name.to_string(),
                 kind,
@@ -384,7 +390,7 @@ impl Query {
                                 ..NodeConfig::default()
                             };
                             let id = pipe_graph.add_node(node.clone());
-                            into_map.insert(i.to_string(), id);
+                            into_map.insert(Port::from(i.to_string()), id);
                             nodes_by_name.insert(name.clone().into(), id);
                         }
 
@@ -516,7 +522,7 @@ impl Query {
 
             for (old_idx, mut node) in ig.graph.graph.into_iter().enumerate() {
                 let new_idx = if let NodeKind::Output(port) = &node.kind {
-                    let port: &str = port;
+                    let port: &str = port.borrow();
                     node.config.kind = NodeKind::Operator;
                     let new_idx = pipe_graph.add_node(node.config);
                     let to_id = ig.into_map.get(port).ok_or(format!(
@@ -653,7 +659,7 @@ impl Query {
                 }
             }
 
-            let mut inputs: HashMap<beef::Cow<'static, str>, usize> = HashMap::new();
+            let mut inputs: HashMap<Port<'static>, usize> = HashMap::new();
             for idx in pipe_graph.externals(Incoming) {
                 if let Some(NodeConfig {
                     kind: NodeKind::Input,
@@ -668,7 +674,7 @@ impl Query {
                 }
             }
 
-            let mut outputs: HashMap<beef::Cow<'static, str>, usize> = HashMap::new();
+            let mut outputs: HashMap<Port<'static>, usize> = HashMap::new();
             for idx in pipe_graph.externals(Outgoing) {
                 if let Some(NodeConfig {
                     kind: NodeKind::Output(_),
@@ -712,7 +718,7 @@ struct InlcudedGraph {
     prefix: String,
     graph: ExecutableGraph,
     from_map: HashMap<String, NodeIndex>,
-    into_map: HashMap<String, NodeIndex>,
+    into_map: HashMap<Port<'static>, NodeIndex>,
 }
 
 fn node_to_dot(_g: &Graph<NodeConfig, Connection>, (_, c): (NodeIndex, &NodeConfig)) -> String {

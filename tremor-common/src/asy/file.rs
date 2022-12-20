@@ -16,11 +16,8 @@
 // basis
 // #![cfg_attr(coverage, no_coverage)]
 
-use async_std::{
-    fs::{File, OpenOptions},
-    path::Path,
-    path::PathBuf,
-};
+use std::path::{Path, PathBuf};
+use tokio::fs::{File, OpenOptions};
 
 use crate::errors::Error;
 
@@ -74,7 +71,7 @@ pub async fn canonicalize<S>(path: &S) -> Result<PathBuf, Error>
 where
     S: AsRef<Path> + ?Sized,
 {
-    async_std::fs::canonicalize(path).await.map_err(|e| {
+    tokio::fs::canonicalize(path).await.map_err(|e| {
         let p: &Path = path.as_ref();
         Error::FileCanonicalize(e, p.to_string_lossy().to_string())
     })
@@ -87,12 +84,12 @@ mod test {
     #![allow(clippy::unwrap_used)]
     use crate::errors::Error;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn canonicalize() -> Result<(), Error> {
         let path = std::env::current_dir().unwrap();
         let path = path.join("Cargo.toml");
         let path = super::canonicalize(&path).await?;
-        assert!(path.exists().await);
+        assert!(path.exists());
         let path = path.join("really.does.not.exist");
         let p = path.to_string_lossy().to_string();
         let path = super::canonicalize(&path).await;
@@ -102,7 +99,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn create() -> Result<(), Error> {
         let path = std::env::current_dir().unwrap();
         let path = path.join(".a.file.that.will.get.deleted");
@@ -116,7 +113,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn open() -> Result<(), Error> {
         let path = std::env::current_dir().unwrap();
         let path = path.join("Cargo.toml");
@@ -130,7 +127,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn open_with() -> Result<(), Error> {
         let path = std::env::current_dir().unwrap();
         let path = path.join("Cargo.toml");

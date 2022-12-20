@@ -13,14 +13,11 @@
 // limitations under the License.
 use super::auth;
 use crate::connectors::prelude::*;
-use async_std::{
-    channel::{self, Receiver, Sender},
-    sync::Arc,
-    task::{self, JoinHandle},
-};
 use aws_sdk_s3::{model::Object, types::ByteStream, Client as S3Client};
 use futures::stream::TryStreamExt;
 use std::error::Error as StdError;
+use std::sync::Arc;
+use tokio::task::{self, JoinHandle};
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
@@ -116,7 +113,7 @@ impl ConnectorBuilder for Builder {
 
 struct S3Reader {
     config: Config,
-    tx: Option<Sender<SourceReply>>,
+    tx: Option<crate::channel::Sender<SourceReply>>,
     handles: Vec<JoinHandle<Result<()>>>,
 }
 
@@ -124,22 +121,19 @@ struct S3Reader {
 impl Connector for S3Reader {
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
+        ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let (tx, rx) = channel::bounded(QSIZE.load(Ordering::Relaxed));
-        let s3_source = ChannelSource::from_channel(tx.clone(), rx, Arc::default());
-
+        let (tx, rx) = crate::channel::bounded(qsize());
+        let source = ChannelSource::from_channel(tx.clone(), rx, Arc::default());
         self.tx = Some(tx);
-
-        let addr = builder.spawn(s3_source, source_context)?;
-        Ok(Some(addr))
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn connect(&mut self, ctx: &ConnectorContext, _attemp: &Attempt) -> Result<bool> {
         // cancelling handles from previous connection, if any
         for handle in self.handles.drain(..) {
-            handle.cancel().await;
+            handle.abort();
         }
         let client = auth::get_client(
             self.config.aws_region.clone(),
@@ -166,10 +160,10 @@ impl Connector for S3Reader {
                 Error::from(ErrorKind::S3Error(msg))
             })?;
 
-        let (tx_key, rx_key) = channel::bounded(QSIZE.load(Ordering::Relaxed));
+        let (tx_key, rx_key) = async_channel::bounded(qsize());
 
         // spawn object fetcher tasks
-        for i in 0..self.config.max_connections {
+        for _ in 0..self.config.max_connections {
             let client = client.clone();
             let rx = rx_key.clone();
             let bucket = self.config.bucket.clone();
@@ -194,18 +188,15 @@ impl Connector for S3Reader {
                 part_size: self.config.multipart_chunksize,
                 origin_uri,
             };
-            let handle = task::Builder::new()
-                .name(format!("fetch_obj_task{i}"))
-                .spawn(async move { instance.start().await })?;
+            let handle = task::spawn(async move { instance.start().await });
             self.handles.push(handle);
         }
 
         // spawn key fetcher task
         let bucket = self.config.bucket.clone();
         let prefix = self.config.prefix.clone();
-        task::Builder::new()
-            .name("fetch_key_task".to_owned())
-            .spawn(fetch_keys_task(client, bucket, prefix, tx_key))?;
+        //Builder::new().name("fetch_key_task").
+        task::spawn(fetch_keys_task(client, bucket, prefix, tx_key));
 
         Ok(true)
     }
@@ -217,7 +208,7 @@ impl Connector for S3Reader {
     async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
         // stop all handles
         for handle in self.handles.drain(..) {
-            handle.cancel().await;
+            handle.abort();
         }
         Ok(())
     }
@@ -227,7 +218,7 @@ async fn fetch_keys_task(
     client: S3Client,
     bucket: String,
     prefix: Option<String>,
-    sender: Sender<KeyPayload>,
+    sender: async_channel::Sender<KeyPayload>,
 ) -> Result<()> {
     let fetch_keys = |continuation_token: Option<String>| async {
         Result::<_>::Ok(
@@ -274,8 +265,8 @@ async fn fetch_keys_task(
 struct S3Instance {
     ctx: ConnectorContext,
     client: S3Client,
-    rx: Receiver<KeyPayload>,
-    tx: Sender<SourceReply>,
+    rx: async_channel::Receiver<KeyPayload>,
+    tx: crate::channel::Sender<SourceReply>,
     bucket: String,
     multipart_threshold: i64,
     part_size: i64,

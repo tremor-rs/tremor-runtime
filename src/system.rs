@@ -18,29 +18,20 @@ pub mod flow;
 pub mod flow_supervisor;
 
 use self::flow::Flow;
-use crate::errors::{Error, Kind as ErrorKind, Result};
-use crate::{connectors, QSIZE};
-use async_std::channel::{bounded, Sender};
-use async_std::prelude::*;
-use async_std::task::JoinHandle;
-use std::sync::atomic::Ordering;
+use crate::{
+    channel::Sender,
+    connectors,
+    errors::{Error, Kind as ErrorKind, Result},
+};
 use std::time::Duration;
+use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
 use tremor_script::{ast, highlighter::Highlighter};
 
 /// Configuration for the runtime
+#[derive(Default)]
 pub struct WorldConfig {
-    /// default size for queues
-    pub qsize: usize,
     /// if debug connectors should be loaded
     pub debug_connectors: bool,
-}
-impl Default for WorldConfig {
-    fn default() -> Self {
-        Self {
-            qsize: QSIZE.load(Ordering::Relaxed),
-            debug_connectors: false,
-        }
-    }
 }
 
 /// default graceful shutdown timeout
@@ -68,11 +59,11 @@ impl KillSwitch {
     /// * if draining or stopping fails
     pub(crate) async fn stop(&self, mode: ShutdownMode) -> Result<()> {
         if mode == ShutdownMode::Graceful {
-            let (tx, rx) = bounded(1);
+            let (tx, rx) = oneshot::channel();
             self.0.send(flow_supervisor::Msg::Drain(tx)).await?;
-            if let Ok(res) = rx.recv().timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await {
-                if let Err(e) | Ok(Err(e)) = res.map_err(Error::from) {
-                    error!("Error draining all Flows: {}", e);
+            if let Ok(res) = timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT, rx).await {
+                if res.is_err() {
+                    error!("Error draining all Flows",);
                 }
             } else {
                 warn!(
@@ -90,7 +81,7 @@ impl KillSwitch {
 
     #[cfg(test)]
     pub(crate) fn dummy() -> Self {
-        KillSwitch(bounded(1).0)
+        KillSwitch(crate::channel::bounded(1).0)
     }
 
     #[cfg(test)]
@@ -111,14 +102,14 @@ impl World {
     /// # Errors
     /// If the flow can't be started
     pub async fn start_flow(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
-        let (tx, rx) = bounded(1);
+        let (tx, rx) = oneshot::channel();
         self.system
             .send(flow_supervisor::Msg::StartDeploy {
                 flow: Box::new(flow.clone()),
                 sender: tx,
             })
             .await?;
-        if let Err(e) = rx.recv().await? {
+        if let Err(e) = rx.await? {
             let err_str = match e {
                 Error(
                     ErrorKind::Script(e)
@@ -166,12 +157,12 @@ impl World {
     /// # Errors
     ///  * if we fail to send the request or fail to receive it
     pub async fn get_flow(&self, flow_id: String) -> Result<Flow> {
-        let (flow_tx, flow_rx) = bounded(1);
+        let (flow_tx, flow_rx) = oneshot::channel();
         let flow_id = flow::Alias::new(flow_id);
         self.system
             .send(flow_supervisor::Msg::GetFlow(flow_id.clone(), flow_tx))
             .await?;
-        flow_rx.recv().await?
+        flow_rx.await?
     }
 
     /// list the currently deployed flows
@@ -179,11 +170,11 @@ impl World {
     /// # Errors
     ///  * if we fail to send the request or fail to receive it
     pub async fn get_flows(&self) -> Result<Vec<Flow>> {
-        let (reply_tx, reply_rx) = bounded(1);
+        let (reply_tx, reply_rx) = oneshot::channel();
         self.system
             .send(flow_supervisor::Msg::GetFlows(reply_tx))
             .await?;
-        reply_rx.recv().await?
+        reply_rx.await?
     }
 
     /// Starts the runtime system
@@ -191,8 +182,7 @@ impl World {
     /// # Errors
     ///  * if the world manager can't be started
     pub async fn start(config: WorldConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
-        let (system_h, system, kill_switch) =
-            flow_supervisor::FlowSupervisor::new(config.qsize).start();
+        let (system_h, system, kill_switch) = flow_supervisor::FlowSupervisor::new().start();
 
         let world = Self {
             system,

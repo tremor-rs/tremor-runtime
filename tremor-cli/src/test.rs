@@ -21,7 +21,6 @@ use crate::{
     errors::{Error, ErrorKind, Result},
 };
 use crate::{cli::TestMode, target_process};
-use async_std::prelude::FutureExt;
 use globwalk::{FileType, GlobWalkerBuilder};
 use metadata::Meta;
 use std::collections::HashMap;
@@ -29,6 +28,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tag::TagFilter;
+use tokio::time::timeout;
 use tremor_common::file;
 use tremor_common::time::nanotime;
 
@@ -58,8 +58,10 @@ async fn suite_bench(
 
         status::h0("Framework", "Finding benchmark test scenarios")?;
 
+        let mut benches: Vec<_> = benches.map(|b| b.path().to_owned()).collect();
+        benches.sort();
         for bench in benches {
-            let (s, t) = run_bench(bench.path(), config, stats).await?;
+            let (s, t) = run_bench(bench, config, stats).await?;
 
             stats = s;
             if let Some(report) = t {
@@ -74,16 +76,16 @@ async fn suite_bench(
 }
 
 async fn run_bench(
-    root: &Path,
+    root: PathBuf,
     config: &TestConfig,
     mut stats: stats::Stats,
 ) -> Result<(stats::Stats, Option<report::TestReport>)> {
     let bench_root = root.to_string_lossy();
-    let tags = tag::resolve(config.base_directory.as_path(), root)?;
+    let tags = tag::resolve(config.base_directory.as_path(), &root)?;
     let (matched, is_match) = config.matches(&tags);
 
     if is_match {
-        let mut tags_file = PathBuf::from(root);
+        let mut tags_file = root.clone();
         tags_file.push("tags.yaml");
         if tags_file.exists() {
             status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
@@ -93,7 +95,7 @@ async fn run_bench(
             let test_report = process::run_process(
                 "bench",
                 config.base_directory.as_path(),
-                &cwd.join(root),
+                &cwd.join(&root),
                 &tags,
             )
             .await?;
@@ -180,10 +182,12 @@ async fn run_integration(
         status::tags(&tags, Some(&matched), Some(&config.excludes))?;
 
         // Run integration tests
-        let test_report = if let Some(timeout) = config.timeout {
-            match process::run_process("integration", base, root, &tags)
-                .timeout(timeout)
-                .await
+        let test_report = if let Some(timeout_dur) = config.timeout {
+            match timeout(
+                timeout_dur,
+                process::run_process("integration", base, root, &tags),
+            )
+            .await
             {
                 Err(_) => {
                     // timeout
@@ -309,8 +313,7 @@ impl Test {
                 config.meta.mode = self.mode;
                 let test_report = match config.meta.mode {
                     TestMode::Bench => {
-                        let (s, t) =
-                            run_bench(PathBuf::from(&self.path).as_path(), &config, stats).await?;
+                        let (s, t) = run_bench(PathBuf::from(&self.path), &config, stats).await?;
                         match t {
                             Some(x) => {
                                 bench_stats.merge(&s);

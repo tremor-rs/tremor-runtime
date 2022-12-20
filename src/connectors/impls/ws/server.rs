@@ -17,13 +17,10 @@ use crate::connectors::{
     prelude::*,
     utils::{
         socket::{tcp_server_socket, TcpSocketOptions},
-        tls::{load_server_config, TLSServerConfig},
+        tls::TLSServerConfig,
         ConnectionMeta,
     },
 };
-use async_std::{prelude::FutureExt, task::JoinHandle};
-use async_tls::TlsAcceptor;
-use async_tungstenite::accept_async;
 use futures::StreamExt;
 use rustls::ServerConfig;
 use simd_json::ValueAccess;
@@ -31,6 +28,9 @@ use std::{
     net::SocketAddr,
     sync::{atomic::AtomicBool, Arc},
 };
+use tokio::{task::JoinHandle, time::timeout};
+use tokio_rustls::TlsAcceptor;
+use tokio_tungstenite::accept_async;
 
 const URL_SCHEME: &str = "tremor-ws-server";
 
@@ -77,11 +77,11 @@ impl ConnectorBuilder for Builder {
     ) -> crate::errors::Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
-        let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
-            Some(load_server_config(tls_config)?)
-        } else {
-            None
-        };
+        let tls_server_config = config
+            .tls
+            .as_ref()
+            .map(TLSServerConfig::to_server_config)
+            .transpose()?;
 
         Ok(Box::new(WsServer {
             config,
@@ -126,7 +126,7 @@ impl Connector for WsServer {
     async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
         if let Some(accept_task) = self.accept_task.take() {
             // stop acceptin' new connections
-            accept_task.cancel().await;
+            accept_task.abort();
         }
         Ok(())
     }
@@ -136,14 +136,10 @@ impl Connector for WsServer {
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(
-            builder.qsize(),
-            Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
-        );
+        // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+        let source = ChannelSource::new(Arc::new(AtomicBool::from(false)));
         self.source_runtime = Some(source.runtime());
-        let addr = builder.spawn(source, ctx)?;
-
-        Ok(Some(addr))
+        Ok(Some(builder.spawn(source, ctx)))
     }
 
     async fn create_sink(
@@ -152,15 +148,13 @@ impl Connector for WsServer {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = ChannelSink::new_with_meta(
-            builder.qsize(),
             resolve_connection_meta,
             builder.reply_tx(),
             self.sink_is_connected.clone(),
         );
 
         self.sink_runtime = Some(sink.runtime());
-        let addr = builder.spawn(sink, ctx)?;
-        Ok(Some(addr))
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     #[allow(clippy::too_many_lines)]
@@ -179,18 +173,20 @@ impl Connector for WsServer {
 
         // cancel last accept task if necessary, this will drop the previous listener
         if let Some(previous_handle) = self.accept_task.take() {
-            previous_handle.cancel().await;
+            previous_handle.abort();
         }
 
         // TODO: allow for other sockets
         if self.config.url.port().is_none() {
+            let port = if self.config.url.scheme() == "wss" {
+                443
+            } else {
+                80
+            };
             self.config
                 .url
-                .set_port(Some(if self.config.url.scheme() == "wss" {
-                    443
-                } else {
-                    80
-                }))?;
+                .set_port(Some(port))
+                .map_err(|_| "Invalid URL")?;
         }
         let listener = tcp_server_socket(
             &self.config.url,
@@ -207,7 +203,7 @@ impl Connector for WsServer {
         self.accept_task = Some(spawn_task(ctx.clone(), async move {
             let mut stream_id_gen = StreamIdGen::default();
             while ctx.quiescence_beacon.continue_reading().await {
-                match listener.accept().timeout(ACCEPT_TIMEOUT).await {
+                match timeout(ACCEPT_TIMEOUT, listener.accept()).await {
                     Ok(Ok((tcp_stream, peer_addr))) => {
                         let stream_id: u64 = stream_id_gen.next_stream_id();
                         let connection_meta: ConnectionMeta = peer_addr.into();

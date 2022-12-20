@@ -174,27 +174,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-attributes"
-version = "1.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3203e79f4dd9bdda415ed03cf14dae5a2bf775c683a00f94e9cd1faf0f596e5"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
-name = "async-broadcast"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b19760fa2b7301cf235360ffd6d3558b1ed4249edd16d6cca8d690cee265b95"
-dependencies = [
- "event-listener",
- "futures-core",
- "parking_lot 0.12.1",
-]
-
-[[package]]
 name = "async-channel"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -206,19 +185,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-compat"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b48b4ff0c2026db683dea961cd8ea874737f56cffca86fa84415eaddc51c00d"
-dependencies = [
- "futures-core",
- "futures-io",
- "once_cell",
- "pin-project-lite 0.2.9",
- "tokio",
-]
-
-[[package]]
 name = "async-compression"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -227,7 +193,6 @@ dependencies = [
  "bytes 0.5.6",
  "flate2",
  "futures-core",
- "futures-io",
  "memchr",
  "pin-project-lite 0.2.9",
  "tokio",
@@ -259,18 +224,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-fs"
-version = "1.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "279cf904654eeebfa37ac9bb1598880884924aab82e290aa65c9e77a0e142e06"
-dependencies = [
- "async-lock",
- "autocfg",
- "blocking",
- "futures-lite",
-]
-
-[[package]]
 name = "async-global-executor"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -283,7 +236,6 @@ dependencies = [
  "blocking",
  "futures-lite",
  "once_cell",
- "tokio",
 ]
 
 [[package]]
@@ -333,18 +285,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-net"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4051e67316bc7eff608fe723df5d32ed639946adcd69e07df41fd42a7b411f1f"
-dependencies = [
- "async-io",
- "autocfg",
- "blocking",
- "futures-lite",
-]
-
-[[package]]
 name = "async-process"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -360,17 +300,6 @@ dependencies = [
  "libc",
  "signal-hook",
  "windows-sys 0.42.0",
-]
-
-[[package]]
-name = "async-rustls"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c86f33abd5a4f3e2d6d9251a9e0c6a7e52eb1113caf893dae8429bf4a53f378"
-dependencies = [
- "futures-lite",
- "rustls 0.19.1",
- "webpki 0.21.4",
 ]
 
 [[package]]
@@ -393,7 +322,6 @@ version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62565bb4402e926b29953c785397c6dc0391b7b446e45008b0049eb43cec6f5d"
 dependencies = [
- "async-attributes",
  "async-channel",
  "async-global-executor",
  "async-io",
@@ -413,21 +341,6 @@ dependencies = [
  "pin-utils",
  "slab",
  "wasm-bindgen-futures",
-]
-
-[[package]]
-name = "async-std-resolver"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ba50e24d9ee0a8950d3d03fc6d0dd10aa14b5de3b101949b4e160f7fee7c723"
-dependencies = [
- "async-std",
- "async-trait",
- "futures-io",
- "futures-util",
- "pin-utils",
- "socket2",
- "trust-dns-resolver",
 ]
 
 [[package]]
@@ -471,19 +384,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-tls"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f23d769dbf1838d5df5156e7b1ad404f4c463d1ac2c6aeb6cd943630f8a8400"
-dependencies = [
- "futures-core",
- "futures-io",
- "rustls 0.19.1",
- "webpki 0.21.4",
- "webpki-roots 0.21.1",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -508,21 +408,6 @@ dependencies = [
  "tokio-rustls 0.23.4",
  "tungstenite 0.17.3",
  "webpki-roots 0.22.5",
-]
-
-[[package]]
-name = "async-tungstenite"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e6acf7e4a267eecbb127ed696bb2d50572c22ba7f586a646321e1798d8336a1"
-dependencies = [
- "async-std",
- "async-tls 0.11.0",
- "futures-io",
- "futures-util",
- "log",
- "pin-project-lite 0.2.9",
- "tungstenite 0.18.0",
 ]
 
 [[package]]
@@ -1397,7 +1282,6 @@ name = "clickhouse-rs"
 version = "1.0.0-alpha.1"
 source = "git+https://github.com/suharev7/clickhouse-rs?rev=553f3aa#553f3aa0f21f3b5e539c0cb899008a578eb67434"
 dependencies = [
- "async-std",
  "byteorder",
  "chrono",
  "chrono-tz 0.6.3",
@@ -1415,6 +1299,7 @@ dependencies = [
  "percent-encoding",
  "pin-project",
  "thiserror",
+ "tokio",
  "url",
  "uuid 0.8.2",
 ]
@@ -1879,16 +1764,6 @@ dependencies = [
  "darling_core",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "dashmap"
-version = "4.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e77a43b28d0668df09411cb0bc9a8c2adc40f9a048afe863e05fd43251e8e39c"
-dependencies = [
- "cfg-if",
- "num_cpus",
 ]
 
 [[package]]
@@ -2722,34 +2597,16 @@ dependencies = [
 
 [[package]]
 name = "http-client"
-version = "6.5.1"
-source = "git+https://github.com/tremor-rs/http-client?rev=059b23e#059b23e5d615debe41a6a1cd1f4228579179a88c"
-dependencies = [
- "async-h1",
- "async-std",
- "async-tls 0.11.0",
- "async-trait",
- "cfg-if",
- "dashmap 4.0.2",
- "deadpool",
- "futures",
- "http-types",
- "log",
- "rustls 0.19.1",
-]
-
-[[package]]
-name = "http-client"
 version = "6.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1947510dc91e2bf586ea5ffb412caad7673264e14bb39fb9078da114a94ce1a5"
 dependencies = [
  "async-h1",
  "async-std",
- "async-tls 0.10.0",
+ "async-tls",
  "async-trait",
  "cfg-if",
- "dashmap 5.4.0",
+ "dashmap",
  "deadpool",
  "futures",
  "http-types",
@@ -4902,12 +4759,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82fd5e7b5858ad96e99d440138f34f5b98e1b959ebcd3a1036203b30e78eb788"
 dependencies = [
  "async-trait",
- "async-tungstenite 0.17.2",
+ "async-tungstenite",
  "base64 0.13.1",
  "bitflags",
  "bytes 1.4.0",
  "cfg-if",
- "dashmap 5.4.0",
+ "dashmap",
  "flate2",
  "futures",
  "mime",
@@ -4931,7 +4788,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "538c30747ae860d6fb88330addbbd3e0ddbe46d662d032855596d8a8ca260611"
 dependencies = [
- "dashmap 5.4.0",
+ "dashmap",
  "futures",
  "lazy_static",
  "log",
@@ -5028,24 +4885,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-hook-async-std"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c4aa94397e2023af5b7cff5b8d4785e935cfb77f0e4aab0cae3b26258ace556"
-dependencies = [
- "async-io",
- "futures-lite",
- "libc",
- "signal-hook",
-]
-
-[[package]]
 name = "signal-hook-registry"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e51e73328dc4ac0c7ccbda3a494dfa03df1de2f46018127f60c693f2648455b0"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "signal-hook-tokio"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "213241f76fb1e37e27de3b6aa1b068a2c333233b59cca6634f634b80a27ecf1e"
+dependencies = [
+ "futures-core",
+ "libc",
+ "signal-hook",
+ "tokio",
 ]
 
 [[package]]
@@ -5165,23 +5022,6 @@ name = "smallvec"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
-
-[[package]]
-name = "smol"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13f2b548cd8447f8de0fdf1c592929f70f4fc7039a05e47404b0d096ec6987a1"
-dependencies = [
- "async-channel",
- "async-executor",
- "async-fs",
- "async-io",
- "async-lock",
- "async-net",
- "async-process",
- "blocking",
- "futures-lite",
-]
 
 [[package]]
 name = "snap"
@@ -5333,7 +5173,7 @@ dependencies = [
  "encoding_rs",
  "futures-util",
  "getrandom 0.2.8",
- "http-client 6.5.3",
+ "http-client",
  "http-types",
  "log",
  "mime_guess",
@@ -5547,7 +5387,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "futures-util",
- "http-client 6.5.3",
+ "http-client",
  "http-types",
  "kv-log-macro",
  "log",
@@ -5555,20 +5395,6 @@ dependencies = [
  "route-recognizer",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "tide-rustls"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a85b568b611840ba794ae749d4fa8b345b9f71a9c02b82cf0c28ff076fde6b7"
-dependencies = [
- "async-dup",
- "async-h1",
- "async-rustls",
- "async-std",
- "rustls 0.19.1",
- "tide",
 ]
 
 [[package]]
@@ -5693,7 +5519,9 @@ dependencies = [
  "memchr",
  "mio",
  "num_cpus",
+ "parking_lot 0.12.1",
  "pin-project-lite 0.2.9",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.42.0",
@@ -5761,6 +5589,18 @@ dependencies = [
  "futures-core",
  "pin-project-lite 0.2.9",
  "tokio",
+]
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54319c93411147bced34cb5609a80e0a8e44c5999c93903a81cd866630ec0bfd"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite 0.18.0",
 ]
 
 [[package]]
@@ -5936,7 +5776,6 @@ dependencies = [
 name = "tremor-api"
 version = "0.13.0-rc.11"
 dependencies = [
- "async-std",
  "env_logger",
  "halfbrown",
  "http-types",
@@ -5946,6 +5785,7 @@ dependencies = [
  "simd-json",
  "surf",
  "tide",
+ "tokio",
  "tremor-common",
  "tremor-pipeline",
  "tremor-runtime",
@@ -5958,7 +5798,6 @@ name = "tremor-cli"
 version = "0.13.0-rc.11"
 dependencies = [
  "anyhow",
- "async-std",
  "clap 4.1.4",
  "clap_complete",
  "criterion",
@@ -5980,13 +5819,14 @@ dependencies = [
  "serde_yaml 0.9.17",
  "shell-words",
  "signal-hook",
- "signal-hook-async-std",
+ "signal-hook-tokio",
  "simd-json",
  "snmalloc-rs",
  "surf",
  "tch",
  "temp-dir",
  "termcolor",
+ "tokio",
  "tremor-api",
  "tremor-common",
  "tremor-pipeline",
@@ -6000,12 +5840,13 @@ dependencies = [
 name = "tremor-common"
 version = "0.13.0-rc.11"
 dependencies = [
- "async-std",
  "base64 0.21.0",
  "beef",
  "rand 0.8.5",
+ "serde",
  "simd-json",
  "simd-json-derive",
+ "tokio",
  "url",
 ]
 
@@ -6047,8 +5888,6 @@ dependencies = [
 name = "tremor-pipeline"
 version = "0.13.0-rc.11"
 dependencies = [
- "async-broadcast",
- "async-std",
  "base64 0.21.0",
  "beef",
  "criterion",
@@ -6069,6 +5908,7 @@ dependencies = [
  "simd-json-derive",
  "sled",
  "tempfile",
+ "tokio",
  "tremor-common",
  "tremor-script",
  "tremor-value",
@@ -6083,15 +5923,11 @@ name = "tremor-runtime"
 version = "0.13.0-rc.11"
 dependencies = [
  "anyhow",
- "async-broadcast",
- "async-compat",
+ "async-channel",
  "async-compression",
  "async-std",
- "async-std-resolver",
  "async-stream",
- "async-tls 0.11.0",
  "async-trait",
- "async-tungstenite 0.19.0",
  "aws-config",
  "aws-sdk-s3",
  "aws-smithy-http",
@@ -6106,7 +5942,7 @@ dependencies = [
  "clickhouse-rs",
  "cron",
  "csv",
- "dashmap 5.4.0",
+ "dashmap",
  "either",
  "elasticsearch",
  "env_logger",
@@ -6125,8 +5961,9 @@ dependencies = [
  "hostname",
  "http",
  "http-body",
- "http-client 6.5.1",
  "http-types",
+ "hyper",
+ "hyper-rustls",
  "indexmap",
  "itoa 1.0.5",
  "lazy_static",
@@ -6136,6 +5973,7 @@ dependencies = [
  "lz4",
  "matches",
  "memchr",
+ "mime",
  "num_cpus",
  "pin-project-lite 0.2.9",
  "port_scanner",
@@ -6150,29 +5988,30 @@ dependencies = [
  "regex",
  "reqwest",
  "rmp-serde",
- "rustls 0.19.1",
+ "rustls 0.20.7",
  "rustls-native-certs",
+ "rustls-pemfile",
  "ryu",
  "serde",
  "serde_yaml 0.9.17",
  "serenity",
  "serial_test",
  "signal-hook",
- "signal-hook-async-std",
+ "signal-hook-tokio",
  "simd-json",
  "simd-json-derive",
  "simdutf8",
  "sled",
- "smol",
  "snap",
  "socket2",
- "surf",
  "syslog_loose",
  "tempfile",
  "test-case",
  "testcontainers",
- "tide",
- "tide-rustls",
+ "tokio",
+ "tokio-rustls 0.23.4",
+ "tokio-stream",
+ "tokio-tungstenite",
  "tonic",
  "tremor-common",
  "tremor-influx",
@@ -6180,6 +6019,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-script",
  "tremor-value",
+ "trust-dns-resolver",
  "url",
  "uuid 1.3.0",
  "value-trait",
@@ -6278,6 +6118,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "tinyvec",
+ "tokio",
  "tracing",
  "url",
 ]
@@ -6297,6 +6138,7 @@ dependencies = [
  "resolv-conf",
  "smallvec",
  "thiserror",
+ "tokio",
  "tracing",
  "trust-dns-proto",
 ]
@@ -6755,15 +6597,6 @@ name = "webpki-roots"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f20dea7535251981a9670857150d571846545088359b28e4951d350bdaf179f"
-dependencies = [
- "webpki 0.21.4",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "0.21.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aabe153544e473b775453675851ecc86863d2a81d786d741f6b76778f2a48940"
 dependencies = [
  "webpki 0.21.4",
 ]

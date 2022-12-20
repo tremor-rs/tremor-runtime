@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::Result;
 use base64::Engine;
 use std::io::Write;
 use tremor_common::base64::BASE64;
-
-use crate::errors::Result;
 
 /// Authorization methods
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

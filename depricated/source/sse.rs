@@ -13,8 +13,8 @@
 // limitations under the License.
 // #![cfg_attr(coverage, no_coverage)]
 
+use crate::channel::{Sender, TryRecvError};
 use crate::source::prelude::*;
-use async_std::channel::{Sender, TryRecvError};
 use halfbrown::HashMap;
 use surf::middleware::{Middleware, Next};
 use surf::{Client, Request, Response};
@@ -149,7 +149,7 @@ impl Source for Int {
             return Err(err.to_string().into());
         }
 
-        let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
+        let (tx, rx) = bounded(qsize());
 
         let url: surf_sse::Url = self.config.url.parse()?;
         let headers = self.config.headers.clone();

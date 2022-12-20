@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use async_std::task;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use serde_yaml::Value as YamlValue;
@@ -170,7 +169,7 @@ impl<I> TemporalPriorityQueue<I> {
         let now = Utc::now().timestamp();
         let event = x.at.timestamp();
         #[allow(clippy::cast_sign_loss)]
-        task::sleep(Duration::from_secs(
+        tokio::time::sleep(Duration::from_secs(
             (event as u64).saturating_sub(now as u64),
         ))
         .await;
@@ -264,8 +263,6 @@ mod tests {
     use std::convert::TryFrom;
 
     #[cfg(not(feature = "tarpaulin-exclude"))]
-    use async_std::task;
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     use chrono::DateTime;
     #[cfg(not(feature = "tarpaulin-exclude"))]
     use std::time::Duration;
@@ -291,7 +288,7 @@ mod tests {
     // This tight requirements for timing are extremely problematic in tests
     // and lead to frequent issues with the test being flaky or unrelaibale
     #[cfg(not(feature = "tarpaulin-exclude"))]
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_tpq_fill_drain() -> Result<()> {
         use chrono::prelude::Utc;
         let mut tpq = TemporalPriorityQueue::default();
@@ -315,9 +312,9 @@ mod tests {
         let due = tpq.drain();
         assert_eq!(vec![n1.clone(), n2], due);
 
-        task::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
         assert!(tpq.drain().is_empty());
-        task::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
         assert!(tpq.drain().is_empty());
 
         Ok(())
@@ -326,7 +323,7 @@ mod tests {
     // This tight requirements for timing are extremely problematic in tests
     // and lead to frequent issues with the test being flaky or unrelaibale
     #[cfg(not(feature = "tarpaulin-exclude"))]
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_tpq_fill_pop() -> Result<()> {
         use chrono::prelude::Utc;
         let mut tpq = TemporalPriorityQueue::default();
@@ -351,9 +348,9 @@ mod tests {
         assert_eq!(Some(n1), tpq.pop());
         assert_eq!(Some(n2), tpq.pop());
 
-        task::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
         assert!(tpq.pop().is_none());
-        task::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
         assert!(tpq.pop().is_none());
 
         Ok(())
@@ -362,7 +359,7 @@ mod tests {
     // This tight requirements for timing are extremely problematic in tests
     // and lead to frequent issues with the test being flaky or unrelaibale
     #[cfg(not(feature = "tarpaulin-exclude"))]
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cq_fill_drain_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
         // Dates before Jan 1st 1970 are invalid
@@ -385,10 +382,10 @@ mod tests {
         let due = cq.drain();
         assert_eq!(0, due.len());
 
-        task::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
         assert_eq!(1, cq.drain().len());
 
-        task::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
         assert_eq!(1, cq.drain().len());
 
         Ok(())
@@ -397,7 +394,7 @@ mod tests {
     // This tight requirements for timing are extremely problematic in tests
     // and lead to frequent issues with the test being flaky or unrelaibale
     #[cfg(not(feature = "tarpaulin-exclude"))]
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cq_fill_pop_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
         // Dates before Jan 1st 1970 are invalid
@@ -419,10 +416,10 @@ mod tests {
         cq.enqueue(&n3);
         assert!(cq.next().is_none());
 
-        task::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
         assert!(cq.next().is_some());
         assert!(cq.next().is_none());
-        task::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
         assert!(cq.next().is_some());
 
         Ok(())

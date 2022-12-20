@@ -23,23 +23,19 @@ use crate::{
     errors::Result,
     instance::State,
 };
-use async_std::{
-    channel::bounded,
-    io::WriteExt,
-    net::{TcpListener, TcpStream, UdpSocket},
+
+use tokio::sync::oneshot;
+use tokio::{
+    io::AsyncWriteExt,
+    net::{TcpStream, UdpSocket},
 };
 use tremor_value::prelude::*;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn udp_pause_resume() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = {
-        let socket = UdpSocket::bind("127.0.0.1:0").await?;
-        let port = socket.local_addr()?.port();
-        drop(socket);
-        port
-    };
+    let free_port = super::free_port::find_free_udp_port().await?;
 
     let server_addr = format!("127.0.0.1:{free_port}");
 
@@ -52,15 +48,10 @@ async fn udp_pause_resume() -> Result<()> {
       }
     });
 
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &udp::server::Builder::default(), &defn).await?;
-
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of udp_server");
     harness.start().await?;
     harness.wait_for_connected().await?;
-
     // connect client socket
     let socket = UdpSocket::bind("127.0.0.1:0").await?;
     socket.connect(&server_addr).await?;
@@ -69,7 +60,7 @@ async fn udp_pause_resume() -> Result<()> {
     socket.send(data.as_bytes()).await?;
     // expect data being received
     for expected in data.split('\n').take(4) {
-        let event = out_pipeline.get_event().await?;
+        let event = harness.out()?.get_event().await?;
         let content = event.data.suffix().value().as_str();
         assert_eq!(Some(expected), content);
     }
@@ -77,29 +68,27 @@ async fn udp_pause_resume() -> Result<()> {
     harness.pause().await?;
     harness.wait_for_state(State::Paused).await?;
     // ensure the source has applied the state change
-    let (tx, rx) = bounded(1);
-    harness.send_to_source(SourceMsg::Ping(tx)).await?;
-    rx.recv().await?;
-
+    let (tx, rx) = oneshot::channel();
+    harness.send_to_source(SourceMsg::Synchronize(tx))?;
+    rx.await?;
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.send(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    let res = out_pipeline
+    let res = harness
+        .out()?
         .expect_no_event_for(std::time::Duration::from_secs(1))
         .await;
     assert!(res.is_ok(), "We got an event during pause: {res:?}");
-
     // resume connector
     harness.resume().await?;
     harness.wait_for_state(State::Running).await?;
 
     // ensure the source has applied the state change
-    let (tx, rx) = bounded(1);
-    harness.send_to_source(SourceMsg::Ping(tx)).await?;
-    rx.recv().await?;
-
+    let (tx, rx) = oneshot::channel();
+    harness.send_to_source(SourceMsg::Synchronize(tx))?;
+    rx.await?;
     // receive the data sent during pause
     // first line, continueing the stuff from last send
     assert_eq!(
@@ -111,7 +100,8 @@ async fn udp_pause_resume() -> Result<()> {
             )
             .as_str()
         ),
-        out_pipeline
+        harness
+            .out()?
             .get_event()
             .await?
             .data
@@ -121,26 +111,22 @@ async fn udp_pause_resume() -> Result<()> {
     );
     for expected in data2[..data2.len() - 1].split('\n').skip(1) {
         debug!("expecting '{}'", expected);
-        let event = out_pipeline.get_event().await?;
+        let event = harness.out()?.get_event().await?;
         let content = event.data.suffix().value().as_str();
         debug!("got '{:?}'", content);
         assert_eq!(Some(expected), content);
     }
+
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn tcp_server_pause_resume() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = {
-        let listener = TcpListener::bind("127.0.0.1:0").await?;
-        let port = listener.local_addr()?.port();
-        drop(listener);
-        port
-    };
+    let free_port = super::free_port::find_free_tcp_port().await?;
 
     let server_addr = format!("127.0.0.1:{free_port}");
 
@@ -152,11 +138,8 @@ async fn tcp_server_pause_resume() -> Result<()> {
           "buf_size": 4096
       }
     });
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &tcp::server::Builder::default(), &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'out' port of tcp_server connector");
     harness.start().await?;
     harness.wait_for_connected().await?;
     debug!("Connected.");
@@ -168,7 +151,7 @@ async fn tcp_server_pause_resume() -> Result<()> {
     // expect data being received, the last item is not received yet
     for expected in data.split('\n').take(4) {
         debug!("expecting: '{}'", expected);
-        let event = out_pipeline.get_event().await?;
+        let event = harness.out()?.get_event().await?;
         let content = event.data.suffix().value().as_str();
         debug!("received '{:?}'", content);
         assert_eq!(Some(expected), content);
@@ -178,16 +161,17 @@ async fn tcp_server_pause_resume() -> Result<()> {
     harness.wait_for_state(State::Paused).await?;
 
     // ensure the source has applied the state change
-    let (tx, rx) = bounded(1);
-    harness.send_to_source(SourceMsg::Ping(tx)).await?;
-    rx.recv().await?;
+    let (tx, rx) = oneshot::channel();
+    harness.send_to_source(SourceMsg::Synchronize(tx))?;
+    rx.await?;
 
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.write_all(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    assert!(out_pipeline
+    assert!(harness
+        .out()?
         .expect_no_event_for(Duration::from_millis(500))
         .await
         .is_ok());
@@ -196,9 +180,9 @@ async fn tcp_server_pause_resume() -> Result<()> {
     harness.wait_for_state(State::Running).await?;
 
     // ensure the source has applied the state change
-    let (tx, rx) = bounded(1);
-    harness.send_to_source(SourceMsg::Ping(tx)).await?;
-    rx.recv().await?;
+    let (tx, rx) = oneshot::channel();
+    harness.send_to_source(SourceMsg::Synchronize(tx))?;
+    rx.await?;
 
     // receive the data sent during pause
     assert_eq!(
@@ -210,7 +194,8 @@ async fn tcp_server_pause_resume() -> Result<()> {
             )
             .as_str()
         ),
-        out_pipeline
+        harness
+            .out()?
             .get_event()
             .await?
             .data
@@ -221,7 +206,7 @@ async fn tcp_server_pause_resume() -> Result<()> {
     drop(socket); // closing the socket, ensuring the last bits are flushed from preprocessors etc
     for expected in data2[..data2.len() - 1].split('\n').skip(1) {
         debug!("expecting: '{}'", expected);
-        let event = out_pipeline.get_event().await?;
+        let event = harness.out()?.get_event().await?;
         let content = event.data.suffix().value().as_str();
         debug!("received '{:?}'", content);
         assert_eq!(Some(expected), content);

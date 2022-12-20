@@ -259,9 +259,10 @@ fn assemble(key: u64, m: GelfMsgs) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::Result;
 
     #[test]
-    fn gelf_chunking_default() {
+    fn gelf_chunking_default() -> Result<()> {
         let g = GelfChunking::default();
         assert!(g.buffer.is_empty());
         assert!(g.last_buffer.is_empty());
@@ -271,9 +272,9 @@ mod test {
         assert!(g.last_buffer.is_empty());
         assert_eq!(0, g.last_swap);
         let d = br#"{"snot": "badger"}"#;
-        let r = g.process(&mut 0, d);
-        assert!(r.is_ok());
-        assert_eq!(r.expect("r should be Ok"), vec![d.to_vec()]);
+        let r = g.process(&mut 0, d)?;
+        assert_eq!(r, vec![d.to_vec()]);
+        Ok(())
     }
 
     #[test]

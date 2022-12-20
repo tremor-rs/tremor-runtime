@@ -18,7 +18,7 @@ use std::time::Duration;
 use tremor_value::prelude::*;
 
 #[allow(clippy::cast_possible_truncation)]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn connector_metronome_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -29,28 +29,19 @@ async fn connector_metronome_routing() -> Result<()> {
     });
     let epoch = tremor_common::time::nanotime();
 
-    let harness =
+    let mut harness =
         ConnectorHarness::new(function_name!(), &metronome::Builder::default(), &defn).await?;
-    let out_pipeline = harness
-        .out()
-        .expect("No pipeline connected to 'in' port of ws_server connector");
-
-    dbg!();
     harness.start().await?;
-    dbg!();
     harness.wait_for_connected().await?;
-    dbg!();
 
-    let event = out_pipeline.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     let (data, _meta) = event.data.parts();
 
     let at = data.get_u64("ingest_ns").unwrap_or_default();
     assert!(at >= epoch);
 
     //cleanup
-    dbg!();
     let (_out, err) = harness.stop().await?;
-    dbg!();
     assert!(err.is_empty());
     Ok(())
 }

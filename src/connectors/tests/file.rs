@@ -14,11 +14,11 @@
 
 use super::ConnectorHarness;
 use crate::{connectors::impls::file, errors::Result};
-use async_std::path::Path;
+use std::path::Path;
 use tremor_value::literal;
 use value_trait::ValueAccess;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn file_connector() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -38,13 +38,12 @@ async fn file_connector() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), &file::Builder::default(), &defn).await?;
-    let out = harness.out().expect("No out pipeline");
+    let mut harness =
+        ConnectorHarness::new(function_name!(), &file::Builder::default(), &defn).await?;
     harness.start().await?;
-
     harness.wait_for_connected().await?;
 
-    let event = out.get_event().await?;
+    let event = harness.out()?.get_event().await?;
     assert_eq!(1, event.len());
     let value = event.data.suffix().value();
     let meta = event.data.suffix().meta();
@@ -61,7 +60,7 @@ async fn file_connector() -> Result<()> {
         meta
     );
 
-    let event2 = out.get_event().await?;
+    let event2 = harness.out()?.get_event().await?;
     assert_eq!(1, event2.len());
     let data = event2.data.suffix().value();
     assert_eq!(Some("badger"), data.as_str());

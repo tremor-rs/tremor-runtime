@@ -28,7 +28,7 @@ use crate::errors::Result;
 use beef::Cow;
 use halfbrown::HashMap;
 use regex::Regex;
-use tremor_common::ids::OperatorId;
+use tremor_common::{ids::OperatorId, ports::Port};
 use tremor_value::Value;
 
 lazy_static::lazy_static! {
@@ -44,13 +44,13 @@ lazy_static::lazy_static! {
 pub struct EventAndInsights {
     /// Events being returned
     /// tuples of (port, event)
-    pub events: Vec<(Cow<'static, str>, Event)>,
+    pub events: Vec<(Port<'static>, Event)>,
     /// Insights being returned
     pub insights: Vec<Event>,
 }
 
-impl From<Vec<(beef::Cow<'static, str>, Event)>> for EventAndInsights {
-    fn from(events: Vec<(beef::Cow<'static, str>, Event)>) -> Self {
+impl From<Vec<(Port<'static>, Event)>> for EventAndInsights {
+    fn from(events: Vec<(Port<'static>, Event)>) -> Self {
         Self {
             events,
             ..Self::default()
@@ -82,7 +82,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     fn on_event(
         &mut self,
         uid: OperatorId,
-        port: &str,
+        port: &Port<'static>,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights>;

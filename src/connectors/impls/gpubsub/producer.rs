@@ -24,12 +24,12 @@ use crate::connectors::{
     Context,
 };
 use crate::errors::Result;
-use async_std::prelude::FutureExt;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::time::Duration;
+use tokio::time::timeout;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Code;
@@ -92,7 +92,7 @@ struct GpubConnector<T> {
 impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
     async fn create_sink(
         &mut self,
-        sink_context: SinkContext,
+        ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = GpubSink::<T> {
@@ -110,7 +110,7 @@ impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
                 .to_string(),
             client: None,
         };
-        builder.spawn(sink, sink_context).map(Some)
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
@@ -190,13 +190,14 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
             }
         }
 
-        if let Ok(inner_result) = client
-            .publish(PublishRequest {
+        if let Ok(inner_result) = timeout(
+            Duration::from_nanos(self.config.request_timeout),
+            client.publish(PublishRequest {
                 topic: self.config.topic.clone(),
                 messages,
-            })
-            .timeout(Duration::from_nanos(self.config.request_timeout))
-            .await
+            }),
+        )
+        .await
         {
             if let Err(error) = inner_result {
                 error!("{ctx} Failed to publish a message: {}", error);
@@ -213,7 +214,7 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
                         | Code::Unknown
                 ) {
                     ctx.swallow_err(
-                        ctx.notifier.connection_lost().await,
+                        ctx.notifier().connection_lost().await,
                         "Failed to notify about PubSub connection loss",
                     );
                 }

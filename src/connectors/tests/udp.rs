@@ -18,7 +18,7 @@ use tremor_common::ports::IN;
 use tremor_pipeline::Event;
 use tremor_value::prelude::*;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn udp_no_bind() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -29,11 +29,8 @@ async fn udp_no_bind() -> Result<()> {
       }
     });
 
-    let server_harness =
+    let mut server_harness =
         ConnectorHarness::new("udp_server", &udp::server::Builder::default(), &server_defn).await?;
-    let server_out = server_harness
-        .out()
-        .expect("No pipeline connected to 'out' port of udp_server connector");
     server_harness.start().await?;
     server_harness.wait_for_connected().await?;
 
@@ -55,7 +52,7 @@ async fn udp_no_bind() -> Result<()> {
     };
     client_harness.send_to_sink(event1, IN).await?;
     // send something to socket 2
-    let server_event = server_out.get_event().await?;
+    let server_event = server_harness.out()?.get_event().await?;
     // send an event and route it via eventid to socket 2
 
     assert_eq!(server_event.data.parts().0.as_str(), Some("badger"));
@@ -67,7 +64,7 @@ async fn udp_no_bind() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn udp_bind() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -78,11 +75,9 @@ async fn udp_bind() -> Result<()> {
       }
     });
 
-    let server_harness =
+    let mut server_harness =
         ConnectorHarness::new("udp_server", &udp::server::Builder::default(), &server_defn).await?;
-    let server_out = server_harness
-        .out()
-        .expect("No pipeline connected to 'out' port of udp_server connector");
+
     server_harness.start().await?;
     server_harness.wait_for_connected().await?;
 
@@ -105,7 +100,7 @@ async fn udp_bind() -> Result<()> {
     };
     client_harness.send_to_sink(event1, IN).await?;
     // send something to socket 2
-    let server_event = server_out.get_event().await?;
+    let server_event = server_harness.out()?.get_event().await?;
     // send an event and route it via eventid to socket 2
 
     assert_eq!(server_event.data.parts().0.as_str(), Some("badger"));
@@ -117,7 +112,7 @@ async fn udp_bind() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn bind_connect_ipv4_ipv6() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -135,7 +130,7 @@ async fn bind_connect_ipv4_ipv6() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn connect_ipv4() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -150,11 +145,11 @@ async fn connect_ipv4() -> Result<()> {
     client_harness.start().await?;
     client_harness.wait_for_connected().await?;
     // ensure we were able to connect given the config above
-    let _ = client_harness.stop().await?;
+    client_harness.stop().await?;
     Ok(())
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn connect_ipv6() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -169,6 +164,6 @@ async fn connect_ipv6() -> Result<()> {
     client_harness.start().await?;
     client_harness.wait_for_connected().await?;
     // ensure we were able to connect given the config above
-    let _ = client_harness.stop().await?;
+    client_harness.stop().await?;
     Ok(())
 }
