@@ -1039,12 +1039,78 @@ mod tests {
     }
 
     #[test]
-    fn es_meta() -> Result<()> {
+    fn es_meta_update() -> Result<()> {
+        // update
+        let meta = literal!({
+            "elastic": {
+                "action": "update",
+                "_id": "1234",
+                "retry_on_conflict": 42,
+                "if_seq_no": 123,
+                "if_primary_term": 456,
+                "version": 12,
+                "version_type": "external",
+                "routing": "snot"
+            }
+        });
+        let es_meta = ESMeta::new(&meta);
+        assert_eq!(Some(42), es_meta.get_retry_on_conflict());
+        assert_eq!(Some(123), es_meta.get_if_seq_no());
+        assert_eq!(Some(456), es_meta.get_if_primary_term());
+        let data = literal!({});
+        let mut ops = BulkOperations::new();
+        es_meta.insert_op(&data, &mut ops)?;
+        assert_eq!(
+            Some(String::from(
+                r#"{"update":{"_id":"1234","if_seq_no":123,"if_primary_term":456,"routing":"snot","retry_on_conflict":42,"version":12,"version_type":"external"}}
+{"doc":{}}
+"#
+            )),
+            ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
+        );
+
+        // raw update
+        let meta = literal!({
+            "elastic": {
+                "action": "update",
+                "raw_payload": true,
+                "_id": "1234",
+                "retry_on_conflict": 42,
+                "if_seq_no": 123,
+                "if_primary_term": 456,
+                "version": 12,
+                "version_type": "external",
+                "routing": "snot"
+            }
+        });
+        let es_meta = ESMeta::new(&meta);
+        assert_eq!(Some(42), es_meta.get_retry_on_conflict());
+        assert_eq!(Some(123), es_meta.get_if_seq_no());
+        assert_eq!(Some(456), es_meta.get_if_primary_term());
+        let data = literal!({});
+        let mut ops = BulkOperations::new();
+        es_meta.insert_op(&data, &mut ops)?;
+        assert_eq!(
+            Some(String::from(
+                r#"{"update":{"_id":"1234","if_seq_no":123,"if_primary_term":456,"routing":"snot","retry_on_conflict":42,"version":12,"version_type":"external"}}
+{}
+"#
+            )),
+            ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn es_meta_index() -> Result<()> {
+        // index
         let meta = literal!({
             "elastic": {
                 "action": "index",
                 "_id": "abcdef",
                 "_index": "snot",
+                "if_primary_term": 2,
+                "if_seq_no": 3,
                 "pipeline": "pipeline",
                 "refresh": "wait_for",
                 "routing": "routing",
@@ -1061,8 +1127,8 @@ mod tests {
         assert_eq!(Some("snot"), es_meta.get_index());
         assert_eq!(Some("pipeline"), es_meta.get_pipeline());
         assert_eq!(false, es_meta.get_raw_payload());
-        assert_eq!(None, es_meta.get_if_primary_term());
-        assert_eq!(None, es_meta.get_if_seq_no());
+        assert_eq!(Some(2), es_meta.get_if_primary_term());
+        assert_eq!(Some(3), es_meta.get_if_seq_no());
         assert_eq!(Ok(Some(Refresh::WaitFor)), es_meta.get_refresh());
         assert_eq!(Some("routing"), es_meta.get_routing());
         assert_eq!(Some("10s"), es_meta.get_timeout());
@@ -1074,37 +1140,66 @@ mod tests {
         es_meta.insert_op(&data, &mut ops)?;
         assert_eq!(
             Some(String::from(
-                r#"{"index":{"_index":"snot","_id":"abcdef","pipeline":"pipeline","routing":"routing","version":12,"version_type":"external"}}
+                r#"{"index":{"_index":"snot","_id":"abcdef","pipeline":"pipeline","if_seq_no":3,"if_primary_term":2,"routing":"routing","version":12,"version_type":"external"}}
+{}
+"#
+            )),
+            ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
+        );
+        // create
+        let meta = literal!({
+            "elastic": {
+                "action": "create",
+                "_id": "badger",
+                "_index": "schmindex",
+                "pipeline": "schnipeline",
+                "routing": "schmouting"
+            }
+        });
+        let data = literal!({});
+
+        let es_meta = ESMeta::new(&meta);
+        let mut ops = BulkOperations::new();
+        es_meta.insert_op(&data, &mut ops)?;
+        assert_eq!(
+            Some(String::from(
+                r#"{"create":{"_index":"schmindex","_id":"badger","pipeline":"schnipeline","routing":"schmouting"}}
 {}
 "#
             )),
             ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn es_meta_delete() -> Result<()> {
         let meta = literal!({
             "elastic": {
-                "action": "update",
-                "_id": "1234",
-                "retry_on_conflict": 42,
-                "if_seq_no": 123,
-                "if_primary_term": 456
+                "action": "delete",
+                "_id": "badger",
+                "_index": "schmindex",
+                "routing": "schmouting",
+                "version": 123,
+                "version_type": "internal",
+                "if_primary_term": 456,
+                "if_seq_no": 890
             }
         });
-        let es_meta = ESMeta::new(&meta);
-        assert_eq!(Some(42), es_meta.get_retry_on_conflict());
-        assert_eq!(Some(123), es_meta.get_if_seq_no());
-        assert_eq!(Some(456), es_meta.get_if_primary_term());
         let data = literal!({});
+
+        let es_meta = ESMeta::new(&meta);
         let mut ops = BulkOperations::new();
         es_meta.insert_op(&data, &mut ops)?;
         assert_eq!(
             Some(String::from(
-                r#"{"update":{"_id":"1234","if_seq_no":123,"if_primary_term":456,"retry_on_conflict":42}}
-{"doc":{}}
+                r#"{"delete":{"_index":"schmindex","_id":"badger","if_seq_no":890,"if_primary_term":456,"routing":"schmouting","version":123,"version_type":"internal"}}
 "#
             )),
             ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
         );
+
         Ok(())
     }
 }
