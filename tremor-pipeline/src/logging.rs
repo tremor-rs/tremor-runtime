@@ -16,8 +16,9 @@ use crate::errors::Result;
 use simd_json::ValueAccess;
 use tremor_script::{
     registry::{mfa, FResult, FunctionError, Mfa, Registry},
-    EventContext, TremorFn, TremorFnWrapper, Value,
+    EventContext, TremorFn, TremorFnWrapper
 };
+use tremor_value::Value;
 /// Install's common functions into a registry
 ///
 /// # Errors
@@ -471,8 +472,8 @@ pub fn load(reg: &mut Registry) {
 mod test {
     use super::*;
     use tremor_script::ctx::EventContext;
-    use tremor_script::{literal, Object, Registry};
-    use tremor_value::Value;
+    use tremor_script::{Registry};
+    use tremor_value::{Value, Object, literal};
 
     #[test]
     fn test_info() {

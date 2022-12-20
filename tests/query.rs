@@ -260,7 +260,7 @@ macro_rules! test_cases_with_server {
     ($($file:ident),*) => {
         $(
             #[async_std::test]
-            #[serial(query, timeout_ms = 120000)]
+            #[serial(query)]
             async fn $file() -> Result<()> {
                 run().await;
                 main_config(stringify!($file)).await

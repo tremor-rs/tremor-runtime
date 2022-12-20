@@ -7,7 +7,7 @@ flow
 	args
 		file = "in"
 	with
-		codec = "json-sorted",
+		codec = {"name": "json", "config": {"mode": "sorted"}},
 		preprocessors = ["separate"],
 		config = {
 				"path": args.file,
@@ -18,7 +18,7 @@ flow
 	args
 		file = "out"
 	with
-		codec = "json-sorted",
+		codec = {"name": "json", "config": {"mode": "sorted"}},
 		postprocessors = ["separate"],
 		config = {
 				"path": args.file,
