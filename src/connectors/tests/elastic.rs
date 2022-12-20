@@ -21,6 +21,7 @@ use crate::errors::{Error, Result};
 use async_std::path::Path;
 use elasticsearch::auth::{ClientCertificate, Credentials};
 use elasticsearch::cert::{Certificate, CertificateValidation};
+use elasticsearch::http::response::Response;
 use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use elasticsearch::GetParts;
 use elasticsearch::{http::transport::Transport, Elasticsearch};
@@ -758,7 +759,7 @@ async fn elastic_routing() -> Result<()> {
             "_id": "03",
             "found": false
         }),
-        &res.json::<simd_json::OwnedValue>().await?
+        res.json::<simd_json::OwnedValue>().await?
     );
 
     let res = elastic
@@ -1225,7 +1226,7 @@ async fn wait_for_es(elastic: &Elasticsearch) -> Result<()> {
         .cluster()
         .health(elasticsearch::cluster::ClusterHealthParts::None)
         .send()
-        .and_then(|r| r.json::<StaticValue>())
+        .and_then(Response::json::<StaticValue>)
         .await
     {
         if start.elapsed() > wait_for {
