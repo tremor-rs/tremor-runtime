@@ -306,22 +306,16 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
         }
     }
 
-    fn create_column_families(db: &mut rocksdb::DB) -> StorageResult<()> {
-        if db.cf_handle(Self::CF_APPS).is_none() {
-            db.create_cf(Self::CF_APPS, &rocksdb::Options::default())
-                .map_err(store_w_err)?;
-        }
-        if db.cf_handle(Self::CF_INSTANCES).is_none() {
-            db.create_cf(Self::CF_INSTANCES, &rocksdb::Options::default())
-                .map_err(store_w_err)?;
-        }
-        Ok(())
+    fn column_families() -> &'static [&'static str] {
+        &Self::COLUMN_FAMILIES
     }
 }
 
 impl AppsStateMachine {
     const CF_APPS: &str = "apps";
     const CF_INSTANCES: &str = "instances";
+
+    const COLUMN_FAMILIES: [&'static str; 2] = [Self::CF_APPS, Self::CF_INSTANCES];
 
     fn cf_apps(db: &Arc<rocksdb::DB>) -> Result<&ColumnFamily, store::Error> {
         db.cf_handle(Self::CF_APPS)

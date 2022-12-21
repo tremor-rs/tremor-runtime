@@ -107,8 +107,7 @@ trait RaftStateMachine<Ser: Serialize + Deserialize<'static>, Cmd> {
     async fn apply_diff_from_snapshot(&mut self, snapshot: &Ser) -> StorageResult<()>;
     fn as_snapshot(&self) -> StorageResult<Ser>;
     async fn transition(&mut self, cmd: &Cmd) -> StorageResult<TremorResponse>;
-
-    fn create_column_families(db: &mut rocksdb::DB) -> StorageResult<()>;
+    fn column_families() -> &'static [&'static str];
 }
 
 #[derive(Debug, Clone)]
@@ -137,16 +136,19 @@ impl TremorStateMachine {
             .map_err(sm_w_err)
     }
 
-    pub(super) fn create_column_families(db: &mut rocksdb::DB) -> StorageResult<()> {
-        nodes::NodesStateMachine::create_column_families(db)?;
-        kv::KvStateMachine::create_column_families(db)?;
-        apps::AppsStateMachine::create_column_families(db)?;
-
-        if db.cf_handle(Self::CF).is_none() {
-            db.create_cf(Self::CF, &rocksdb::Options::default())
-                .map_err(sm_w_err)?;
-        }
-        Ok(())
+    pub(super) fn column_families() -> impl Iterator<Item = &'static str> {
+        let iter = nodes::NodesStateMachine::column_families()
+            .iter()
+            .copied()
+            .chain(
+                kv::KvStateMachine::column_families().iter().copied().chain(
+                    apps::AppsStateMachine::column_families()
+                        .iter()
+                        .copied()
+                        .chain([Self::CF].into_iter()),
+                ),
+            );
+        iter
     }
 }
 

@@ -32,7 +32,7 @@ use openraft::{
     ErrorVerb, HardState, LogId, RaftStorage, SnapshotMeta, StateMachineChanges, StorageError,
     StorageIOError,
 };
-use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Direction, FlushOptions, Options, DB};
+use rocksdb::{ColumnFamily, Direction, FlushOptions, Options, DB};
 use serde::{Deserialize, Serialize};
 use simd_json::OwnedValue;
 use std::{
@@ -772,18 +772,9 @@ impl Store {
         let mut db_opts = Options::default();
         db_opts.create_missing_column_families(true);
         db_opts.create_if_missing(true);
-        db_opts.set_log_level(rocksdb::LogLevel::Fatal); // avoid info logs getting in our way of debugging
-        db_opts.set_stats_dump_period_sec(0);
-        db_opts.set_stats_persist_period_sec(0);
 
-        let cf_iter = Self::COLUMN_FAMILIES
-            .into_iter()
-            .map(|cf_name| ColumnFamilyDescriptor::new(cf_name, Options::default()));
-        let mut db =
-            DB::open_cf_descriptors(&db_opts, db_path, cf_iter).map_err(ClusterError::Rocks)?;
-
-        // initialize the cfs of the state machine
-        TremorStateMachine::create_column_families(&mut db).map_err(Error::from)?;
+        let cfs = TremorStateMachine::column_families().chain(Self::COLUMN_FAMILIES.into_iter());
+        let db = DB::open_cf(&db_opts, db_path, cfs).map_err(ClusterError::Rocks)?;
         Ok(db)
     }
 
@@ -794,7 +785,8 @@ impl Store {
         db_path: P,
         world: Runtime,
     ) -> Result<Arc<Store>, ClusterError> {
-        let db = Arc::new(Self::init_db(db_path)?);
+        let db = Self::init_db(db_path)?;
+        let db = Arc::new(db);
         let state_machine = RwLock::new(
             TremorStateMachine::new(db.clone(), world.clone())
                 .await

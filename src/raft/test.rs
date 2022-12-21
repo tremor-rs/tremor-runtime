@@ -20,6 +20,7 @@ use crate::raft::{
 use crate::system::ShutdownMode;
 use crate::{connectors::tests::free_port::find_free_tcp_port, errors::Result};
 use std::path::Path;
+use std::time::Duration;
 
 //use super::ClusterError;
 
@@ -109,7 +110,7 @@ impl TestNode {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn cluster_test() -> ClusterResult<()> {
+async fn cluster_join_test() -> ClusterResult<()> {
     let _ = env_logger::try_init();
     let dir0 = tempfile::tempdir()?;
     let dir1 = tempfile::tempdir()?;
@@ -118,6 +119,7 @@ async fn cluster_test() -> ClusterResult<()> {
     let node1 = TestNode::start_and_join(dir1.path(), &node0.addr).await?;
     let node2 = TestNode::start_and_join(dir2.path(), &node1.addr).await?;
 
+    // all see the same leader
     let client0 = node0.client();
     let client1 = node1.client();
     let client2 = node2.client();
@@ -133,10 +135,12 @@ async fn cluster_test() -> ClusterResult<()> {
         .await?
         .current_leader
         .expect("expect a leader from node2");
-    assert_eq!(0, node0_leader);
-    assert_eq!(0, node1_leader);
-    assert_eq!(0, node2_leader);
+    let node0_id = node0.running.node_data().0;
+    assert_eq!(node0_id, node0_leader);
+    assert_eq!(node0_id, node1_leader);
+    assert_eq!(node0_id, node2_leader);
 
+    // all are voters in the cluster
     let members = metrics
         .membership_config
         .membership
@@ -152,7 +156,98 @@ async fn cluster_test() -> ClusterResult<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn add_learner_test() -> ClusterResult<()> {
+    let _ = env_logger::try_init();
+    let dir0 = tempfile::tempdir()?;
+    let dir1 = tempfile::tempdir()?;
+    let dir2 = tempfile::tempdir()?;
+    let dir3 = tempfile::tempdir()?;
+    let node0 = TestNode::bootstrap(dir0.path()).await?;
+    let node1 = TestNode::start_and_join(dir1.path(), &node0.addr).await?;
+    let node2 = TestNode::start_and_join(dir2.path(), &node1.addr).await?;
+    let client0 = node0.client();
+    let metrics = client0.metrics().await?;
+    let members = metrics
+        .membership_config
+        .membership
+        .get_configs()
+        .last()
+        .expect("No nodes in membership config");
+    assert_eq!(3, members.len());
+
+    let learner_node = TestNode::join_as_learner(dir3.path(), &node0.addr).await?;
+    // learner is known to the cluster
+    let nodemap = client0.get_nodes().await?;
+    assert_eq!(
+        Some(&learner_node.running.node_data().1),
+        nodemap.get(&learner_node.running.node_data().0)
+    );
+    // but is not a voter
+    let metrics = client0.metrics().await?;
+    let members = metrics
+        .membership_config
+        .membership
+        .get_configs()
+        .last()
+        .expect("No nodes in membership config");
+    assert!(
+        !members.contains(&learner_node.running.node_data().0),
+        "learner not to be part of cluster voters"
+    );
+
+    // TODO: deploy an app and see if the learner also runs it
+    // TODO: verify the whole lifecycle shenanigans of app instances with and without learner
+    // TODO: verify kv stuff
+
+    node2.stop().await?;
+    node1.stop().await?;
+    node0.stop().await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn kill_and_restart_voter() -> ClusterResult<()> {
+    let _ = env_logger::try_init();
+    let dir0 = tempfile::tempdir()?;
+    let dir1 = tempfile::tempdir()?;
+    let dir2 = tempfile::tempdir()?;
+
+    let node0 = TestNode::bootstrap(dir0.path()).await?;
+    let node1 = TestNode::start_and_join(dir1.path(), &node0.addr).await?;
+    let node2 = TestNode::start_and_join(dir2.path(), &node1.addr).await?;
+
+    let client0 = node0.client();
+    let metrics = client0.metrics().await?;
+    let members = metrics
+        .membership_config
+        .membership
+        .get_configs()
+        .last()
+        .expect("No nodes in membership config");
+    assert_eq!(3, members.len());
+
+    node1.stop().await?;
+    // wait until we hit some timeouts
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // restart the node
+    let node1 = TestNode::just_start(dir1.path()).await?;
+
+    // check that the leader is available
+    // TODO: solidify to guard against timing issues
+    let client1 = node0.client();
+    let k = client1.consistent_read("snot").await?;
+    assert!(k.is_none());
+
+    node1.stop().await?;
+    node2.stop().await?;
+    node0.stop().await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn db_fun() {
+    // See: https://github.com/rust-rocksdb/rust-rocksdb/issues/720
     let path = Path::new("/tmp/node01");
     if path.exists() {
         std::fs::remove_dir_all(path).expect("remove to succeed");

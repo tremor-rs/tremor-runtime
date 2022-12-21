@@ -68,7 +68,7 @@ impl Tremor {
         req: Option<&Req>,
     ) -> ClientResult<Resp>
     where
-        Req: Serialize + 'static,
+        Req: Serialize + 'static + ?Sized,
         Resp: Serialize + DeserializeOwned,
     {
         let target_url = {
@@ -115,7 +115,7 @@ impl Tremor {
     /// # Errors
     /// if the api call fails
     pub async fn write(&self, req: &TremorSet) -> ClientResult<String> {
-        self.api_req::<TremorSet, String>("api/write", Method::POST, Some(req))
+        self.api_req::<TremorSet, String>("api/kv/write", Method::POST, Some(req))
             .await
     }
     /// Read value by key, in an inconsistent mode.
@@ -124,8 +124,9 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn read(&self, req: &String) -> ClientResult<Option<String>> {
-        let tremor_res: TremorResponse = self.api_req("api/read", Method::POST, Some(req)).await?;
+    pub async fn read(&self, req: &str) -> ClientResult<Option<String>> {
+        let tremor_res: TremorResponse =
+            self.api_req("api/kv/read", Method::POST, Some(req)).await?;
         Ok(tremor_res.value)
     }
 
@@ -135,9 +136,9 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn consistent_read(&self, req: &String) -> ClientResult<Option<String>> {
+    pub async fn consistent_read(&self, req: &str) -> ClientResult<Option<String>> {
         let tremor_res: TremorResponse = self
-            .api_req("api/consistent_read", Method::POST, Some(req))
+            .api_req("api/kv/consistent_read", Method::POST, Some(req))
             .await?;
         Ok(tremor_res.value)
     }
@@ -284,6 +285,15 @@ impl Tremor {
             None::<&()>,
         )
         .await
+    }
+
+    /// Get all the nodes with their id and address that are currently known to the cluster
+    ///
+    /// # Errors
+    /// if the api call fails
+    pub async fn get_nodes(&self) -> ClientResult<HashMap<NodeId, Addr>> {
+        self.api_req("cluster/nodes", Method::GET, None::<&()>)
+            .await
     }
 
     /// Add a node as learner.

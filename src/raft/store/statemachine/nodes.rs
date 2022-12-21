@@ -48,6 +48,7 @@ pub(crate) struct NodesStateMachine {
 impl NodesStateMachine {
     const CF: &str = "nodes";
     const NEXT_NODE_ID: &str = "next_node_id";
+    const COLUMN_FAMILIES: [&'static str; 1] = [Self::CF];
 
     fn cf(db: &Arc<rocksdb::DB>) -> Result<&ColumnFamily, StoreError> {
         db.cf_handle(Self::CF)
@@ -126,13 +127,8 @@ impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
             value: Some(node_id.to_string()),
         })
     }
-
-    fn create_column_families(db: &mut rocksdb::DB) -> StorageResult<()> {
-        if db.cf_handle(Self::CF).is_none() {
-            db.create_cf(Self::CF, &rocksdb::Options::default())
-                .map_err(sm_w_err)?;
-        }
-        Ok(())
+    fn column_families() -> &'static [&'static str] {
+        &Self::COLUMN_FAMILIES
     }
 }
 
