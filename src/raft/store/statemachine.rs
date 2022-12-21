@@ -14,8 +14,7 @@
 
 use crate::{
     raft::store::{
-        self, statemachine::nodes::NodesStateMachine, StorageResult, Store, TremorRequest,
-        TremorResponse,
+        self, statemachine::nodes::NodesStateMachine, StorageResult, TremorRequest, TremorResponse,
     },
     system::Runtime,
 };
@@ -108,6 +107,8 @@ trait RaftStateMachine<Ser: Serialize + Deserialize<'static>, Cmd> {
     async fn apply_diff_from_snapshot(&mut self, snapshot: &Ser) -> StorageResult<()>;
     fn as_snapshot(&self) -> StorageResult<Ser>;
     async fn transition(&mut self, cmd: &Cmd) -> StorageResult<TremorResponse>;
+
+    fn create_column_families(db: &mut rocksdb::DB) -> StorageResult<()>;
 }
 
 #[derive(Debug, Clone)]
@@ -122,12 +123,30 @@ pub(crate) struct TremorStateMachine {
 
 /// DB Helpers
 impl TremorStateMachine {
+    /// storing state machine related stuff
+    const CF: &'static str = "state_machine";
+
+    const LAST_MEMBERSHIP: &'static str = "last_membership";
+    const LAST_APPLIED_LOG: &'static str = "last_applied_log";
+
     /// state machine column family
     fn cf_state_machine(&self) -> StorageResult<&ColumnFamily> {
         self.db
-            .cf_handle(Store::STATE_MACHINE)
-            .ok_or(store::Error::MissingCf(Store::STATE_MACHINE))
-            .map_err(StorageError::from)
+            .cf_handle(Self::CF)
+            .ok_or(store::Error::MissingCf(Self::CF))
+            .map_err(sm_w_err)
+    }
+
+    pub(super) fn create_column_families(db: &mut rocksdb::DB) -> StorageResult<()> {
+        nodes::NodesStateMachine::create_column_families(db)?;
+        kv::KvStateMachine::create_column_families(db)?;
+        apps::AppsStateMachine::create_column_families(db)?;
+
+        if db.cf_handle(Self::CF).is_none() {
+            db.create_cf(Self::CF, &rocksdb::Options::default())
+                .map_err(sm_w_err)?;
+        }
+        Ok(())
     }
 }
 
@@ -150,7 +169,7 @@ impl TremorStateMachine {
 
     pub(crate) fn get_last_membership(&self) -> StorageResult<Option<EffectiveMembership>> {
         self.db
-            .get_cf(self.cf_state_machine()?, Store::LAST_MEMBERSHIP)
+            .get_cf(self.cf_state_machine()?, Self::LAST_MEMBERSHIP)
             .map_err(sm_r_err)
             .and_then(|value| {
                 value
@@ -166,7 +185,7 @@ impl TremorStateMachine {
         self.db
             .put_cf(
                 self.cf_state_machine()?,
-                Store::LAST_MEMBERSHIP,
+                Self::LAST_MEMBERSHIP,
                 serde_json::to_vec(&membership).map_err(sm_w_err)?,
             )
             .map_err(sm_w_err)
@@ -174,7 +193,7 @@ impl TremorStateMachine {
 
     pub(crate) fn get_last_applied_log(&self) -> StorageResult<Option<LogId>> {
         self.db
-            .get_cf(self.cf_state_machine()?, Store::LAST_APPLIED_LOG)
+            .get_cf(self.cf_state_machine()?, Self::LAST_APPLIED_LOG)
             .map_err(sm_r_err)
             .and_then(|value| {
                 value
@@ -187,7 +206,7 @@ impl TremorStateMachine {
         self.db
             .put_cf(
                 self.cf_state_machine()?,
-                Store::LAST_APPLIED_LOG,
+                Self::LAST_APPLIED_LOG,
                 serde_json::to_vec(&log_id).map_err(sm_w_err)?,
             )
             .map_err(sm_w_err)
@@ -195,7 +214,7 @@ impl TremorStateMachine {
 
     fn delete_last_applied_log(&self) -> StorageResult<()> {
         self.db
-            .delete_cf(self.cf_state_machine()?, Store::LAST_APPLIED_LOG)
+            .delete_cf(self.cf_state_machine()?, Self::LAST_APPLIED_LOG)
             .map_err(sm_d_err)
     }
 

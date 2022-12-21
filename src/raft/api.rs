@@ -19,9 +19,21 @@ mod apps;
 pub mod client;
 mod cluster;
 mod kv;
+pub(crate) mod worker;
 
-use crate::raft::{app, store, Server};
+use crate::raft::{
+    node::Addr,
+    store::{self, AppId, FlowId, InstanceId, StateApp, Store, TremorResponse},
+    TremorRaftImpl,
+};
+use async_std::{
+    channel::{bounded, Sender},
+    future::TimeoutError,
+    prelude::FutureExt,
+    task::JoinHandle,
+};
 use futures::Future;
+use halfbrown::HashMap;
 use openraft::{
     error::{
         AddLearnerError, ChangeMembershipError, ClientReadError, ClientWriteError, Fatal,
@@ -30,15 +42,61 @@ use openraft::{
     raft::{AddLearnerResponse, ClientWriteResponse},
     LogId, NodeId, StorageError,
 };
-use std::{num::ParseIntError, sync::Arc};
+use std::{collections::BTreeSet, num::ParseIntError, sync::Arc, time::Duration};
 use tide::{http::headers::LOCATION, Body, Endpoint, Request, Response, StatusCode};
 
-use super::store::{AppId, FlowId, InstanceId, TremorResponse};
+use self::apps::AppState;
 
-type APIRequest = Request<Arc<app::Tremor>>;
+type Server = tide::Server<Arc<ServerState>>;
+type APIRequest = Request<Arc<ServerState>>;
 pub type APIResult<T> = Result<T, APIError>;
 
-pub fn install_rest_endpoints(app: &mut Server) {
+const API_WORKER_TIMEOUT: Duration = Duration::from_secs(5);
+
+enum APIStoreReq {
+    GetApp(AppId, Sender<Option<StateApp>>),
+    GetApps(Sender<HashMap<AppId, AppState>>),
+    KVGet(String, Sender<Option<String>>),
+    GetNode(NodeId, Sender<Option<Addr>>),
+    GetNodes(Sender<HashMap<NodeId, Addr>>),
+    GetNodeId(Addr, Sender<Option<NodeId>>),
+    GetLastMembership(Sender<BTreeSet<NodeId>>),
+}
+
+pub(crate) struct ServerState {
+    id: NodeId,
+    addr: Addr,
+    raft: TremorRaftImpl,
+    store_tx: Sender<APIStoreReq>,
+}
+
+impl ServerState {
+    pub(crate) fn id(&self) -> NodeId {
+        self.id
+    }
+    pub(crate) fn addr(&self) -> &Addr {
+        &self.addr
+    }
+}
+
+pub(crate) fn initialize(
+    id: NodeId,
+    addr: Addr,
+    raft: TremorRaftImpl,
+    store: Arc<Store>,
+) -> (JoinHandle<()>, Arc<ServerState>) {
+    let (store_tx, store_rx) = bounded(64); // arbitrary choice to block upon too much concurrent incoming requests
+    let handle = async_std::task::spawn(worker::api_worker(store, store_rx));
+    let state = Arc::new(ServerState {
+        id,
+        addr,
+        raft,
+        store_tx,
+    });
+    (handle, state)
+}
+
+pub(crate) fn install_rest_endpoints(app: &mut Server) {
     let mut v1 = app.at("/v1");
     cluster::install_rest_endpoints(&mut v1);
 
@@ -59,7 +117,7 @@ where
 }
 
 #[async_trait::async_trait]
-impl<T, F, Fut> Endpoint<Arc<app::Tremor>> for WrappingEndpoint<T, F, Fut>
+impl<T, F, Fut> Endpoint<Arc<ServerState>> for WrappingEndpoint<T, F, Fut>
 where
     T: serde::Serialize + serde::Deserialize<'static> + 'static,
     F: Send + Sync + 'static + Fn(APIRequest) -> Fut,
@@ -240,9 +298,13 @@ where
     T: serde::Serialize + serde::Deserialize<'static>,
 {
     Err(if let Some(leader_id) = e.leader_id {
-        let state_machine = req.state().store.state_machine.read().await;
+        let (tx, rx) = bounded(1);
+        req.state()
+            .store_tx
+            .send(APIStoreReq::GetNode(leader_id, tx))
+            .await?;
         // we can only forward to the leader if we have the node in our state machine
-        if let Some(leader_addr) = state_machine.nodes.get_node(leader_id) {
+        if let Some(leader_addr) = rx.recv().timeout(API_WORKER_TIMEOUT).await?? {
             let mut leader_url =
                 url::Url::parse(&format!("{}://{}", req.url().scheme(), leader_addr.api()))?;
             leader_url.set_path(req.url().path());
@@ -368,5 +430,23 @@ impl From<AppError> for APIError {
 impl From<crate::Error> for APIError {
     fn from(e: crate::Error) -> Self {
         APIError::Runtime(e.to_string())
+    }
+}
+
+impl<T> From<async_std::channel::SendError<T>> for APIError {
+    fn from(e: async_std::channel::SendError<T>) -> Self {
+        Self::Other(e.to_string())
+    }
+}
+
+impl From<async_std::channel::RecvError> for APIError {
+    fn from(e: async_std::channel::RecvError) -> Self {
+        Self::Other(e.to_string())
+    }
+}
+
+impl From<TimeoutError> for APIError {
+    fn from(e: TimeoutError) -> Self {
+        Self::Other(e.to_string())
     }
 }

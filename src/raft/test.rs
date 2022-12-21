@@ -21,7 +21,7 @@ use crate::system::ShutdownMode;
 use crate::{connectors::tests::free_port::find_free_tcp_port, errors::Result};
 use std::path::Path;
 
-use super::store::Store;
+//use super::ClusterError;
 
 async fn free_node_addr() -> Result<Addr> {
     let api_port = find_free_tcp_port().await?;
@@ -34,7 +34,7 @@ async fn free_node_addr() -> Result<Addr> {
 
 struct TestNode {
     client: ClusterClient,
-    //addr: Addr,
+    addr: Addr,
     running: Running,
 }
 
@@ -47,12 +47,11 @@ impl TestNode {
         let client = ClusterClient::new(&addr.api())?;
         Ok(Self {
             client,
-            //addr,
+            addr,
             running,
         })
     }
 
-    #[allow(dead_code)]
     async fn start_and_join(path: impl AsRef<Path>, join_addr: &Addr) -> ClusterResult<Self> {
         let addr = free_node_addr().await?;
         let mut node = Node::new(path, raft_config()?);
@@ -62,7 +61,7 @@ impl TestNode {
         let client = ClusterClient::new(&addr.api())?;
         Ok(Self {
             client,
-            //addr,
+            addr,
             running,
         })
     }
@@ -74,7 +73,7 @@ impl TestNode {
         let client = ClusterClient::new(&addr.api())?;
         Ok(Self {
             client,
-            //addr,
+            addr,
             running,
         })
     }
@@ -89,18 +88,21 @@ impl TestNode {
         let client = ClusterClient::new(&addr.api())?;
         Ok(Self {
             client,
-            //addr,
+            addr,
             running,
         })
     }
 
-    #[allow(dead_code)]
     async fn stop(self) -> ClusterResult<()> {
-        self.running.kill_switch().stop(ShutdownMode::Graceful)
-        //self.running.join().await
+        let Self { running, .. } = self;
+        let kill_switch = running.kill_switch();
+        kill_switch.stop(ShutdownMode::Graceful)?;
+        running.join().await
+
+        // only ever destroy the db when the raft node is known to have stopped
+        //rocksdb::DB::destroy(&rocksdb::Options::default(), &path).map_err(ClusterError::Rocks)
     }
 
-    #[allow(dead_code)]
     fn client(&self) -> &ClusterClient {
         &self.client
     }
@@ -109,60 +111,62 @@ impl TestNode {
 #[tokio::test(flavor = "multi_thread")]
 async fn cluster_test() -> ClusterResult<()> {
     let _ = env_logger::try_init();
-    let dir0 = Path::new("/tmp/node0");
-    std::fs::remove_dir_all(dir0)?;
-    let node0 = TestNode::bootstrap(dir0).await?;
+    let dir0 = tempfile::tempdir()?;
+    let dir1 = tempfile::tempdir()?;
+    let dir2 = tempfile::tempdir()?;
+    let node0 = TestNode::bootstrap(dir0.path()).await?;
+    let node1 = TestNode::start_and_join(dir1.path(), &node0.addr).await?;
+    let node2 = TestNode::start_and_join(dir2.path(), &node1.addr).await?;
 
-    // let dir1 = Path::new("/tmp/node1");
-    // std::fs::remove_dir_all(dir1)?;
-    // let _node1 = TestNode::start_and_join(dir1, &node0.addr).await?;
+    let client0 = node0.client();
+    let client1 = node1.client();
+    let client2 = node2.client();
+    let metrics = client0.metrics().await?;
+    let node0_leader = metrics.current_leader.expect("expect a leader from node 0");
+    let node1_leader = client1
+        .metrics()
+        .await?
+        .current_leader
+        .expect("expect a leader from node1");
+    let node2_leader = client2
+        .metrics()
+        .await?
+        .current_leader
+        .expect("expect a leader from node2");
+    assert_eq!(0, node0_leader);
+    assert_eq!(0, node1_leader);
+    assert_eq!(0, node2_leader);
 
-    // let dir2 = Path::new("/tmp/node2");
-    // std::fs::remove_dir_all(dir2)?;
-    // let _node2 = TestNode::start_and_join(dir2, &node1.addr).await?;
+    let members = metrics
+        .membership_config
+        .membership
+        .get_configs()
+        .last()
+        .expect("No nodes in membership config");
+    assert_eq!(3, members.len());
 
-    let _client0 = node0.client();
-    let _apps = _client0.list().await?;
-    // let client1 = node1.client();
-    //let client2 = node2.client();
-    //let metrics = client0.metrics().await?;
-    // let node0_leader = metrics.current_leader.expect("expect a leader from node 0");
-    // let node1_leader = client1
-    //     .metrics()
-    //     .await?
-    //     .current_leader
-    //     .expect("expect a leader from node1");
-    // let node2_leader = client2
-    //     .metrics()
-    //     .await?
-    //     .current_leader
-    //     .expect("expect a leader from node2");
-    // assert_eq!(0, node0_leader);
-    // assert_eq!(0, node1_leader);
-    // assert_eq!(0, node2_leader);
-
-    // let members = metrics
-    //     .membership_config
-    //     .membership
-    //     .get_configs()
-    //     .last()
-    //     .expect("No nodes in membership config");
-    // assert_eq!(3, members.len());
-
-    // TODO: remove the leaving nodes before stopping them
-    //node2.stop().await?;
-    // node1.stop().await?;
+    node2.stop().await?;
+    node1.stop().await?;
     node0.stop().await?;
     Ok(())
 }
 
-#[test]
-fn db_fun() {
-    std::fs::remove_dir_all("/tmp/node01").unwrap();
-    std::fs::remove_dir_all("/tmp/node02").unwrap();
-    let store01 = Store::init_db("/tmp/node01").unwrap();
-    let store02 = Store::init_db("/tmp/node02").unwrap();
+#[tokio::test(flavor = "multi_thread")]
+async fn db_fun() {
+    let path = Path::new("/tmp/node01");
+    if path.exists() {
+        std::fs::remove_dir_all(path).expect("remove to succeed");
+    }
+    let mut db_opts = rocksdb::Options::default();
+    db_opts.create_missing_column_families(true);
+    db_opts.create_if_missing(true);
 
-    drop(store02);
-    drop(store01);
+    let cf = "foo";
+    let db = rocksdb::DB::open_cf(&db_opts, path, [cf]).expect("open to succeed");
+    tokio::task::spawn(async move {
+        let res = db
+            .get_cf(&db.cf_handle(cf).expect("cf to be there"), "key")
+            .expect("ok");
+        assert!(res.is_none());
+    });
 }

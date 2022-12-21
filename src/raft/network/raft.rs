@@ -23,36 +23,31 @@ use openraft::{
 };
 use tarpc::context;
 
-use crate::raft::{app, store::TremorRequest};
+use crate::raft::{store::TremorRequest, TremorRaftImpl};
 
 // --- Raft communication server side
 #[derive(Clone)]
 pub struct Server {
-    app: Arc<app::Tremor>,
+    raft: Arc<TremorRaftImpl>,
 }
 
 impl Server {
-    pub(crate) fn new(app: Arc<app::Tremor>) -> Self {
-        Self { app }
+    pub(crate) fn new(raft: Arc<TremorRaftImpl>) -> Self {
+        Self { raft }
     }
 }
 
 #[tarpc::server]
 impl super::Raft for Server {
     async fn vote(self, _: context::Context, vote: VoteRequest) -> Result<VoteResponse, AnyError> {
-        self.app
-            .raft
-            .vote(vote)
-            .await
-            .map_err(|e| AnyError::new(&e))
+        self.raft.vote(vote).await.map_err(|e| AnyError::new(&e))
     }
     async fn append(
         self,
         _: context::Context,
         req: AppendEntriesRequest<TremorRequest>,
     ) -> Result<AppendEntriesResponse, AnyError> {
-        self.app
-            .raft
+        self.raft
             .append_entries(req)
             .await
             .map_err(|e| AnyError::new(&e))
@@ -62,8 +57,7 @@ impl super::Raft for Server {
         _: context::Context,
         req: InstallSnapshotRequest,
     ) -> Result<InstallSnapshotResponse, AnyError> {
-        self.app
-            .raft
+        self.raft
             .install_snapshot(req)
             .await
             .map_err(|e| AnyError::new(&e))

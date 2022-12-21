@@ -305,6 +305,18 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
             }
         }
     }
+
+    fn create_column_families(db: &mut rocksdb::DB) -> StorageResult<()> {
+        if db.cf_handle(Self::CF_APPS).is_none() {
+            db.create_cf(Self::CF_APPS, &rocksdb::Options::default())
+                .map_err(store_w_err)?;
+        }
+        if db.cf_handle(Self::CF_INSTANCES).is_none() {
+            db.create_cf(Self::CF_INSTANCES, &rocksdb::Options::default())
+                .map_err(store_w_err)?;
+        }
+        Ok(())
+    }
 }
 
 impl AppsStateMachine {
@@ -518,10 +530,6 @@ impl AppsStateMachine {
 impl AppsStateMachine {
     pub(crate) fn get_app(&self, app_id: &AppId) -> Option<&StateApp> {
         self.apps.get(app_id)
-    }
-
-    pub(crate) fn get_instances(&self, app_id: &AppId) -> Option<&Instances> {
-        self.apps.get(app_id).map(|app| &app.instances)
     }
 
     pub(crate) fn list(&self) -> impl Iterator<Item = (&AppId, &StateApp)> {

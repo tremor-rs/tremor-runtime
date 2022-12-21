@@ -1,5 +1,4 @@
 pub mod api;
-pub mod app;
 pub mod archive;
 pub mod network;
 pub mod node;
@@ -14,9 +13,9 @@ pub use openraft::NodeId;
 use openraft::{error::InitializeError, Config, ConfigError, Raft};
 use std::{
     fmt::{Display, Formatter},
-    sync::{Arc, Mutex},
+    sync::Mutex,
 };
-use store::{Store, TremorRequest, TremorResponse};
+use store::{TremorRequest, TremorResponse};
 
 /// load a default raft config
 /// # Errors
@@ -30,9 +29,7 @@ pub fn config() -> ClusterResult<Config> {
     Ok(config.validate()?)
 }
 
-pub type Tremor = Raft<TremorRequest, TremorResponse, Network, store::Store>;
-// FIXME: move to api module
-type Server = tide::Server<Arc<app::Tremor>>;
+pub type TremorRaftImpl = Raft<TremorRequest, TremorResponse, Network, store::Store>;
 
 #[derive(Debug)]
 pub enum ClusterError {

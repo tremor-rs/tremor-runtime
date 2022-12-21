@@ -17,9 +17,6 @@
 
 use std::{collections::BTreeMap, marker::Sized, sync::Arc};
 
-use openraft::StorageError;
-use rocksdb::ColumnFamily;
-
 use crate::{
     raft::store::{
         self,
@@ -28,6 +25,8 @@ use crate::{
     },
     system::Runtime,
 };
+use openraft::StorageError;
+use rocksdb::ColumnFamily;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub(crate) struct KvSnapshot(BTreeMap<String, String>);
@@ -116,5 +115,13 @@ impl RaftStateMachine<KvSnapshot, KvRequest> for KvStateMachine {
                 })
             }
         }
+    }
+
+    fn create_column_families(db: &mut rocksdb::DB) -> StorageResult<()> {
+        if db.cf_handle(Self::CF).is_none() {
+            db.create_cf(Self::CF, &rocksdb::Options::default())
+                .map_err(sm_w_err)?;
+        }
+        Ok(())
     }
 }

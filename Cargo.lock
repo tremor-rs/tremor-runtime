@@ -980,9 +980,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.64.0"
+version = "0.63.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4243e6031260db77ede97ad86c27e501d646a27ab57b59a574f725d98ab1fb4"
+checksum = "36d860121800b2a9a94f9b5604b332d5cffb234ce17609ea479d723dbc9d3885"
 dependencies = [
  "bitflags",
  "cexpr",
@@ -3346,9 +3346,8 @@ checksum = "348108ab3fba42ec82ff6e9564fc4ca0247bdccdc68dd8af9764bbc79c3c8ffb"
 
 [[package]]
 name = "librocksdb-sys"
-version = "0.8.3+7.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "557b255ff04123fcc176162f56ed0c9cd42d8f357cf55b3fabeb60f7413741b3"
+version = "0.8.0+7.7.3"
+source = "git+https://github.com/tremor-rs/rust-rocksdb?rev=a02b00f029fb45d294715748cd2459491594e0e3#a02b00f029fb45d294715748cd2459491594e0e3"
 dependencies = [
  "bindgen",
  "bzip2-sys",
@@ -3356,6 +3355,7 @@ dependencies = [
  "glob",
  "libc",
  "libz-sys",
+ "lz4-sys",
  "zstd-sys",
 ]
 
@@ -4665,8 +4665,7 @@ dependencies = [
 [[package]]
 name = "rocksdb"
 version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e9562ea1d70c0cc63a34a22d977753b50cca91cc6b6527750463bd5dd8697bc"
+source = "git+https://github.com/tremor-rs/rust-rocksdb?rev=a02b00f029fb45d294715748cd2459491594e0e3#a02b00f029fb45d294715748cd2459491594e0e3"
 dependencies = [
  "libc",
  "librocksdb-sys",

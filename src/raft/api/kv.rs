@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::raft::api::{wrapp, APIError, APIRequest, APIResult};
-use crate::raft::app;
+use crate::raft::api::{wrapp, APIError, APIRequest, APIResult, ServerState, ToAPIResult};
 use crate::raft::store::{TremorResponse, TremorSet};
+use async_std::channel::bounded;
+use async_std::prelude::FutureExt;
 use std::sync::Arc;
 use tide::Route;
 
-use super::ToAPIResult;
+use super::API_WORKER_TIMEOUT;
 
-pub(crate) fn install_rest_endpoints(parent: &mut Route<Arc<app::Tremor>>) {
+pub(crate) fn install_rest_endpoints(parent: &mut Route<Arc<ServerState>>) {
     let mut kv_route = parent.at("/kv");
     kv_route.at("/write").post(wrapp(write));
     kv_route.at("/read").post(wrapp(read));
@@ -52,8 +53,12 @@ async fn write(mut req: APIRequest) -> APIResult<String> {
 /// read a value from the current node, not necessarily the leader, thus this value can be stale
 async fn read(mut req: APIRequest) -> APIResult<TremorResponse> {
     let key: String = req.body_json().await?;
-    let state_machine = req.state().store.state_machine.read().await;
-    let value = state_machine.kv.get(&key)?;
+    let (tx, rx) = bounded(1);
+    req.state()
+        .store_tx
+        .send(super::APIStoreReq::KVGet(key, tx))
+        .await?;
+    let value = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
     Ok(TremorResponse { value })
 }
 
@@ -64,12 +69,11 @@ async fn consistent_read(mut req: APIRequest) -> APIResult<TremorResponse> {
     // this will fail if we are not a leader
     state.raft.client_read().await.to_api_result(&req).await?;
     // here we are safe to read
-    let value = state
-        .store
-        .state_machine
-        .read()
-        .await
-        .kv
-        .get(key.as_str())?;
+    let (tx, rx) = bounded(1);
+    req.state()
+        .store_tx
+        .send(super::APIStoreReq::KVGet(key, tx))
+        .await?;
+    let value = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
     Ok(TremorResponse { value })
 }

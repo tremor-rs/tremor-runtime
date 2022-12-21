@@ -181,6 +181,7 @@ pub struct Store {
     // the database
     db: Arc<rocksdb::DB>,
 }
+
 type StorageResult<T> = Result<T, StorageError>;
 
 /// converts an id to a byte vector for storing in the database.
@@ -262,6 +263,12 @@ impl From<tremor_script::errors::Error> for Error {
     }
 }
 
+impl From<StorageError> for Error {
+    fn from(e: StorageError) -> Self {
+        Error::Storage(e)
+    }
+}
+
 impl StdError for Error {}
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -322,11 +329,6 @@ pub(crate) trait GetCfHandle {
     /// store column family
     fn cf_store(&self) -> Result<&ColumnFamily, Error> {
         self.cf(Store::STORE)
-    }
-
-    /// node column family
-    fn cf_nodes(&self) -> Result<&ColumnFamily, Error> {
-        self.cf(Store::NODES)
     }
 
     fn cf_self(&self) -> Result<&ColumnFamily, Error> {
@@ -692,44 +694,20 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
         }
     }
 }
+
 impl Store {
     // db column families
 
     /// storing `node_id` and addr of the current node
     const SELF: &'static str = "self";
-
-    /// storing node metadata for all nodes somehow participating in the cluster (learners and voters)
-    const NODES: &'static str = "nodes";
-
     /// storing raft logs
     const LOGS: &'static str = "logs";
     /// storing `RaftStorage` related stuff
     const STORE: &'static str = "store";
 
-    /// storing key-value-data
-    const KV_DATA: &'static str = "data";
-    /// storing installed tremor apps
-    const APPS: &'static str = "apps";
-    /// storing tremor flow instances and their current/intended state
-    const INSTANCES: &'static str = "instances";
-
-    /// storing state machine related stuff
-    const STATE_MACHINE: &'static str = "state_machine";
-
-    const COLUMN_FAMILIES: [&'static str; 8] = [
-        Self::SELF,
-        Self::NODES,
-        Self::LOGS,
-        Self::STORE,
-        Self::KV_DATA,
-        Self::APPS,
-        Self::INSTANCES,
-        Self::STATE_MACHINE,
-    ];
+    const COLUMN_FAMILIES: [&'static str; 3] = [Self::SELF, Self::LOGS, Self::STORE];
 
     // keys
-    const LAST_MEMBERSHIP: &'static str = "last_membership";
-    const LAST_APPLIED_LOG: &'static str = "last_applied_log";
     const LAST_PURGED_LOG_ID: &'static str = "last_purged_log_id";
     const SNAPSHOT_INDEX: &'static str = "snapshot_index";
     const SNAPSHOT: &'static str = "snapshot";
@@ -737,63 +715,6 @@ impl Store {
     /// for storing the own `node_id`
     const NODE_ID: &'static str = "node_id";
     const NODE_ADDR: &'static str = "node_addr";
-
-    /// Initialize the rocksdb column families.
-    ///
-    /// This function is safe and never cleans up or resets the current state,
-    /// but creates a new db if there is none.
-    pub(crate) fn init_db<P: AsRef<Path>>(db_path: P) -> Result<DB, ClusterError> {
-        let mut db_opts = Options::default();
-        db_opts.create_missing_column_families(true);
-        db_opts.create_if_missing(true);
-        db_opts.set_log_level(rocksdb::LogLevel::Fatal); // avoid info logs getting in our way of debugging
-        db_opts.set_stats_dump_period_sec(0);
-        db_opts.set_stats_persist_period_sec(0);
-
-        let cf_iter = Self::COLUMN_FAMILIES
-            .into_iter()
-            .map(|cf_name| ColumnFamilyDescriptor::new(cf_name, Options::default()));
-        DB::open_cf_descriptors(&db_opts, db_path, cf_iter).map_err(ClusterError::Rocks)
-    }
-
-    pub(crate) fn get_self(&self) -> Result<(NodeId, Addr), ClusterError> {
-        let id = self
-            .get_self_node_id()?
-            .ok_or("invalid cluster store, node_id missing")?;
-        let addr = self
-            .get_self_addr()?
-            .ok_or("invalid cluster store, node_addr missing")?;
-
-        Ok((id, addr))
-    }
-
-    /// Store the information about the current node itself in the `db`
-    fn set_self(db: &DB, node_id: NodeId, addr: &Addr) -> Result<(), ClusterError> {
-        let node_id_bytes = id_to_bin(node_id)?;
-        let addr_bytes = serde_json::to_vec(addr)?;
-        let cf = db.cf_self()?;
-        db.put_cf(cf, Store::NODE_ID, node_id_bytes)?;
-        db.put_cf(cf, Store::NODE_ADDR, &addr_bytes)?;
-        Ok(())
-    }
-
-    /// # Errors
-    /// if the store fails to read the RPC address
-    pub fn get_self_addr(&self) -> Result<Option<Addr>, Error> {
-        Ok(self
-            .db
-            .get_cf(self.db.cf_self()?, Store::NODE_ADDR)?
-            .map(|v| serde_json::from_slice(&v))
-            .transpose()?)
-    }
-    /// # Errors
-    /// if the store fails to read the node id
-    pub fn get_self_node_id(&self) -> Result<Option<NodeId>, Error> {
-        self.db
-            .get_cf(self.db.cf_self()?, Store::NODE_ID)?
-            .map(|v| bin_to_id(&v))
-            .transpose()
-    }
 
     /// bootstrapping constructor - storing the given node data in the db
     pub(crate) async fn bootstrap<P: AsRef<Path>>(
@@ -811,7 +732,59 @@ impl Store {
                 .await
                 .map_err(Error::from)?,
         );
-        Ok(Arc::new(Self { db, state_machine }))
+        Ok(Arc::new(Self { state_machine, db }))
+    }
+
+    pub(crate) fn get_self(&self) -> Result<(NodeId, Addr), ClusterError> {
+        let id = self
+            .get_self_node_id()?
+            .ok_or("invalid cluster store, node_id missing")?;
+        let addr = self
+            .get_self_addr()?
+            .ok_or("invalid cluster store, node_addr missing")?;
+
+        Ok((id, addr))
+    }
+
+    /// # Errors
+    /// if the store fails to read the RPC address
+    pub fn get_self_addr(&self) -> Result<Option<Addr>, Error> {
+        Ok(self
+            .db
+            .get_cf(self.db.cf_self()?, Store::NODE_ADDR)?
+            .map(|v| serde_json::from_slice(&v))
+            .transpose()?)
+    }
+
+    /// # Errors
+    /// if the store fails to read the node id
+    pub fn get_self_node_id(&self) -> Result<Option<NodeId>, Error> {
+        self.db
+            .get_cf(self.db.cf_self()?, Store::NODE_ID)?
+            .map(|v| bin_to_id(&v))
+            .transpose()
+    }
+    /// Initialize the database
+    ///
+    /// This function is safe and never cleans up or resets the current state,
+    /// but creates a new db if there is none.
+    pub(crate) fn init_db<P: AsRef<Path>>(db_path: P) -> Result<DB, ClusterError> {
+        let mut db_opts = Options::default();
+        db_opts.create_missing_column_families(true);
+        db_opts.create_if_missing(true);
+        db_opts.set_log_level(rocksdb::LogLevel::Fatal); // avoid info logs getting in our way of debugging
+        db_opts.set_stats_dump_period_sec(0);
+        db_opts.set_stats_persist_period_sec(0);
+
+        let cf_iter = Self::COLUMN_FAMILIES
+            .into_iter()
+            .map(|cf_name| ColumnFamilyDescriptor::new(cf_name, Options::default()));
+        let mut db =
+            DB::open_cf_descriptors(&db_opts, db_path, cf_iter).map_err(ClusterError::Rocks)?;
+
+        // initialize the cfs of the state machine
+        TremorStateMachine::create_column_families(&mut db).map_err(Error::from)?;
+        Ok(db)
     }
 
     /// loading constructor - loading the given database
@@ -827,12 +800,18 @@ impl Store {
                 .await
                 .map_err(Error::from)?,
         );
-        let this = Self {
-            db,
-            state_machine,
-            //runtime: world,
-        };
+        let this = Self { state_machine, db };
         Ok(Arc::new(this))
+    }
+
+    /// Store the information about the current node itself in the `db`
+    fn set_self(db: &DB, node_id: NodeId, addr: &Addr) -> Result<(), ClusterError> {
+        let node_id_bytes = id_to_bin(node_id)?;
+        let addr_bytes = serde_json::to_vec(addr)?;
+        let cf = db.cf_self()?;
+        db.put_cf(cf, Store::NODE_ID, node_id_bytes)?;
+        db.put_cf(cf, Store::NODE_ADDR, &addr_bytes)?;
+        Ok(())
     }
 }
 
@@ -846,13 +825,13 @@ mod tests {
     fn init_db_is_idempotent() -> ClusterResult<()> {
         let dir = tempfile::tempdir()?;
         let db = Store::init_db(dir.path())?;
-        let handle = db.cf_handle(Store::NODES).ok_or("no data")?;
+        let handle = db.cf_handle(Store::STORE).ok_or("no data")?;
         let data = vec![1_u8, 2_u8, 3_u8];
         db.put_cf(handle, "node_id", data.clone())?;
         drop(db);
 
         let db2 = Store::init_db(dir.path())?;
-        let handle2 = db2.cf_handle(Store::NODES).ok_or("no data")?;
+        let handle2 = db2.cf_handle(Store::STORE).ok_or("no data")?;
         let res2 = db2.get_cf(handle2, "node_id")?;
         assert_eq!(Some(data), res2);
         Ok(())

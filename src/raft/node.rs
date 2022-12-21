@@ -16,7 +16,7 @@
 use crate::{
     errors::Result,
     raft::{
-        api, app,
+        api::{self, ServerState},
         network::{raft, Raft as TarPCRaftService},
         store::{NodesRequest, Store, TremorRequest, TremorResponse},
         ClusterError, ClusterResult, Network, NodeId,
@@ -58,7 +58,7 @@ impl ClusterNodeKillSwitch {
 
 pub struct Running {
     node: Node,
-    server_state: Arc<app::Tremor>,
+    server_state: Arc<ServerState>,
     kill_switch_tx: Sender<ShutdownMode>,
     run_handle: JoinHandle<ClusterResult<()>>,
 }
@@ -66,7 +66,7 @@ pub struct Running {
 impl Running {
     #[must_use]
     pub fn node_data(&self) -> (NodeId, Addr) {
-        (self.server_state.id, self.server_state.addr.clone())
+        (self.server_state.id(), self.server_state.addr().clone())
     }
 
     #[must_use]
@@ -77,18 +77,19 @@ impl Running {
     async fn start(
         node: Node,
         raft: Raft<TremorRequest, TremorResponse, Network, Store>,
-        server_state: Arc<app::Tremor>,
+        api_worker_handle: JoinHandle<()>,
+        server_state: Arc<ServerState>,
         runtime: Runtime,
         runtime_handle: JoinHandle<Result<()>>,
     ) -> ClusterResult<Self> {
         let (kill_switch_tx, kill_switch_rx) = bounded(1);
 
-        let tcp_server_state = server_state.clone();
+        let tcp_server_state = Arc::new(raft.clone());
         let mut listener =
-            tarpc::serde_transport::tcp::listen(&server_state.addr.rpc(), Json::default).await?;
+            tarpc::serde_transport::tcp::listen(&server_state.addr().rpc(), Json::default).await?;
         listener.config_mut().max_frame_length(usize::MAX);
 
-        let http_api_addr = server_state.addr.api().to_string();
+        let http_api_addr = server_state.addr().api().to_string();
         let mut http_api_server = tide::Server::with_state(server_state.clone());
         api::install_rest_endpoints(&mut http_api_server);
 
@@ -117,6 +118,8 @@ impl Running {
             futures::select! {
                 _ = tcp_future => {
                     warn!("TCP cluster API shutdown.");
+                    // Important: this will free and drop the store and thus the rocksdb
+                    api_worker_handle.cancel().await;
                     raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
                     runtime.stop(ShutdownMode::Graceful).await?;
                     runtime_future.await?;
@@ -125,6 +128,8 @@ impl Running {
                     if let Err(e) = http_res {
                         error!("HTTP cluster API failed: {e}");
                     }
+                    // Important: this will free and drop the store and thus the rocksdb
+                    api_worker_handle.cancel().await;
                     raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
                     runtime.stop(ShutdownMode::Graceful).await?;
                     runtime_future.await?;
@@ -134,14 +139,17 @@ impl Running {
                     if let Err(e) = runtime_res {
                         error!("Local runtime failed: {e}");
                     }
+                    // Important: this will free and drop the store and thus the rocksdb
+                    api_worker_handle.cancel().await;
                     // runtime is already down, we only need to stop local raft
                     raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
                 }
                 shutdown_mode = kill_switch_future => {
                     let shutdown_mode = shutdown_mode.unwrap_or(ShutdownMode::Forceful);
                     info!("Tremor cluster node stopping in {shutdown_mode:?} mode");
+                    // Important: this will free and drop the store and thus the rocksdb
+                    api_worker_handle.cancel().await;
                     // tcp and http api stopped listening as we don't poll them no more
-                    // FIXME: something here is hanging infinitely
                     raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
                     info!("Raft engine did stop.");
                     info!("Stopping the Tremor runtime...");
@@ -151,6 +159,7 @@ impl Running {
                 }
             }
             info!("Tremor cluster node stopped");
+
             Ok::<(), ClusterError>(())
         });
 
@@ -252,13 +261,17 @@ impl Node {
 
         let network = Network::new(store.clone());
         let raft = Raft::new(node_id, node.raft_config.clone(), network, store.clone());
-        let server_state = Arc::new(app::Tremor {
-            id: node_id,
-            addr,
-            raft: raft.clone(),
-            store,
-        });
-        Running::start(node, raft, server_state, runtime, runtime_handle).await
+        let (api_worker_handle, server_state) =
+            api::initialize(node_id, addr, raft.clone(), store.clone());
+        Running::start(
+            node,
+            raft,
+            api_worker_handle,
+            server_state,
+            runtime,
+            runtime_handle,
+        )
+        .await
     }
 
     /// Just start the cluster node and let it do whatever it does
@@ -307,15 +320,16 @@ impl Node {
         let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
         let network = Network::new(store.clone());
         let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone());
-
-        let server_state = Arc::new(app::Tremor {
-            id: node_id,
-            addr,
-            raft: raft.clone(),
-            store,
-        });
-        let running =
-            Running::start(self.clone(), raft, server_state, runtime, runtime_handle).await?;
+        let (api_worker_handle, server_state) = api::initialize(node_id, addr, raft.clone(), store);
+        let running = Running::start(
+            self.clone(),
+            raft,
+            api_worker_handle,
+            server_state,
+            runtime,
+            runtime_handle,
+        )
+        .await?;
 
         // only when the node is started (listens for HTTP, TCP etc)
         // we can add it as learner and optionally promote it to a voter
@@ -374,13 +388,18 @@ impl Node {
                         ClusterError::Other(format!("Invalid node_id returned from AddNode: {e}"))
                     })?;
                 debug_assert_eq!(node_id, assigned_node_id, "Adding initial leader resulted in a differing node_id: {assigned_node_id}, expected: {node_id}");
-                let server_state = Arc::new(app::Tremor {
-                    id: node_id,
-                    addr,
-                    raft: raft.clone(),
-                    store,
-                });
-                Running::start(self.clone(), raft, server_state, runtime, runtime_handle).await
+                let (worker_handle, server_state) =
+                    api::initialize(node_id, addr, raft.clone(), store);
+
+                Running::start(
+                    self.clone(),
+                    raft,
+                    worker_handle,
+                    server_state,
+                    runtime,
+                    runtime_handle,
+                )
+                .await
             }
             Err(e) => Err(ClusterError::Other(format!(
                 "Error adding myself to the bootstrapped cluster: {e}"

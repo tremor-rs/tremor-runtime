@@ -12,19 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use async_std::{channel::bounded, prelude::FutureExt};
 use halfbrown::HashMap;
-use tide::{http::StatusCode, Request, Route};
+use tide::{http::StatusCode, Route};
 
 use crate::raft::{
-    api::{wrapp, APIError, APIResult, ToAPIResult},
-    app,
+    api::{wrapp, APIError, APIResult, ServerState, ToAPIResult},
     node::Addr,
     store::{NodesRequest, TremorRequest},
 };
-use openraft::{error::LearnerNotFound, LogId, NodeId, RaftMetrics};
+use openraft::{LogId, NodeId, RaftMetrics};
 use std::sync::Arc;
 
-pub(crate) fn install_rest_endpoints(app: &mut Route<Arc<app::Tremor>>) {
+use super::{APIRequest, APIStoreReq, API_WORKER_TIMEOUT};
+
+pub(crate) fn install_rest_endpoints(app: &mut Route<Arc<ServerState>>) {
     let mut cluster = app.at("/cluster");
     cluster
         .at("/nodes")
@@ -45,25 +47,19 @@ pub(crate) fn install_rest_endpoints(app: &mut Route<Arc<app::Tremor>>) {
 }
 
 /// Get a list of all currently known nodes (be it learner, leader, voter etc.)
-async fn get_nodes(req: Request<Arc<app::Tremor>>) -> APIResult<HashMap<NodeId, Addr>> {
+async fn get_nodes(req: APIRequest) -> APIResult<HashMap<NodeId, Addr>> {
     let state = req.state();
     state.raft.client_read().await.to_api_result(&req).await?;
-
-    let nodes = state
-        .store
-        .state_machine
-        .read()
-        .await
-        .nodes
-        .get_nodes()
-        .clone();
+    let (tx, rx) = bounded(1);
+    state.store_tx.send(APIStoreReq::GetNodes(tx)).await?;
+    let nodes = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
     Ok(nodes)
 }
 
 /// Make a node known to cluster by putting it onto the cluster state
 ///
 /// This is a precondition for the node being added as learner and promoted to voter
-async fn add_node(mut req: Request<Arc<app::Tremor>>) -> APIResult<NodeId> {
+async fn add_node(mut req: APIRequest) -> APIResult<NodeId> {
     // FIXME: returns 500 if not the leader
     // FIXME: better client errors
     let addr: Addr = req.body_json().await?;
@@ -75,14 +71,13 @@ async fn add_node(mut req: Request<Arc<app::Tremor>>) -> APIResult<NodeId> {
 
     // 2. ensure we don't add the node twice if it is already there
     // we need to make sure we don't hold on to the state machine lock any further here
-    let maybe_existing_node_id = state
-        .store
-        .state_machine
-        .read()
-        .await
-        .nodes
-        .find_node_id(&addr)
-        .copied();
+    let (tx, rx) = bounded(1);
+    state
+        .store_tx
+        .send(APIStoreReq::GetNodeId(addr.clone(), tx))
+        .await?;
+
+    let maybe_existing_node_id = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
     if let Some(existing_node_id) = maybe_existing_node_id {
         Ok(existing_node_id)
     } else {
@@ -112,21 +107,22 @@ async fn add_node(mut req: Request<Arc<app::Tremor>>) -> APIResult<NodeId> {
 ///
 /// # Errors
 /// if the API call fails
-async fn remove_node(req: Request<Arc<app::Tremor>>) -> APIResult<()> {
+async fn remove_node(req: APIRequest) -> APIResult<()> {
     let node_id = req.param("node_id")?.parse::<NodeId>()?;
     // make sure the node is not a learner or a voter
-    {
-        let sm = req.state().store.state_machine.read().await;
-        if let Some(membership) = sm.get_last_membership()? {
-            if membership.membership.contains(&node_id) {
-                return Err(APIError::HTTP {
-                    status: StatusCode::Conflict,
-                    message: format!("Node {node_id} cannot be removed as it is still a voter."),
-                });
-            }
-            // TODO: how to check if the node is a learner?
-        }
+    let (tx, rx) = bounded(1);
+    req.state()
+        .store_tx
+        .send(APIStoreReq::GetLastMembership(tx))
+        .await?;
+    let membership = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    if membership.contains(&node_id) {
+        return Err(APIError::HTTP {
+            status: StatusCode::Conflict,
+            message: format!("Node {node_id} cannot be removed as it is still a voter."),
+        });
     }
+    // TODO: how to check if the node is a learner?
     // remove the node metadata from the state machine
     req.state()
         .raft
@@ -141,7 +137,7 @@ async fn remove_node(req: Request<Arc<app::Tremor>>) -> APIResult<()> {
 ///
 /// A Learner receives log replication from the leader but does not vote.
 /// This should be done before adding a node as a member into the cluster
-async fn add_learner(req: Request<Arc<app::Tremor>>) -> APIResult<Option<LogId>> {
+async fn add_learner(req: APIRequest) -> APIResult<Option<LogId>> {
     let node_id = req.param("node_id")?.parse::<NodeId>()?;
     let state = req.state();
 
@@ -151,15 +147,13 @@ async fn add_learner(req: Request<Arc<app::Tremor>>) -> APIResult<Option<LogId>>
 
     // 2. check that the node has already been added
     // we need to make sure we don't hold on to the state machine lock any further here
-    if state
-        .store
-        .state_machine
-        .read()
-        .await
-        .nodes
-        .get_node(node_id)
-        .is_none()
-    {
+    let (tx, rx) = bounded(1);
+    state
+        .store_tx
+        .send(APIStoreReq::GetNode(node_id, tx))
+        .await?;
+    let node_addr = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    if node_addr.is_none() {
         return Err(APIError::HTTP {
             status: StatusCode::NotFound,
             message: format!("Node {node_id} is not known to the cluster yet."),
@@ -178,7 +172,7 @@ async fn add_learner(req: Request<Arc<app::Tremor>>) -> APIResult<Option<LogId>>
 
 /// Removes a node from **Learners** only
 ///
-async fn remove_learner(req: Request<Arc<app::Tremor>>) -> APIResult<()> {
+async fn remove_learner(req: APIRequest) -> APIResult<()> {
     let node_id = req.param("node_id")?.parse::<NodeId>()?;
     let state = req.state();
     // remove the node as learner
@@ -191,39 +185,24 @@ async fn remove_learner(req: Request<Arc<app::Tremor>>) -> APIResult<()> {
 }
 
 /// Changes specified learners to members, or remove members.
-async fn promote_voter(req: Request<Arc<app::Tremor>>) -> APIResult<Option<NodeId>> {
+async fn promote_voter(req: APIRequest) -> APIResult<Option<NodeId>> {
     let node_id: NodeId = req.param("node_id")?.parse::<NodeId>()?;
     let state = req.state();
     // we introduce a new scope here to release the lock on the state machine
     // not releasing it can lead to dead-locks, if executed on the leader (as the store is shared between the API and the raft engine)
-    let mut new_membership_config = {
-        let sm = state.store.state_machine.read().await;
-        // check if node is known to the state machine (has been added as learner previously)
-        if sm.nodes.get_node(node_id).is_none() {
-            return Err(APIError::HTTP {
-                status: StatusCode::NotFound,
-                message: format!("Node {node_id} is not known to the cluster yet."),
-            });
-        }
+    let (tx, rx) = bounded(1);
+    state
+        .store_tx
+        .send(APIStoreReq::GetLastMembership(tx))
+        .await?;
+    let mut membership = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
 
-        // update membership
-        let membership = sm
-            .get_last_membership()?
-            .ok_or_else(|| APIError::Store("No membership stored in statemachine".to_string()))?;
-        let config = membership
-            .membership
-            .get_configs()
-            .last()
-            .ok_or_else(|| APIError::Store("No membership config available".to_string()))?;
-        config.clone()
-    };
-
-    let value = if new_membership_config.insert(node_id) {
+    let value = if membership.insert(node_id) {
         // only update state if not already in the membership config
         // this call always returns TremorResponse { value: None } // see store.rs
         state
             .raft
-            .change_membership(new_membership_config, true)
+            .change_membership(membership, true)
             .await
             .to_api_result(&req)
             .await?;
@@ -235,36 +214,20 @@ async fn promote_voter(req: Request<Arc<app::Tremor>>) -> APIResult<Option<NodeI
 }
 
 /// Changes specified learners to members, or remove members.
-async fn demote_voter(req: Request<Arc<app::Tremor>>) -> APIResult<Option<NodeId>> {
+async fn demote_voter(req: APIRequest) -> APIResult<Option<NodeId>> {
     let node_id: NodeId = req.param("node_id")?.parse::<NodeId>()?;
     let state = req.state();
     // scoping here to not hold the state machine locked for too long
-    let mut new_membership_config = {
-        let sm = state.store.state_machine.read().await;
-        // check if node is known to the state machine (has been added as learner previously)
-        if sm.nodes.get_node(node_id).is_none() {
-            return Err(APIError::ChangeMembership(
-                openraft::error::ChangeMembershipError::LearnerNotFound(LearnerNotFound {
-                    node_id,
-                }),
-            ));
-        }
-
-        // update membership
-        let membership = sm
-            .get_last_membership()?
-            .ok_or_else(|| APIError::Store("No membership stored in statemachine".to_string()))?;
-        let config = membership
-            .membership
-            .get_configs()
-            .last()
-            .ok_or_else(|| APIError::Store("No membership config available".to_string()))?;
-        config.clone()
-    };
-    let value = if new_membership_config.remove(&node_id) {
+    let (tx, rx) = bounded(1);
+    state
+        .store_tx
+        .send(APIStoreReq::GetLastMembership(tx))
+        .await?;
+    let mut membership = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let value = if membership.remove(&node_id) {
         req.state()
             .raft
-            .change_membership(new_membership_config, true)
+            .change_membership(membership, true)
             .await
             .to_api_result(&req)
             .await?;
@@ -277,6 +240,6 @@ async fn demote_voter(req: Request<Arc<app::Tremor>>) -> APIResult<Option<NodeId
 
 /// Get the latest metrics of the cluster (from the viewpoint of the targeted node)
 #[allow(clippy::unused_async)]
-async fn metrics(req: Request<Arc<app::Tremor>>) -> APIResult<RaftMetrics> {
+async fn metrics(req: APIRequest) -> APIResult<RaftMetrics> {
     Ok(req.state().raft.metrics().borrow().clone())
 }
