@@ -33,7 +33,7 @@ opt-level = 3
 
 [dependencies]
 anyhow = "1"
-async-broadcast = "0.4"
+async-broadcast = "0.5"
 async-compat = "0.2"
 async-compression = { version = "0.3", features = [
   "xz",
