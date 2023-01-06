@@ -47,7 +47,7 @@ async-std = { version = "1.12.0", features = [
 ] }
 async-stream = "0.3"
 async-trait = "0.1"
-base64 = "0.13"
+base64 = "0.20"
 beef = { version = "0.5", features = ["impl_serde"] }
 bimap = { version = "0.6", features = ["serde"] }
 byteorder = "1"
