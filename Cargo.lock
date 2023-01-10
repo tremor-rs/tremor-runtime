@@ -939,6 +939,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
+name = "base64"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
+
+[[package]]
 name = "base64-simd"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5957,7 +5963,7 @@ version = "0.13.0-rc.11"
 dependencies = [
  "async-broadcast",
  "async-std",
- "base64 0.13.1",
+ "base64 0.21.0",
  "beef",
  "criterion",
  "either",
@@ -6004,7 +6010,7 @@ dependencies = [
  "aws-sdk-s3",
  "aws-smithy-http",
  "aws-types",
- "base64 0.13.1",
+ "base64 0.21.0",
  "beef",
  "bimap",
  "byteorder",
@@ -6100,7 +6106,7 @@ name = "tremor-script"
 version = "0.13.0-rc.11"
 dependencies = [
  "atty",
- "base64 0.13.1",
+ "base64 0.21.0",
  "beef",
  "byteorder",
  "chrono",
@@ -6152,7 +6158,7 @@ dependencies = [
 name = "tremor-value"
 version = "0.13.0-rc.11"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.21.0",
  "beef",
  "float-cmp",
  "getopts",
