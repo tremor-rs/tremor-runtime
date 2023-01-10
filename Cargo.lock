@@ -4127,7 +4127,7 @@ dependencies = [
 [[package]]
 name = "qwal"
 version = "0.1.0"
-source = "git+https://github.com/tremor-rs/qwal#67e22f53c939d320cc65073153907365529c0b62"
+source = "git+https://github.com/tremor-rs/qwal#3eee7cae5a7cc506ea5beee15e820188d5160a79"
 dependencies = [
  "byteorder",
  "tokio",
