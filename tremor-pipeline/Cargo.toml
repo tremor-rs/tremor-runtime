@@ -34,7 +34,7 @@ value-trait = "0.5"
 window = { git = "https://github.com/tremor-rs/window.git", tag = "v0.1.1" }
 
 [dev-dependencies]
-base64 = "0.13"
+base64 = "0.21"
 criterion = "0.4"
 tempfile = "3.2"
 xz2 = "0.1"
