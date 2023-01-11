@@ -199,7 +199,7 @@ PX8efvDMhv16QqDFF0k80d0=
     async fn gouth_token() -> Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
 
-        let port = crate::connectors::tests::free_port::find_free_tcp_port().await?;
+        let port = crate::utils::free_port::find_free_tcp_port().await?;
         let sa = ServiceAccount {
             client_email: "snot@tremor.rs".to_string(),
             private_key_id: "badger".to_string(),

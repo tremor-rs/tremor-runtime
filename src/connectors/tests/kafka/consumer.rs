@@ -16,12 +16,12 @@ use crate::{
     connectors::{
         impls::kafka,
         tests::{
-            free_port,
             kafka::{redpanda_container, PRODUCE_TIMEOUT},
             ConnectorHarness,
         },
     },
     errors::Result,
+    utils::free_port,
 };
 use beef::Cow;
 use rdkafka::{

@@ -15,9 +15,10 @@
 use crate::{
     connectors::{
         impls::tcp,
-        tests::{free_port, setup_for_tls, tcp::EchoServer, ConnectorHarness},
+        tests::{setup_for_tls, tcp::EchoServer, ConnectorHarness},
     },
     errors::Result,
+    utils::free_port,
 };
 use std::time::Duration;
 use tokio::net::lookup_host;

@@ -23,7 +23,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use std::time::{Duration, Instant};
 use testcontainers::{clients::Cli, images::generic::GenericImage, Container, RunnableImage};
 
-use super::free_port::find_free_tcp_port;
+use crate::utils::free_port::find_free_tcp_port;
 const IMAGE: &str = "minio/minio";
 const VERSION: &str = "RELEASE.2023-01-12T02-06-16Z";
 

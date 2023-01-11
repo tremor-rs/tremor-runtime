@@ -57,7 +57,7 @@ async fn connector_elastic() -> Result<()> {
     let _ = env_logger::try_init();
 
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = crate::utils::free_port::find_free_tcp_port().await?;
     let image = RunnableImage::from(
         default_image()
             .with_env_var("xpack.security.enabled", "false")
@@ -801,7 +801,7 @@ async fn elastic_routing() -> Result<()> {
 async fn auth_basic() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = crate::utils::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
         default_image()
@@ -863,7 +863,7 @@ async fn auth_basic() -> Result<()> {
 async fn auth_api_key() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = crate::utils::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
         default_image()
@@ -953,7 +953,7 @@ async fn auth_client_cert() -> Result<()> {
     };
 
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = crate::utils::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
         default_image()
@@ -1091,7 +1091,7 @@ async fn elastic_https() -> Result<()> {
     };
 
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = crate::utils::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
         default_image()
