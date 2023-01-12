@@ -93,7 +93,7 @@ mod tests {
                 table_id: "test".into(),
                 connect_timeout: 1,
                 request_timeout: 1,
-//                request_size_limit: 10 * 1024 * 1024,
+                //                request_size_limit: 10 * 1024 * 1024,
             },
         };
 

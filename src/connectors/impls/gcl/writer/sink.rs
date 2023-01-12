@@ -205,10 +205,10 @@ impl Sink for GclSink {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         if let Some(logic) = self.mock_logic {
             info!("{} Mocking connection to Google Cloud Logging", ctx);
-            self.client = Some(LoggingServiceV2Client::new(
-                TremorGoogleAuthz::new_mock(logic),
-            ));
-        } else  {
+            self.client = Some(LoggingServiceV2Client::new(TremorGoogleAuthz::new_mock(
+                logic,
+            )));
+        } else {
             info!("{} Connecting to Google Cloud Logging", ctx);
             let channel =
                 make_tonic_channel(Duration::from_nanos(self.config.connect_timeout)).await?;
@@ -237,18 +237,16 @@ mod test {
     use super::*;
     use crate::connectors::impls::gcl;
     use crate::connectors::tests::ConnectorHarness;
+    use crate::connectors::utils::quiescence::QuiescenceBeacon;
     use crate::connectors::ConnectionLostNotifier;
-    use crate::connectors::{
-        utils::quiescence::QuiescenceBeacon,
-    };
     use async_std::channel::bounded;
     use futures::executor::block_on;
     use google_api_proto::google::logging::{r#type::LogSeverity, v2::WriteLogEntriesResponse};
     use http::{HeaderMap, HeaderValue};
+    use tremor_common::ids::SinkId;
     use tremor_pipeline::CbAction::Trigger;
     use tremor_pipeline::EventId;
     use tremor_value::{literal, structurize};
-    use tremor_common::ids::SinkId;
 
     #[async_std::test]
     async fn on_event_can_send_an_event() -> Result<()> {

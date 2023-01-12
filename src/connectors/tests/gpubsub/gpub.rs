@@ -17,6 +17,11 @@ use crate::connectors::tests::ConnectorHarness;
 use crate::errors::Result;
 use crate::instance::State;
 use async_std::prelude::FutureExt;
+use google_api_proto::google::pubsub::v1::publisher_client::PublisherClient;
+use google_api_proto::google::pubsub::v1::subscriber_client::SubscriberClient;
+use google_api_proto::google::pubsub::v1::PullRequest;
+use google_api_proto::google::pubsub::v1::Subscription;
+use google_api_proto::google::pubsub::v1::Topic;
 use serial_test::serial;
 use std::collections::HashSet;
 use std::time::Duration;
@@ -26,11 +31,6 @@ use tonic::transport::Channel;
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
-use google_api_proto::google::pubsub::v1::Subscription;
-use google_api_proto::google::pubsub::v1::publisher_client::PublisherClient;
-use google_api_proto::google::pubsub::v1::subscriber_client::SubscriberClient;
-use google_api_proto::google::pubsub::v1::Topic;
-use google_api_proto::google::pubsub::v1::PullRequest;
 // use tremor_common::ids::SinkId;
 
 #[async_std::test]

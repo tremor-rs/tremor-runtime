@@ -22,7 +22,7 @@ use simd_json::Builder;
 use tremor_otelapis::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, InstrumentationScope, KeyValue, KeyValueList,
 };
-use tremor_value::{StaticNode, Value, literal};
+use tremor_value::{literal, StaticNode, Value};
 use value_trait::ValueAccess;
 
 pub(crate) struct OtelDefaults;

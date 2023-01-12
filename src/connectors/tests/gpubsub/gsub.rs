@@ -15,21 +15,21 @@
 use crate::connectors::impls::gpubsub::consumer::Builder;
 use crate::connectors::tests::ConnectorHarness;
 use crate::errors::Result;
-use std::collections::BTreeMap;
+use google_api_proto::google::pubsub::v1::publisher_client::PublisherClient;
+use google_api_proto::google::pubsub::v1::subscriber_client::SubscriberClient;
+use google_api_proto::google::pubsub::v1::GetSubscriptionRequest;
+use google_api_proto::google::pubsub::v1::PublishRequest;
+use google_api_proto::google::pubsub::v1::PubsubMessage;
+use google_api_proto::google::pubsub::v1::Subscription;
+use google_api_proto::google::pubsub::v1::Topic;
 use serial_test::serial;
+use std::collections::BTreeMap;
 use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
-use google_api_proto::google::pubsub::v1::PubsubMessage;
-use google_api_proto::google::pubsub::v1::Subscription;
-use google_api_proto::google::pubsub::v1::publisher_client::PublisherClient;
-use google_api_proto::google::pubsub::v1::subscriber_client::SubscriberClient;
-use google_api_proto::google::pubsub::v1::GetSubscriptionRequest;
-use google_api_proto::google::pubsub::v1::Topic;
-use google_api_proto::google::pubsub::v1::PublishRequest;
 // use tremor_common::ids::SinkId;
 
 #[async_std::test]
