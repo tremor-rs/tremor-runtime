@@ -83,16 +83,19 @@ pub async fn package(target: &str, entrypoint: &str, name: Option<String>) -> Re
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
-async fn build_archive(name: &str, entrypoint: &str) -> Result<Vec<u8>> {
-    use tar::Builder;
+pub(crate) async fn build_archive(name: &str, entrypoint: &str) -> Result<Vec<u8>> {
     let src = file::read_to_string(entrypoint).await?;
+    build_archive_from_source(name, src.as_str())
+}
+
+#[allow(clippy::too_many_lines)]
+pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>> {
+    use tar::Builder;
     let mut hasher = Sha256::new();
 
     let aggr_reg = tremor_script::registry::aggr();
     let mut hl = highlighter::Term::stderr();
-    let src_str: &str = &src;
-    let mut deploy = match Deploy::parse(&src_str, &*FN_REGISTRY.read()?, &aggr_reg) {
+    let mut deploy = match Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg) {
         Ok(deploy) => deploy,
         Err(e) => {
             hl.format_error(&e)?;

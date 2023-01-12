@@ -22,7 +22,8 @@ use crate::{connectors::tests::free_port::find_free_tcp_port, errors::Result};
 use std::path::Path;
 use std::time::Duration;
 
-//use super::ClusterError;
+mod learner;
+mod prelude;
 
 async fn free_node_addr() -> Result<Addr> {
     let api_port = find_free_tcp_port().await?;
@@ -148,56 +149,6 @@ async fn cluster_join_test() -> ClusterResult<()> {
         .last()
         .expect("No nodes in membership config");
     assert_eq!(3, members.len());
-
-    node2.stop().await?;
-    node1.stop().await?;
-    node0.stop().await?;
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn add_learner_test() -> ClusterResult<()> {
-    let _ = env_logger::try_init();
-    let dir0 = tempfile::tempdir()?;
-    let dir1 = tempfile::tempdir()?;
-    let dir2 = tempfile::tempdir()?;
-    let dir3 = tempfile::tempdir()?;
-    let node0 = TestNode::bootstrap(dir0.path()).await?;
-    let node1 = TestNode::start_and_join(dir1.path(), &node0.addr).await?;
-    let node2 = TestNode::start_and_join(dir2.path(), &node1.addr).await?;
-    let client0 = node0.client();
-    let metrics = client0.metrics().await?;
-    let members = metrics
-        .membership_config
-        .membership
-        .get_configs()
-        .last()
-        .expect("No nodes in membership config");
-    assert_eq!(3, members.len());
-
-    let learner_node = TestNode::join_as_learner(dir3.path(), &node0.addr).await?;
-    // learner is known to the cluster
-    let nodemap = client0.get_nodes().await?;
-    assert_eq!(
-        Some(&learner_node.running.node_data().1),
-        nodemap.get(&learner_node.running.node_data().0)
-    );
-    // but is not a voter
-    let metrics = client0.metrics().await?;
-    let members = metrics
-        .membership_config
-        .membership
-        .get_configs()
-        .last()
-        .expect("No nodes in membership config");
-    assert!(
-        !members.contains(&learner_node.running.node_data().0),
-        "learner not to be part of cluster voters"
-    );
-
-    // TODO: deploy an app and see if the learner also runs it
-    // TODO: verify the whole lifecycle shenanigans of app instances with and without learner
-    // TODO: verify kv stuff
 
     node2.stop().await?;
     node1.stop().await?;
