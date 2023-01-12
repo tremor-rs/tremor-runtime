@@ -15,19 +15,22 @@
 use crate::connectors::impls::gpubsub::consumer::Builder;
 use crate::connectors::tests::ConnectorHarness;
 use crate::errors::Result;
-use googapis::google::pubsub::v1::publisher_client::PublisherClient;
-use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{
-    GetSubscriptionRequest, PublishRequest, PubsubMessage, Subscription, Topic,
-};
+use std::collections::BTreeMap;
 use serial_test::serial;
-use std::collections::HashMap;
 use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
+use google_api_proto::google::pubsub::v1::PubsubMessage;
+use google_api_proto::google::pubsub::v1::Subscription;
+use google_api_proto::google::pubsub::v1::publisher_client::PublisherClient;
+use google_api_proto::google::pubsub::v1::subscriber_client::SubscriberClient;
+use google_api_proto::google::pubsub::v1::GetSubscriptionRequest;
+use google_api_proto::google::pubsub::v1::Topic;
+use google_api_proto::google::pubsub::v1::PublishRequest;
+// use tremor_common::ids::SinkId;
 
 #[async_std::test]
 #[serial(gpubsub)]
@@ -81,6 +84,9 @@ async fn create_subscription(endpoint: String, topic: &str, subscription: &str) 
             retry_policy: None,
             detached: false,
             topic_message_retention_duration: None,
+            bigquery_config: None,
+            enable_exactly_once_delivery: false,
+            state: Default::default(),
         })
         .await?;
     // assert the system knows about our subscription now
@@ -132,7 +138,7 @@ async fn simple_subscribe() -> Result<()> {
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
-    let mut attributes = HashMap::new();
+    let mut attributes = BTreeMap::new();
     attributes.insert("a".to_string(), "b".to_string());
 
     let channel = Channel::from_shared(endpoint)?.connect().await?;
@@ -141,7 +147,7 @@ async fn simple_subscribe() -> Result<()> {
         .publish(PublishRequest {
             topic: "projects/test/topics/test".to_string(),
             messages: vec![PubsubMessage {
-                data: Vec::from("abc1".as_bytes()),
+                data: bytes::Bytes::from("abc1".as_bytes()),
                 attributes,
                 message_id: String::new(),
                 publish_time: None,

@@ -28,7 +28,6 @@ use google_api_proto::google::cloud::bigquery::storage::v1::{
     CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream,
 };
 use prost::encoding::WireType;
-use prost::Message;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -44,8 +43,6 @@ pub(crate) struct GbqSink {
     write_stream: Option<WriteStream>,
     mapping: Option<JsonToProtobufMapping>,
     config: Config,
-    channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
-    _error_phantom: PhantomData<TChannelError>,
 }
 
 struct Field {
@@ -171,6 +168,8 @@ fn map_field(
 fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> {
     let tag = field.tag;
 
+    // fixme check which fields are required and fail if they're missing
+    // fixme do not panic if the tremor type does not match
     match field.table_type {
         TableType::Double => prost::encoding::double::encode(
             tag,
@@ -288,10 +287,9 @@ impl GbqSink {
     pub fn new(config: Config) -> Self {
         Self {
             client: None,
-            write_streams: HashMap::new(),
+            write_stream: None,
+            mapping: None,
             config,
-            channel_factory,
-            _error_phantom: PhantomData,
         }
     }
 }
@@ -306,94 +304,81 @@ impl Sink for GbqSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let request_size_limit = self.config.request_size_limit;
-
-        let request_data = self
-            .event_to_requests(event, ctx, request_size_limit)
-            .await?;
-
-        if request_data.len() > 1 {
-            warn!("{ctx} The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
-        }
-
         let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
             "BigQuery",
             "The client is not connected",
         ))?;
+        let write_stream = self
+            .write_stream
+            .as_ref()
+            .ok_or(ErrorKind::ClientNotAvailable(
+                "BigQuery",
+                "The write stream is not available",
+            ))?;
+        let mapping = self.mapping.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+            "BigQuery",
+            "The mapping is not available",
+        ))?;
 
-        for request in request_data {
-            let req_timeout = Duration::from_nanos(self.config.request_timeout);
-            let append_response = client
-                .append_rows(stream::iter(vec![request]))
-                .timeout(req_timeout)
-                .await;
+        let mut serialized_rows = Vec::with_capacity(event.len());
 
-            let append_response = if let Ok(append_response) = append_response {
-                append_response
-            } else {
-                // timeout sending append rows request
-                error!(
-                    "{ctx} GBQ request timed out after {}ms",
-                    req_timeout.as_millis()
-                );
-                ctx.notifier.connection_lost().await?;
-
-                return Ok(SinkReply::FAIL);
-            };
-
-            if let Ok(x) = append_response?
-                .into_inner()
-                .next()
-                .timeout(req_timeout)
-                .await
-            {
-                match x {
-                    Some(Ok(res)) => {
-                        if let Some(updated_schema) = res.updated_schema.as_ref() {
-                            let fields = updated_schema
-                                .fields
-                                .iter()
-                                .map(|f| {
-                                    format!(
-                                        "{}: {:?}",
-                                        f.name,
-                                        TableType::from_i32(f.r#type).unwrap_or_default()
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                                .join("\n");
-
-                            info!("{ctx} GBQ Schema was updated: {}", fields);
-                        }
-                        if let Some(res) = res.response {
-                            match res {
-                                Response::AppendResult(AppendResult { .. }) => {}
-                                Response::Error(e) => {
-                                    error!("{ctx} GBQ Error: {} {}", e.code, e.message);
-                                    return Ok(SinkReply::FAIL);
-                                }
-                            }
-                        }
-                    }
-                    Some(Err(e)) => {
-                        error!("{ctx} GBQ Error: {}", e);
-                        return Ok(SinkReply::FAIL);
-                    }
-                    None => return Ok(SinkReply::NONE),
-                }
-            } else {
-                // timeout receiving response
-                error!(
-                    "{ctx} Receiving GBQ response timeout after {}ms",
-                    req_timeout.as_millis()
-                );
-                ctx.notifier.connection_lost().await?;
-
-                return Ok(SinkReply::FAIL);
-            }
+        for data in event.value_iter() {
+            serialized_rows.push(mapping.map(data)?);
         }
 
-        Ok(SinkReply::ACK)
+        let request = AppendRowsRequest {
+            write_stream: write_stream.name.clone(),
+            offset: None,
+            trace_id: "".to_string(),
+            rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
+                writer_schema: Some(ProtoSchema {
+                    proto_descriptor: Some(mapping.descriptor().clone()),
+                }),
+                rows: Some(ProtoRows { serialized_rows }),
+            })),
+        };
+        let req_timeout = Duration::from_nanos(self.config.request_timeout);
+        let append_response = client
+            .append_rows(stream::iter(vec![request]))
+            .timeout(req_timeout)
+            .await;
+
+        let append_response = if let Ok(append_response) = append_response {
+            append_response
+        } else {
+            // timeout sending append rows request
+            error!(
+                "{ctx} GBQ request timed out after {}ms",
+                req_timeout.as_millis()
+            );
+            ctx.notifier.connection_lost().await?;
+
+            return Ok(SinkReply::FAIL);
+        };
+        if let Ok(x) = append_response?
+            .into_inner()
+            .next()
+            .timeout(req_timeout)
+            .await
+        {
+            match x {
+                Some(Ok(_)) => Ok(SinkReply::ACK),
+                Some(Err(e)) => {
+                    error!("{ctx} GBQ Error: {}", e);
+                    Ok(SinkReply::FAIL)
+                }
+                None => Ok(SinkReply::NONE),
+            }
+        } else {
+            // timeout receiving response
+            error!(
+                "{ctx} Receiving GBQ response timeout after {}ms",
+                req_timeout.as_millis()
+            );
+            ctx.notifier.connection_lost().await?;
+
+            Ok(SinkReply::FAIL)
+        }
     }
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
@@ -448,221 +433,7 @@ impl Sink for GbqSink {
     }
 }
 
-pub trait GbqChannel<TChannelError>:
-    tonic::codegen::Service<
-        http::Request<tonic::body::BoxBody>,
-        Response = http::Response<tonic::transport::Body>,
-        Error = TChannelError,
-    > + Send
-    + Clone
-where
-    TChannelError: GbqChannelError,
-{
-}
-
-pub trait GbqChannelError:
-    Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync
-{
-}
-
-impl<T> GbqChannelError for T where
-    T: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync
-{
-}
-impl<T, TChannelError> GbqChannel<TChannelError> for T
-where
-    T: tonic::codegen::Service<
-            http::Request<tonic::body::BoxBody>,
-            Response = http::Response<tonic::transport::Body>,
-            Error = TChannelError,
-        > + Send
-        + Clone,
-    TChannelError: GbqChannelError,
-{
-}
-
-impl<T, TChannelError, TChannel> GbqSink<T, TChannel, TChannelError>
-where
-    T: TokenProvider + 'static,
-    TChannel: GbqChannel<TChannelError> + 'static,
-    TChannel::Future: Send,
-    TChannelError: GbqChannelError,
-{
-    async fn event_to_requests(
-        &mut self,
-        event: Event,
-        ctx: &SinkContext,
-        request_size_limit: usize,
-    ) -> Result<Vec<AppendRowsRequest>> {
-        let mut request_data: Vec<AppendRowsRequest> = Vec::new();
-        let mut requests: HashMap<String, AppendRowsRequest> = HashMap::new();
-
-        for (data, meta) in event.value_meta_iter() {
-            let write_stream = self
-                .get_or_create_write_stream(
-                    &ctx.extract_meta(meta)
-                        .get("table_id")
-                        .as_str()
-                        .map_or_else(|| self.config.table_id.clone(), ToString::to_string),
-                    ctx,
-                )
-                .await?;
-
-            match requests.entry(write_stream.name.clone()) {
-                Entry::Occupied(entry) => {
-                    let mut request = entry.remove();
-
-                    let serialized_event = write_stream.mapping.map(data)?;
-                    Self::rows_from_request(&mut request)?.push(serialized_event);
-
-                    if request.encoded_len() > request_size_limit {
-                        let rows = Self::rows_from_request(&mut request)?;
-                        let row_count = rows.len();
-                        let last_event = rows.pop().ok_or(ErrorKind::GbqSinkFailed(
-                            "Failed to pop last event from request",
-                        ))?;
-                        request_data.push(request);
-
-                        let mut new_rows = Vec::with_capacity(event.len() - row_count);
-                        new_rows.push(last_event);
-
-                        requests.insert(
-                            write_stream.name.clone(),
-                            AppendRowsRequest {
-                                write_stream: write_stream.name.clone(),
-                                offset: None,
-                                rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
-                                    writer_schema: Some(ProtoSchema {
-                                        proto_descriptor: Some(
-                                            write_stream.mapping.descriptor().clone(),
-                                        ),
-                                    }),
-                                    rows: Some(ProtoRows {
-                                        serialized_rows: new_rows,
-                                    }),
-                                })),
-                                trace_id: String::new(),
-                            },
-                        );
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    let serialized_event = write_stream.mapping.map(data)?;
-                    let mut serialized_rows = Vec::with_capacity(event.len());
-                    serialized_rows.push(serialized_event);
-
-                    entry.insert(AppendRowsRequest {
-                        write_stream: write_stream.name.clone(),
-                        offset: None,
-                        rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
-                            writer_schema: Some(ProtoSchema {
-                                proto_descriptor: Some(write_stream.mapping.descriptor().clone()),
-                            }),
-                            rows: Some(ProtoRows { serialized_rows }),
-                        })),
-                        trace_id: String::new(),
-                    });
-                }
-            }
-        }
-
-        for (_, request) in requests {
-            request_data.push(request);
-        }
-
-        Ok(request_data)
-    }
-}
-
-impl<
-        T: TokenProvider + 'static,
-        TChannel: GbqChannel<TChannelError> + 'static,
-        TChannelError: GbqChannelError,
-    > GbqSink<T, TChannel, TChannelError>
-where
-    TChannel::Future: Send,
-{
-    async fn get_or_create_write_stream(
-        &mut self,
-        table_id: &str,
-        ctx: &SinkContext,
-    ) -> Result<&ConnectedWriteStream> {
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "BigQuery",
-            "The client is not connected",
-        ))?;
-
-        match self.write_streams.entry(table_id.to_string()) {
-            Entry::Occupied(entry) => {
-                // NOTE: `into_mut` is needed here, even though we just need a non-mutable reference
-                //  This is because `get` returns reference which's lifetime is bound to the entry,
-                //  while the reference returned by `into_mut` is bound to the map
-                Ok(entry.into_mut())
-            }
-            Entry::Vacant(entry) => {
-                let stream = client
-                    .create_write_stream(CreateWriteStreamRequest {
-                        parent: table_id.to_string(),
-                        write_stream: Some(WriteStream {
-                            // The stream name here will be ignored and a generated value will be set in the response
-                            name: String::new(),
-                            r#type: i32::from(write_stream::Type::Committed),
-                            create_time: None,
-                            commit_time: None,
-                            table_schema: None,
-                        }),
-                    })
-                    .await?
-                    .into_inner();
-
-                let mapping = JsonToProtobufMapping::new(
-                    &stream
-                        .table_schema
-                        .as_ref()
-                        .ok_or_else(|| ErrorKind::GbqSchemaNotProvided(table_id.to_string()))?
-                        .clone()
-                        .fields,
-                    ctx,
-                );
-
-                Ok(entry.insert(ConnectedWriteStream {
-                    name: stream.name,
-                    mapping,
-                }))
-            }
-        }
-    }
-}
-
-impl<
-        T: TokenProvider + 'static,
-        TChannel: GbqChannel<TChannelError> + 'static,
-        TChannelError: GbqChannelError,
-    > GbqSink<T, TChannel, TChannelError>
-where
-    TChannel::Future: Send,
-{
-    fn rows_from_request(request: &mut AppendRowsRequest) -> Result<&mut Vec<Vec<u8>>> {
-        let rows = match request
-            .rows
-            .as_mut()
-            .ok_or(ErrorKind::GbqSinkFailed("No rows in request"))?
-        {
-            Rows::ProtoRows(ref mut x) => {
-                &mut x
-                    .rows
-                    .as_mut()
-                    .ok_or(ErrorKind::GbqSinkFailed("No rows in request"))?
-                    .serialized_rows
-            }
-        };
-
-        Ok(rows)
-    }
-}
-
 #[cfg(test)]
-#[cfg(feature = "gcp-integration")]
 mod test {
     use super::*;
     use crate::connectors::impls::gbq;
@@ -670,90 +441,6 @@ mod test {
     use crate::connectors::tests::ConnectorHarness;
     use google_api_proto::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
     use value_trait::StaticNode;
-
-    struct HardcodedChannelFactory {
-        channel: Channel,
-    }
-
-    #[async_trait::async_trait]
-    impl ChannelFactory<Channel> for HardcodedChannelFactory {
-        async fn make_channel(&self, _connect_timeout: Duration) -> Result<Channel> {
-            Ok(self.channel.clone())
-        }
-    }
-
-    #[derive(Debug)]
-    enum MockServiceError {}
-
-    impl Display for MockServiceError {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            write!(f, "MockServiceError")
-        }
-    }
-
-    impl std::error::Error for MockServiceError {}
-
-    struct MockChannelFactory {
-        responses: Arc<RwLock<VecDeque<Vec<u8>>>>,
-    }
-
-    #[async_trait::async_trait]
-    impl ChannelFactory<MockService> for MockChannelFactory {
-        async fn make_channel(&self, _connect_timeout: Duration) -> Result<MockService> {
-            Ok(MockService {
-                responses: self.responses.clone(),
-            })
-        }
-    }
-
-    #[derive(Clone)]
-    struct MockService {
-        responses: Arc<RwLock<VecDeque<Vec<u8>>>>,
-    }
-
-    impl Service<http::Request<BoxBody>> for MockService {
-        type Response = http::Response<tonic::transport::Body>;
-        type Error = MockServiceError;
-        type Future =
-            Ready<std::result::Result<http::Response<tonic::transport::Body>, MockServiceError>>;
-
-        fn poll_ready(
-            &mut self,
-            _cx: &mut std::task::Context<'_>,
-        ) -> Poll<std::result::Result<(), Self::Error>> {
-            Poll::Ready(Ok(()))
-        }
-
-        #[allow(clippy::unwrap_used, clippy::cast_possible_truncation)] // We don't control the return type here
-        fn call(&mut self, _request: http::Request<BoxBody>) -> Self::Future {
-            let buffer = self.responses.write().unwrap().pop_front().unwrap();
-
-            let (mut tx, body) = tonic::transport::Body::channel();
-            let jh = async_std::task::spawn(async move {
-                let len: [u8; 4] = (buffer.len() as u32).to_be_bytes();
-
-                let mut response_buffer = vec![0u8];
-                response_buffer.append(&mut len.to_vec());
-                response_buffer.append(&mut buffer.clone());
-
-                tx.send_data(Bytes::from(response_buffer)).await.unwrap();
-
-                let mut trailers = HeaderMap::new();
-                trailers.insert(
-                    "content-type",
-                    HeaderValue::from_static("application/grpc+proto"),
-                );
-                trailers.insert("grpc-status", HeaderValue::from_static("0"));
-
-                tx.send_trailers(trailers).await.unwrap();
-            });
-            async_std::task::spawn_blocking(|| jh);
-
-            let response = http::Response::new(body);
-
-            futures::future::ready(Ok(response))
-        }
-    }
 
     #[test]
     fn skips_unknown_field_types() {
@@ -766,16 +453,16 @@ mod test {
                 r#type: -1,
                 mode: Mode::Required.into(),
                 fields: vec![],
-                description: String::new(),
+                description: "".to_string(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
             }],
             &SinkContext {
-                uid: SinkId::default(),
+                uid: Default::default(),
                 alias: Alias::new("flow", "connector"),
-                connector_type: ConnectorType::default(),
-                quiescence_beacon: QuiescenceBeacon::default(),
+                connector_type: Default::default(),
+                quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
             },
         );
@@ -795,16 +482,16 @@ mod test {
                 r#type: TableType::Unspecified.into(),
                 mode: Mode::Required.into(),
                 fields: vec![],
-                description: String::new(),
+                description: "".to_string(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
             }],
             &SinkContext {
-                uid: SinkId::default(),
+                uid: Default::default(),
                 alias: Alias::new("flow", "connector"),
-                connector_type: ConnectorType::default(),
-                quiescence_beacon: QuiescenceBeacon::default(),
+                connector_type: Default::default(),
+                quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
             },
         );
@@ -833,23 +520,23 @@ mod test {
                     r#type: item.0.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: String::new(),
+                    description: "".to_string(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
                 }],
                 &SinkContext {
-                    uid: SinkId::default(),
+                    uid: Default::default(),
                     alias: Alias::new("flow", "connector"),
-                    connector_type: ConnectorType::default(),
-                    quiescence_beacon: QuiescenceBeacon::default(),
+                    connector_type: Default::default(),
+                    quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
                 },
             );
 
             assert_eq!(result.1.len(), 1);
             assert_eq!(result.1["something"].table_type, item.0);
-            assert_eq!(result.0.field[0].r#type, Some(item.1.into()));
+            assert_eq!(result.0.field[0].r#type, Some(item.1.into()))
         }
     }
 
@@ -868,21 +555,21 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: String::new(),
+                    description: "".to_string(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
                 }],
-                description: String::new(),
+                description: "".to_string(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
             }],
             &SinkContext {
-                uid: SinkId::default(),
+                uid: Default::default(),
                 alias: Alias::new("flow", "connector"),
-                connector_type: ConnectorType::default(),
-                quiescence_beacon: QuiescenceBeacon::default(),
+                connector_type: Default::default(),
+                quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
             },
         );
@@ -897,7 +584,7 @@ mod test {
         assert_eq!(
             result.1["something"].subfields["subfield_a"].table_type,
             TableType::Int64
-        );
+        )
     }
 
     #[test]
@@ -908,7 +595,7 @@ mod test {
                 Field {
                     table_type: TableType::Int64,
                     tag: 1,
-                    subfields: HashMap::default(),
+                    subfields: Default::default(),
                 },
             ),
             (
@@ -916,7 +603,7 @@ mod test {
                 Field {
                     table_type: TableType::String,
                     tag: 2,
-                    subfields: HashMap::default(),
+                    subfields: Default::default(),
                 },
             ),
         ];
@@ -931,7 +618,7 @@ mod test {
     }
 
     #[test]
-    pub fn can_encode_stringy_types() {
+    pub fn test_can_encode_stringy_types() {
         // NOTE: This test always passes the string "I" as the value to encode, this is not correct for some of the types (e.g. datetime),
         // but we still allow it, leaving the validation to BigQuery
         let data = [
@@ -953,7 +640,7 @@ mod test {
                     &Field {
                         table_type: item,
                         tag: 123,
-                        subfields: HashMap::default()
+                        subfields: Default::default()
                     },
                     &mut result
                 )
@@ -967,7 +654,7 @@ mod test {
     }
 
     #[test]
-    pub fn can_encode_a_struct() {
+    pub fn test_can_encode_a_struct() {
         let mut values = halfbrown::HashMap::new();
         values.insert("a".into(), Value::Static(StaticNode::I64(1)));
         values.insert("b".into(), Value::Static(StaticNode::I64(1024)));
@@ -979,7 +666,7 @@ mod test {
             Field {
                 table_type: TableType::Int64,
                 tag: 1,
-                subfields: HashMap::default(),
+                subfields: Default::default(),
             },
         );
         subfields.insert(
@@ -987,7 +674,7 @@ mod test {
             Field {
                 table_type: TableType::Int64,
                 tag: 2,
-                subfields: HashMap::default(),
+                subfields: Default::default(),
             },
         );
 
@@ -1000,7 +687,7 @@ mod test {
         let mut result = Vec::new();
         assert!(encode_field(&input, &field, &mut result).is_ok());
 
-        assert_eq!([130u8, 64u8, 5u8, 8u8, 1u8, 16u8, 128u8, 8u8], result[..]);
+        assert_eq!([130u8, 64u8, 5u8, 8u8, 1u8, 16u8, 128u8, 8u8], result[..])
     }
 
     #[test]
@@ -1009,7 +696,7 @@ mod test {
         let field = Field {
             table_type: TableType::Double,
             tag: 2,
-            subfields: HashMap::default(),
+            subfields: Default::default(),
         };
 
         let mut result = Vec::new();
@@ -1027,7 +714,7 @@ mod test {
         let field = Field {
             table_type: TableType::Bool,
             tag: 43,
-            subfields: HashMap::default(),
+            subfields: Default::default(),
         };
 
         let mut result = Vec::new();
@@ -1042,7 +729,7 @@ mod test {
         let field = Field {
             table_type: TableType::Bytes,
             tag: 1,
-            subfields: HashMap::default(),
+            subfields: Default::default(),
         };
 
         let mut result = Vec::new();
@@ -1057,7 +744,7 @@ mod test {
         let field = Field {
             table_type: TableType::Json,
             tag: 1,
-            subfields: HashMap::default(),
+            subfields: Default::default(),
         };
 
         let mut result = Vec::new();
@@ -1073,7 +760,7 @@ mod test {
         let field = Field {
             table_type: TableType::Interval,
             tag: 1,
-            subfields: HashMap::default(),
+            subfields: Default::default(),
         };
 
         let mut result = Vec::new();
@@ -1089,7 +776,7 @@ mod test {
         let field = Field {
             table_type: TableType::Unspecified,
             tag: 1,
-            subfields: HashMap::default(),
+            subfields: Default::default(),
         };
 
         let mut result = Vec::new();
@@ -1104,10 +791,10 @@ mod test {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: SinkId::default(),
+            uid: Default::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1117,7 +804,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: String::new(),
+                    description: "".to_string(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1127,7 +814,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: String::new(),
+                    description: "".to_string(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1139,24 +826,24 @@ mod test {
         let descriptor = mapping.descriptor();
         assert_eq!(2, descriptor.field.len());
         assert_eq!(
-            descriptor.field[0].r#type,
-            Some(field_descriptor_proto::Type::Int64 as i32),
+            field_descriptor_proto::Type::Int64 as i32,
+            descriptor.field[0].r#type.unwrap()
         );
         assert_eq!(
-            descriptor.field[1].r#type,
-            Some(field_descriptor_proto::Type::Int64 as i32),
+            field_descriptor_proto::Type::Int64 as i32,
+            descriptor.field[1].r#type.unwrap()
         );
     }
 
     #[test]
-    pub fn can_map_json_to_protobuf() -> Result<()> {
+    pub fn can_map_json_to_protobuf() {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: SinkId::default(),
+            uid: Default::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1166,7 +853,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: String::new(),
+                    description: "".to_string(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1176,7 +863,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: String::new(),
+                    description: "".to_string(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1187,21 +874,20 @@ mod test {
         let mut fields = halfbrown::HashMap::new();
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
         fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
-        let result = mapping.map(&Value::Object(Box::new(fields)))?;
+        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
 
         assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
-        Ok(())
     }
 
     #[test]
-    fn map_field_ignores_fields_that_are_not_in_definition() -> Result<()> {
+    fn map_field_ignores_fields_that_are_not_in_definition() {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: SinkId::default(),
+            uid: Default::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1211,7 +897,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: String::new(),
+                    description: "".to_string(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1221,7 +907,7 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: String::new(),
+                    description: "".to_string(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
@@ -1233,21 +919,20 @@ mod test {
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
         fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
         fields.insert("c".into(), Value::Static(StaticNode::I64(33)));
-        let result = mapping.map(&Value::Object(Box::new(fields)))?;
+        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
 
         assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
-        Ok(())
     }
 
     #[test]
-    fn map_field_ignores_struct_fields_that_are_not_in_definition() -> Result<()> {
+    fn map_field_ignores_struct_fields_that_are_not_in_definition() {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: SinkId::default(),
+            uid: Default::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1260,12 +945,12 @@ mod test {
                     r#type: TableType::Int64.into(),
                     mode: Mode::Required.into(),
                     fields: vec![],
-                    description: String::new(),
+                    description: "".to_string(),
                     max_length: 0,
                     precision: 0,
                     scale: 0,
                 }],
-                description: String::new(),
+                description: "".to_string(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
@@ -1277,10 +962,9 @@ mod test {
         inner_fields.insert("y".into(), Value::Static(StaticNode::I64(10)));
         let mut fields = halfbrown::HashMap::new();
         fields.insert("a".into(), Value::Object(Box::new(inner_fields)));
-        let result = mapping.map(&Value::Object(Box::new(fields)))?;
+        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
 
         assert_eq!([10u8, 2u8, 8u8, 10u8], result[..]);
-        Ok(())
     }
 
     #[test]
@@ -1288,10 +972,10 @@ mod test {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: SinkId::default(),
+            uid: Default::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1300,7 +984,7 @@ mod test {
                 r#type: TableType::Bytes.into(),
                 mode: Mode::Required.into(),
                 fields: vec![],
-                description: String::new(),
+                description: "".to_string(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
@@ -1314,7 +998,7 @@ mod test {
         if let Err(Error(ErrorKind::BigQueryTypeMismatch("bytes", x), _)) = result {
             assert_eq!(x, ValueType::I64);
         } else {
-            panic!("Bytes conversion did not fail on type mismatch");
+            assert!(false, "Bytes conversion did not fail on type mismatch");
         }
     }
 
@@ -1323,10 +1007,10 @@ mod test {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
-            uid: SinkId::default(),
+            uid: Default::default(),
             alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
         };
         let mapping = JsonToProtobufMapping::new(
@@ -1335,7 +1019,7 @@ mod test {
                 r#type: TableType::Bytes.into(),
                 mode: Mode::Required.into(),
                 fields: vec![],
-                description: String::new(),
+                description: "".to_string(),
                 max_length: 0,
                 precision: 0,
                 scale: 0,
@@ -1347,7 +1031,7 @@ mod test {
         if let Err(Error(ErrorKind::BigQueryTypeMismatch("object", x), _)) = result {
             assert_eq!(x, ValueType::I64);
         } else {
-            panic!("Mapping did not fail on non-object event");
+            assert!(false, "Mapping did not fail on non-object event");
         }
     }
 
@@ -1383,10 +1067,10 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext {
-                    uid: SinkId::default(),
+                    uid: Default::default(),
                     alias: Alias::new("flow", "connector"),
-                    connector_type: ConnectorType::default(),
-                    quiescence_beacon: QuiescenceBeacon::default(),
+                    connector_type: Default::default(),
+                    quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
                 },
                 &mut EventSerializer::new(
@@ -1395,218 +1079,13 @@ mod test {
                     vec![],
                     &ConnectorType::from(""),
                     &Alias::new("flow", "connector"),
-                )?,
+                )
+                .unwrap(),
                 0,
             )
             .await;
 
         assert!(result.is_err());
         Ok(())
-    }
-
-    #[async_std::test]
-    pub async fn fails_on_error_response() -> Result<()> {
-        let mut buffer_write_stream = vec![];
-        let mut buffer_append_rows_response = vec![];
-        WriteStream {
-            name: "test".to_string(),
-            r#type: i32::from(write_stream::Type::Committed),
-            create_time: None,
-            commit_time: None,
-            table_schema: Some(TableSchema { fields: vec![] }),
-        }
-        .encode(&mut buffer_write_stream)
-        .map_err(|_| "encode failed")?;
-
-        AppendRowsResponse {
-            updated_schema: Some(TableSchema {
-                fields: vec![TableFieldSchema {
-                    name: "newfield".to_string(),
-                    r#type: i32::from(table_field_schema::Type::String),
-                    mode: i32::from(Mode::Nullable),
-                    fields: vec![],
-                    description: "test".to_string(),
-                    max_length: 10,
-                    precision: 0,
-                    scale: 0,
-                }],
-            }),
-            response: Some(append_rows_response::Response::Error(Status {
-                code: 1024,
-                message: "test failure".to_string(),
-                details: vec![],
-            })),
-        }
-        .encode(&mut buffer_append_rows_response)
-        .map_err(|_| "encode failed")?;
-
-        let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
-            Config {
-                table_id: String::new(),
-                connect_timeout: 1_000_000_000,
-                request_timeout: 1_000_000_000,
-                request_size_limit: 10 * 1024 * 1024,
-            },
-            Box::new(MockChannelFactory {
-                responses: Arc::new(RwLock::new(VecDeque::from([
-                    buffer_write_stream,
-                    buffer_append_rows_response,
-                ]))),
-            }),
-        );
-
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
-        };
-
-        sink.connect(&sink_context, &Attempt::default()).await?;
-
-        let result = sink
-            .on_event(
-                "",
-                Event::default(),
-                &sink_context,
-                &mut EventSerializer::new(
-                    None,
-                    CodecReq::Structured,
-                    vec![],
-                    &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
-                )?,
-                0,
-            )
-            .await?;
-
-        assert_eq!(result.ack, SinkAck::Fail);
-        assert_eq!(result.cb, CbAction::None);
-        Ok(())
-    }
-
-    #[async_std::test]
-    pub async fn splits_large_requests() -> Result<()> {
-        let mut buffer_write_stream = vec![];
-        let mut buffer_append_rows_response = vec![];
-        WriteStream {
-            name: "test".to_string(),
-            r#type: i32::from(write_stream::Type::Committed),
-            create_time: None,
-            commit_time: None,
-            table_schema: Some(TableSchema {
-                fields: vec![TableFieldSchema {
-                    name: "a".to_string(),
-                    r#type: table_field_schema::Type::String as i32,
-                    mode: table_field_schema::Mode::Nullable as i32,
-                    fields: vec![],
-                    description: String::new(),
-                    max_length: 0,
-                    precision: 0,
-                    scale: 0,
-                }],
-            }),
-        }
-        .encode(&mut buffer_write_stream)
-        .map_err(|_| "encode failed")?;
-
-        AppendRowsResponse {
-            updated_schema: None,
-            response: Some(append_rows_response::Response::AppendResult(AppendResult {
-                offset: None,
-            })),
-        }
-        .encode(&mut buffer_append_rows_response)
-        .map_err(|_| "encode failed")?;
-
-        let responses = Arc::new(RwLock::new(VecDeque::from([
-            buffer_write_stream,
-            buffer_append_rows_response.clone(),
-            buffer_append_rows_response,
-        ])));
-        let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
-            Config {
-                table_id: String::new(),
-                connect_timeout: 1_000_000_000,
-                request_timeout: 1_000_000_000,
-                request_size_limit: 16 * 1024,
-            },
-            Box::new(MockChannelFactory {
-                responses: responses.clone(),
-            }),
-        );
-
-        let sink_context = SinkContext {
-            uid: SinkId::default(),
-            alias: Alias::new("flow", "connector"),
-            connector_type: ConnectorType::default(),
-            quiescence_beacon: QuiescenceBeacon::default(),
-            notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
-        };
-
-        sink.connect(&sink_context, &Attempt::default()).await?;
-
-        let value = literal!([
-            {
-                "data": {
-                    "value": {
-                        "a": "a".repeat(15*1024)
-                    },
-                    "meta": {}
-                }
-            },
-            {
-                "data": {
-                    "value": {
-                        "a": "b".repeat(15*1024)
-                    },
-                    "meta": {}
-                }
-            }
-        ]);
-
-        let payload: EventPayload = value.into();
-
-        let result = sink
-            .on_event(
-                "",
-                Event {
-                    data: payload,
-                    is_batch: true,
-                    ..Default::default()
-                },
-                &sink_context,
-                &mut EventSerializer::new(
-                    None,
-                    CodecReq::Structured,
-                    vec![],
-                    &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
-                )?,
-                0,
-            )
-            .await?;
-
-        assert_eq!(result.ack, SinkAck::Ack);
-        assert_eq!(0, responses.read()?.len());
-        Ok(())
-    }
-
-    #[async_std::test]
-    pub async fn does_not_auto_ack() {
-        let sink = GbqSink::<TestTokenProvider, _, _>::new(
-            Config {
-                table_id: String::new(),
-                connect_timeout: 1_000_000_000,
-                request_timeout: 1_000_000_000,
-                request_size_limit: 10 * 1024 * 1024,
-            },
-            Box::new(MockChannelFactory {
-                responses: Arc::new(RwLock::new(VecDeque::new())),
-            }),
-        );
-
-        assert!(!sink.auto_ack());
     }
 }

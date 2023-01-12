@@ -1000,7 +1000,6 @@ mod tests {
             }],
         };
         let json = resource_metrics_to_json(pb.clone())?;
-        dbg!(&json);
         let back_again = resource_metrics_to_pb(Some(&json))?;
         let expected: Value = literal!({
             "metrics": [

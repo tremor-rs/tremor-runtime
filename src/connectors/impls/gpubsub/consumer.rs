@@ -18,7 +18,7 @@ use crate::connectors::utils::url::HttpsDefaults;
 use async_std::channel::{Receiver, Sender};
 use async_std::stream::StreamExt;
 use async_std::sync::RwLock;
-use async_std::task;
+// use async_std::task;
 use async_std::task::JoinHandle;
 use beef::generic::Cow;
 use google_api_proto::google::pubsub::v1::subscriber_client::SubscriberClient;
@@ -31,7 +31,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tonic::transport::{Channel, ClientTlsConfig};
-use tonic::{Code, Status};
+use tonic::{Code};
 use tremor_common::blue_green_hashmap::BlueGreenHashMap;
 use tremor_pipeline::ConfigImpl;
 
@@ -65,8 +65,6 @@ fn default_ack_deadline() -> u64 {
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
-type GSubWithTokenProvider = GSub;
-
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -75,16 +73,16 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        alias: &Alias,
+        _alias: &Alias,
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         let url = Url::<HttpsDefaults>::parse(config.url.as_str())?;
-        let client_id = format!("tremor-{}-{alias}-{:?}", hostname(), task::current().id());
-
-        Ok(Box::new(GSubWithTokenProvider {
+//        let client_id = format!("tremor-{}-{alias}-{:?}", hostname(), task::current().id());
+        let client_id = "snot".to_string();
+        Ok(Box::new(GSub {
             config,
             url,
             client_id,
@@ -103,7 +101,8 @@ type AsyncTaskMessage = Result<(u64, PubsubMessage)>;
 
 struct GSubSource {
     config: Config,
-    client: Option<PubSubClient>,
+    hostname: String,
+//    client: Option<PubSubClient>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
     ack_sender: Option<Sender<u64>>,
     task_handle: Option<JoinHandle<()>>,
@@ -112,16 +111,26 @@ struct GSubSource {
 }
 
 impl GSubSource {
-    pub fn new(config: Config, url: Url<HttpsDefaults>, client_id: String) -> Self {
-        GSubSource {
+    pub fn new(config: Config, url: Url<HttpsDefaults>, client_id: String) -> Result<Self> {
+        let hostname = config
+            .url
+            .host_str()
+            .ok_or_else(|| {
+                ErrorKind::InvalidConfiguration(
+                    "gpubsub-consumer".to_string(),
+                    "Missing hostname".to_string(),
+                )
+            })?.to_string();
+        Ok(GSubSource {
             config,
+            hostname,
             url,
             client_id,
-            client: None,
+            // client: None,
             receiver: None,
             task_handle: None,
             ack_sender: None,
-        }
+        })
     }
 }
 
@@ -266,12 +275,7 @@ impl Source for GSubSource {
         if self.url.scheme() == "https" {
             let tls_config = ClientTlsConfig::new()
                 // TODO FIXME .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
-                .domain_name(
-                    self.url
-                        .host_str()
-                        .ok_or_else(|| Status::unavailable("The endpoint is missing a hostname"))?
-                        .to_string(),
-                );
+                .domain_name(self.hostname.clone());
 
             channel = channel.tls_config(tls_config)?;
         }
@@ -281,6 +285,7 @@ impl Source for GSubSource {
         if let Some(task_handle) = self.task_handle.take() {
             task_handle.cancel().await;
         }
+
 
         let mut client = SubscriberClient::new(TremorGoogleAuthz::new(channel.clone()).await?);
         // check that the subscription exists
@@ -296,7 +301,9 @@ impl Source for GSubSource {
         );
         debug!("{ctx} Subscription details {res:?}");
 
-        let client_background = client.clone();
+//        let client_background = client.clone();
+// let client_background = SubscriberClient::new(auth_channel.clone());
+        let client_background = SubscriberClient::new(TremorGoogleAuthz::new(channel.clone()).await?);
 
         let (tx, rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
         let (ack_tx, ack_rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
@@ -316,7 +323,7 @@ impl Source for GSubSource {
 
         self.receiver = Some(rx);
         self.ack_sender = Some(ack_tx);
-        self.client = Some(client);
+//        self.client = Some(client);
         self.task_handle = Some(join_handle);
 
         Ok(true)
@@ -387,7 +394,7 @@ impl Connector for GSub {
             self.config.clone(),
             self.url.clone(),
             self.client_id.clone(),
-        );
+        )?;
         builder.spawn(source, source_context).map(Some)
     }
 

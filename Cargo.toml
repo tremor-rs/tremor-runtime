@@ -251,6 +251,12 @@ tower = "0.4.13"
 tower-http = { version = "0.3.4", features = [ "full" ] }
 hyper = "0.14.20"
 
+#dogstatsd
+simdutf8 = "0.1.4"
+lexical = "6.1.1"
+itoa = "1.0.5"
+ryu = "1.0.12"
+
 [dev-dependencies]
 serial_test = { version = "0.10", features = ["logging"] }
 # path = "../serial_test/serial_test" 

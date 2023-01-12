@@ -61,6 +61,10 @@ port_scanner = "0.1"
 shell-words = "1.1"
 tch = { version = "*", optional = true }
 termcolor = "1.1"
+simdutf8 = "0.1.4"
+lexical = "6.1.1"
+itoa = "1.0.5"
+ryu = "1.0.12"
 
 [[bin]]
 name = "tremor"

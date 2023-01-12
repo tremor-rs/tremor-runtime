@@ -29,6 +29,7 @@ use std::time::Duration;
 use tonic::transport::{Channel, ClientTlsConfig};
 use tonic::Code;
 use tremor_common::time::nanotime;
+// use tremor_common::ids::SinkId;
 
 //
 // NOTE This code now depends on a different protocol buffers and tonic library
@@ -93,6 +94,7 @@ impl GclSink {
     }
 
     #[cfg(test)]
+    #[cfg(feature = "gcp-integration")]
     pub fn new_mock(
         config: Config,
         reply_tx: Sender<AsyncSinkReply>,
@@ -162,7 +164,7 @@ impl Sink for GclSink {
                 .await?;
 
             if let Err(error) = log_entries_response {
-                error!("Failed to write a log entries: {}", error);
+                error!("Failed to write log entries: {}", error.message());
 
                 if matches!(
                     error.code(),
@@ -240,7 +242,7 @@ mod test {
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
     use crate::connectors::{
-        google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
+        utils::quiescence::QuiescenceBeacon,
     };
     use async_std::channel::bounded;
     use futures::executor::block_on;
@@ -249,6 +251,7 @@ mod test {
     use tremor_pipeline::CbAction::Trigger;
     use tremor_pipeline::EventId;
     use tremor_value::{literal, structurize};
+    use tremor_common::ids::SinkId;
 
     #[async_std::test]
     async fn on_event_can_send_an_event() -> Result<()> {

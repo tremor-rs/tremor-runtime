@@ -406,7 +406,7 @@ mod tests {
     }
 
     #[test]
-    fn minimal_log_record() -> Result<()> {
+    fn minimal_log_record() {
         let lr = literal!({});
         assert_eq!(
             Ok(LogRecord {

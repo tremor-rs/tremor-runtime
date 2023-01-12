@@ -17,9 +17,6 @@ use crate::connectors::tests::ConnectorHarness;
 use crate::errors::Result;
 use crate::instance::State;
 use async_std::prelude::FutureExt;
-use googapis::google::pubsub::v1::publisher_client::PublisherClient;
-use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{PullRequest, Subscription, Topic};
 use serial_test::serial;
 use std::collections::HashSet;
 use std::time::Duration;
@@ -29,6 +26,12 @@ use tonic::transport::Channel;
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
+use google_api_proto::google::pubsub::v1::Subscription;
+use google_api_proto::google::pubsub::v1::publisher_client::PublisherClient;
+use google_api_proto::google::pubsub::v1::subscriber_client::SubscriberClient;
+use google_api_proto::google::pubsub::v1::Topic;
+use google_api_proto::google::pubsub::v1::PullRequest;
+// use tremor_common::ids::SinkId;
 
 #[async_std::test]
 #[serial(gpubsub)]
@@ -126,6 +129,9 @@ async fn simple_publish() -> Result<()> {
             retry_policy: None,
             detached: false,
             topic_message_retention_duration: None,
+            bigquery_config: None,
+            enable_exactly_once_delivery: false,
+            state: Default::default(),
         })
         .await?;
 
@@ -158,7 +164,7 @@ async fn simple_publish() -> Result<()> {
 
         for msg in result.into_inner().received_messages {
             let body = msg.message.unwrap();
-            received_messages.insert(String::from_utf8(body.data).unwrap());
+            received_messages.insert(String::from_utf8(body.data.to_vec()).unwrap());
         }
 
         iter_count += 1;
@@ -232,6 +238,9 @@ async fn simple_publish_with_timeout() -> Result<()> {
             retry_policy: None,
             detached: false,
             topic_message_retention_duration: None,
+            bigquery_config: None,
+            enable_exactly_once_delivery: false,
+            state: Default::default(),
         })
         .await?;
 

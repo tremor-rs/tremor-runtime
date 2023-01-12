@@ -22,7 +22,7 @@ use simd_json::Builder;
 use tremor_otelapis::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, InstrumentationScope, KeyValue, KeyValueList,
 };
-use tremor_value::{StaticNode, Value};
+use tremor_value::{StaticNode, Value, literal};
 use value_trait::ValueAccess;
 
 pub(crate) struct OtelDefaults;
@@ -240,7 +240,7 @@ mod tests {
     #![allow(clippy::float_cmp)]
     use simd_json::prelude::*;
     use tremor_otelapis::opentelemetry::proto::common::v1::{ArrayValue, KeyValueList};
-    use tremor_script::literal;
+    use tremor_value::literal;
 
     use super::*;
 

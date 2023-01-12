@@ -513,7 +513,7 @@ impl TestPipeline {
     feature = "http-integration",
     feature = "ws-integration",
     feature = "s3-integration",
-    feature = "gcp-integration"
+//    feature = "gcp-integration"
 ))]
 pub(crate) mod free_port {
 

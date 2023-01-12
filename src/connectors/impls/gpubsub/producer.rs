@@ -52,8 +52,6 @@ impl ConfigImpl for Config {}
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
 
-type GpubConnectorWithTokenProvider = GpubConnector;
-
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -69,7 +67,7 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
-        Ok(Box::new(GpubConnectorWithTokenProvider { config }))
+        Ok(Box::new(GpubConnector { config }))
     }
 }
 
