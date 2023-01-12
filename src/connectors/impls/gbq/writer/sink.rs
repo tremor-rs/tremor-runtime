@@ -329,7 +329,7 @@ impl Sink for GbqSink {
         let request = AppendRowsRequest {
             write_stream: write_stream.name.clone(),
             offset: None,
-            trace_id: "".to_string(),
+            trace_id: String::new(),
             rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
                 writer_schema: Some(ProtoSchema {
                     proto_descriptor: Some(mapping.descriptor().clone()),
@@ -399,12 +399,12 @@ impl Sink for GbqSink {
                 parent: self.config.table_id.clone(),
                 write_stream: Some(WriteStream {
                     // The stream name here will be ignored and a generated value will be set in the response
-                    name: "".to_string(),
+                    name: String::new(),
                     r#type: i32::from(write_stream::Type::Committed),
                     create_time: None,
                     commit_time: None,
                     table_schema: None,
-                    location: "".to_string(), // Should be a valid region TODO FIXME
+                    location: String::new(), // Should be a valid region TODO FIXME
                     write_mode: WriteMode::Insert.into(),
                 }),
             })

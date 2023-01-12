@@ -203,22 +203,19 @@ impl Sink for GclSink {
     }
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        match self.mock_logic {
-            Some(logic) => {
-                info!("{} Mocking connection to Google Cloud Logging", ctx);
-                self.client = Some(LoggingServiceV2Client::new(
-                    TremorGoogleAuthz::new_mock(logic).await?,
-                ));
-            }
-            None => {
-                info!("{} Connecting to Google Cloud Logging", ctx);
-                let channel =
-                    make_tonic_channel(Duration::from_nanos(self.config.connect_timeout)).await?;
+        if let Some(logic) = self.mock_logic {
+            info!("{} Mocking connection to Google Cloud Logging", ctx);
+            self.client = Some(LoggingServiceV2Client::new(
+                TremorGoogleAuthz::new_mock(logic),
+            ));
+        } else  {
+            info!("{} Connecting to Google Cloud Logging", ctx);
+            let channel =
+                make_tonic_channel(Duration::from_nanos(self.config.connect_timeout)).await?;
 
-                let client = LoggingServiceV2Client::new(channel);
+            let client = LoggingServiceV2Client::new(channel);
 
-                self.client = Some(client);
-            }
+            self.client = Some(client);
         }
 
         Ok(true)

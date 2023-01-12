@@ -327,7 +327,7 @@ pub(crate) fn metrics_records_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Metr
         json.as_array()
             .ok_or("Invalid json mapping for [MetricRecord, ...]")?
             .iter()
-            .map(|item| metric_to_pb(item))
+            .map(metric_to_pb)
             .collect()
     } else {
         Ok(vec![])

@@ -47,11 +47,11 @@ type TonicInternalBodyType = UnsyncBoxBody<bytes::Bytes, tonic::Status>;
 impl Display for TremorTonicServiceError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match *self {
-            Self::HyperError(ref err) => write!(f, "Hyper error: {}", err),
-            Self::TonicStatus(ref status) => write!(f, "Tonic error: {}", status),
-            Self::TonicTransportError(ref err) => write!(f, "Tonic transport error: {}", err),
-            Self::GoogleAuthError(ref err) => write!(f, "Google Auth error: {}", err),
-            Self::GoogleCredentialsError(ref err) => write!(f, "Google Credentials error: {}", err),
+            Self::HyperError(ref err) => write!(f, "Hyper error: {err}"),
+            Self::TonicStatus(ref status) => write!(f, "Tonic error: {status}"),
+            Self::TonicTransportError(ref err) => write!(f, "Tonic transport error: {err}"),
+            Self::GoogleAuthError(ref err) => write!(f, "Google Auth error: {err}"),
+            Self::GoogleCredentialsError(ref err) => write!(f, "Google Credentials error: {err}"),
         }
     }
 }
@@ -230,8 +230,8 @@ impl TremorGoogleAuthz {
     }
 
     // Create a new mock channel to a GCP gRPC service
-    pub async fn new_mock(logic: MockServiceRpcCall) -> Result<Self> {
-        Ok(Self::Test(TonicMockService::new(logic)))
+    pub fn new_mock(logic: MockServiceRpcCall) -> Self {
+        Self::Test(TonicMockService::new(logic))
     }
 }
 
@@ -256,7 +256,7 @@ pub(crate) mod tests {
     // NOTE so we use mock tests where emulators/simulators are not available at this time
     #[async_std::test]
     async fn appease_the_coverage_gods() -> Result<()> {
-        let mut mock = TremorGoogleAuthz::new_mock(|_| http::Response::new(empty_body())).await?;
+        let mut mock = TremorGoogleAuthz::new_mock(|_| http::Response::new(empty_body())).await;
         let actual = mock.call(http::Request::new(empty_body())).await;
         if let Ok(actual) = actual {
             let actual = hyper::body::to_bytes(actual).await?;
