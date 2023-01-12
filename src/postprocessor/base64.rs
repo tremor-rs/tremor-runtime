@@ -16,6 +16,7 @@
 
 use super::Postprocessor;
 use crate::Result;
+use base64::prelude::*;
 
 #[derive(Default)]
 pub(crate) struct Base64 {}
@@ -25,6 +26,9 @@ impl Postprocessor for Base64 {
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(vec![base64::encode(data).as_bytes().to_vec()])
+        Ok(vec![BASE64_STANDARD_NO_PAD
+            .encode(data)
+            .as_bytes()
+            .to_vec()])
     }
 }

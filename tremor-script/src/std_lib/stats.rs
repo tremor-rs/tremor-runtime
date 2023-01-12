@@ -1131,7 +1131,7 @@ mod test {
                 a.accumulate(&[
                     &Value::from(*v),
                     &literal!([0.5])
-                ]).map_err(|fe| Error::from(format!("{:?}", fe)))?;
+                ]).map_err(|fe| Error::from(format!("{fe:?}")))?;
             }
 
             let mut b = Dds::default();
@@ -1140,12 +1140,12 @@ mod test {
                 b.accumulate(&[
                     &Value::from(*v),
                     &literal!([0.5])
-                ]).map_err(|fe| Error::from(format!("{:?}", fe)))?;
+                ]).map_err(|fe| Error::from(format!("{fe:?}")))?;
             }
 
-            a.merge(&b).map_err(|fe| Error::from(format!("{:?}", fe)))?;
+            a.merge(&b).map_err(|fe| Error::from(format!("{fe:?}")))?;
 
-            let value = a.emit().map_err(|fe| Error::from(format!("{:?}", fe)))?;
+            let value = a.emit().map_err(|fe| Error::from(format!("{fe:?}")))?;
             let count = value.get_u64("count").unwrap_or_default();
             let sum = value.get_f64("sum").unwrap_or_default();
             let min = value.get_f64("min").unwrap_or_default();
@@ -1171,7 +1171,7 @@ mod test {
                 a.accumulate(&[
                     &Value::from(*v),
                     &literal!([0.5, 0.99])
-                ]).map_err(|fe| Error::from(format!("{:?}", fe)))?;
+                ]).map_err(|fe| Error::from(format!("{fe:?}")))?;
             }
             let mut b = Hdr::default();
             b.init();
@@ -1179,10 +1179,10 @@ mod test {
                 b.accumulate(&[
                     &Value::from(*v),
                     &literal!([0.5, 0.99])
-                ]).map_err(|fe| Error::from(format!("{:?}", fe)))?;
+                ]).map_err(|fe| Error::from(format!("{fe:?}")))?;
             }
-            a.merge(&b).map_err(|fe| Error::from(format!("{:?}", fe)))?;
-            let value = a.emit().map_err(|fe| Error::from(format!("{:?}", fe)))?;
+            a.merge(&b).map_err(|fe| Error::from(format!("{fe:?}")))?;
+            let value = a.emit().map_err(|fe| Error::from(format!("{fe:?}")))?;
             let count = value.get_u64("count").unwrap_or_default();
             let min = value.get_u64("min").unwrap_or_default();
             let max = value.get_u64("max").unwrap_or_default();

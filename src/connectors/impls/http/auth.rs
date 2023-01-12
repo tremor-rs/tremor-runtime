@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use base64::prelude::*;
 use std::io::Write;
 
 use crate::errors::Result;
@@ -44,14 +45,16 @@ impl Auth {
                 ref username,
                 ref password,
             } => {
-                let encoded = base64::encode(format!("{username}:{password}"));
+                let encoded = BASE64_STANDARD_NO_PAD.encode(format!("{username}:{password}"));
                 Ok(Some(format!("Basic {}", &encoded)))
             }
             Auth::Bearer(token) => Ok(Some(format!("Bearer {}", &token))),
             Auth::ElasticsearchApiKey { id, api_key } => {
                 let mut header_value = "ApiKey ".to_string();
-                let mut writer =
-                    base64::write::EncoderStringWriter::from(&mut header_value, base64::STANDARD);
+                let mut writer = base64::write::EncoderStringWriter::from_consumer(
+                    &mut header_value,
+                    &BASE64_STANDARD_NO_PAD,
+                );
                 write!(writer, "{id}:")?;
                 write!(writer, "{api_key}")?;
                 writer.into_inner(); // release the reference, so header-value is accessible again

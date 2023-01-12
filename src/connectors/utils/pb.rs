@@ -15,6 +15,7 @@
 #![allow(dead_code)]
 
 use crate::errors::{Error, ErrorKind, Result};
+use base64::prelude::*;
 use simd_json::StaticNode;
 use std::collections::BTreeMap;
 use tremor_otelapis::opentelemetry::proto::metrics::v1;
@@ -155,7 +156,7 @@ pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value> {
             }
         }
         Value::Bytes(v) => {
-            let encoded = base64::encode(v);
+            let encoded = BASE64_STANDARD_NO_PAD.encode(v);
             prost_types::Value {
                 kind: Some(Kind::StringValue(encoded)),
             }

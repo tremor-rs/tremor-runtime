@@ -170,7 +170,7 @@ mod tests {
         }
         let tremor_path = match path.ok_or("bad path")?.strip_prefix(d.clone()) {
             Ok(p) => format!("{}", p.display()),
-            Err(e) => return Err(Error::from(format!("{}", e))),
+            Err(e) => return Err(Error::from(format!("{e}"))),
         };
 
         let mp = load_(&tremor_path);

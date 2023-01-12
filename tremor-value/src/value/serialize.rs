@@ -19,10 +19,9 @@
 // https://github.com/maciejhirsz/json-rust/blob/master/src/codegen.rs
 
 use super::{Object, Value};
-use simd_json::prelude::*;
-use simd_json::{stry, StaticNode};
-use std::io;
-use std::io::Write;
+use base64::prelude::*;
+use simd_json::{prelude::*, stry, StaticNode};
+use std::io::{self, Write};
 use value_trait::generator::{
     BaseGenerator, DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
 };
@@ -147,8 +146,10 @@ trait Generator: BaseGenerator {
             Value::Bytes(ref b) => {
                 stry!(self.write(b"\""));
                 {
-                    let mut enc =
-                        base64::write::EncoderWriter::new(self.get_writer(), base64::STANDARD);
+                    let mut enc = base64::write::EncoderWriter::new(
+                        self.get_writer(),
+                        &BASE64_STANDARD_NO_PAD,
+                    );
                     stry!(enc.write_all(b));
                     stry!(enc.finish().map(|_| ()));
                 }
@@ -231,8 +232,10 @@ trait FastGenerator: BaseGenerator {
             Value::Bytes(ref b) => {
                 stry!(self.write(b"\""));
                 {
-                    let mut enc =
-                        base64::write::EncoderWriter::new(self.get_writer(), base64::STANDARD);
+                    let mut enc = base64::write::EncoderWriter::new(
+                        self.get_writer(),
+                        &BASE64_STANDARD_NO_PAD,
+                    );
                     stry!(enc.write_all(b));
                     stry!(enc.finish().map(|_| ()));
                 }
