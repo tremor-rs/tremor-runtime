@@ -466,7 +466,7 @@ pub(crate) mod tests {
             }
             let count = self.counter.fetch_add(1, Ordering::AcqRel);
             let mut session_uri = url.url().clone();
-            session_uri.set_path(format!("{}/{}", url.path(), count).as_str());
+            session_uri.set_path(format!("{}/{count}", url.path()).as_str());
             self.running.insert(session_uri.clone(), (file_id, vec![]));
             Ok(session_uri)
         }

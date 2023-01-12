@@ -19,9 +19,9 @@
 // https://github.com/maciejhirsz/json-rust/blob/master/src/codegen.rs
 
 use super::{Object, Value};
-use base64::prelude::*;
 use simd_json::{prelude::*, stry, StaticNode};
 use std::io::{self, Write};
+use tremor_common::base64::BASE64;
 use value_trait::generator::{
     BaseGenerator, DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
 };
@@ -146,10 +146,7 @@ trait Generator: BaseGenerator {
             Value::Bytes(ref b) => {
                 stry!(self.write(b"\""));
                 {
-                    let mut enc = base64::write::EncoderWriter::new(
-                        self.get_writer(),
-                        &BASE64_STANDARD_NO_PAD,
-                    );
+                    let mut enc = base64::write::EncoderWriter::new(self.get_writer(), &BASE64);
                     stry!(enc.write_all(b));
                     stry!(enc.finish().map(|_| ()));
                 }
@@ -232,10 +229,7 @@ trait FastGenerator: BaseGenerator {
             Value::Bytes(ref b) => {
                 stry!(self.write(b"\""));
                 {
-                    let mut enc = base64::write::EncoderWriter::new(
-                        self.get_writer(),
-                        &BASE64_STANDARD_NO_PAD,
-                    );
+                    let mut enc = base64::write::EncoderWriter::new(self.get_writer(), &BASE64);
                     stry!(enc.write_all(b));
                     stry!(enc.finish().map(|_| ()));
                 }
