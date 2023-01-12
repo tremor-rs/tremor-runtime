@@ -353,8 +353,8 @@ fn text_exclusive_base64() -> StdResult<(), Error> {
     let e = Extractor::new("base64", "")?;
     assert!(e.is_exclusive_to(&Value::from("sn!ot")));
     assert!(e.is_exclusive_to(&Value::from("badger snot")));
-    assert!(!e.is_exclusive_to(&Value::from("abc")));
-    assert!(!e.is_exclusive_to(&Value::from("124")));
+    assert!(!e.is_exclusive_to(&Value::from("abc=")));
+    assert!(!e.is_exclusive_to(&Value::from("124=")));
     Ok(())
 }
 

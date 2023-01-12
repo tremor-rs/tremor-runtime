@@ -130,7 +130,7 @@ pub mod test {
     use proptest::proptest;
 
     pub(crate) fn pb_span_id_to_json(pb: &[u8]) -> Value {
-        let hex: String = pb.iter().map(|b| format!("{:02x}", b)).collect();
+        let hex: String = pb.iter().map(|b| format!("{b:02x}")).collect();
         Value::String(hex.into())
     }
 
@@ -139,7 +139,7 @@ pub mod test {
     }
 
     pub(crate) fn pb_trace_id_to_json(pb: &[u8]) -> Value {
-        let hex: String = pb.iter().map(|b| format!("{:02x}", b)).collect();
+        let hex: String = pb.iter().map(|b| format!("{b:02x}")).collect();
         Value::String(hex.into())
     }
 
@@ -187,7 +187,7 @@ pub mod test {
             arb_hexen in prop::collection::vec("[a-f0-9]{16}", 16..=16)
         ) {
             for expected in arb_hexen {
-                let bytes = hex::decode(&expected).unwrap_or_default();
+                let bytes = hex::decode(expected).unwrap_or_default();
 
                 let json = Value::Bytes(bytes.clone().into());
                 let pb = hex_span_id_to_pb(Some(&json))?;
@@ -200,7 +200,7 @@ pub mod test {
             arb_hexen in prop::collection::vec("[a-f0-9]{32}", 32..=32)
         ) {
             for expected in arb_hexen {
-                let bytes = hex::decode(&expected).unwrap_or_default();
+                let bytes = hex::decode(expected).unwrap_or_default();
 
                 let json = Value::Bytes(bytes.clone().into());
                 let pb = hex_trace_id_to_pb(Some(&json))?;

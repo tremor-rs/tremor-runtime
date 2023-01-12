@@ -266,14 +266,14 @@ mod test {
         assert!(g.buffer.is_empty());
         assert!(g.last_buffer.is_empty());
         assert_eq!(0, g.last_swap);
-        let mut g = g.clone();
+        let mut g = g;
         assert!(g.buffer.is_empty());
         assert!(g.last_buffer.is_empty());
         assert_eq!(0, g.last_swap);
         let d = br#"{"snot": "badger"}"#;
         let r = g.process(&mut 0, d);
         assert!(r.is_ok());
-        assert_eq!(r.unwrap(), vec![d.to_vec()]);
+        assert_eq!(r.expect("r should be Ok"), vec![d.to_vec()]);
     }
 
     #[test]

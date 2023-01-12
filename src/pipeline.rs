@@ -764,7 +764,7 @@ mod tests {
             &query,
             &mut operator_id_gen,
         )?;
-        println!("{:?}", addr); // coverage
+        println!("{addr:?}"); // coverage
         let yolo_mid = NodeMeta::new(Location::yolo(), Location::yolo());
         let (tx, rx) = bounded(1);
         // interconnect 3 pipelines
@@ -935,7 +935,7 @@ mod tests {
                 assert_eq!(Value::from(42_usize), event.data.suffix().value());
                 assert_eq!(Value::from(true), event.data.suffix().meta());
             }
-            other => panic!("Expected Event, got: {:?}", other),
+            other => panic!("Expected Event, got: {other:?}"),
         }
 
         // send a signal
@@ -971,7 +971,7 @@ mod tests {
             assert_eq!(event_id, cb_id);
             assert_eq!(CbAction::Ack, cb_action);
         } else {
-            panic!("Expected SourceMsg::Cb, got: {:?}", source_msg);
+            panic!("Expected SourceMsg::Cb, got: {source_msg:?}");
         }
 
         // test pause and resume

@@ -123,7 +123,7 @@ impl ConnectorHarness {
         let mid = NodeMeta::new(Location::yolo(), Location::yolo());
         for port in input_ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = DeployEndpoint::new(&format!("TEST__{}_pipeline", port), &IN, &mid);
+            let pipeline_id = DeployEndpoint::new(&format!("TEST__{port}_pipeline"), &IN, &mid);
             // connect pipeline to connector
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
@@ -145,7 +145,7 @@ impl ConnectorHarness {
         }
         for port in output_ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = DeployEndpoint::new(&format!("TEST__{}_pipeline", port), &IN, &mid);
+            let pipeline_id = DeployEndpoint::new(&format!("TEST__{port}_pipeline"), &IN, &mid);
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
                 .send(connectors::Msg::LinkOutput {

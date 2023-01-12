@@ -105,7 +105,7 @@ mod tests {
             "got: {}",
             str::from_utf8(&encoded).expect("failed to convert utf8")
         );
-        println!("exp: {}", raw);
+        println!("exp: {raw}");
         assert_eq!(
             str::from_utf8(&encoded).expect("failed to convert utf8"),
             raw

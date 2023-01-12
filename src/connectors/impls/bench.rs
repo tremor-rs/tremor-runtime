@@ -14,18 +14,19 @@
 
 // #![cfg_attr(coverage, no_coverage)] // This is for benchmarking and testing
 
-use crate::connectors::prelude::*;
-use crate::system::{KillSwitch, ShutdownMode};
-use base64::prelude::*;
+use crate::{
+    connectors::prelude::*,
+    system::{KillSwitch, ShutdownMode},
+};
+use base64::Engine;
 use hdrhistogram::Histogram;
-use std::io::{stdout, Write};
 use std::{
     cmp::min,
     fmt::Display,
-    io::{BufRead as StdBufRead, BufReader, Read},
+    io::{stdout, BufRead as StdBufRead, BufReader, Read, Write},
     time::Duration,
 };
-use tremor_common::{file, time::nanotime};
+use tremor_common::{base64::BASE64, file, time::nanotime};
 use xz2::read::XzDecoder;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -74,7 +75,7 @@ pub(crate) struct Builder {}
 
 fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
     if base64 {
-        Ok(BASE64_STANDARD_NO_PAD.decode(data)?)
+        Ok(BASE64.decode(data)?)
     } else {
         let d: &[u8] = data.as_ref();
         Ok(d.to_vec())

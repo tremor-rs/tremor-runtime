@@ -5916,6 +5916,7 @@ name = "tremor-common"
 version = "0.13.0-rc.11"
 dependencies = [
  "async-std",
+ "base64 0.21.0",
  "beef",
  "rand 0.8.5",
  "simd-json",
@@ -6168,6 +6169,7 @@ dependencies = [
  "serde_json",
  "simd-json",
  "simd-json-derive",
+ "tremor-common",
  "value-trait",
 ]
 

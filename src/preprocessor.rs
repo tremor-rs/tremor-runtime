@@ -208,7 +208,7 @@ mod test {
             .prop_map(|ss| {
                 let s: (Vec<usize>, Vec<String>) = ss
                     .into_iter()
-                    .map(|s| (s.len(), format!("{} {}", s.len(), s))) // for each string, extract the length, and create a textual length prefix
+                    .map(|s| (s.len(), format!("{} {s}", s.len()))) // for each string, extract the length, and create a textual length prefix
                     .unzip();
                 s
             })

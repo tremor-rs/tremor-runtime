@@ -1,4 +1,4 @@
-// Copyright 2020-2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,21 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use base64::alphabet::STANDARD as STANDARD_ALPHABET;
+use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 
-//! Decodes base64 encoded data to the raw bytes.
-use super::Preprocessor;
-use crate::Result;
-use base64::Engine;
-use tremor_common::base64::BASE64;
-
-#[derive(Clone, Default, Debug)]
-pub(crate) struct Base64 {}
-impl Preprocessor for Base64 {
-    fn name(&self) -> &str {
-        "base64"
-    }
-
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(vec![BASE64.decode(data)?])
-    }
-}
+/**
+ * Our very own base64 engine, that produces base64 with padding, but accepts base64 with and without padding.
+ * `BASE64` doesn't allow decoding without padding.
+ */
+pub const BASE64: GeneralPurpose = GeneralPurpose::new(
+    &STANDARD_ALPHABET,
+    GeneralPurposeConfig::new()
+        .with_encode_padding(true)
+        .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+);

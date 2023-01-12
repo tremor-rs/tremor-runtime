@@ -345,14 +345,14 @@ mod test {
         b.name();
         c.name();
 
-        let _ = a.process(0, 0, &[]);
-        let _ = b.process(0, 0, &[]);
-        let _ = c.process(0, 0, &[]);
+        let _a = a.process(0, 0, &[]);
+        let _b = b.process(0, 0, &[]);
+        let _c = c.process(0, 0, &[]);
 
         let data: Vec<u8> = b"donotcare".to_vec();
-        let _ = a.finish(Some(&data));
-        let _ = b.finish(Some(&data));
-        let _ = c.finish(Some(&data));
+        let _af = a.finish(Some(&data));
+        let _bf = b.finish(Some(&data));
+        let _cf = c.finish(Some(&data));
     }
 
     #[test]

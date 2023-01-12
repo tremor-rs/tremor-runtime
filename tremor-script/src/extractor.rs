@@ -36,9 +36,10 @@ mod re;
 
 use crate::{grok::PATTERNS_FILE_DEFAULT_PATH, prelude::*};
 use crate::{EventContext, Value};
-use ::base64::prelude::*;
+use ::base64::Engine;
 use re::Regex;
 use std::{fmt, iter::Iterator, result::Result as StdResult};
+use tremor_common::base64::BASE64;
 
 use self::cidr::SnotCombiner;
 
@@ -209,7 +210,7 @@ impl Extractor {
                 Extractor::Rerg { compiled, .. } | Extractor::Re { compiled, .. } => {
                     !compiled.is_match(s)
                 }
-                Extractor::Base64 => BASE64_STANDARD_NO_PAD.decode(s).is_err(),
+                Extractor::Base64 => BASE64.decode(s).is_err(),
                 Extractor::Kv(p) => p.run::<Value>(s).is_none(),
                 Extractor::Json => {
                     let mut s = String::from(s);

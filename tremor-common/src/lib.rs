@@ -45,6 +45,9 @@ pub mod blue_green_hashmap;
 /// Common ports
 pub mod ports;
 
+/// Base64 engine
+pub mod base64;
+
 pub use errors::Error;
 
 #[cfg(test)]
