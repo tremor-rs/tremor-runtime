@@ -16,6 +16,7 @@
 
 use crate::connectors::prelude::*;
 use crate::system::{KillSwitch, ShutdownMode};
+use base64::prelude::*;
 use hdrhistogram::Histogram;
 use std::io::{stdout, Write};
 use std::{
@@ -73,7 +74,7 @@ pub(crate) struct Builder {}
 
 fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
     if base64 {
-        Ok(base64::decode(data)?)
+        Ok(BASE64_STANDARD_NO_PAD.decode(data)?)
     } else {
         let d: &[u8] = data.as_ref();
         Ok(d.to_vec())

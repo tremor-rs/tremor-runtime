@@ -484,7 +484,7 @@ fn test_test_literal_format_bug_regression() {
 #[allow(clippy::float_cmp)]
 fn lexer_long_float() -> Result<()> {
     let f = 48_354_865_651_623_290_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000.0;
-    let source = format!("{:.1}", f); // ensure we keep the .0
+    let source = format!("{f:.1}"); // ensure we keep the .0
     let token = Lexer::new(&source, arena::Index::default())
         .next()
         .ok_or("unexpected")??
@@ -499,7 +499,7 @@ proptest! {
 #[test]
     fn float_literals_precision(f in 0_f64..f64::MAX) {
         if f.round() != f {
-            let float = format!("{:.}", f);
+            let float = format!("{f}");
             for token in Lexer::new(&float, arena::Index::default()) {
                 assert!(token.is_ok());
             }
@@ -512,7 +512,7 @@ proptest! {
     #[allow(clippy::float_cmp)]
     #[test]
     fn float_literals_scientific(f in 0_f64..f64::MAX) {
-        let float = format!("{:e}", f);
+        let float = format!("{f:e}");
         for token in Lexer::new(&float, arena::Index::default()).flatten() {
             if let Token::FloatLiteral(f_token, _) = token.value {
                 assert_eq!(f, f_token);

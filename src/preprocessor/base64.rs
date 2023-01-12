@@ -15,6 +15,7 @@
 //! Decodes base64 encoded data to the raw bytes.
 use super::Preprocessor;
 use crate::Result;
+use base64::prelude::*;
 
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Base64 {}
@@ -24,6 +25,6 @@ impl Preprocessor for Base64 {
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(vec![base64::decode(data)?])
+        Ok(vec![BASE64_STANDARD_NO_PAD.decode(data)?])
     }
 }

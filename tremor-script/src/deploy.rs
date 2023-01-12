@@ -160,7 +160,7 @@ mod test {
         let reg = crate::registry();
         let aggr_reg = crate::aggr_registry();
         if let Err(e) = Deploy::parse(query, &reg, &aggr_reg) {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             panic!("error during parsing");
         }
     }
