@@ -2515,7 +2515,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e2a3c70a9c00cc1ee87b54e89f9505f73bb17d63f1b25c9a462ba8ef885444f"
 dependencies = [
  "fxhash",
- "hashbrown 0.13.1",
+ "hashbrown 0.13.2",
  "serde",
 ]
 
@@ -2530,9 +2530,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.13.1"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ff8ae62cd3a9102e5637afc8452c55acf3844001bd5374e0b0bd7b6616c038"
+checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
 dependencies = [
  "ahash 0.8.2",
  "serde",
@@ -3256,7 +3256,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71e7d46de488603ffdd5f30afbc64fbba2378214a2c3a2fb83abf3d33126df17"
 dependencies = [
- "hashbrown 0.13.1",
+ "hashbrown 0.13.2",
 ]
 
 [[package]]
@@ -6034,7 +6034,7 @@ dependencies = [
  "gouth",
  "grok",
  "halfbrown",
- "hashbrown 0.13.1",
+ "hashbrown 0.13.2",
  "hdrhistogram",
  "hex",
  "hostname",
