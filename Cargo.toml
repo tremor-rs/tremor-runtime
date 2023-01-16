@@ -225,7 +225,6 @@ aws-sdk-s3 = "0.23"
 aws-types = "0.53"
 aws-config = "0.53"
 aws-smithy-http = "0.53"
-aws-smithy-types = "0.53"
 
 # gcp
 googapis = { version = "0.6", default-features = false, features = [
