@@ -128,8 +128,5 @@
     "whrf",
     "whrt",
     "wintel"
-  ],
-  "rust-analyzer.cargo.features": [
-    "s3-integration"
   ]
 }
