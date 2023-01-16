@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New features
+
+* Add configuration option `path_style_access` to `s3_streamer` and `s3_reader` connectors.
+
 ## [0.13.0-rc.11]
 
 ### New Features

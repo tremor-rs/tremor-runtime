@@ -46,6 +46,21 @@ pub(crate) struct Config {
 
     #[serde(default = "Config::fivembs")]
     buffer_size: usize,
+
+    /// Enable path-style access
+    /// So e.g. creating a bucket is done using:
+    ///
+    /// PUT http://<host>:<port>/<bucket>
+    ///
+    /// instead of
+    ///
+    /// PUT http://<bucket>.<host>:<port>/
+    ///
+    /// Set this to `true` for accessing s3 compatible backends
+    /// that do only support path style access, like e.g. minio.
+    /// Defaults to `true` for backward compatibility.
+    #[serde(default = "default_true")]
+    path_style_access: bool,
 }
 
 // Defaults for the config.
@@ -213,8 +228,14 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
         self.config.buffer_size
     }
     async fn connect(&mut self, _ctx: &SinkContext) -> Result<()> {
-        self.client =
-            Some(auth::get_client(self.config.aws_region.clone(), self.config.url.as_ref()).await?);
+        self.client = Some(
+            auth::get_client(
+                self.config.aws_region.clone(),
+                self.config.url.as_ref(),
+                self.config.path_style_access,
+            )
+            .await?,
+        );
         Ok(())
     }
 

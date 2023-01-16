@@ -48,7 +48,8 @@ async fn no_connection() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": "http://localhost:9090",
-            "mode": "yolo"
+            "mode": "yolo",
+            "path_style_access": true // required by minio
         }
     });
 
@@ -84,7 +85,9 @@ async fn no_credentials() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": endpoint,
-            "mode": "consistent"
+            "mode": "consistent",
+            "path_style_access": true // required by minio
+
         }
     });
 
@@ -123,7 +126,8 @@ async fn no_region() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": endpoint,
-            "mode": "yolo"
+            "mode": "yolo",
+            "path_style_access": true // required by minio
         }
     });
 
@@ -159,7 +163,8 @@ async fn no_bucket() -> Result<()> {
         "config": {
             "bucket": bucket_name.clone(),
             "url": endpoint,
-            "mode": "consistent"
+            "mode": "consistent",
+            "path_style_access": true // required by minio
         }
     });
     let harness = ConnectorHarness::new(
@@ -199,7 +204,8 @@ async fn connector_s3_consistent() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": format!("http://localhost:{http_port}"),
-            "mode": "consistent"
+            "mode": "consistent",
+            "path_style_access": true // required by minio
         }
     });
 

@@ -14,7 +14,7 @@
 
 use crate::connectors::prelude::*;
 use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_s3::{config, Client, Endpoint};
+use aws_sdk_s3::{config, Client};
 use aws_types::region::Region;
 
 /// Get an S3 client for the given region and the optionally provided endpoint URL.
@@ -31,6 +31,7 @@ use aws_types::region::Region;
 pub(crate) async fn get_client<D>(
     region: Option<String>,
     endpoint: Option<&Url<D>>,
+    path_style_access: bool,
 ) -> Result<Client>
 where
     D: Defaults,
@@ -39,11 +40,12 @@ where
         RegionProviderChain::first_try(region.map(Region::new)).or_default_provider();
     let region = region_provider.region().await;
     let config = aws_config::from_env().load().await;
-    let mut config_builder = config::Builder::from(&config).region(region);
+    let mut config_builder = config::Builder::from(&config)
+        .region(region)
+        .force_path_style(path_style_access);
 
     if let Some(endpoint) = endpoint {
-        config_builder =
-            config_builder.endpoint_resolver(Endpoint::immutable(endpoint.to_string())?);
+        config_builder = config_builder.endpoint_url(endpoint.to_string());
     }
 
     Ok(Client::from_conf(config_builder.build()))

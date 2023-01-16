@@ -48,6 +48,21 @@ pub(crate) struct Config {
 
     #[serde(default = "Config::default_max_connections")]
     max_connections: usize,
+
+    /// Enable path-style access
+    /// So e.g. creating a bucket is done using:
+    ///
+    /// PUT http://<host>:<port>/<bucket>
+    ///
+    /// instead of
+    ///
+    /// PUT http://<bucket>.<host>:<port>/
+    ///
+    /// Set this to `true` for accessing s3 compatible backends
+    /// that do only support path style access, like e.g. minio.
+    /// Defaults to `true` for backward compatibility.
+    #[serde(default = "default_true")]
+    path_style_access: bool,
 }
 
 struct KeyPayload {
@@ -126,8 +141,12 @@ impl Connector for S3Reader {
         for handle in self.handles.drain(..) {
             handle.cancel().await;
         }
-        let client =
-            auth::get_client(self.config.aws_region.clone(), self.config.url.as_ref()).await?;
+        let client = auth::get_client(
+            self.config.aws_region.clone(),
+            self.config.url.as_ref(),
+            self.config.path_style_access,
+        )
+        .await?;
 
         // Check the existence of the bucket.
         client

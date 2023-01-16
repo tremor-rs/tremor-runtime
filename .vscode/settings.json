@@ -129,5 +129,7 @@
     "whrt",
     "wintel"
   ],
-  "rust-analyzer.cargo.features": []
+  "rust-analyzer.cargo.features": [
+    "s3-integration"
+  ]
 }
