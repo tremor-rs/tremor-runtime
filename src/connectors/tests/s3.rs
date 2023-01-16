@@ -15,14 +15,14 @@ mod reader;
 mod streamer;
 
 use crate::errors::{Error, Result};
-use aws_sdk_s3::{Client, Config, Credentials, Endpoint, Region};
+use aws_sdk_s3::{Client, Config, Credentials, Region};
 use rand::{distributions::Alphanumeric, Rng};
 use std::time::{Duration, Instant};
 use testcontainers::{clients::Cli, images::generic::GenericImage, Container, RunnableImage};
 
 use super::free_port::find_free_tcp_port;
 const IMAGE: &str = "minio/minio";
-const TAG: &str = "RELEASE.2022-06-20T23-13-45Z";
+const TAG: &str = "RELEASE.2023-01-12T02-06-16Z";
 
 const MINIO_ROOT_USER: &str = "tremor";
 const MINIO_ROOT_PASSWORD: &str = "snot_badger";
@@ -111,9 +111,8 @@ fn get_client(http_port: u16) -> Client {
             "Environment",
         ))
         .region(Region::new(MINIO_REGION))
-        .endpoint_resolver(
-            Endpoint::immutable(format!("http://localhost:{http_port}")).expect("Invalid endpoint"),
-        )
+        .endpoint_url(format!("http://localhost:{http_port}"))
+        .force_path_style(true)
         .build();
 
     Client::from_conf(s3_config)
