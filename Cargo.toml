@@ -251,7 +251,7 @@ lexical = "6.1.1"
 simdutf8 = "0.1"
 
 [dev-dependencies]
-serial_test = { version = "0.10", features = ["logging"] }
+serial_test = { version = "1.0", features = ["logging"] }
 # path = "../serial_test/serial_test" 
 env_logger = "0.10.0"
 matches = "0.1"
