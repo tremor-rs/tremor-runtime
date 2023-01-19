@@ -29,8 +29,9 @@ use tremor_script::{
     highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter},
     interpreter::{AggrType, Env, ExecOpts, LocalStack},
     prelude::*,
-    Value, NO_AGGRS, NO_CONSTS,
+    NO_AGGRS, NO_CONSTS,
 };
+use tremor_value::Value;
 
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,

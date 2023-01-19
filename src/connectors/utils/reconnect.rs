@@ -386,6 +386,7 @@ mod tests {
     use super::*;
     use crate::{
         connectors::{utils::quiescence::QuiescenceBeacon, CodecReq},
+        ids::FlowInstanceId,
         qsize,
     };
 
@@ -446,7 +447,7 @@ mod tests {
     async fn failfast_runtime() -> Result<()> {
         let (tx, _rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = Alias::new("flow", "test");
+        let alias = Alias::new(FlowInstanceId::new("app", "flow"), "test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -460,6 +461,7 @@ mod tests {
         };
         let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
+            node_id: openraft::NodeId::default(),
             alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,
@@ -478,7 +480,7 @@ mod tests {
     async fn backoff_runtime() -> Result<()> {
         let (tx, mut rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = Alias::new("flow", "test");
+        let alias = Alias::new(FlowInstanceId::new("app", "flow"), "test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -497,6 +499,7 @@ mod tests {
         };
         let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
+            node_id: openraft::NodeId::default(),
             alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,

@@ -208,11 +208,13 @@ impl Sink for OtelSink {
 
 #[cfg(test)]
 mod tests {
+    use crate::ids::FlowInstanceId;
+
     use super::*;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn otel_client_builder() -> Result<()> {
-        let alias = Alias::new("flow", "my_otel_client");
+        let alias = Alias::new(FlowInstanceId::new("app", "flow"), "my_otel_client");
         let with_processors = literal!({
             "config": {
                 "url": "localhost:4317",

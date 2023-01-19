@@ -68,18 +68,17 @@ use crate::{
         StatusReport,
     },
     errors::Result,
+    ids::FlowInstanceId,
     instance::State,
-    pipeline, qsize,
-    system::flow::Alias as FlowAlias,
-    Event,
+    pipeline, qsize, Event,
 };
 use log::{debug, info};
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 use tokio::{sync::oneshot, task, time::timeout};
 use tremor_common::{
-    ids::{ConnectorIdGen, Id, SourceId},
     ports::{Port, ERR, IN, OUT},
+    uids::{ConnectorUIdGen, SourceUId, UId},
 };
 use tremor_pipeline::{CbAction, EventId};
 use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta};
@@ -99,8 +98,8 @@ impl ConnectorHarness {
         input_ports: Vec<Port<'static>>,
         output_ports: Vec<Port<'static>>,
     ) -> Result<Self> {
-        let alias = ConnectorAlias::new("test", alias);
-        let mut connector_id_gen = ConnectorIdGen::new();
+        let alias = ConnectorAlias::new(FlowInstanceId::new("app", "test"), alias);
+        let mut connector_id_gen = ConnectorUIdGen::new();
         let mut known_connectors = HashMap::new();
 
         for builder in builtin_connector_types() {
@@ -108,6 +107,7 @@ impl ConnectorHarness {
         }
         let raw_config = config::Connector::from_config(&alias, builder.connector_type(), defn)?;
         let connector_addr = connectors::spawn(
+            openraft::NodeId::default(),
             &alias,
             &mut connector_id_gen,
             builder,
@@ -200,7 +200,7 @@ impl ConnectorHarness {
         // ensure we notify the connector that its sink part is connected
         self.addr
             .send_sink(SinkMsg::Signal {
-                signal: Event::signal_start(SourceId::new(1)),
+                signal: Event::signal_start(SourceUId::new(1)),
             })
             .await?;
 
@@ -223,7 +223,7 @@ impl ConnectorHarness {
         let cr = rx.recv().await.ok_or_else(empty_error)?;
         debug!("Stop result received.");
         cr.res?;
-        //self.handle.cancel().await;
+        //self.handle.abort();
         let out_events = self
             .pipes
             .get_mut(&OUT)
@@ -377,7 +377,7 @@ impl TestPipeline {
         self.addr.send_mgmt(pipeline::MgmtMsg::Stop).await
     }
     pub(crate) fn new(alias: String) -> Self {
-        let flow_id = FlowAlias::new("test");
+        let flow_id = FlowInstanceId::new("TEST", "test");
         let qsize = qsize();
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = unbounded();

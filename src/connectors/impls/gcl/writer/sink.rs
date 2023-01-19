@@ -253,7 +253,7 @@ mod test {
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
-    use bytes::Bytes;
+    use crate::ids::{AppId, FlowInstanceId};
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
     use googapis::google::logging::v2::WriteLogEntriesResponse;
@@ -267,7 +267,7 @@ mod test {
     };
     use tonic::body::BoxBody;
     use tonic::codegen::Service;
-    use tremor_common::ids::SinkId;
+    use tremor_common::uids::SinkUId;
     use tremor_pipeline::CbAction::Trigger;
     use tremor_pipeline::EventId;
     use tremor_value::{literal, structurize};
@@ -362,8 +362,9 @@ mod test {
             tx,
             MockChannelFactory,
         );
-        let ctx = SinkContext::new(
-            SinkId::default(),
+        let sink_context = SinkContext::new(
+            openraft::NodeId::default(),
+            SinkUId::default(),
             Alias::new("a", "b"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
@@ -393,7 +394,7 @@ mod test {
                 CodecReq::Structured,
                 vec![],
                 &"a".into(),
-                &Alias::new("a", "b"),
+                &Alias::new(FlowInstanceId::new(AppId::default(), "a"), "b"),
             )?,
             0,
         )
@@ -459,8 +460,9 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext::new(
-                    SinkId::default(),
-                    Alias::new("", ""),
+                    // NodeId::default()
+                    SinkUId::default(),
+                    Alias::new(FlowInstanceId::new(AppId::default(), ""), ""),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
@@ -470,7 +472,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("", ""),
+                    &Alias::new(FlowInstanceId::new(AppId::default(), ""), ""),
                 )?,
                 0,
             )

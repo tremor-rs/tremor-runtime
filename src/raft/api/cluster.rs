@@ -12,17 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::{channel::bounded, prelude::FutureExt};
-use halfbrown::HashMap;
-use tide::{http::StatusCode, Route};
-
-use crate::raft::{
-    api::{wrapp, APIError, APIResult, ServerState, ToAPIResult},
-    node::Addr,
-    store::{NodesRequest, TremorRequest},
+use crate::{
+    channel::bounded,
+    raft::{
+        api::{wrapp, APIError, APIResult, ServerState, ToAPIResult},
+        node::Addr,
+        store::{NodesRequest, TremorRequest},
+    },
 };
 use openraft::{LogId, NodeId, RaftMetrics};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tide::{http::StatusCode, Route};
+use tokio::time::timeout;
 
 use super::{APIRequest, APIStoreReq, API_WORKER_TIMEOUT};
 
@@ -50,9 +52,11 @@ pub(crate) fn install_rest_endpoints(app: &mut Route<Arc<ServerState>>) {
 async fn get_nodes(req: APIRequest) -> APIResult<HashMap<NodeId, Addr>> {
     let state = req.state();
     state.raft.client_read().await.to_api_result(&req).await?;
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     state.store_tx.send(APIStoreReq::GetNodes(tx)).await?;
-    let nodes = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let nodes = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
     Ok(nodes)
 }
 
@@ -71,13 +75,15 @@ async fn add_node(mut req: APIRequest) -> APIResult<NodeId> {
 
     // 2. ensure we don't add the node twice if it is already there
     // we need to make sure we don't hold on to the state machine lock any further here
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     state
         .store_tx
         .send(APIStoreReq::GetNodeId(addr.clone(), tx))
         .await?;
 
-    let maybe_existing_node_id = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let maybe_existing_node_id = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
     if let Some(existing_node_id) = maybe_existing_node_id {
         Ok(existing_node_id)
     } else {
@@ -110,12 +116,14 @@ async fn add_node(mut req: APIRequest) -> APIResult<NodeId> {
 async fn remove_node(req: APIRequest) -> APIResult<()> {
     let node_id = req.param("node_id")?.parse::<NodeId>()?;
     // make sure the node is not a learner or a voter
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     req.state()
         .store_tx
         .send(APIStoreReq::GetLastMembership(tx))
         .await?;
-    let membership = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let membership = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
     if membership.contains(&node_id) {
         return Err(APIError::HTTP {
             status: StatusCode::Conflict,
@@ -147,12 +155,14 @@ async fn add_learner(req: APIRequest) -> APIResult<Option<LogId>> {
 
     // 2. check that the node has already been added
     // we need to make sure we don't hold on to the state machine lock any further here
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     state
         .store_tx
         .send(APIStoreReq::GetNode(node_id, tx))
         .await?;
-    let node_addr = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let node_addr = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
     if node_addr.is_none() {
         return Err(APIError::HTTP {
             status: StatusCode::NotFound,
@@ -174,14 +184,15 @@ async fn add_learner(req: APIRequest) -> APIResult<Option<LogId>> {
 ///
 async fn remove_learner(req: APIRequest) -> APIResult<()> {
     let node_id = req.param("node_id")?.parse::<NodeId>()?;
+    debug!(
+        "[API {} {}] Removing learner {node_id}",
+        req.method(),
+        req.url().path()
+    );
     let state = req.state();
     // remove the node as learner
-    state
-        .raft
-        .remove_learner(node_id)
-        .await
-        .to_api_result(&req)
-        .await
+    let result = state.raft.remove_learner(node_id).await;
+    result.to_api_result(&req).await
 }
 
 /// Changes specified learners to members, or remove members.
@@ -190,12 +201,14 @@ async fn promote_voter(req: APIRequest) -> APIResult<Option<NodeId>> {
     let state = req.state();
     // we introduce a new scope here to release the lock on the state machine
     // not releasing it can lead to dead-locks, if executed on the leader (as the store is shared between the API and the raft engine)
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     state
         .store_tx
         .send(APIStoreReq::GetLastMembership(tx))
         .await?;
-    let mut membership = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let mut membership = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
 
     let value = if membership.insert(node_id) {
         // only update state if not already in the membership config
@@ -218,12 +231,14 @@ async fn demote_voter(req: APIRequest) -> APIResult<Option<NodeId>> {
     let node_id: NodeId = req.param("node_id")?.parse::<NodeId>()?;
     let state = req.state();
     // scoping here to not hold the state machine locked for too long
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     state
         .store_tx
         .send(APIStoreReq::GetLastMembership(tx))
         .await?;
-    let mut membership = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let mut membership = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
     let value = if membership.remove(&node_id) {
         req.state()
             .raft

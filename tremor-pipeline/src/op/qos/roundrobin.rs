@@ -96,7 +96,7 @@ if let Some(map) = &node.config {
 impl Operator for RoundRobin {
     fn on_event(
         &mut self,
-        uid: OperatorId,
+        uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -126,7 +126,7 @@ impl Operator for RoundRobin {
     }
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -147,7 +147,7 @@ impl Operator for RoundRobin {
         true
     }
 
-    fn on_contraflow(&mut self, uid: OperatorId, insight: &mut Event) {
+    fn on_contraflow(&mut self, uid: OperatorUId, insight: &mut Event) {
         let RoundRobin {
             ref mut outputs, ..
         } = *self;
@@ -182,13 +182,13 @@ impl Operator for RoundRobin {
 
 #[cfg(test)]
 mod test {
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
 
     use super::*;
 
     #[test]
     fn multi_output_block() {
-        let uid = OperatorId::new(0);
+        let uid = OperatorUId::new(0);
         let mut op: RoundRobin = Config {
             outputs: vec!["out".into(), "out2".into()],
         }

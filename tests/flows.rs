@@ -17,6 +17,7 @@ use std::time::Duration;
 use tremor_common::file;
 use tremor_runtime::{
     errors::*,
+    ids::{AppId, FlowInstanceId},
     system::{Runtime, ShutdownMode, WorldConfig},
 };
 use tremor_script::{deploy::Deploy, module::Manager};
@@ -52,10 +53,11 @@ macro_rules! test_cases {
                             let config = WorldConfig{
                                 debug_connectors: true,
                             };
-                            let (runtime, h) = Runtime::start(config).await?;
+                            let (runtime, h) = Runtime::start(openraft::NodeId::default(), config).await?;
+                            let app_id = AppId::default();
                             for flow in deployable.iter_flows() {
-                                let flow_alias = flow.instance_alias.to_string().into();
-                                runtime.deploy_flow(flow).await?;
+                                let flow_alias = FlowInstanceId::new(app_id.clone(), &flow.instance_alias);
+                                runtime.deploy_flow(app_id.clone(), flow).await?;
                                 runtime.start_flow(flow_alias).await?;
                             }
                             runtime.stop(ShutdownMode::Forceful).await?;

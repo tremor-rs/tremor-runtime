@@ -47,7 +47,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{sync::oneshot, task::JoinHandle};
-use tremor_common::ids::Id;
+use tremor_common::uids::UId;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]

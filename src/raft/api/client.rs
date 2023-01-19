@@ -14,13 +14,11 @@
 
 //! Tremor Rest API Client
 use crate::errors::Result;
+use crate::ids::{AppId, FlowDefinitionId, FlowInstanceId};
 use crate::raft::{
     api::apps::AppState,
     node::Addr,
-    store::{
-        AppId, FlowId, InstanceId, TremorInstanceState, TremorResponse, TremorSet, TremorStart,
-    },
-    NodeId,
+    store::{TremorInstanceState, TremorResponse, TremorSet, TremorStart},
 };
 use halfbrown::HashMap;
 use openraft::{LogId, RaftMetrics};
@@ -73,7 +71,7 @@ impl Tremor {
     {
         let target_url = {
             let target_addr = &self.endpoint;
-            format!("http://{}/v1/{}", target_addr, uri)
+            format!("http://{target_addr}/v1/{uri}")
         };
         debug!(">>> client send {method} request to {target_url}");
         let mut request = self.inner.request(method, &target_url);
@@ -185,19 +183,18 @@ impl Tremor {
     /// if the api call fails
     pub async fn start(
         &self,
-        app: &AppId,
-        flow: &FlowId,
-        instance: &InstanceId,
+        flow: &FlowDefinitionId,
+        instance: &FlowInstanceId,
         config: std::collections::HashMap<String, OwnedValue>,
         running: bool,
-    ) -> ClientResult<InstanceId> {
+    ) -> ClientResult<FlowInstanceId> {
         let req = TremorStart {
             instance: instance.clone(),
             config,
             running,
         };
-        self.api_req::<TremorStart, InstanceId>(
-            &format!("api/apps/{app}/flows/{flow}"),
+        self.api_req::<TremorStart, FlowInstanceId>(
+            &format!("api/apps/{}/flows/{flow}", instance.app_id()),
             Method::POST,
             Some(&req),
         )
@@ -215,12 +212,15 @@ impl Tremor {
     /// if the api call fails
     pub async fn change_instance_state(
         &self,
-        app: &AppId,
-        instance: &InstanceId,
+        instance: &FlowInstanceId,
         state: TremorInstanceState,
-    ) -> ClientResult<InstanceId> {
+    ) -> ClientResult<FlowInstanceId> {
         self.api_req(
-            &format!("api/apps/{app}/instances/{instance}"),
+            &format!(
+                "api/apps/{}/instances/{}",
+                instance.app_id(),
+                instance.alias()
+            ),
             Method::POST,
             Some(&state),
         )
@@ -236,13 +236,13 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn stop_instance(
-        &self,
-        app: &AppId,
-        instance: &InstanceId,
-    ) -> ClientResult<InstanceId> {
+    pub async fn stop_instance(&self, instance: &FlowInstanceId) -> ClientResult<FlowInstanceId> {
         self.api_req(
-            &format!("api/apps/{app}/instances/{instance}"),
+            &format!(
+                "api/apps/{}/instances/{}",
+                instance.app_id(),
+                instance.alias()
+            ),
             Method::DELETE,
             None::<&()>,
         )
@@ -268,7 +268,7 @@ impl Tremor {
     /// Make the given node known to the cluster and assign it a unique `node_id`
     /// # Errors
     /// If the api call fails
-    pub async fn add_node(&self, addr: &Addr) -> ClientResult<NodeId> {
+    pub async fn add_node(&self, addr: &Addr) -> ClientResult<openraft::NodeId> {
         self.api_req("cluster/nodes", Method::POST, Some(addr))
             .await
     }
@@ -278,7 +278,7 @@ impl Tremor {
     /// After this call a node is not reachable anymore for all nodes still participating in the cluster
     /// # Errors
     /// if the api call fails
-    pub async fn remove_node(&self, node_id: &NodeId) -> ClientResult<()> {
+    pub async fn remove_node(&self, node_id: &openraft::NodeId) -> ClientResult<()> {
         self.api_req(
             &format!("cluster/nodes/{node_id}"),
             Method::DELETE,
@@ -291,7 +291,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn get_nodes(&self) -> ClientResult<HashMap<NodeId, Addr>> {
+    pub async fn get_nodes(&self) -> ClientResult<HashMap<openraft::NodeId, Addr>> {
         self.api_req("cluster/nodes", Method::GET, None::<&()>)
             .await
     }
@@ -303,7 +303,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails e.g. because the node is already a learner
-    pub async fn add_learner(&self, node_id: &NodeId) -> ClientResult<Option<LogId>> {
+    pub async fn add_learner(&self, node_id: &openraft::NodeId) -> ClientResult<Option<LogId>> {
         self.api_req(
             &format!("cluster/learners/{node_id}"),
             Method::PUT,
@@ -318,8 +318,8 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn remove_learner(&self, id: &NodeId) -> ClientResult<NodeId> {
-        self.api_req::<(), NodeId>(&format!("cluster/learners/{id}"), Method::DELETE, None)
+    pub async fn remove_learner(&self, id: &openraft::NodeId) -> ClientResult<()> {
+        self.api_req::<(), ()>(&format!("cluster/learners/{id}"), Method::DELETE, None)
             .await
     }
 
@@ -330,9 +330,16 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn promote_voter(&self, id: &NodeId) -> ClientResult<Option<NodeId>> {
-        self.api_req::<(), Option<NodeId>>(&format!("cluster/voters/{id}"), Method::PUT, None)
-            .await
+    pub async fn promote_voter(
+        &self,
+        id: &openraft::NodeId,
+    ) -> ClientResult<Option<openraft::NodeId>> {
+        self.api_req::<(), Option<openraft::NodeId>>(
+            &format!("cluster/voters/{id}"),
+            Method::PUT,
+            None,
+        )
+        .await
     }
 
     /// Demote node with `node_id` from voter back to learner.
@@ -342,9 +349,16 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn demote_voter(&self, id: &NodeId) -> ClientResult<Option<NodeId>> {
-        self.api_req::<(), Option<NodeId>>(&format!("cluster/voters/{id}"), Method::DELETE, None)
-            .await
+    pub async fn demote_voter(
+        &self,
+        id: &openraft::NodeId,
+    ) -> ClientResult<Option<openraft::NodeId>> {
+        self.api_req::<(), Option<openraft::NodeId>>(
+            &format!("cluster/voters/{id}"),
+            Method::DELETE,
+            None,
+        )
+        .await
     }
 
     /// Get the metrics about the cluster.

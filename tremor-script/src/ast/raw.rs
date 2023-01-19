@@ -16,7 +16,7 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use halfbrown::HashMap;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use crate::ast::optimizer::Optimizer;

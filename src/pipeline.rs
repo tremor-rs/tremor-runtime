@@ -18,15 +18,15 @@ use crate::{
 use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
     errors::{pipe_send_e, Result},
+    ids::FlowInstanceId,
     instance::State,
     primerge::PriorityMerge,
-    system::flow,
 };
 use futures::StreamExt;
 use std::{fmt, time::Duration};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
-use tremor_common::{ids::OperatorIdGen, ports::Port, time::nanotime};
+use tremor_common::{ports::Port, time::nanotime, uids::OperatorUIdGen};
 use tremor_pipeline::{
     errors::ErrorKind as PipelineErrorKind, CbAction, Event, ExecutableGraph, SignalKind,
 };
@@ -39,19 +39,23 @@ type EventSet = Vec<(Port<'static>, Event)>;
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
 pub(crate) struct Alias {
-    flow_alias: flow::Alias,
+    flow_alias: FlowInstanceId,
     pipeline_alias: String,
 }
 
 impl Alias {
     pub(crate) fn new(
-        flow_alias: impl Into<flow::Alias>,
+        flow_alias: impl Into<FlowInstanceId>,
         pipeline_alias: impl Into<String>,
     ) -> Self {
         Self {
             flow_alias: flow_alias.into(),
             pipeline_alias: pipeline_alias.into(),
         }
+    }
+
+    pub(crate) fn flow_alias(&self) -> &FlowInstanceId {
+        &self.flow_alias
     }
 
     pub(crate) fn pipeline_alias(&self) -> &str {
@@ -61,7 +65,7 @@ impl Alias {
 
 impl std::fmt::Display for Alias {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.flow_alias, self.pipeline_alias)
+        write!(f, "{}::{}", self.flow_alias(), self.pipeline_alias())
     }
 }
 
@@ -175,9 +179,10 @@ impl TryFrom<connectors::Addr> for OutputTarget {
 }
 
 pub(crate) fn spawn(
+    node_id: openraft::NodeId,
     pipeline_alias: Alias,
     config: &tremor_pipeline::query::Query,
-    operator_id_gen: &mut OperatorIdGen,
+    operator_id_gen: &mut OperatorUIdGen,
 ) -> Result<Addr> {
     let qsize = qsize();
     let mut pipeline = config.to_executable_graph(operator_id_gen)?;
@@ -208,6 +213,7 @@ pub(crate) fn spawn(
     let addr = Addr::new(tx, cf_tx, mgmt_tx, pipeline_alias.clone());
 
     task::spawn(pipeline_task(
+        node_id,
         pipeline_alias,
         pipeline,
         rx,
@@ -503,31 +509,25 @@ fn maybe_send(r: Result<()>) {
 ///
 /// currently only used for printing
 struct PipelineContext {
+    node_id: openraft::NodeId,
     alias: Alias,
+}
+
+impl PipelineContext {
+    fn new(node_id: openraft::NodeId, alias: Alias) -> Self {
+        Self { node_id, alias }
+    }
 }
 
 impl std::fmt::Display for PipelineContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[Pipeline::{}]", &self.alias)
-    }
-}
-
-impl From<&Alias> for PipelineContext {
-    fn from(alias: &Alias) -> Self {
-        Self {
-            alias: alias.clone(),
-        }
-    }
-}
-
-impl From<Alias> for PipelineContext {
-    fn from(alias: Alias) -> Self {
-        Self { alias }
+        write!(f, "[Node:{}][Pipeline::{}]", self.node_id, &self.alias)
     }
 }
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn pipeline_task(
+    node_id: openraft::NodeId,
     id: Alias,
     mut pipeline: ExecutableGraph,
     rx: Receiver<Box<Msg>>,
@@ -537,7 +537,7 @@ pub(crate) async fn pipeline_task(
 ) -> Result<()> {
     pipeline.id = id.to_string();
 
-    let ctx = PipelineContext::from(&id);
+    let ctx = PipelineContext::new(node_id, id.clone());
 
     let mut dests: Dests = halfbrown::HashMap::new();
     let mut inputs: Inputs = halfbrown::HashMap::new();
@@ -717,9 +717,9 @@ mod tests {
     };
     use std::time::Instant;
     use tremor_common::{
-        ids::Id as _,
-        ids::SourceId,
         ports::{IN, OUT},
+        uids::SourceUId,
+        uids::UId as _,
     };
     use tremor_pipeline::{EventId, OpMeta};
     use tremor_script::{aggr_registry, lexer::Location, NodeMeta, FN_REGISTRY};
@@ -728,23 +728,26 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn report() -> Result<()> {
         let _ = env_logger::try_init();
-        let mut operator_id_gen = OperatorIdGen::new();
+        let mut operator_id_gen = OperatorUIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
         let query =
             tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(
-            Alias::new("report", "test-pipe1"),
+            openraft::NodeId::default(),
+            Alias::new(FlowInstanceId::new("app", "report"), "test-pipe1"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr2 = spawn(
-            Alias::new("report", "test-pipe2"),
+            openraft::NodeId::default(),
+            Alias::new(FlowInstanceId::new("app", "report"), "test-pipe2"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr3 = spawn(
-            Alias::new("report", "test-pipe3"),
+            openraft::NodeId::default(),
+            Alias::new(FlowInstanceId::new("app", "report"), "test-pipe3"),
             &query,
             &mut operator_id_gen,
         )?;
@@ -834,13 +837,18 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn pipeline_spawn() -> Result<()> {
         let _ = env_logger::try_init();
-        let mut operator_id_gen = OperatorIdGen::new();
+        let mut operator_id_gen = OperatorUIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
-        let pipeline_id = Alias::new("flow", "test-pipe");
+        let pipeline_id = Alias::new(FlowInstanceId::new("app", "flow"), "test-pipe");
         let query =
             tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
-        let addr = spawn(pipeline_id, &query, &mut operator_id_gen)?;
+        let addr = spawn(
+            openraft::NodeId::default(),
+            pipeline_id,
+            &query,
+            &mut operator_id_gen,
+        )?;
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
@@ -924,7 +932,7 @@ mod tests {
         }
 
         // send a signal
-        addr.send(Box::new(Msg::Signal(Event::signal_drain(SourceId::new(
+        addr.send(Box::new(Msg::Signal(Event::signal_drain(SourceUId::new(
             42,
         )))))
         .await?;

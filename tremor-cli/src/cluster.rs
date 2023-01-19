@@ -16,22 +16,23 @@ use crate::{
     cli::{AppsCommands, Cluster, ClusterCommand},
     errors::{Error, Result},
 };
-use async_std::{io::ReadExt, stream::StreamExt, task};
-
-use halfbrown::HashMap;
+use futures::StreamExt;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::low_level::signal_name;
-use signal_hook_async_std::Signals;
+use signal_hook_tokio::Signals;
 use simd_json::OwnedValue;
+use std::collections::HashMap;
 use std::path::Path;
+use tokio::{io::AsyncReadExt, task};
 use tremor_common::asy::file;
 use tremor_runtime::{
+    ids::{AppId, FlowDefinitionId, FlowInstanceId},
     raft::{
         api::client::{print_metrics, Tremor as Client},
         archive,
         node::{Addr, ClusterNodeKillSwitch, Node},
         remove_node,
-        store::{AppId, FlowId, InstanceId, TremorInstanceState},
+        store::TremorInstanceState,
         ClusterError, NodeId,
     },
     system::ShutdownMode,
@@ -41,7 +42,7 @@ use tremor_runtime::{
 /// variable `TREMOR_API_ADDRESS`
 fn get_api(input: Option<String>) -> Result<String> {
     input.map_or_else(
-        || Ok(std::env::var("TREMOR_API_ADDRESS").map_err(|e| format!("{}", e))?),
+        || Ok(std::env::var("TREMOR_API_ADDRESS").map_err(|e| e.to_string())?),
         Ok,
     )
 }
@@ -144,7 +145,7 @@ impl Cluster {
                 }
                 info!("Tremor stopped.");
                 signal_handle.close();
-                signal_handler_task.cancel().await;
+                signal_handler_task.abort();
             }
             // target/debug/tremor cluster start  --db-dir temp/test-db2 --api 127.0.0.1:8002 --rpc 127.0.0.1:9002 --join 127.0.0.1:8001
             // target/debug/tremor cluster start --db-dir temp/test-db3 --api 127.0.0.1:8003 --rpc 127.0.0.1:9003 --join 127.0.0.1:8001
@@ -198,7 +199,7 @@ impl Cluster {
                     error!("Error: {e}");
                 }
                 signal_handle.close();
-                signal_handler_task.cancel().await;
+                signal_handler_task.abort();
             }
             ClusterCommand::Remove { node, api } => {
                 let api_addr = get_api(api)?;
@@ -288,65 +289,64 @@ impl AppsCommands {
                 } else {
                     HashMap::default()
                 };
-                let flow = flow.map_or_else(|| FlowId("main".to_string()), FlowId);
+                let flow =
+                    flow.map_or_else(|| FlowDefinitionId("main".to_string()), FlowDefinitionId);
                 let app_id = AppId(app);
-                let instance_id = InstanceId(instance);
+                let instance_id = FlowInstanceId::new(app_id, instance);
                 let running = !paused;
                 let res = client
-                    .start(&app_id, &flow, &instance_id, config, running)
+                    .start(&flow, &instance_id, config, running)
                     .await
                     .map_err(|e| format!("error: {e}"));
 
                 if let Err(e) = res {
-                    eprintln!("Instance `{app_id}/{instance_id}` failed to start: {e:?}");
+                    eprintln!("Instance `{instance_id}` failed to start: {e:?}");
                 } else {
-                    println!("Instance `{app_id}/{instance_id}` successfully started",);
+                    println!("Instance `{instance_id}` successfully started",);
                 }
             }
 
             AppsCommands::Stop { app, instance } => {
                 let client = Client::new(api)?;
-                let app_id = AppId(app);
-                let instance_id = InstanceId(instance);
+                let instance_id = FlowInstanceId::new(app, instance);
                 let res = client
-                    .stop_instance(&app_id, &instance_id)
+                    .stop_instance(&instance_id)
                     .await
                     .map_err(|e| format!("error: {e}"));
                 if let Err(e) = res {
-                    eprintln!("Instance `{app_id}/{instance_id}` failed to stop: {e:?}");
+                    eprintln!("Instance `{instance_id}` failed to stop: {e:?}");
                 } else {
-                    println!("Instance `{app_id}/{instance_id}` stopped",);
+                    println!("Instance `{instance_id}` stopped",);
                 }
             }
             AppsCommands::Pause { app, instance } => {
                 let client = Client::new(api)?;
                 let app_id = AppId(app);
-                let instance_id = InstanceId(instance);
+                let instance_id = FlowInstanceId::new(app_id, instance);
                 let res = client
-                    .change_instance_state(&app_id, &instance_id, TremorInstanceState::Pause)
+                    .change_instance_state(&instance_id, TremorInstanceState::Pause)
                     .await
                     .map_err(|e| format!("error: {e}"));
 
                 if let Err(e) = res {
-                    eprintln!("Instance `{app_id}/{instance_id}` failed to pause: {e:?}");
+                    eprintln!("Instance `{instance_id}` failed to pause: {e:?}");
                 } else {
-                    println!("Instance `{app_id}/{instance_id}` successfully paused",);
+                    println!("Instance `{instance_id}` successfully paused",);
                 }
             }
             AppsCommands::Resume { app, instance } => {
                 let client = Client::new(api)?;
-                let app_id = AppId(app);
-                let instance_id = InstanceId(instance);
+                let instance_id = FlowInstanceId::new(app, instance);
 
                 let res = client
-                    .change_instance_state(&app_id, &instance_id, TremorInstanceState::Resume)
+                    .change_instance_state(&instance_id, TremorInstanceState::Resume)
                     .await
                     .map_err(|e| format!("error: {e}"));
 
                 if let Err(e) = res {
-                    eprintln!("Instance `{app_id}/{instance_id}` failed to resume: {e:?}");
+                    eprintln!("Instance `{instance_id}` failed to resume: {e:?}");
                 } else {
-                    println!("Instance `{app_id}/{instance_id}` successfully resumed",);
+                    println!("Instance `{instance_id}` successfully resumed",);
                 }
             }
         }

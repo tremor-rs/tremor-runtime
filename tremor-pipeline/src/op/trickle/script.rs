@@ -39,7 +39,7 @@ impl Operator for Script {
     }
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         port: &Port<'static>,
         state: &mut Value<'static>,
         mut event: Event,

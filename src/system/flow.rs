@@ -19,6 +19,7 @@ use crate::{
 use crate::{
     connectors::{self, ConnectorResult, Known},
     errors::{Error, Kind as ErrorKind, Result},
+    ids::FlowInstanceId,
     instance::{IntendedState, State},
     log_error,
     pipeline::{self, InputTarget},
@@ -30,54 +31,13 @@ use hashbrown::HashMap;
 use std::{collections::HashSet, ops::ControlFlow, pin::Pin, time::Duration};
 use tokio::{task, time::timeout};
 use tokio_stream::wrappers::ReceiverStream;
-use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
+use tremor_common::uids::{ConnectorUIdGen, OperatorUIdGen};
 use tremor_script::{
-    ast::{self, ConnectStmt, DeployFlow, Helper},
+    ast::{self, ConnectStmt, Helper},
     errors::{error_generic, not_defined_err},
 };
 
 use super::ShutdownMode;
-
-/// unique identifier of a flow instance within a tremor instance
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct Alias(String); // FIXME: we need to add the app_id to this
-
-impl Alias {
-    /// construct a new flow if from some stringy thingy
-    pub fn new(alias: impl Into<String>) -> Self {
-        Self(alias.into())
-    }
-
-    /// reference this id as a stringy thing again
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl From<&DeployFlow<'_>> for Alias {
-    fn from(f: &DeployFlow) -> Self {
-        Self(f.instance_alias.to_string())
-    }
-}
-
-impl From<&str> for Alias {
-    fn from(e: &str) -> Self {
-        Self(e.to_string())
-    }
-}
-
-impl From<String> for Alias {
-    fn from(alias: String) -> Self {
-        Self(alias)
-    }
-}
-
-impl std::fmt::Display for Alias {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 #[derive(Debug)]
 /// Control Plane message accepted by each binding control plane handler
@@ -103,7 +63,7 @@ type Addr = Sender<Msg>;
 /// A deployed Flow instance
 #[derive(Debug, Clone)]
 pub struct Flow {
-    alias: Alias,
+    alias: FlowInstanceId,
     addr: Addr,
 }
 
@@ -111,7 +71,7 @@ pub struct Flow {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StatusReport {
     /// the id of the instance this report describes
-    pub alias: Alias,
+    pub alias: FlowInstanceId,
     /// the current state
     pub status: State,
     /// the created connectors
@@ -119,7 +79,7 @@ pub struct StatusReport {
 }
 
 impl Flow {
-    pub(crate) fn id(&self) -> &Alias {
+    pub(crate) fn id(&self) -> &FlowInstanceId {
         &self.alias
     }
 
@@ -207,16 +167,17 @@ impl Flow {
     /// If any of the operations of spawning connectors, linking pipelines and connectors or spawning the flow instance
     /// fails.
     pub(crate) async fn deploy(
+        node_id: openraft::NodeId,
+        flow_id: FlowInstanceId,
         flow: ast::DeployFlow<'static>,
-        operator_id_gen: &mut OperatorIdGen,
-        connector_id_gen: &mut ConnectorIdGen,
+        operator_id_gen: &mut OperatorUIdGen,
+        connector_id_gen: &mut ConnectorUIdGen,
         known_connectors: &Known,
         kill_switch: &KillSwitch,
         // FIXME: add AppContext
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
         let mut connectors = HashMap::new();
-        let flow_alias = Alias::from(&flow);
 
         for create in &flow.defn.creates {
             let alias: &str = &create.instance_alias;
@@ -224,7 +185,7 @@ impl Flow {
                 ast::CreateTargetDefinition::Connector(defn) => {
                     let mut defn = defn.clone();
                     defn.params.ingest_creational_with(&create.with)?;
-                    let connector_alias = connectors::Alias::new(flow_alias.clone(), alias);
+                    let connector_alias = connectors::Alias::new(flow_id.clone(), alias);
                     let config = crate::Connector::from_defn(&connector_alias, &defn)?;
                     let builder =
                         known_connectors
@@ -235,6 +196,7 @@ impl Flow {
                     connectors.insert(
                         alias.to_string(),
                         connectors::spawn(
+                            node_id,
                             &connector_alias,
                             connector_id_gen,
                             builder.as_ref(),
@@ -252,11 +214,12 @@ impl Flow {
 
                         defn.to_query(&create.with, &mut helper)?
                     };
-                    let pipeline_alias = pipeline::Alias::new(flow_alias.clone(), alias);
+                    let pipeline_alias = pipeline::Alias::new(flow_id.clone(), alias);
                     let pipeline = tremor_pipeline::query::Query(
                         tremor_script::query::Query::from_query(query),
                     );
-                    let addr = pipeline::spawn(pipeline_alias, &pipeline, operator_id_gen)?;
+                    let addr =
+                        pipeline::spawn(node_id, pipeline_alias, &pipeline, operator_id_gen)?;
                     pipelines.insert(alias.to_string(), addr);
                 }
             }
@@ -268,14 +231,14 @@ impl Flow {
         }
 
         let addr = spawn_task(
-            flow_alias.clone(),
+            flow_id.clone(),
             pipelines,
             &connectors,
             &flow.defn.connections,
         );
 
         let this = Flow {
-            alias: flow_alias.clone(),
+            alias: flow_id.clone(),
             addr,
         };
 
@@ -422,7 +385,7 @@ enum MsgWrapper {
 }
 
 struct RunningFlow {
-    id: Alias,
+    id: FlowInstanceId,
     state: State,
     expected_starts: usize,
     expected_drains: usize,
@@ -441,7 +404,7 @@ struct RunningFlow {
 
 impl RunningFlow {
     fn new(
-        id: Alias,
+        id: FlowInstanceId,
         pipelines: HashMap<String, pipeline::Addr>,
         connectors: &HashMap<String, connectors::Addr>,
         links: &[ConnectStmt],
@@ -852,6 +815,7 @@ impl RunningFlow {
                     error!("{prefix} Error stopping pipeline {pipeline:?}: {e}");
                 }
             }
+            self.change_state(State::Stopped).await;
             // nothing to do, we can break right away
             Ok(ControlFlow::Break(()))
         }
@@ -939,7 +903,7 @@ impl RunningFlow {
 /// task handling flow instance control plane
 #[allow(clippy::too_many_lines)]
 fn spawn_task(
-    id: Alias,
+    id: FlowInstanceId,
     pipelines: HashMap<String, pipeline::Addr>,
     connectors: &HashMap<String, connectors::Addr>,
     links: &[ConnectStmt],
@@ -953,9 +917,12 @@ fn spawn_task(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{connectors::ConnectorBuilder, instance, qsize};
-
-    use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
+    use crate::{
+        connectors::ConnectorBuilder,
+        ids::{FlowInstanceId, BOOTSTRAP_NODE_ID},
+        instance, qsize,
+    };
+    use tremor_common::uids::{ConnectorUIdGen, OperatorUIdGen};
     use tremor_script::{ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
     use tremor_value::literal;
 
@@ -1072,8 +1039,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn flow_spawn() -> Result<()> {
-        let mut operator_id_gen = OperatorIdGen::default();
-        let mut connector_id_gen = ConnectorIdGen::default();
+        let mut operator_id_gen = OperatorUIdGen::default();
+        let mut connector_id_gen = ConnectorUIdGen::default();
         let aggr_reg = tremor_script::aggr_registry();
         let src = r#"
         define flow test
@@ -1114,6 +1081,8 @@ mod tests {
         let builder = connector::FakeBuilder { tx: connector_tx };
         known_connectors.insert(builder.connector_type(), Box::new(builder));
         let flow = Flow::deploy(
+            BOOTSTRAP_NODE_ID,
+            FlowInstanceId::new("app", "test"),
             deploy,
             &mut operator_id_gen,
             &mut connector_id_gen,
@@ -1127,11 +1096,14 @@ mod tests {
         start_rx.recv().await.ok_or_else(empty_error)??;
 
         let connector = flow.get_connector("foo".to_string()).await?;
-        assert_eq!(String::from("test::foo"), connector.alias.to_string());
+        assert_eq!(String::from("app/test::foo"), connector.alias.to_string());
 
         let connectors = flow.get_connectors().await?;
         assert_eq!(1, connectors.len());
-        assert_eq!(String::from("test::foo"), connectors[0].alias.to_string());
+        assert_eq!(
+            String::from("app/test::foo"),
+            connectors[0].alias.to_string()
+        );
 
         // assert the flow has started and events are flowing
         let event = connector_rx.recv().await.ok_or("empty")?;
@@ -1149,7 +1121,7 @@ mod tests {
         assert_eq!(instance::State::Running, report.status);
         assert_eq!(1, report.connectors.len());
 
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         flow.pause(tx.clone()).await?;
         rx.recv().await.ok_or_else(empty_error)??;
         let report = flow.report_status().await?;

@@ -89,7 +89,7 @@ where
         aggr_reg: &AggrRegistry,
     ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg, aggr_reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
@@ -102,7 +102,7 @@ where
 
     pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg, aggr_reg)

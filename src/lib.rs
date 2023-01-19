@@ -77,6 +77,9 @@ pub mod instance;
 
 pub mod raft;
 
+/// Common Identifiers for entities within the Runtime
+pub mod ids;
+
 /// Metrics instance name
 pub static mut INSTANCE: &str = "tremor";
 
@@ -95,7 +98,7 @@ pub type OpConfig = tremor_value::Value<'static>;
 pub(crate) mod channel;
 
 /// Default Q Size
-const QSIZE: AtomicUsize = AtomicUsize::new(128);
+static QSIZE: AtomicUsize = AtomicUsize::new(128);
 
 pub(crate) fn qsize() -> usize {
     QSIZE.load(std::sync::atomic::Ordering::Relaxed)
@@ -134,12 +137,15 @@ macro_rules! log_error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::system::{ShutdownMode, WorldConfig};
+    use crate::{
+        ids::BOOTSTRAP_NODE_ID,
+        system::{ShutdownMode, WorldConfig},
+    };
     use std::io::Write;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_load_troy_file() -> Result<()> {
-        let (world, handle) = Runtime::start(WorldConfig::default()).await?;
+        let (world, handle) = Runtime::start(BOOTSTRAP_NODE_ID, WorldConfig::default()).await?;
         let troy_file = tempfile::NamedTempFile::new()?;
         troy_file.as_file().write_all(
             r#"

@@ -181,14 +181,14 @@ pub fn serve(host: String, world: &Runtime) -> JoinHandle<Result<()>> {
         .at("/flows")
         .get(|r| handle_api_request(r, flow::list_flows));
     v1_app
-        .at("/flows/:id")
+        .at("/flows/:app_id/:id")
         .get(|r| handle_api_request(r, flow::get_flow))
         .patch(|r| handle_api_request(r, flow::patch_flow_status));
     v1_app
-        .at("/flows/:id/connectors")
+        .at("/flows/:app_id/:id/connectors")
         .get(|r| handle_api_request(r, flow::get_flow_connectors));
     v1_app
-        .at("/flows/:id/connectors/:connector")
+        .at("/flows/:app_id/:id/connectors/:connector")
         .get(|r| handle_api_request(r, flow::get_flow_connector_status))
         .patch(|r| handle_api_request(r, flow::patch_flow_connector_status));
 
@@ -216,6 +216,7 @@ mod tests {
     use tokio::net::TcpListener;
     use tremor_runtime::{
         errors::Result as RuntimeResult,
+        ids::AppId,
         instance::State as InstanceState,
         system::{ShutdownMode, WorldConfig},
     };
@@ -233,7 +234,8 @@ mod tests {
         let config = WorldConfig {
             debug_connectors: true,
         };
-        let (world, world_handle) = Runtime::start(config).await?;
+        let (world, world_handle) =
+            Runtime::start(tremor_runtime::raft::NodeId::default(), config).await?;
 
         let free_port = {
             let listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -273,8 +275,9 @@ mod tests {
                 _other => None,
             })
             .expect("No deploy in the given troy file");
-        world.deploy_flow(&deploy).await?;
-        world.start_flow("api_test".into()).await?;
+        let app_id = AppId::default();
+        let flow_id = world.deploy_flow(app_id, &deploy).await?;
+        world.start_flow(flow_id).await?;
 
         // check the status endpoint
         let start = Instant::now();
@@ -329,7 +332,7 @@ mod tests {
             .body_json::<Vec<ApiFlowStatusReport>>()
             .await?;
         assert_eq!(1, body.len());
-        assert_eq!("api_test", body[0].alias.as_str());
+        assert_eq!("default/api_test", body[0].alias.to_string().as_str());
         assert_eq!(InstanceState::Running, body[0].status);
         assert_eq!(1, body[0].connectors.len());
         assert_eq!(String::from("my_null"), body[0].connectors[0]);
@@ -339,19 +342,19 @@ mod tests {
         assert_eq!(StatusCode::NotFound, res.status());
 
         let body = client
-            .get("/v1/flows/api_test")
+            .get("/v1/flows/default/api_test")
             .await?
             .body_json::<ApiFlowStatusReport>()
             .await?;
 
-        assert_eq!("api_test", body.alias.as_str());
+        assert_eq!("default/api_test", body.alias.to_string().as_str());
         assert_eq!(InstanceState::Running, body.status);
         assert_eq!(1, body.connectors.len());
         assert_eq!(String::from("my_null"), body.connectors[0]);
 
         // patch flow status
         let body = client
-            .patch("/v1/flows/api_test")
+            .patch("/v1/flows/default/api_test")
             .body_json(&PatchStatus {
                 status: InstanceState::Paused,
             })?
@@ -359,14 +362,14 @@ mod tests {
             .body_json::<ApiFlowStatusReport>()
             .await?;
 
-        assert_eq!("api_test", body.alias.as_str());
+        assert_eq!("default/api_test", body.alias.to_string().as_str());
         assert_eq!(InstanceState::Paused, body.status);
         assert_eq!(1, body.connectors.len());
         assert_eq!(String::from("my_null"), body.connectors[0]);
 
         // invalid patch
         let mut res = client
-            .patch("/v1/flows/api_test")
+            .patch("/v1/flows/default/api_test")
             .body_json(&PatchStatus {
                 status: InstanceState::Failed,
             })?
@@ -376,7 +379,7 @@ mod tests {
 
         // resume
         let body = client
-            .patch("/v1/flows/api_test")
+            .patch("/v1/flows/default/api_test")
             .body_json(&PatchStatus {
                 status: InstanceState::Running,
             })?
@@ -384,14 +387,14 @@ mod tests {
             .body_json::<ApiFlowStatusReport>()
             .await?;
 
-        assert_eq!("api_test", body.alias.as_str());
+        assert_eq!("default/api_test", body.alias.to_string().as_str());
         assert_eq!(InstanceState::Running, body.status);
         assert_eq!(1, body.connectors.len());
         assert_eq!(String::from("my_null"), body.connectors[0]);
 
         // list flow connectors
         let body = client
-            .get("/v1/flows/api_test/connectors")
+            .get("/v1/flows/default/api_test/connectors")
             .await?
             .body_json::<StaticValue>()
             .await?
@@ -423,13 +426,13 @@ mod tests {
 
         // get flow connector
         let mut res = client
-            .get("/v1/flows/api_test/connectors/i_do_not_exist")
+            .get("/v1/flows/default/api_test/connectors/i_do_not_exist")
             .await?;
         assert_eq!(StatusCode::NotFound, res.status());
         res.body_bytes().await?; //consume body
 
         let body = client
-            .get("/v1/flows/api_test/connectors/my_null")
+            .get("/v1/flows/default/api_test/connectors/my_null")
             .await?
             .body_json::<StaticValue>()
             .await?
@@ -459,7 +462,7 @@ mod tests {
 
         // patch flow connector status
         let body = client
-            .patch("/v1/flows/api_test/connectors/my_null")
+            .patch("/v1/flows/default/api_test/connectors/my_null")
             .body_json(&PatchStatus {
                 status: InstanceState::Paused,
             })?
@@ -493,7 +496,7 @@ mod tests {
 
         // invalid patch
         let mut res = client
-            .patch("/v1/flows/api_test/connectors/my_null")
+            .patch("/v1/flows/default/api_test/connectors/my_null")
             .body_json(&PatchStatus {
                 status: InstanceState::Failed,
             })?
@@ -503,7 +506,7 @@ mod tests {
 
         // resume
         let body = client
-            .patch("/v1/flows/api_test/connectors/my_null")
+            .patch("/v1/flows/default/api_test/connectors/my_null")
             .body_json(&PatchStatus {
                 status: InstanceState::Running,
             })?

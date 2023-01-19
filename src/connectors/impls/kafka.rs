@@ -14,7 +14,7 @@
 pub(crate) mod consumer;
 pub(crate) mod producer;
 
-use crate::connectors::prelude::*;
+use crate::connectors::{prelude::*, utils::metrics::make_metrics_payload};
 use beef::Cow;
 use halfbrown::HashMap;
 use rdkafka::{error::KafkaError, ClientContext, Statistics};
@@ -362,7 +362,7 @@ mod tests {
             &literal!({
                 "measurement": "kafka_consumer_stats",
                 "tags": {
-                    "connector": "fake::fake"
+                    "connector": "app/fake::fake"
                 },
                 "fields": {
                     "rx_msgs": 42,

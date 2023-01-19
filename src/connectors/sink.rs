@@ -19,11 +19,11 @@ pub(crate) mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
 
-use super::{utils::metrics::SinkReporter, CodecReq};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
 };
 use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
+use crate::connectors::{utils::metrics::SinkReporter, CodecReq};
 use crate::connectors::{Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
 use crate::errors::Result;
 use crate::pipeline;
@@ -45,8 +45,8 @@ use tokio::task;
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
 use tremor_common::time::nanotime;
 use tremor_common::{
-    ids::{SinkId, SourceId},
     ports::Port,
+    uids::{SinkUId, SourceUId},
 };
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
@@ -255,8 +255,9 @@ pub(crate) trait SinkRuntime: Send + Sync {
 /// context for the connector sink
 #[derive(Clone)]
 pub(crate) struct SinkContextInner {
+    pub(crate) node_id: openraft::NodeId,
     /// the connector unique identifier
-    pub(crate) uid: SinkId,
+    pub(crate) uid: SinkUId,
     /// the connector alias
     pub(crate) alias: Alias,
     /// the connector type
@@ -271,20 +272,22 @@ pub(crate) struct SinkContextInner {
 #[derive(Clone)]
 pub(crate) struct SinkContext(Arc<SinkContextInner>);
 impl SinkContext {
-    pub(crate) fn uid(&self) -> SinkId {
+    pub(crate) fn uid(&self) -> SinkUId {
         self.0.uid
     }
     pub(crate) fn notifier(&self) -> &ConnectionLostNotifier {
         &self.0.notifier
     }
     pub(crate) fn new(
-        uid: SinkId,
+        node_id: openraft::NodeId,
+        uid: SinkUId,
         alias: Alias,
         connector_type: ConnectorType,
         quiescence_beacon: QuiescenceBeacon,
         notifier: ConnectionLostNotifier,
     ) -> SinkContext {
         Self(Arc::new(SinkContextInner {
+            node_id,
             uid,
             alias,
             connector_type,
@@ -296,7 +299,7 @@ impl SinkContext {
 
 impl Display for SinkContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Sink::{}]", &self.0.alias)
+        write!(f, "[Node::{}][Sink::{}]", self.0.node_id, &self.0.alias)
     }
 }
 
@@ -605,9 +608,9 @@ where
     // pipelines connected to IN port
     pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     // set of source ids we received start signals from
-    starts_received: HashSet<SourceId>,
+    starts_received: HashSet<SourceUId>,
     // set of connector ids we received drain signals from
-    drains_received: HashSet<SourceId>, // TODO: use a bitset for both?
+    drains_received: HashSet<SourceUId>, // TODO: use a bitset for both?
     drain_channel: Option<Sender<Msg>>,
     state: SinkState,
 }

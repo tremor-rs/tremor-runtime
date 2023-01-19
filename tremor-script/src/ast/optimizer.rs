@@ -34,6 +34,8 @@ use crate::{
     module::Content,
 };
 use beef::Cow;
+
+use super::FlowDefinition;
 struct CombinedVisitor<First, Second> {
     first: First,
     second: Second,
@@ -1393,6 +1395,15 @@ where
     /// When the walker fails
     pub fn walk_script_defn(&mut self, e: &mut ScriptDefinition<'script>) -> Result<()> {
         self.visitor.walk_script_defn(e)?;
+
+        Ok(())
+    }
+    /// Walk `FlowDefinition`
+    /// # Errors
+    /// When the walker fails
+
+    pub fn walk_flow_definition(&mut self, e: &mut FlowDefinition<'script>) -> Result<()> {
+        self.visitor.walk_flow_definition(e)?;
 
         Ok(())
     }

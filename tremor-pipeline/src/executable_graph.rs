@@ -23,7 +23,7 @@ use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
 use std::{fmt, fmt::Display};
-use tremor_common::{ids::OperatorId, ports::Port, stry};
+use tremor_common::{ports::Port, stry, uids::OperatorUId};
 use tremor_script::{ast::Helper, ast::Stmt};
 use tremor_value::Value;
 
@@ -81,7 +81,7 @@ impl PartialEq for NodeConfig {
 impl NodeConfig {
     pub(crate) fn to_op(
         &self,
-        uid: OperatorId,
+        uid: OperatorUId,
         resolver: NodeLookupFn,
         helper: &mut Helper<'static, '_>,
     ) -> Result<OperatorNode> {
@@ -114,7 +114,7 @@ pub struct OperatorNode {
     /// The executable operator
     pub op: Box<dyn Operator>,
     /// Tremor unique identifyer
-    pub uid: OperatorId,
+    pub uid: OperatorUId,
     /// The original config
     pub config: NodeConfig,
 }
@@ -125,7 +125,7 @@ impl Operator for OperatorNode {
     }
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         port: &Port<'static>,
         state: &mut Value<'static>,
         event: Event,
@@ -138,7 +138,7 @@ impl Operator for OperatorNode {
     }
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -148,7 +148,7 @@ impl Operator for OperatorNode {
     fn handles_contraflow(&self) -> bool {
         self.op.handles_contraflow()
     }
-    fn on_contraflow(&mut self, _uid: OperatorId, contraevent: &mut Event) {
+    fn on_contraflow(&mut self, _uid: OperatorUId, contraevent: &mut Event) {
         self.op.on_contraflow(self.uid, contraevent);
     }
 
@@ -621,9 +621,9 @@ mod test {
         },
         Result, METRICS_CHANNEL,
     };
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
     use tremor_script::prelude::*;
-    fn pass(uid: OperatorId, id: &'static str) -> Result<OperatorNode> {
+    fn pass(uid: OperatorUId, id: &'static str) -> Result<OperatorNode> {
         let config = NodeConfig::from_config(&"passthrough", None);
         Ok(OperatorNode {
             id: id.into(),
@@ -636,7 +636,7 @@ mod test {
     }
     #[test]
     fn operator_node() -> Result<()> {
-        let op_id = OperatorId::new(0);
+        let op_id = OperatorUId::new(0);
         let mut n = pass(op_id, "passthrough")?;
         assert!(!n.handles_contraflow());
         assert!(!n.handles_signal());
@@ -687,7 +687,7 @@ mod test {
     impl Operator for AllOperator {
         fn on_event(
             &mut self,
-            _uid: OperatorId,
+            _uid: OperatorUId,
             _port: &Port<'static>,
             _state: &mut Value<'static>,
             event: Event,
@@ -700,7 +700,7 @@ mod test {
 
         fn on_signal(
             &mut self,
-            _uid: OperatorId,
+            _uid: OperatorUId,
             _state: &mut Value<'static>,
             _signal: &mut Event,
         ) -> Result<EventAndInsights> {
@@ -712,7 +712,7 @@ mod test {
             true
         }
 
-        fn on_contraflow(&mut self, _uid: OperatorId, _insight: &mut Event) {}
+        fn on_contraflow(&mut self, _uid: OperatorUId, _insight: &mut Event) {}
 
         fn metrics(
             &self,
@@ -733,7 +733,7 @@ mod test {
             kind: NodeKind::Operator,
             op_type: "test".into(),
             op: Box::new(AllOperator {}),
-            uid: OperatorId::default(),
+            uid: OperatorUId::default(),
             config: NodeConfig::default(),
         }
     }
@@ -786,9 +786,9 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn eg_metrics() -> Result<()> {
-        let mut in_n = pass(OperatorId::new(1), "in")?;
+        let mut in_n = pass(OperatorUId::new(1), "in")?;
         in_n.kind = NodeKind::Input;
-        let mut out_n = pass(OperatorId::new(2), "out")?;
+        let mut out_n = pass(OperatorUId::new(2), "out")?;
         out_n.kind = NodeKind::Output(OUT);
 
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
@@ -881,18 +881,18 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn eg_optimize() -> Result<()> {
-        let mut in_n = pass(OperatorId::new(0), "in")?;
+        let mut in_n = pass(OperatorUId::new(0), "in")?;
         in_n.kind = NodeKind::Input;
-        let mut out_n = pass(OperatorId::new(1), "out")?;
+        let mut out_n = pass(OperatorUId::new(1), "out")?;
         out_n.kind = NodeKind::Output(OUT);
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
         // need to have order in here.
         let graph = vec![
-            in_n,                             // 0
-            all_op("all-1"),                  // 1
-            pass(OperatorId::new(2), "nop")?, // 2
-            all_op("all-2"),                  // 3
-            out_n,                            // 4
+            in_n,                              // 0
+            all_op("all-1"),                   // 1
+            pass(OperatorUId::new(2), "nop")?, // 2
+            all_op("all-2"),                   // 3
+            out_n,                             // 4
         ];
 
         let mut inputs = HashMap::new();

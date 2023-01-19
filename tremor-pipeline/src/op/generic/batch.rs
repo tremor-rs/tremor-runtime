@@ -99,7 +99,7 @@ impl Operator for Batch {
     /// with a new event id tracking all events within that batch
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         event: Event,
@@ -170,7 +170,7 @@ impl Operator for Batch {
 
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -211,12 +211,12 @@ impl Operator for Batch {
 mod test {
     use super::*;
     use simd_json_derive::Serialize;
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
     use tremor_value::Value;
 
     #[test]
     fn size() {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut idgen = EventIdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
@@ -279,7 +279,7 @@ mod test {
 
     #[test]
     fn time() -> Result<()> {
-        let operator_id = OperatorId::new(42);
+        let operator_id = OperatorUId::new(42);
         let node_config = NodeConfig::from_config(
             &"badger",
             Some(literal!({
@@ -356,7 +356,7 @@ mod test {
 
     #[test]
     fn signal() {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut idgen = EventIdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
@@ -432,7 +432,7 @@ mod test {
 
     #[test]
     fn forbid_empty_batches() -> Result<()> {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut idgen = EventIdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {

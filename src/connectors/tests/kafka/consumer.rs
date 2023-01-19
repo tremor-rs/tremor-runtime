@@ -223,7 +223,7 @@ async fn transactional_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test::transactional_retry",
+            "source": "app/test::transactional_retry",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -437,7 +437,7 @@ async fn custom_no_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test::custom_no_retry",
+            "source": "app/test::custom_no_retry",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -640,7 +640,7 @@ async fn performance() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test::performance",
+            "source": "app/test::performance",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),

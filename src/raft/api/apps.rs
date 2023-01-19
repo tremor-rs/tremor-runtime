@@ -11,7 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use super::APIError;
 use crate::{
+    channel::bounded,
+    ids::{AppId, FlowDefinitionId, FlowInstanceId},
     instance::IntendedState,
     raft::{
         api::{
@@ -20,15 +23,15 @@ use crate::{
         },
         archive::{get_app, TremorAppDef},
         store::{
-            AppId, AppsRequest as AppsCmd, FlowId, FlowInstance, InstanceId, Instances, StateApp,
-            TremorInstanceState, TremorRequest, TremorResponse, TremorStart,
+            AppsRequest as AppsCmd, FlowInstance, Instances, StateApp, TremorInstanceState,
+            TremorRequest, TremorResponse, TremorStart,
         },
     },
 };
-use async_std::{channel::bounded, prelude::FutureExt};
 use std::collections::HashMap;
 use std::{fmt::Display, sync::Arc};
 use tide::Route;
+use tokio::time::timeout;
 
 pub(crate) fn install_rest_endpoints(parent: &mut Route<Arc<ServerState>>) {
     let mut apps_endpoint = parent.at("/apps");
@@ -46,12 +49,16 @@ async fn install_app(mut req: APIRequest) -> APIResult<AppId> {
     let app = get_app(&file)?;
     let app_id = app.name().clone();
 
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     req.state()
         .store_tx
         .send(APIStoreReq::GetApp(app_id.clone(), tx))
         .await?;
-    if rx.recv().timeout(API_WORKER_TIMEOUT).await??.is_some() {
+    if timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .flatten()
+        .is_some()
+    {
         return Err(AppError::AlreadyInstalled(app.name).into());
     }
     let request = TremorRequest::Apps(AppsCmd::InstallApp {
@@ -69,17 +76,22 @@ async fn install_app(mut req: APIRequest) -> APIResult<AppId> {
 
 async fn uninstall_app(req: APIRequest) -> APIResult<TremorResponse> {
     let app_id = AppId(req.param("app")?.to_string());
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     req.state()
         .store_tx
         .send(APIStoreReq::GetApp(app_id.clone(), tx))
         .await?;
-    let app = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let app = timeout(API_WORKER_TIMEOUT, rx.recv()).await?.flatten();
     if let Some(app) = app {
         if !app.instances.is_empty() {
-            return Err(
-                AppError::HasInstances(app_id, app.instances.keys().cloned().collect()).into(),
-            );
+            return Err(AppError::HasInstances(
+                app_id.clone(),
+                app.instances
+                    .keys()
+                    .map(|alias| FlowInstanceId::new(app_id.clone(), alias))
+                    .collect(),
+            )
+            .into());
         }
     } else {
         return Err(AppError::AppNotFound(app_id.clone()).into());
@@ -136,14 +148,15 @@ impl Display for AppState {
         for (
             name,
             FlowInstance {
-                definition: id,
+                definition,
                 config,
                 state,
+                ..
             },
         ) in &self.instances
         {
             writeln!(f, "    - {name}")?;
-            writeln!(f, "      Flow: {id}")?;
+            writeln!(f, "      Flow definition: {definition}")?;
             writeln!(f, "      Config:")?;
             if config.is_empty() {
                 writeln!(f, " -")?;
@@ -160,34 +173,37 @@ impl Display for AppState {
 }
 
 async fn list(req: APIRequest) -> APIResult<HashMap<AppId, AppState>> {
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     req.state().store_tx.send(APIStoreReq::GetApps(tx)).await?;
-    let apps = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let apps = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
     Ok(apps)
 }
 
-async fn start(mut req: APIRequest) -> APIResult<InstanceId> {
+async fn start(mut req: APIRequest) -> APIResult<FlowInstanceId> {
     let body: TremorStart = req.body_json().await?;
 
     let instance_id = body.instance.clone();
     let app_name = AppId(req.param("app")?.to_string());
-    let flow_name = FlowId(req.param("flow")?.to_string());
+    let flow_name = FlowDefinitionId(req.param("flow")?.to_string());
 
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     req.state()
         .store_tx
         .send(APIStoreReq::GetApp(app_name.clone(), tx))
         .await?;
-    let app = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let app = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
 
     if let Some(app) = app {
-        if app.instances.contains_key(&body.instance) {
-            return Err(AppError::InstanceAlreadyExists(app_name, body.instance).into());
+        if app.instances.contains_key(instance_id.alias()) {
+            return Err(AppError::InstanceAlreadyExists(body.instance).into());
         }
         if let Some(flow) = app.app.flows.get(&flow_name) {
             if let Some(errors) = config_errors(&flow.args, &body.config) {
                 return Err(AppError::InvalidArgs {
-                    app: app_name,
                     flow: flow_name,
                     instance: body.instance,
                     errors,
@@ -217,11 +233,11 @@ async fn start(mut req: APIRequest) -> APIResult<InstanceId> {
     Ok(instance_id)
 }
 
-async fn manage_instance(mut req: APIRequest) -> APIResult<InstanceId> {
+async fn manage_instance(mut req: APIRequest) -> APIResult<FlowInstanceId> {
     let body: TremorInstanceState = req.body_json().await?;
 
     let app_id = AppId(req.param("app")?.to_string());
-    let instance_id = InstanceId(req.param("instance")?.to_string());
+    let instance_id = FlowInstanceId::new(app_id.clone(), req.param("instance")?.to_string());
     // FIXME: this is not only for this but all the API functions as we're running in a potentially
     // problematic situation here.
     //
@@ -246,15 +262,17 @@ async fn manage_instance(mut req: APIRequest) -> APIResult<InstanceId> {
     // Solution? We might need to put a single process inbetween the API and the raft algorithm that
     // serializes all commands to ensure no command is executed before the previous one has been fully
     // handled
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     req.state()
         .store_tx
         .send(APIStoreReq::GetApp(app_id.clone(), tx))
         .await?;
-    let app = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let app = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
     if let Some(app) = app {
-        if !app.instances.contains_key(&instance_id) {
-            return Err(AppError::InstanceNotFound(app_id, instance_id).into());
+        if !app.instances.contains_key(instance_id.alias()) {
+            return Err(AppError::InstanceNotFound(instance_id).into());
         }
     } else {
         return Err(AppError::AppNotFound(app_id).into());
@@ -265,7 +283,6 @@ async fn manage_instance(mut req: APIRequest) -> APIResult<InstanceId> {
     };
 
     let request = TremorRequest::Apps(AppsCmd::InstanceStateChange {
-        app: app_id.clone(),
         instance: instance_id.clone(),
         state,
     });
@@ -278,25 +295,25 @@ async fn manage_instance(mut req: APIRequest) -> APIResult<InstanceId> {
     Ok(instance_id)
 }
 
-async fn stop_instance(req: APIRequest) -> APIResult<InstanceId> {
+async fn stop_instance(req: APIRequest) -> APIResult<FlowInstanceId> {
     let app_id = AppId(req.param("app")?.to_string());
-    let instance_id = InstanceId(req.param("instance")?.to_string());
-    let (tx, rx) = bounded(1);
+    let instance_id = FlowInstanceId::new(app_id.clone(), req.param("instance")?.to_string());
+    let (tx, mut rx) = bounded(1);
     req.state()
         .store_tx
         .send(APIStoreReq::GetApp(app_id.clone(), tx))
         .await?;
-    if let Some(app) = rx.recv().timeout(API_WORKER_TIMEOUT).await?? {
-        if !app.instances.contains_key(&instance_id) {
-            return Err(AppError::InstanceNotFound(app_id, instance_id).into());
+    if let Some(app) = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?
+    {
+        if !app.instances.contains_key(instance_id.alias()) {
+            return Err(AppError::InstanceNotFound(instance_id).into());
         }
     } else {
         return Err(AppError::AppNotFound(app_id).into());
     }
-    let request = TremorRequest::Apps(AppsCmd::Undeploy {
-        app: app_id.clone(),
-        instance: instance_id.clone(),
-    });
+    let request = TremorRequest::Apps(AppsCmd::Undeploy(instance_id.clone()));
     req.state()
         .raft
         .client_write(request)

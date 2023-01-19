@@ -17,15 +17,18 @@ pub mod flow;
 /// contains the runtime actor starting and maintaining flows
 pub mod flow_supervisor;
 
+use std::time::Duration;
+
 use self::flow::Flow;
 use crate::{
     channel::{bounded, Sender},
     connectors,
     errors::{empty_error, Error, Kind as ErrorKind, Result},
+    ids::{AppId, FlowInstanceId},
     instance::IntendedState as IntendedInstanceState,
     log_error,
 };
-use std::time::Duration;
+use openraft::NodeId;
 use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
 use tremor_script::{
     ast,
@@ -138,18 +141,18 @@ impl Runtime {
             Err(e) => {
                 log_error!(h.format_error(&e), "Error: {e}");
 
-                return Err(format!("failed to load troy file: {}", src).into());
+                return Err(format!("failed to load troy file: {src}").into());
             }
         };
 
         let mut count = 0;
         // first deploy them
         for flow in deployable.iter_flows() {
-            self.deploy_flow(flow).await?;
+            self.deploy_flow(AppId::default(), flow).await?;
         }
         // start flows in a second step
         for flow in deployable.iter_flows() {
-            self.start_flow(flow::Alias::new(&flow.instance_alias))
+            self.start_flow(FlowInstanceId::new(AppId::default(), &flow.instance_alias))
                 .await?;
             count += 1;
         }
@@ -161,35 +164,42 @@ impl Runtime {
     /// This flow instance is not started yet.
     /// # Errors
     /// If the flow can't be deployed
-    pub async fn deploy_flow(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
+    pub async fn deploy_flow(
+        &self,
+        app_id: AppId,
+        flow: &ast::DeployFlow<'static>,
+    ) -> Result<FlowInstanceId> {
+        // FIXME: return a FlowInstanceId here
         let (tx, rx) = oneshot::channel();
         self.flows
             .send(flow_supervisor::Msg::DeployFlow {
+                app: app_id,
                 flow: Box::new(flow.clone()),
                 sender: tx,
             })
             .await?;
-        if let Err(e) = rx.await? {
-            let err_str = match e {
-                Error(
-                    ErrorKind::Script(e)
-                    | ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)),
-                    _,
-                ) => {
-                    let mut h = crate::ToStringHighlighter::new();
-                    h.format_error(&tremor_script::errors::Error::from(e))?;
-                    h.finalize()?;
-                    h.to_string()
-                }
-                err => err.to_string(),
-            };
-            error!(
-                "Error starting deployment of flow {}: {}",
-                flow.instance_alias, &err_str
-            );
-            Err(ErrorKind::DeployFlowError(flow.instance_alias.clone(), err_str).into())
-        } else {
-            Ok(())
+        match rx.await? {
+            Err(e) => {
+                let err_str = match e {
+                    Error(
+                        ErrorKind::Script(e)
+                        | ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)),
+                        _,
+                    ) => {
+                        let mut h = crate::ToStringHighlighter::new();
+                        h.format_error(&tremor_script::errors::Error::from(e))?;
+                        h.finalize()?;
+                        h.to_string()
+                    }
+                    err => err.to_string(),
+                };
+                error!(
+                    "Error starting deployment of flow {}: {err_str}",
+                    flow.instance_alias
+                );
+                Err(ErrorKind::DeployFlowError(flow.instance_alias.clone(), err_str).into())
+            }
+            Ok(flow_id) => Ok(flow_id),
         }
     }
 
@@ -197,7 +207,7 @@ impl Runtime {
     /// if the flow state change fails
     pub async fn change_flow_state(
         &self,
-        id: flow::Alias,
+        id: FlowInstanceId,
         intended_state: IntendedInstanceState,
     ) -> Result<()> {
         let (reply_tx, mut reply_rx) = bounded(1);
@@ -215,7 +225,7 @@ impl Runtime {
     ///
     /// # Errors
     /// if the flow can't be started
-    pub async fn start_flow(&self, id: flow::Alias) -> Result<()> {
+    pub async fn start_flow(&self, id: FlowInstanceId) -> Result<()> {
         self.change_flow_state(id, IntendedInstanceState::Running)
             .await
     }
@@ -224,7 +234,7 @@ impl Runtime {
     ///
     /// # Errors
     /// if the flow can't be stopped
-    pub async fn stop_flow(&self, id: flow::Alias) -> Result<()> {
+    pub async fn stop_flow(&self, id: FlowInstanceId) -> Result<()> {
         self.change_flow_state(id, IntendedInstanceState::Stopped)
             .await
     }
@@ -233,7 +243,7 @@ impl Runtime {
     ///
     /// # Errors
     /// if the flow can't be paused
-    pub async fn pause_flow(&self, id: flow::Alias) -> Result<()> {
+    pub async fn pause_flow(&self, id: FlowInstanceId) -> Result<()> {
         self.change_flow_state(id, IntendedInstanceState::Paused)
             .await
     }
@@ -241,7 +251,7 @@ impl Runtime {
     ///
     /// # Errors
     /// if the flow can't be resumed
-    pub async fn resume_flow(&self, id: flow::Alias) -> Result<()> {
+    pub async fn resume_flow(&self, id: FlowInstanceId) -> Result<()> {
         self.start_flow(id).await // equivalent
     }
 
@@ -268,11 +278,10 @@ impl Runtime {
     ///
     /// # Errors
     ///  * if we fail to send the request or fail to receive it
-    pub async fn get_flow(&self, flow_id: String) -> Result<Flow> {
+    pub async fn get_flow(&self, flow_id: FlowInstanceId) -> Result<Flow> {
         let (flow_tx, flow_rx) = oneshot::channel();
-        let flow_id = flow::Alias::new(flow_id);
         self.flows
-            .send(flow_supervisor::Msg::GetFlow(flow_id.clone(), flow_tx))
+            .send(flow_supervisor::Msg::GetFlow(flow_id, flow_tx))
             .await?;
         flow_rx.await?
     }
@@ -293,8 +302,11 @@ impl Runtime {
     ///
     /// # Errors
     ///  * if the world manager can't be started
-    pub async fn start(config: WorldConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
-        let (system_h, system, kill_switch) = flow_supervisor::FlowSupervisor::new().start();
+    pub async fn start(
+        node_id: NodeId,
+        config: WorldConfig,
+    ) -> Result<(Self, JoinHandle<Result<()>>)> {
+        let (system_h, system, kill_switch) = flow_supervisor::FlowSupervisor::new(node_id).start();
 
         let world = Self {
             flows: system,

@@ -16,20 +16,18 @@ use crate::{
     channel::{bounded, Sender},
     connectors::{self, ConnectorBuilder, ConnectorType},
     errors::{empty_error, Kind as ErrorKind, Result},
+    ids::{AppId, FlowInstanceId},
     instance::IntendedState,
     log_error, qsize,
-    system::{
-        flow::{Alias, Flow},
-        KillSwitch, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
-    },
+    system::{flow::Flow, KillSwitch, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT},
 };
-use hashbrown::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap};
 use tokio::{
     sync::oneshot,
     task::{self, JoinHandle},
     time::timeout,
 };
-use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
+use tremor_common::uids::{ConnectorUIdGen, OperatorUIdGen};
 use tremor_script::ast::DeployFlow;
 
 pub(crate) type Channel = Sender<Msg>;
@@ -39,15 +37,17 @@ pub(crate) type Channel = Sender<Msg>;
 pub(crate) enum Msg {
     /// Deploy a flow, instantiate it, but does not start it or any child instance (connector, pipeline)
     DeployFlow {
+        /// the App this flow shall be a part of
+        app: AppId,
         /// the `deploy flow` AST
         flow: Box<DeployFlow<'static>>,
         /// result sender
-        sender: oneshot::Sender<Result<()>>,
+        sender: oneshot::Sender<Result<FlowInstanceId>>,
     },
     /// change instance state
     ChangeInstanceState {
         /// unique ID for the `Flow` instance to start
-        id: Alias,
+        id: FlowInstanceId,
         /// The state the instance should be changed to
         intended_state: IntendedState,
         /// result sender
@@ -60,7 +60,7 @@ pub(crate) enum Msg {
         builder: Box<dyn ConnectorBuilder>,
     },
     GetFlows(oneshot::Sender<Result<Vec<Flow>>>),
-    GetFlow(Alias, oneshot::Sender<Result<Flow>>),
+    GetFlow(FlowInstanceId, oneshot::Sender<Result<Flow>>),
     /// Initiate the Quiescence process
     Drain(oneshot::Sender<Result<()>>),
     /// stop this manager
@@ -69,19 +69,21 @@ pub(crate) enum Msg {
 
 #[derive(Debug)]
 pub(crate) struct FlowSupervisor {
-    flows: HashMap<Alias, Flow>,
-    operator_id_gen: OperatorIdGen,
-    connector_id_gen: ConnectorIdGen,
+    node_id: openraft::NodeId,
+    flows: HashMap<FlowInstanceId, Flow>,
+    operator_id_gen: OperatorUIdGen,
+    connector_id_gen: ConnectorUIdGen,
     known_connectors: connectors::Known,
 }
 
 impl FlowSupervisor {
-    pub fn new() -> Self {
+    pub fn new(node_id: openraft::NodeId) -> Self {
         Self {
+            node_id,
             flows: HashMap::new(),
             known_connectors: connectors::Known::new(),
-            operator_id_gen: OperatorIdGen::new(),
-            connector_id_gen: ConnectorIdGen::new(),
+            operator_id_gen: OperatorUIdGen::new(),
+            connector_id_gen: ConnectorUIdGen::new(),
         }
     }
 
@@ -97,14 +99,17 @@ impl FlowSupervisor {
 
     async fn handle_deploy(
         &mut self,
+        app_id: AppId,
         flow: DeployFlow<'static>,
-        sender: oneshot::Sender<Result<()>>,
+        sender: oneshot::Sender<Result<FlowInstanceId>>,
         kill_switch: &KillSwitch,
     ) {
-        let id = Alias::from(&flow);
+        let id = FlowInstanceId::from_deploy(app_id, &flow);
         let res = match self.flows.entry(id.clone()) {
             Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
             Entry::Vacant(vacant) => Flow::deploy(
+                self.node_id,
+                id.clone(),
                 flow,
                 &mut self.operator_id_gen,
                 &mut self.connector_id_gen,
@@ -114,6 +119,7 @@ impl FlowSupervisor {
             .await
             .map(|deploy| {
                 vacant.insert(deploy);
+                id
             }),
         };
         log_error!(
@@ -128,7 +134,7 @@ impl FlowSupervisor {
             "Error sending ListFlows response: {e}"
         );
     }
-    fn handle_get_flow(&self, id: &Alias, reply_tx: oneshot::Sender<Result<Flow>>) {
+    fn handle_get_flow(&self, id: &FlowInstanceId, reply_tx: oneshot::Sender<Result<Flow>>) {
         log_error!(
             reply_tx
                 .send(
@@ -142,19 +148,21 @@ impl FlowSupervisor {
         );
     }
 
-    async fn handle_terminate(&self) -> Result<()> {
+    async fn handle_terminate(&mut self) -> Result<()> {
         info!("Stopping Manager ...");
         if !self.flows.is_empty() {
             // send stop to each deployment
             let (tx, mut rx) = bounded(self.flows.len());
             let mut expected_stops: usize = 0;
-            for flow in self.flows.values() {
-                log_error!(
+            // drain the flows, we are stopping anyways, this is the last interaction with them
+            for (_, flow) in self.flows.drain() {
+                if !log_error!(
                     flow.stop(tx.clone()).await,
                     "Failed to stop Deployment \"{alias}\": {e}",
                     alias = flow.id()
-                );
-                expected_stops += 1;
+                ) {
+                    expected_stops += 1;
+                }
             }
 
             timeout(
@@ -170,11 +178,11 @@ impl FlowSupervisor {
                     Result::Ok(())
                 }),
             )
-            .await??;
+            .await???;
         }
         Ok(())
     }
-    async fn handle_drain(&self, sender: oneshot::Sender<Result<()>>) {
+    async fn handle_drain(&mut self, sender: oneshot::Sender<Result<()>>) {
         if self.flows.is_empty() {
             log_error!(
                 sender.send(Ok(())).map_err(|_| "send error"),
@@ -185,7 +193,7 @@ impl FlowSupervisor {
             info!("Draining all {num_flows} Flows ...");
             let mut alive_flows = 0_usize;
             let (tx, mut rx) = bounded(num_flows);
-            for (_, flow) in &self.flows {
+            for (_, flow) in self.flows.drain() {
                 if !log_error!(
                     flow.stop(tx.clone()).await,
                     "Failed to drain Deployment \"{alias}\": {e}",
@@ -212,12 +220,21 @@ impl FlowSupervisor {
     }
 
     async fn handle_change_state(
-        &self,
-        id: Alias,
+        &mut self,
+        id: FlowInstanceId,
         intended_state: IntendedState,
         reply_tx: Sender<Result<()>>,
     ) -> Result<()> {
-        if let Some(flow) = self.flows.get(&id) {
+        if let IntendedState::Stopped = intended_state {
+            // we remove the flow as it won't be reachable anymore, once it is stopped
+            // keeping it around will lead to errors upon stopping
+            if let Some(flow) = self.flows.remove(&id) {
+                flow.stop(reply_tx).await?;
+                Ok(())
+            } else {
+                Err(ErrorKind::FlowNotFound(id.to_string()).into())
+            }
+        } else if let Some(flow) = self.flows.get(&id) {
             flow.change_state(intended_state, reply_tx).await?;
             Ok(())
         } else {
@@ -238,8 +255,9 @@ impl FlowSupervisor {
                         builder,
                         ..
                     } => self.handle_register_connector_type(connector_type, builder),
-                    Msg::DeployFlow { flow, sender } => {
-                        self.handle_deploy(*flow, sender, &task_kill_switch).await;
+                    Msg::DeployFlow { app, flow, sender } => {
+                        self.handle_deploy(app, *flow, sender, &task_kill_switch)
+                            .await;
                     }
                     Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx),
                     Msg::GetFlow(id, reply_tx) => self.handle_get_flow(&id, reply_tx),

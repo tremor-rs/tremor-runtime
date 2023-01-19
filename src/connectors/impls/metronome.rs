@@ -136,11 +136,11 @@ impl Source for MetronomeSource {
 #[cfg(test)]
 mod tests {
 
-    use crate::{config::Reconnect, connectors::prelude::*};
+    use crate::{config::Reconnect, connectors::prelude::*, ids::FlowInstanceId};
 
     #[tokio::test(flavor = "multi_thread")]
     async fn missing_config() -> Result<()> {
-        let alias = Alias::new("flow", "connector");
+        let alias = Alias::new(FlowInstanceId::new("app", "flow"), "connector");
         let builder = super::Builder::default();
         let connector_config = super::ConnectorConfig {
             connector_type: builder.connector_type(),

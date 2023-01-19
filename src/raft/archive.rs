@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::{
+    errors::Result,
+    ids::{AppId, FlowDefinitionId},
+};
 use async_std::path::PathBuf;
 use sha2::{Digest, Sha256};
 use simd_json::OwnedValue;
@@ -37,8 +40,6 @@ use tremor_script::{
     FN_REGISTRY,
 };
 
-use super::store::{AppId, FlowId};
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AppFlow {
     /// arguments with possible default values
@@ -52,7 +53,7 @@ pub struct TremorAppDef {
     /// hash of all the included files
     /// starting with the main.troy and then all `use`d files in order
     pub sha256: String,
-    pub flows: HashMap<FlowId, AppFlow>,
+    pub flows: HashMap<FlowDefinitionId, AppFlow>,
 }
 
 impl TremorAppDef {
@@ -130,7 +131,7 @@ pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>
         .iter()
         .map(|(k, v)| {
             Ok((
-                FlowId(k.to_string()),
+                FlowDefinitionId(k.to_string()),
                 AppFlow {
                     args: v
                         .clone()
@@ -152,7 +153,7 @@ pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>
             ))
         })
         .collect::<Result<_>>()?;
-    if !flows.contains_key(&FlowId("main".to_string())) {
+    if !flows.contains_key(&FlowDefinitionId("main".to_string())) {
         let w = Warning {
             class: Class::Behaviour,
             outer: deploy.extent(),
@@ -269,7 +270,7 @@ pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> 
             .map(|p| p.to_string_lossy().to_string())
             .collect();
         let id = module.pop().ok_or("No module name")?;
-        let module = NodeId::new(id.clone(), module.clone(), NodeMeta::dummy().to_owned());
+        let module = NodeId::new(id.clone(), module.clone(), NodeMeta::dummy());
 
         info!("included library: {}", entry.path()?.to_string_lossy());
         let mut contents = String::new();

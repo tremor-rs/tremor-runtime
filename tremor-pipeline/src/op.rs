@@ -28,7 +28,7 @@ use crate::errors::Result;
 use beef::Cow;
 use halfbrown::HashMap;
 use regex::Regex;
-use tremor_common::{ids::OperatorId, ports::Port};
+use tremor_common::{ports::Port, uids::OperatorUId};
 use tremor_value::Value;
 
 lazy_static::lazy_static! {
@@ -81,7 +81,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     /// if the event can not be processed
     fn on_event(
         &mut self,
-        uid: OperatorId,
+        uid: OperatorUId,
         port: &Port<'static>,
         state: &mut Value<'static>,
         event: Event,
@@ -100,7 +100,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     /// if the singal can not be processed
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _state: &mut Value<'static>,
         _signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -119,7 +119,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     ///
     /// # Errors
     /// if the insight can not be processed
-    fn on_contraflow(&mut self, _uid: OperatorId, _insight: &mut Event) {
+    fn on_contraflow(&mut self, _uid: OperatorUId, _insight: &mut Event) {
         // Make the trait signature nicer
     }
 
@@ -154,7 +154,7 @@ pub trait InitializableOperator {
     ///
     /// # Errors
     //// if no operator con be instanciated from the provided NodeConfig
-    fn node_to_operator(&self, uid: OperatorId, node: &NodeConfig) -> Result<Box<dyn Operator>>;
+    fn node_to_operator(&self, uid: OperatorUId, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }
 
 /// Trait for detecting errors in config and the key names are included in errors

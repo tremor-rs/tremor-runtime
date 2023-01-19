@@ -676,6 +676,7 @@ mod test {
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
+    use crate::ids::{AppId, FlowInstanceId};
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
@@ -691,7 +692,7 @@ mod test {
     use std::task::Poll;
     use tonic::body::BoxBody;
     use tonic::codegen::Service;
-    use tremor_common::ids::SinkId;
+    use tremor_common::uids::SinkUId;
     use value_trait::StaticNode;
 
     struct HardcodedChannelFactory {
@@ -795,7 +796,8 @@ mod test {
                 scale: 0,
             }],
             &SinkContext::new(
-                SinkId::default(),
+                openraft::NodeId::default(),
+                SinkUId::default(),
                 Alias::new("flow", "connector"),
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
@@ -824,7 +826,7 @@ mod test {
                 scale: 0,
             }],
             &SinkContext::new(
-                SinkId::default(),
+                SinkUId::default(),
                 Alias::new("flow", "connector"),
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
@@ -862,7 +864,7 @@ mod test {
                     scale: 0,
                 }],
                 &SinkContext::new(
-                    SinkId::default(),
+                    SinkUId::default(),
                     Alias::new("flow", "connector"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
@@ -902,7 +904,7 @@ mod test {
                 scale: 0,
             }],
             &SinkContext::new(
-                SinkId::default(),
+                SinkUId::default(),
                 Alias::new("flow", "connector"),
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
@@ -1126,8 +1128,8 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            SinkId::default(),
-            Alias::new("flow", "connector"),
+            SinkUId::default(),
+            Alias::new(FlowInstanceId::new(AppId::default(), "flow"), "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
@@ -1175,7 +1177,7 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
@@ -1220,7 +1222,7 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
@@ -1266,7 +1268,7 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
@@ -1310,7 +1312,7 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
@@ -1345,7 +1347,7 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
@@ -1405,7 +1407,7 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext::new(
-                    SinkId::default(),
+                    SinkUId::default(),
                     Alias::new("flow", "connector"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
@@ -1447,7 +1449,7 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext::new(
-                    SinkId::default(),
+                    SinkUId::default(),
                     Alias::new("flow", "connector"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
@@ -1520,7 +1522,7 @@ mod test {
         );
 
         let ctx = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
@@ -1602,8 +1604,8 @@ mod test {
         );
 
         let ctx = SinkContext::new(
-            SinkId::default(),
-            Alias::new("flow", "connector"),
+            SinkUId::default(),
+            AAlias::new(FlowInstanceId::new(AppId::default(), "flow"), "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
@@ -1646,7 +1648,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
+                    &Alias::new(FlowInstanceId::new(AppId::default(), "flow"), "connector"),
                 )?,
                 0,
             )

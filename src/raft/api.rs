@@ -21,19 +21,16 @@ mod cluster;
 mod kv;
 pub(crate) mod worker;
 
-use crate::raft::{
-    node::Addr,
-    store::{self, AppId, FlowId, InstanceId, StateApp, Store, TremorResponse},
-    TremorRaftImpl,
-};
-use async_std::{
-    channel::{bounded, Sender},
-    future::TimeoutError,
-    prelude::FutureExt,
-    task::JoinHandle,
+use crate::channel::{bounded, Sender};
+use crate::{
+    ids::{AppId, FlowDefinitionId, FlowInstanceId},
+    raft::{
+        node::Addr,
+        store::{self, StateApp, Store, TremorResponse},
+        TremorRaftImpl,
+    },
 };
 use futures::Future;
-use halfbrown::HashMap;
 use openraft::{
     error::{
         AddLearnerError, ChangeMembershipError, ClientReadError, ClientWriteError, Fatal,
@@ -42,8 +39,10 @@ use openraft::{
     raft::{AddLearnerResponse, ClientWriteResponse},
     LogId, NodeId, StorageError,
 };
+use std::collections::HashMap;
 use std::{collections::BTreeSet, num::ParseIntError, sync::Arc, time::Duration};
 use tide::{http::headers::LOCATION, Body, Endpoint, Request, Response, StatusCode};
+use tokio::{task::JoinHandle, time::timeout};
 
 use self::apps::AppState;
 
@@ -86,7 +85,7 @@ pub(crate) fn initialize(
     store: Arc<Store>,
 ) -> (JoinHandle<()>, Arc<ServerState>) {
     let (store_tx, store_rx) = bounded(64); // arbitrary choice to block upon too much concurrent incoming requests
-    let handle = async_std::task::spawn(worker::api_worker(store, store_rx));
+    let handle = tokio::task::spawn(worker::api_worker(store, store_rx));
     let state = Arc::new(ServerState {
         id,
         addr,
@@ -164,16 +163,15 @@ pub enum AppError {
 
     /// app not found
     AppNotFound(AppId),
-    FlowNotFound(AppId, FlowId),
-    InstanceNotFound(AppId, InstanceId),
+    FlowNotFound(AppId, FlowDefinitionId),
+    InstanceNotFound(FlowInstanceId),
     /// App has at least 1 running instances (and thus cannot be uninstalled)
-    HasInstances(AppId, Vec<InstanceId>),
-    InstanceAlreadyExists(AppId, InstanceId),
+    HasInstances(AppId, Vec<FlowInstanceId>),
+    InstanceAlreadyExists(FlowInstanceId),
     /// provided flow args are invalid
     InvalidArgs {
-        app: AppId,
-        flow: FlowId,
-        instance: InstanceId,
+        flow: FlowDefinitionId,
+        instance: FlowInstanceId,
         errors: Vec<ArgsError>,
     },
 }
@@ -194,10 +192,34 @@ impl std::fmt::Display for AppError {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Self::InstanceAlreadyExists(app_id, instance_id) => write!(f, "App \"{app_id}\" already has an instance \"{instance_id}\""),
-            Self::InstanceNotFound(app_id, instance_id) => write!(f, "No instance \"{instance_id}\" in App \"{app_id}\" found"),
-            Self::FlowNotFound(app_id, flow_id) => write!(f, "Flow \"{flow_id}\" not found in App \"{app_id}\"."),
-            Self::InvalidArgs { app, flow, instance, errors } => write!(f, "Invalid Arguments provided for instance \"{instance}\" of Flow \"{flow}\" in App \"{app}\": {}", errors.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")),
+            Self::InstanceAlreadyExists(instance_id) => write!(
+                f,
+                "App \"{}\" already has an instance \"{}\"",
+                instance_id.app_id(),
+                instance_id.alias()
+            ),
+            Self::InstanceNotFound(instance_id) => write!(
+                f,
+                "No instance \"{}\" in App \"{}\" found",
+                instance_id.alias(),
+                instance_id.app_id()
+            ),
+            Self::FlowNotFound(app_id, flow_id) => {
+                write!(f, "Flow \"{flow_id}\" not found in App \"{app_id}\".")
+            }
+            Self::InvalidArgs {
+                flow,
+                instance,
+                errors,
+            } => write!(
+                f,
+                "Invalid Arguments provided for instance \"{instance}\" of Flow \"{flow}\": {}",
+                errors
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 }
@@ -211,7 +233,10 @@ pub enum APIError {
         leader_url: String,
     },
     /// HTTP related error
-    HTTP { status: StatusCode, message: String },
+    HTTP {
+        status: StatusCode,
+        message: String,
+    },
     /// raft fatal error, includes StorageError
     Fatal(Fatal),
     /// We don't have a quorum to read
@@ -226,7 +251,10 @@ pub enum APIError {
     App(AppError),
     /// Error in the runtime
     Runtime(String),
-
+    // Timeout
+    Timeout,
+    // recv error
+    Recv,
     /// fallback error type
     Other(String),
 }
@@ -298,13 +326,13 @@ where
     T: serde::Serialize + serde::Deserialize<'static>,
 {
     Err(if let Some(leader_id) = e.leader_id {
-        let (tx, rx) = bounded(1);
+        let (tx, mut rx) = bounded(1);
         req.state()
             .store_tx
             .send(APIStoreReq::GetNode(leader_id, tx))
             .await?;
         // we can only forward to the leader if we have the node in our state machine
-        if let Some(leader_addr) = rx.recv().timeout(API_WORKER_TIMEOUT).await?? {
+        if let Some(leader_addr) = timeout(API_WORKER_TIMEOUT, rx.recv()).await?.flatten() {
             let mut leader_url =
                 url::Url::parse(&format!("{}://{}", req.url().scheme(), leader_addr.api()))?;
             leader_url.set_path(req.url().path());
@@ -335,13 +363,15 @@ impl From<APIError> for Response {
                 StatusCode::BadRequest
             }
             APIError::Other(_)
-            | &APIError::ChangeMembership(_)
+            | APIError::ChangeMembership(_)
             | APIError::Store(_)
             | APIError::Storage(_)
             | APIError::Fatal(_)
             | APIError::NoQuorum(_)
             | APIError::Runtime(_)
+            | APIError::Recv
             | APIError::App(_) => StatusCode::InternalServerError,
+            APIError::Timeout => StatusCode::GatewayTimeout,
             APIError::HTTP { status, .. } => *status,
         };
         let mut builder = Response::builder(status);
@@ -383,6 +413,8 @@ impl std::fmt::Display for APIError {
             Self::Storage(e) => write!(f, "Storage: {e}"),
             Self::Runtime(e) => write!(f, "Runtime: {e}"),
             Self::App(e) => write!(f, "App: {e}"),
+            Self::Timeout => write!(f, "Timeout"),
+            Self::Recv => write!(f, "Recv"),
         }
     }
 }
@@ -433,20 +465,14 @@ impl From<crate::Error> for APIError {
     }
 }
 
-impl<T> From<async_std::channel::SendError<T>> for APIError {
-    fn from(e: async_std::channel::SendError<T>) -> Self {
+impl<T> From<crate::channel::SendError<T>> for APIError {
+    fn from(e: crate::channel::SendError<T>) -> Self {
         Self::Other(e.to_string())
     }
 }
 
-impl From<async_std::channel::RecvError> for APIError {
-    fn from(e: async_std::channel::RecvError) -> Self {
-        Self::Other(e.to_string())
-    }
-}
-
-impl From<TimeoutError> for APIError {
-    fn from(e: TimeoutError) -> Self {
-        Self::Other(e.to_string())
+impl From<tokio::time::error::Elapsed> for APIError {
+    fn from(_: tokio::time::error::Elapsed) -> Self {
+        Self::Timeout
     }
 }

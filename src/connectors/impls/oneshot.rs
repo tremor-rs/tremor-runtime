@@ -58,7 +58,7 @@ impl Connector for Oneshot {
         let source = OneshotSource {
             value: self.value.take(),
         };
-        builder.spawn(source, source_context).map(Some)
+        Ok(Some(builder.spawn(source, source_context)))
     }
 
     fn codec_requirements(&self) -> CodecReq {

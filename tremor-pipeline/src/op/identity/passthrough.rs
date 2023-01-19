@@ -24,7 +24,7 @@ op!(PassthroughFactory (_uid, _node) {
 impl Operator for Passthrough {
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         event: Event,

@@ -29,35 +29,38 @@ mod google;
 #[cfg(test)]
 pub(crate) mod tests;
 
-use self::metrics::{SinkReporter, SourceReporter};
-use self::sink::{SinkAddr, SinkContext, SinkMsg};
-use self::source::{SourceAddr, SourceContext, SourceMsg};
 use self::utils::quiescence::QuiescenceBeacon;
+use self::{prelude::Attempt, utils::reconnect};
+use self::{
+    sink::{SinkAddr, SinkContext, SinkMsg},
+    utils::{metrics::SourceReporter, reconnect::ConnectionLostNotifier},
+};
+use self::{
+    source::{SourceAddr, SourceContext, SourceMsg},
+    utils::{metrics::SinkReporter, reconnect::ReconnectRuntime},
+};
 pub(crate) use crate::config::Connector as ConnectorConfig;
 use crate::{
     channel::{bounded, Sender},
     errors::{connector_send_err, Error, Kind as ErrorKind, Result},
+    ids::FlowInstanceId,
     instance::State,
     log_error, pipeline, qsize,
-    system::{flow, KillSwitch, Runtime},
+    system::{KillSwitch, Runtime},
 };
 use beef::Cow;
 use futures::Future;
 use halfbrown::HashMap;
+use simd_json::{Builder, Mutable, ValueAccess};
 use std::{fmt::Display, time::Duration};
 use tokio::task::{self, JoinHandle};
 use tremor_common::{
-    ids::{ConnectorId, ConnectorIdGen, SourceId},
     ports::{Port, ERR, IN, OUT},
+    uids::{ConnectorUId, ConnectorUIdGen, SourceUId},
 };
 use tremor_pipeline::METRICS_CHANNEL;
 use tremor_script::ast::DeployEndpoint;
 use tremor_value::Value;
-use utils::reconnect::{Attempt, ConnectionLostNotifier, ReconnectRuntime};
-use value_trait::{Builder, Mutable, ValueAccess};
-
-/// quiescence stuff
-pub(crate) use utils::{metrics, reconnect};
 
 /// Accept timeout
 pub(crate) const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);
@@ -314,6 +317,7 @@ pub(crate) trait Context: Display + Clone {
 /// connector context
 #[derive(Clone)]
 pub(crate) struct ConnectorContext {
+    node_id: openraft::NodeId,
     /// alias of the connector instance
     pub(crate) alias: Alias,
     /// type of the connector
@@ -326,7 +330,7 @@ pub(crate) struct ConnectorContext {
 
 impl Display for ConnectorContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Connector::{}]", &self.alias)
+        write!(f, "[Node::{}][Connector::{}]", self.node_id, &self.alias)
     }
 }
 
@@ -421,15 +425,23 @@ pub(crate) type Known =
 /// # Errors
 /// if the connector can not be built or the config is invalid
 pub(crate) async fn spawn(
+    node_id: openraft::NodeId,
     alias: &Alias,
-    connector_id_gen: &mut ConnectorIdGen,
+    connector_id_gen: &mut ConnectorUIdGen,
     builder: &dyn ConnectorBuilder,
     config: ConnectorConfig,
     kill_switch: &KillSwitch,
 ) -> Result<Addr> {
     // instantiate connector
     let connector = builder.build(alias, &config, kill_switch).await?;
-    let r = connector_task(alias.clone(), connector, config, connector_id_gen.next_id()).await?;
+    let r = connector_task(
+        node_id,
+        alias.clone(),
+        connector,
+        config,
+        connector_id_gen.next_id(),
+    )
+    .await?;
 
     Ok(r)
 }
@@ -437,10 +449,11 @@ pub(crate) async fn spawn(
 #[allow(clippy::too_many_lines)]
 // instantiates the connector and starts listening for control plane messages
 async fn connector_task(
+    node_id: openraft::NodeId,
     alias: Alias,
     mut connector: Box<dyn Connector>,
     config: ConnectorConfig,
-    uid: ConnectorId,
+    uid: ConnectorUId,
 ) -> Result<Addr> {
     let qsize = qsize();
     // channel for connector-level control plane communication
@@ -464,12 +477,13 @@ async fn connector_task(
         .into());
     }
     let source_builder = source::builder(
-        SourceId::from(uid),
+        SourceUId::from(uid),
         &config,
         codec_requirement,
         source_metrics_reporter,
     )?;
     let source_ctx = SourceContext {
+        node_id,
         alias: alias.clone(),
         uid: uid.into(),
         connector_type: config.connector_type.clone(),
@@ -484,6 +498,7 @@ async fn connector_task(
     );
     let sink_builder = sink::builder(&config, codec_requirement, &alias, sink_metrics_reporter)?;
     let sink_ctx = SinkContext::new(
+        node_id,
         uid.into(),
         alias.clone(),
         config.connector_type.clone(),
@@ -503,11 +518,11 @@ async fn connector_task(
         sink: sink_addr,
     };
 
-    let mut reconnect: ReconnectRuntime =
-        ReconnectRuntime::new(&connector_addr, notifier.clone(), &config.reconnect);
+    let mut reconnect = ReconnectRuntime::new(&connector_addr, notifier.clone(), &config.reconnect);
     let notifier = reconnect.notifier();
 
     let ctx = ConnectorContext {
+        node_id,
         alias: alias.clone(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
@@ -1127,13 +1142,13 @@ where
 /// unique instance alias/id of a connector within a deployment
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Alias {
-    flow_alias: flow::Alias,
+    flow_alias: FlowInstanceId,
     connector_alias: String,
 }
 
 impl Alias {
     /// construct a new `ConnectorId` from the id of the containing flow and the connector instance id
-    pub fn new(flow_alias: impl Into<flow::Alias>, connector_alias: impl Into<String>) -> Self {
+    pub fn new(flow_alias: impl Into<FlowInstanceId>, connector_alias: impl Into<String>) -> Self {
         Self {
             flow_alias: flow_alias.into(),
             connector_alias: connector_alias.into(),
@@ -1142,7 +1157,7 @@ impl Alias {
 
     /// get a reference to the flow alias
     #[must_use]
-    pub fn flow_alias(&self) -> &flow::Alias {
+    pub fn flow_alias(&self) -> &FlowInstanceId {
         &self.flow_alias
     }
 
@@ -1295,7 +1310,7 @@ where
 
 #[cfg(test)]
 pub(crate) mod unit_tests {
-    use crate::system::flow;
+    use crate::ids::FlowInstanceId;
 
     use super::*;
 
@@ -1311,7 +1326,7 @@ pub(crate) mod unit_tests {
         pub(crate) fn new(tx: Sender<Msg>) -> Self {
             Self {
                 t: ConnectorType::from("snot"),
-                alias: Alias::new(flow::Alias::new("fake"), "fake"),
+                alias: Alias::new(FlowInstanceId::new("app", "fake"), "fake"),
                 notifier: reconnect::ConnectionLostNotifier::new(tx),
                 beacon: QuiescenceBeacon::default(),
             }

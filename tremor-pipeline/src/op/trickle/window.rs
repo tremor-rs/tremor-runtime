@@ -15,7 +15,7 @@
 use super::select::execute_select_and_having;
 use crate::{Event, EventId, EventIdGenerator, OpMeta};
 use std::{borrow::Cow as SCow, convert::TryFrom};
-use tremor_common::{ids::OperatorId, ports::Port, stry};
+use tremor_common::{ports::Port, stry, uids::OperatorUId};
 use tremor_script::{
     self,
     ast::{AggrSlice, Aggregates, Consts, RunConsts, Script, Select, WindowDefinition},
@@ -69,7 +69,7 @@ impl GroupWindow {
     /// Crate chain of tilt frames from a iterator of windows
     pub(crate) fn from_windows<'i, I>(
         aggrs: &AggrSlice<'static>,
-        operator_id: OperatorId,
+        operator_id: OperatorUId,
         mut iter: I,
     ) -> Option<Box<Self>>
     where

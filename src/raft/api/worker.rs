@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::channel::{Receiver, Sender};
-use halfbrown::HashMap;
+use crate::channel::{Receiver, Sender};
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::raft::{
-    api::APIStoreReq,
-    store::{AppId, Store},
+use crate::{
+    ids::AppId,
+    raft::{api::APIStoreReq, store::Store},
 };
 
 use super::apps::AppState;
@@ -29,8 +29,8 @@ async fn send<T>(tx: Sender<T>, t: T) {
     }
 }
 
-pub(super) async fn api_worker(store: Arc<Store>, store_rx: Receiver<APIStoreReq>) {
-    while let Ok(msg) = store_rx.recv().await {
+pub(super) async fn api_worker(store: Arc<Store>, mut store_rx: Receiver<APIStoreReq>) {
+    while let Some(msg) = store_rx.recv().await {
         match msg {
             APIStoreReq::GetApp(app_id, tx) => {
                 let sm = store.state_machine.read().await;

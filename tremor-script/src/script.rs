@@ -107,7 +107,7 @@ impl Script {
         reg: &Registry,
     ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
@@ -119,7 +119,7 @@ impl Script {
     /// if the script can not be parsed
     pub fn parse<S>(src: &S, reg: &Registry) -> Result<Self>
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg)

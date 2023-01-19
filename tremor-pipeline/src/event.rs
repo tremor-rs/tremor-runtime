@@ -14,8 +14,8 @@
 
 use crate::{CbAction, EventId, OpMeta, SignalKind};
 use std::mem::swap;
-use tremor_common::ids::SourceId;
 use tremor_common::time::nanotime;
+use tremor_common::uids::SourceUId;
 use tremor_script::prelude::*;
 use tremor_script::{EventOriginUri, EventPayload};
 
@@ -58,7 +58,7 @@ impl Event {
 
     /// create a drain signal event originating at the connector with the given `source_id`
     #[must_use]
-    pub fn signal_drain(source_id: SourceId) -> Self {
+    pub fn signal_drain(source_id: SourceUId) -> Self {
         Self {
             ingest_ns: nanotime(),
             kind: Some(SignalKind::Drain(source_id)),
@@ -68,7 +68,7 @@ impl Event {
 
     /// create start signal for the given `SourceId`
     #[must_use]
-    pub fn signal_start(uid: SourceId) -> Self {
+    pub fn signal_start(uid: SourceUId) -> Self {
         Self {
             ingest_ns: nanotime(),
             kind: Some(SignalKind::Start(uid)),
@@ -464,7 +464,7 @@ mod test {
     use super::*;
     use crate::Result;
     use simd_json::OwnedValue;
-    use tremor_common::ids::{Id, OperatorId};
+    use tremor_common::uids::{OperatorUId, UId};
     use tremor_script::ValueAndMeta;
     use tremor_value::Object;
 
@@ -606,7 +606,7 @@ mod test {
         assert_eq!(e.insight_fail().cb, CbAction::Fail);
 
         let mut clone = e.clone();
-        let op_id = OperatorId::new(1);
+        let op_id = OperatorUId::new(1);
         clone.op_meta.insert(op_id, OwnedValue::null());
         let ack_with_timing = clone.insight_ack_with_timing(100);
         assert_eq!(ack_with_timing.cb, CbAction::Ack);
@@ -614,7 +614,7 @@ mod test {
         let (_, m) = ack_with_timing.data.parts();
         assert_eq!(Some(100), m.get_u64("time"));
 
-        e.op_meta.insert(OperatorId::new(42), OwnedValue::null());
+        e.op_meta.insert(OperatorUId::new(42), OwnedValue::null());
     }
 
     #[test]

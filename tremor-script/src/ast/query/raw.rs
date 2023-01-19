@@ -143,7 +143,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
         match self {
             StmtRaw::SelectStmt(stmt) => {
                 let mut aggregates = Vec::new();
-                let mut locals = halfbrown::HashMap::default();
+                let mut locals = std::collections::HashMap::default();
                 helper.swap(&mut aggregates, &mut locals);
                 let stmt: Select<'script> = stmt.up(helper)?;
                 helper.swap(&mut aggregates, &mut locals);

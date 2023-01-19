@@ -14,13 +14,13 @@
 
 mod statemachine;
 
-pub use self::statemachine::apps::{AppId, FlowId, InstanceId};
 pub(crate) use self::statemachine::apps::{FlowInstance, Instances, StateApp};
 use self::statemachine::{SerializableTremorStateMachine, TremorStateMachine};
 use crate::{
     errors::Error as RuntimeError,
+    ids::{AppId, FlowDefinitionId, FlowInstanceId},
     instance::IntendedState,
-    raft::{archive::TremorAppDef, ClusterError, NodeId},
+    raft::{archive::TremorAppDef, ClusterError},
     system::Runtime,
 };
 use async_std::sync::RwLock;
@@ -62,7 +62,7 @@ pub enum NodesRequest {
     AddNode { addr: Addr },
     /// Remove Node with the given `node_id`
     /// This command should be committed after removing a learner from the cluster.
-    RemoveNode { node_id: NodeId },
+    RemoveNode { node_id: openraft::NodeId },
 }
 
 /// Operations on apps and their instances
@@ -79,19 +79,18 @@ pub enum AppsRequest {
     /// Deploy and Start a flow of an installed app
     Deploy {
         app: AppId,
-        flow: FlowId,
-        instance: InstanceId,
+        flow: FlowDefinitionId,
+        instance: FlowInstanceId,
         config: std::collections::HashMap<String, OwnedValue>,
         state: IntendedState,
     },
 
     /// Stopps and Undeploys an instance of a app
-    Undeploy { app: AppId, instance: InstanceId },
+    Undeploy(FlowInstanceId),
 
     /// Requests a instance state change
     InstanceStateChange {
-        app: AppId,
-        instance: InstanceId,
+        instance: FlowInstanceId,
         state: IntendedState,
     },
 }
@@ -114,7 +113,7 @@ impl AppData for TremorRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct TremorStart {
-    pub(crate) instance: InstanceId,
+    pub(crate) instance: FlowInstanceId,
     pub(crate) config: std::collections::HashMap<String, OwnedValue>,
     pub(crate) running: bool,
 }
@@ -209,10 +208,10 @@ pub enum Error {
     Tremor(Mutex<RuntimeError>),
     TremorScript(Mutex<tremor_script::errors::Error>),
     MissingApp(AppId),
-    MissingFlow(AppId, FlowId),
-    MissingInstance(AppId, InstanceId),
+    MissingFlow(AppId, FlowDefinitionId),
+    MissingInstance(FlowInstanceId),
     RunningInstances(AppId),
-    NodeAlreadyAdded(NodeId),
+    NodeAlreadyAdded(openraft::NodeId),
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -273,19 +272,19 @@ impl StdError for Error {}
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::MissingCf(cf) => write!(f, "missing column family: `{}`", cf),
-            Error::Utf8(e) => write!(f, "invalid utf8: {}", e),
-            Error::StrUtf8(e) => write!(f, "invalid utf8: {}", e),
-            Error::JSON(e) => write!(f, "invalid json: {}", e),
-            Error::RocksDB(e) => write!(f, "rocksdb error: {}", e),
-            Error::Io(e) => write!(f, "io error: {}", e),
+            Error::MissingCf(cf) => write!(f, "missing column family: `{cf}`"),
+            Error::Utf8(e) => write!(f, "invalid utf8: {e}"),
+            Error::StrUtf8(e) => write!(f, "invalid utf8: {e}"),
+            Error::JSON(e) => write!(f, "invalid json: {e}"),
+            Error::RocksDB(e) => write!(f, "rocksdb error: {e}"),
+            Error::Io(e) => write!(f, "io error: {e}"),
             Error::Tremor(e) => write!(f, "tremor error: {:?}", e.lock()),
             Error::TremorScript(e) => write!(f, "tremor script error: {:?}", e.lock()),
-            Error::Other(e) => write!(f, "other error: {}", e),
-            Error::MissingApp(app) => write!(f, "missing app: {}", app),
-            Error::MissingFlow(app, flow) => write!(f, "missing flow: {}::{}", app, flow),
-            Error::MissingInstance(app, instance) => {
-                write!(f, "missing instance: {}::{}", app, instance)
+            Error::Other(e) => write!(f, "other error: {e}"),
+            Error::MissingApp(app) => write!(f, "missing app: {app}"),
+            Error::MissingFlow(app, flow) => write!(f, "missing flow: {app}::{flow}"),
+            Error::MissingInstance(instance) => {
+                write!(f, "missing instance: {instance}")
             }
             Error::Storage(e) => write!(f, "Storage: {e}"),
             Error::NodeAlreadyAdded(node_id) => write!(f, "Node {node_id} already added"),
@@ -516,7 +515,7 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
             self.put(
                 self.db.cf_logs()?,
                 &id,
-                &serde_json::to_vec(entry).map_err(logs_w_err)?,
+                serde_json::to_vec(entry).map_err(logs_w_err)?,
             )
             .map_err(logs_w_err)?;
         }
@@ -718,7 +717,7 @@ impl Store {
 
     /// bootstrapping constructor - storing the given node data in the db
     pub(crate) async fn bootstrap<P: AsRef<Path>>(
-        node_id: NodeId,
+        node_id: openraft::NodeId,
         addr: &Addr,
         db_path: P,
         world: Runtime,
@@ -735,35 +734,6 @@ impl Store {
         Ok(Arc::new(Self { state_machine, db }))
     }
 
-    pub(crate) fn get_self(&self) -> Result<(NodeId, Addr), ClusterError> {
-        let id = self
-            .get_self_node_id()?
-            .ok_or("invalid cluster store, node_id missing")?;
-        let addr = self
-            .get_self_addr()?
-            .ok_or("invalid cluster store, node_addr missing")?;
-
-        Ok((id, addr))
-    }
-
-    /// # Errors
-    /// if the store fails to read the RPC address
-    pub fn get_self_addr(&self) -> Result<Option<Addr>, Error> {
-        Ok(self
-            .db
-            .get_cf(self.db.cf_self()?, Store::NODE_ADDR)?
-            .map(|v| serde_json::from_slice(&v))
-            .transpose()?)
-    }
-
-    /// # Errors
-    /// if the store fails to read the node id
-    pub fn get_self_node_id(&self) -> Result<Option<NodeId>, Error> {
-        self.db
-            .get_cf(self.db.cf_self()?, Store::NODE_ID)?
-            .map(|v| bin_to_id(&v))
-            .transpose()
-    }
     /// Initialize the database
     ///
     /// This function is safe and never cleans up or resets the current state,
@@ -779,14 +749,7 @@ impl Store {
     }
 
     /// loading constructor - loading the given database
-    ///
-    /// verifying that we have some node-data stored
-    pub(crate) async fn load<P: AsRef<Path>>(
-        db_path: P,
-        world: Runtime,
-    ) -> Result<Arc<Store>, ClusterError> {
-        let db = Self::init_db(db_path)?;
-        let db = Arc::new(db);
+    pub(crate) async fn load(db: Arc<DB>, world: Runtime) -> Result<Arc<Store>, ClusterError> {
         let state_machine = RwLock::new(
             TremorStateMachine::new(db.clone(), world.clone())
                 .await
@@ -797,13 +760,37 @@ impl Store {
     }
 
     /// Store the information about the current node itself in the `db`
-    fn set_self(db: &DB, node_id: NodeId, addr: &Addr) -> Result<(), ClusterError> {
+    fn set_self(db: &DB, node_id: openraft::NodeId, addr: &Addr) -> Result<(), ClusterError> {
         let node_id_bytes = id_to_bin(node_id)?;
         let addr_bytes = serde_json::to_vec(addr)?;
         let cf = db.cf_self()?;
         db.put_cf(cf, Store::NODE_ID, node_id_bytes)?;
-        db.put_cf(cf, Store::NODE_ADDR, &addr_bytes)?;
+        db.put_cf(cf, Store::NODE_ADDR, addr_bytes)?;
         Ok(())
+    }
+
+    pub(crate) fn get_self(db: &DB) -> Result<(openraft::NodeId, Addr), ClusterError> {
+        let id = Self::get_self_node_id(db)?.ok_or("invalid cluster store, node_id missing")?;
+        let addr = Self::get_self_addr(db)?.ok_or("invalid cluster store, node_addr missing")?;
+
+        Ok((id, addr))
+    }
+
+    /// # Errors
+    /// if the store fails to read the RPC address
+    pub fn get_self_addr(db: &DB) -> Result<Option<Addr>, Error> {
+        Ok(db
+            .get_cf(db.cf_self()?, Store::NODE_ADDR)?
+            .map(|v| serde_json::from_slice(&v))
+            .transpose()?)
+    }
+
+    /// # Errors
+    /// if the store fails to read the node id
+    pub fn get_self_node_id(db: &DB) -> Result<Option<openraft::NodeId>, Error> {
+        db.get_cf(db.cf_self()?, Store::NODE_ID)?
+            .map(|v| bin_to_id(&v))
+            .transpose()
     }
 }
 

@@ -16,6 +16,7 @@ use std::{
     sync::Mutex,
 };
 use store::{TremorRequest, TremorResponse};
+use tokio::task::JoinError;
 
 /// load a default raft config
 /// # Errors
@@ -41,6 +42,7 @@ pub enum ClusterError {
     Serde(serde_json::Error),
     Config(ConfigError),
     Client(Error),
+    JoinError(JoinError),
     // FIXME: this is a horrible hack
     Runtime(Mutex<crate::Error>),
 }
@@ -104,18 +106,24 @@ impl From<serde_json::Error> for ClusterError {
     }
 }
 
+impl From<JoinError> for ClusterError {
+    fn from(e: JoinError) -> Self {
+        ClusterError::JoinError(e)
+    }
+}
 impl Display for ClusterError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ClusterError::Other(s) => write!(f, "{}", s),
-            ClusterError::Rocks(s) => write!(f, "{}", s),
-            ClusterError::Io(s) => write!(f, "{}", s),
-            ClusterError::Store(s) => write!(f, "{}", s),
-            ClusterError::Initialize(e) => write!(f, "{}", e),
-            ClusterError::Config(e) => write!(f, "{}", e),
+            ClusterError::Other(e) => e.fmt(f),
+            ClusterError::Rocks(e) => e.fmt(f),
+            ClusterError::Io(e) => e.fmt(f),
+            ClusterError::Store(e) => e.fmt(f),
+            ClusterError::Initialize(e) => e.fmt(f),
+            ClusterError::Config(e) => e.fmt(f),
             ClusterError::Runtime(e) => write!(f, "{:?}", e.lock()),
-            ClusterError::Serde(e) => write!(f, "{e}"),
+            ClusterError::Serde(e) => e.fmt(f),
             ClusterError::Client(e) => e.fmt(f),
+            ClusterError::JoinError(e) => e.fmt(f),
         }
     }
 }
@@ -127,7 +135,7 @@ type ClusterResult<T> = Result<T, ClusterError>;
 /// # Errors
 /// When the node can't be removed
 pub async fn remove_node<T: ToString + ?Sized>(
-    node_id: NodeId,
+    node_id: openraft::NodeId,
     api_addr: &T,
 ) -> Result<(), crate::errors::Error> {
     let client = api::client::Tremor::new(api_addr)?;

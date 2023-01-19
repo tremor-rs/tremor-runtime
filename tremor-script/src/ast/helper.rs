@@ -14,7 +14,7 @@
 
 use super::{
     docs::{ConstDoc, Docs, QueryDoc},
-    module::{self, Content, GetMod, Manager},
+    module,
     query::{OperatorDefinition, PipelineDefinition, ScriptDefinition, WindowDefinition},
     raw::LocalPathRaw,
     warning::{self, Warning, Warnings},
@@ -23,13 +23,14 @@ use super::{
 use crate::{
     arena,
     errors::Result,
+    module::{Content, GetMod, Manager},
     pos::Span,
     prelude::*,
     registry::{Aggr as AggrRegistry, Registry},
     NodeMeta,
 };
 use beef::Cow;
-use halfbrown::HashMap;
+use std::collections::HashMap;
 use std::{collections::BTreeSet, mem};
 
 /// A scope

@@ -148,7 +148,7 @@ op!(BackpressureFactory(_uid, node) {
 impl Operator for Backpressure {
     fn on_event(
         &mut self,
-        uid: OperatorId,
+        uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -179,7 +179,7 @@ impl Operator for Backpressure {
 
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -199,7 +199,7 @@ impl Operator for Backpressure {
         })
     }
 
-    fn on_contraflow(&mut self, uid: OperatorId, insight: &mut Event) {
+    fn on_contraflow(&mut self, uid: OperatorUId, insight: &mut Event) {
         // If the related event never touched this operator we don't take
         // action
         if !insight.op_meta.contains_key(uid) {
@@ -233,12 +233,12 @@ impl Operator for Backpressure {
 mod test {
     use super::*;
     use crate::SignalKind;
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
     use tremor_value::Object;
 
     #[test]
     fn pass_wo_error() {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100_000_000,
             steps: vec![1, 10, 100],
@@ -283,7 +283,7 @@ mod test {
 
     #[test]
     fn halt_on_error() {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100_000_000,
             steps: vec![1, 10, 100],
@@ -380,7 +380,7 @@ mod test {
 
     #[test]
     fn halt_on_error_cb() -> Result<()> {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100_000_000,
             steps: vec![1, 10, 100],
@@ -489,7 +489,7 @@ mod test {
 
     #[test]
     fn walk_backoff() {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100_000_000,
             steps: vec![1, 10, 100],

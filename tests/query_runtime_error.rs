@@ -14,7 +14,7 @@
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use std::path::PathBuf;
-use tremor_common::{file, ids::OperatorIdGen, ports::IN};
+use tremor_common::{file, ports::IN, uids::OperatorUIdGen};
 
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
@@ -30,7 +30,7 @@ use tremor_script::utils::*;
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
-    let mut idgen = OperatorIdGen::new();
+    let mut idgen = OperatorUIdGen::new();
     let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_executable_graph(&mut idgen)?)
 }

@@ -14,6 +14,7 @@ use super::ConnectorHarness;
 use crate::{
     connectors::{impls::bench, prelude::KillSwitch, sink::SinkMsg},
     errors::Result,
+    ids::BOOTSTRAP_NODE_ID,
     system::{flow_supervisor, Runtime, WorldConfig},
 };
 use std::{io::Write, time::Duration};
@@ -40,7 +41,7 @@ async fn stop_after_events() -> Result<()> {
         "iters": 2
       }
     });
-    let (world, world_handle) = Runtime::start(WorldConfig::default()).await?;
+    let (world, world_handle) = Runtime::start(BOOTSTRAP_NODE_ID, WorldConfig::default()).await?;
     let mut harness = ConnectorHarness::new_with_kill_switch(
         function_name!(),
         &bench::Builder::default(),

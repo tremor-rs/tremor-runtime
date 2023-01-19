@@ -20,8 +20,8 @@ use crate::{
     lexer::{self, Lexer},
     prelude::*,
 };
-use halfbrown::HashMap;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 
 /// A tremor deployment ( troy)
 #[derive(Debug, Clone)]
@@ -137,7 +137,7 @@ where
         aggr_reg: &AggrRegistry,
     ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         let empty = HashMap::new();
@@ -151,7 +151,7 @@ where
     /// if the deployment can not be parsed
     pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         Self::parse_with_cache(src, reg, aggr_reg, &HashMap::new())
     }
@@ -166,7 +166,7 @@ where
         precached: &HashMap<NodeId, arena::Index>,
     ) -> Result<Self>
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg, aggr_reg, precached)

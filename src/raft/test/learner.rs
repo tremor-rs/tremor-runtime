@@ -1,12 +1,3 @@
-use std::time::Duration;
-
-use halfbrown::HashMap;
-
-use crate::raft::{
-    archive::build_archive_from_source,
-    store::{FlowId, InstanceId},
-};
-
 // Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +12,12 @@ use crate::raft::{
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::prelude::*;
+use crate::{
+    ids::{FlowDefinitionId, FlowInstanceId},
+    raft::archive::build_archive_from_source,
+};
+use std::collections::HashMap;
+use std::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn add_learner_test() -> ClusterResult<()> {
@@ -60,10 +57,14 @@ async fn add_learner_test() -> ClusterResult<()> {
         "learner not to be part of cluster voters"
     );
     // remove the learner again
+    dbg!("remove learner", &learner_node_id);
     client0.remove_learner(&learner_node_id).await?;
+    dbg!("stop learner");
     learner_node.stop().await?;
 
+    dbg!("remove learner node");
     client0.remove_node(&learner_node_id).await?;
+    dbg!("removed");
 
     // TODO: deploy an app and see if the learner also runs it
     // TODO: verify the whole lifecycle shenanigans of app instances with and without learner
@@ -136,12 +137,10 @@ end;
     let archive = build_archive_from_source("main", app_entrypoint.as_str())?;
     let app_id = client0.install(&archive).await?;
 
-    let flow_id = FlowId("main".to_string());
-    let instance = InstanceId("01".to_string());
+    let flow_id = FlowDefinitionId("main".to_string());
+    let instance = FlowInstanceId::new(app_id, "01".to_string());
     let config = HashMap::new();
-    let instance_id = client0
-        .start(&app_id, &flow_id, &instance, config, true)
-        .await?;
+    let instance_id = client0.start(&flow_id, &instance, config, true).await?;
 
     // wait for the app to be actually started
     // wait for the file to exist
@@ -151,7 +150,9 @@ end;
     // wait another short while for all nodes to finish writing
     tokio::time::sleep(Duration::from_millis(500)).await;
     // stop the flow instance
-    client0.stop_instance(&app_id, &instance_id).await?;
+    dbg!("Stopping instance");
+    client0.stop_instance(&instance_id).await?;
+    dbg!("Instance stopped");
     // shut the nodes down
     learner_node.stop().await?;
     node2.stop().await?;

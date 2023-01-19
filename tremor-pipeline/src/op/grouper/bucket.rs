@@ -158,7 +158,7 @@ impl Operator for Grouper {
     #[allow(clippy::manual_let_else)] // clippy bug
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         event: Event,
@@ -233,12 +233,12 @@ impl Operator for Grouper {
 #[cfg(test)]
 mod test {
     use super::*;
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
     use tremor_value::Value;
 
     #[test]
     fn bucket() -> Result<()> {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op = Grouper {
             buckets: HashMap::new(),
         };

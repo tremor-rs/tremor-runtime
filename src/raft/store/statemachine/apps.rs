@@ -12,14 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{
-    collections::HashSet,
-    fmt::{Display, Formatter},
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 
-use halfbrown::HashMap;
+use crate::{
+    ids::{AppId, FlowDefinitionId, FlowInstanceId},
+    instance::IntendedState,
+    raft::{
+        archive::{extract, get_app, TremorAppDef},
+        store::{
+            self,
+            statemachine::{sm_d_err, sm_r_err, sm_w_err, RaftStateMachine},
+            store_w_err, AppsRequest, StorageResult, TremorResponse,
+        },
+    },
+    system::Runtime,
+};
 use rocksdb::ColumnFamily;
+use std::collections::HashMap;
 use tremor_script::{
     arena::{self, Arena},
     ast::{
@@ -32,63 +41,16 @@ use tremor_script::{
     AggrRegistry, FN_REGISTRY,
 };
 
-use crate::{
-    instance::IntendedState,
-    raft::{
-        archive::{extract, get_app, TremorAppDef},
-        store::{
-            self,
-            statemachine::{sm_d_err, sm_r_err, sm_w_err, RaftStateMachine},
-            store_w_err, AppsRequest, StorageResult, TremorResponse,
-        },
-    },
-    system::{flow::Alias as FlowAlias, Runtime},
-};
-
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
-pub struct InstanceId(pub String);
-impl Display for InstanceId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-// FIXME: deduplicate those ids
-impl From<InstanceId> for FlowAlias {
-    fn from(instance_id: InstanceId) -> FlowAlias {
-        FlowAlias::new(instance_id.0)
-    }
-}
-
-impl From<&InstanceId> for FlowAlias {
-    fn from(instance_id: &InstanceId) -> FlowAlias {
-        FlowAlias::new(&instance_id.0)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
-pub struct FlowId(pub String);
-impl Display for FlowId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq)]
-pub struct AppId(pub String);
-impl Display for AppId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FlowInstance {
+    /// Identifier of the instance
+    pub id: FlowInstanceId,
     /// the id of the flow definition this instance is based upon
-    pub definition: FlowId,
+    pub definition: FlowDefinitionId,
     pub config: HashMap<String, simd_json::OwnedValue>,
     pub state: IntendedState,
 }
-pub type Instances = HashMap<InstanceId, FlowInstance>;
+pub type Instances = HashMap<String, FlowInstance>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct StateApp {
@@ -145,17 +107,18 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
             .collect::<Result<HashMap<AppId, Instances>, store::Error>>()?;
 
         // start instances and put them into state machine state
-        for (app_id, instances) in instances {
+        for (app_id, app_instances) in instances {
             for (
-                instance,
+                _,
                 FlowInstance {
-                    definition: id,
+                    id,
+                    definition,
                     config,
                     state,
                 },
-            ) in instances
+            ) in app_instances
             {
-                me.deploy_flow(&app_id, id, instance, config, state)
+                me.deploy_flow(&app_id, definition, id, config, state)
                     .await
                     .map_err(store::Error::Storage)?;
             }
@@ -200,11 +163,11 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                         // redeploy existing instance with different config
                         if s_flow.config != flow.config {
                             info!("Flow instance {app_id}/{instance_id} with parameters differ, redeploying...");
-                            self.stop_and_remove_flow(app_id, instance_id).await?;
+                            self.stop_and_remove_flow(&s_flow.id).await?;
                             self.deploy_flow(
                                 app_id,
                                 s_flow.definition.clone(),
-                                instance_id.clone(),
+                                s_flow.id.clone(),
                                 s_flow.config.clone(), // important: this is the new config
                                 s_flow.state,
                             )
@@ -212,22 +175,30 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                         } else if s_flow.state != flow.state {
                             // same flow, same config, different state - just change state
 
-                            self.change_flow_state(app_id, instance_id, s_flow.state)
-                                .await
-                                .map_err(sm_w_err)?;
+                            self.change_flow_state(
+                                &FlowInstanceId::new(app_id.clone(), instance_id),
+                                s_flow.state,
+                            )
+                            .await
+                            .map_err(sm_w_err)?;
                         }
                     } else {
                         // stop and remove instances that are not in the snapshot
-                        self.stop_and_remove_flow(app_id, instance_id).await?;
+                        self.stop_and_remove_flow(&FlowInstanceId::new(
+                            app_id.clone(),
+                            instance_id,
+                        ))
+                        .await?;
                     }
                 }
                 // deploy instances that are not in self
                 for (s_instance_id, s_flow) in snapshot_instances {
-                    if !instances.contains_key(s_instance_id) {
+                    let flow_id = FlowInstanceId::new(app_id.clone(), s_instance_id);
+                    if !instances.contains_key(flow_id.alias()) {
                         self.deploy_flow(
                             app_id,
                             s_flow.definition.clone(),
-                            s_instance_id.clone(),
+                            flow_id,
                             s_flow.config.clone(),
                             s_flow.state,
                         )
@@ -287,18 +258,14 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                     value: Some(instance.to_string()),
                 })
             }
-            AppsRequest::Undeploy { app, instance } => {
-                self.stop_and_remove_flow(app, instance).await?;
+            AppsRequest::Undeploy(instance) => {
+                self.stop_and_remove_flow(instance).await?;
                 Ok(TremorResponse {
                     value: Some(instance.to_string()),
                 })
             }
-            AppsRequest::InstanceStateChange {
-                app,
-                instance,
-                state,
-            } => {
-                self.change_flow_state(app, instance, *state).await?;
+            AppsRequest::InstanceStateChange { instance, state } => {
+                self.change_flow_state(instance, *state).await?;
                 Ok(TremorResponse {
                     value: Some(instance.to_string()),
                 })
@@ -357,8 +324,8 @@ impl AppsStateMachine {
     async fn deploy_flow(
         &mut self,
         app_id: &AppId,
-        flow: FlowId,
-        instance: InstanceId,
+        flow: FlowDefinitionId,
+        instance: FlowInstanceId,
         config: HashMap<String, simd_json::OwnedValue>,
         intended_state: IntendedState,
     ) -> StorageResult<()> {
@@ -399,7 +366,6 @@ impl AppsStateMachine {
             let reg = &*FN_REGISTRY.read().map_err(store_w_err)?;
             let mut helper = Helper::new(reg, &fake_aggr_reg);
             Optimizer::new(&helper)
-                .visitor
                 .walk_flow_definition(&mut defn)
                 .map_err(store::Error::from)?;
 
@@ -409,21 +375,26 @@ impl AppsStateMachine {
                 .walk_flow_definition(&mut defn)
                 .map_err(store::Error::from)?;
             Optimizer::new(&helper)
-                .visitor
                 .walk_flow_definition(&mut defn)
                 .map_err(store::Error::from)?;
         }
 
+        let mid = Box::new(defn.meta().clone());
         let deploy = DeployFlow {
-            mid: Box::new(defn.meta().clone()),
-            from_target: tremor_script::ast::NodeId::new(&flow.0, &[app_id.0.clone()]),
-            instance_alias: instance.0.clone(),
+            mid: mid.clone(),
+            from_target: tremor_script::ast::NodeId::new(
+                flow.0.clone(),
+                vec![app_id.0.clone()],
+                mid,
+            ),
+            instance_alias: instance.alias().to_string(),
             defn,
             docs: None,
         };
         app.instances.insert(
-            instance.clone(),
+            instance.alias().to_string(),
             FlowInstance {
+                id: instance.clone(),
                 definition: flow,
                 config,
                 state: intended_state, // we are about to apply this state further below
@@ -440,28 +411,29 @@ impl AppsStateMachine {
             .map_err(store_w_err)?;
 
         // deploy the flow but don't start it yet
-        self.world.deploy_flow(&deploy).await.map_err(sm_w_err)?;
-        // change the flow state to the intended state
+        dbg!("DEPLOY");
         self.world
-            .change_flow_state(instance.into(), intended_state)
+            .deploy_flow(app_id.clone(), &deploy)
+            .await
+            .map_err(sm_w_err)?;
+        // change the flow state to the intended state
+        dbg!("START");
+        self.world
+            .change_flow_state(instance, intended_state)
             .await
             .map_err(sm_w_err)?;
         Ok(())
     }
 
-    async fn stop_and_remove_flow(
-        &mut self,
-        app_id: &AppId,
-        instance_id: &InstanceId,
-    ) -> StorageResult<()> {
-        info!("Stop and remove flow {app_id}/{instance_id}");
-        if let Some(app) = self.apps.get_mut(app_id) {
-            if app.instances.get(instance_id).is_some() {
+    async fn stop_and_remove_flow(&mut self, instance_id: &FlowInstanceId) -> StorageResult<()> {
+        info!("Stop and remove flow {instance_id}");
+        if let Some(app) = self.apps.get_mut(instance_id.app_id()) {
+            if app.instances.get(instance_id.alias()).is_some() {
                 self.world
-                    .stop_flow(instance_id.into())
+                    .stop_flow(instance_id.clone())
                     .await
                     .map_err(sm_d_err)?;
-                app.instances.remove(instance_id);
+                app.instances.remove(instance_id.alias());
             }
         }
         Ok(())
@@ -476,8 +448,9 @@ impl AppsStateMachine {
             }
             // stop instances then delete the app
             for (instance_id, _instance) in app.instances {
+                let flow_instance_id = FlowInstanceId::new(app.app.name().clone(), instance_id);
                 self.world
-                    .stop_flow(instance_id.into())
+                    .stop_flow(flow_instance_id)
                     .await
                     .map_err(sm_d_err)?;
             }
@@ -497,24 +470,23 @@ impl AppsStateMachine {
 
     async fn change_flow_state(
         &mut self,
-        app_id: &AppId,
-        instance_id: &InstanceId,
+        instance_id: &FlowInstanceId,
         intended_state: IntendedState,
     ) -> StorageResult<()> {
-        info!("Change flow state {app_id}/{instance_id} to {intended_state}");
+        info!("Change flow state {instance_id} to {intended_state}");
         let app = self
             .apps
-            .get_mut(app_id)
-            .ok_or_else(|| store::Error::MissingApp(app_id.clone()))?;
+            .get_mut(instance_id.app_id())
+            .ok_or_else(|| store::Error::MissingApp(instance_id.app_id().clone()))?;
         let instance = app
             .instances
-            .get_mut(instance_id)
-            .ok_or_else(|| store::Error::MissingInstance(app_id.clone(), instance_id.clone()))?;
+            .get_mut(instance_id.alias())
+            .ok_or_else(|| store::Error::MissingInstance(instance_id.clone()))?;
         // set the intended state in our state machine
         instance.state = intended_state;
         // ... and attempt to bring the flow instance in the runtime in the desired state
         self.world
-            .change_flow_state(instance_id.into(), intended_state)
+            .change_flow_state(instance_id.clone(), intended_state)
             .await
             .map_err(sm_w_err)?;
         Ok(())

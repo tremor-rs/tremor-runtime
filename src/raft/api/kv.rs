@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::raft::api::{wrapp, APIError, APIRequest, APIResult, ServerState, ToAPIResult};
-use crate::raft::store::{TremorResponse, TremorSet};
-use async_std::channel::bounded;
-use async_std::prelude::FutureExt;
+use crate::{
+    channel::bounded,
+    raft::{
+        api::{wrapp, APIError, APIRequest, APIResult, ServerState, ToAPIResult},
+        store::{TremorResponse, TremorSet},
+    },
+};
 use std::sync::Arc;
 use tide::Route;
+use tokio::time::timeout;
 
 use super::API_WORKER_TIMEOUT;
 
@@ -53,12 +57,14 @@ async fn write(mut req: APIRequest) -> APIResult<String> {
 /// read a value from the current node, not necessarily the leader, thus this value can be stale
 async fn read(mut req: APIRequest) -> APIResult<TremorResponse> {
     let key: String = req.body_json().await?;
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     req.state()
         .store_tx
         .send(super::APIStoreReq::KVGet(key, tx))
         .await?;
-    let value = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let value = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
     Ok(TremorResponse { value })
 }
 
@@ -69,11 +75,13 @@ async fn consistent_read(mut req: APIRequest) -> APIResult<TremorResponse> {
     // this will fail if we are not a leader
     state.raft.client_read().await.to_api_result(&req).await?;
     // here we are safe to read
-    let (tx, rx) = bounded(1);
+    let (tx, mut rx) = bounded(1);
     req.state()
         .store_tx
         .send(super::APIStoreReq::KVGet(key, tx))
         .await?;
-    let value = rx.recv().timeout(API_WORKER_TIMEOUT).await??;
+    let value = timeout(API_WORKER_TIMEOUT, rx.recv())
+        .await?
+        .ok_or(APIError::Recv)?;
     Ok(TremorResponse { value })
 }

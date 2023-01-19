@@ -21,7 +21,7 @@ use crate::EventId;
 
 use super::*;
 
-use tremor_common::ids::Id;
+use tremor_common::uids::UId;
 use tremor_script::ast::{self, Helper, Ident, Literal};
 use tremor_script::{ast::Consts, NodeMeta};
 use tremor_script::{
@@ -30,8 +30,8 @@ use tremor_script::{
 };
 use tremor_value::{literal, Value};
 
-fn test_uid() -> OperatorId {
-    OperatorId::new(42)
+fn test_uid() -> OperatorUId {
+    OperatorUId::new(42)
 }
 
 fn test_select_stmt(stmt: tremor_script::ast::Select) -> SelectStmt {
@@ -100,7 +100,7 @@ fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
     }
 }
 
-fn test_select(uid: OperatorId, stmt: &SelectStmt<'static>) -> Select {
+fn test_select(uid: OperatorUId, stmt: &SelectStmt<'static>) -> Select {
     let windows = vec![
         (
             "w15s".into(),

@@ -103,7 +103,7 @@ impl Arena {
     #[allow(clippy::let_and_return)]
     fn insert_<S>(&mut self, src: &S) -> Index
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         if let Some((idx, e)) = self.sources.iter_mut().enumerate().find(|e| {
             e.1.src
@@ -186,7 +186,7 @@ impl Arena {
     /// really never
     pub fn insert<S>(src: &S) -> Result<(Index, &'static str)>
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let mut a = ARENA.write()?;
         let id = a.insert_(src);

@@ -100,7 +100,7 @@ op!(PercentileFactory(_uid, node) {
 impl Operator for Percentile {
     fn on_event(
         &mut self,
-        uid: OperatorId,
+        uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -127,7 +127,7 @@ impl Operator for Percentile {
         true
     }
 
-    fn on_contraflow(&mut self, uid: OperatorId, insight: &mut Event) {
+    fn on_contraflow(&mut self, uid: OperatorUId, insight: &mut Event) {
         // If the related event never touched this operator we don't take
         // action
         if !insight.op_meta.contains_key(uid) {
@@ -151,12 +151,12 @@ impl Operator for Percentile {
 mod test {
     #![allow(clippy::float_cmp)]
     use super::*;
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
     use tremor_value::Object;
 
     #[test]
     fn pass_wo_error() {
-        let uid = OperatorId::new(0);
+        let uid = OperatorUId::new(0);
         let mut op: Percentile = Config {
             timeout: 100_000_000,
             step_up: default_step_up(),
@@ -207,7 +207,7 @@ mod test {
             step_up: default_step_up(),
         }
         .into();
-        let uid = OperatorId::new(42);
+        let uid = OperatorUId::new(42);
 
         let mut state = Value::null();
 
@@ -270,7 +270,7 @@ mod test {
             step_up: 0.1,
         }
         .into();
-        let uid = OperatorId::new(123);
+        let uid = OperatorUId::new(123);
         // An contraflow that fails the timeout
         let mut m = Object::new();
         m.insert("time".into(), 200_000_000.into());

@@ -15,7 +15,6 @@
 pub(crate) use crate::{
     channel::{bounded, Receiver, Sender},
     connectors::{
-        metrics::make_metrics_payload,
         sink::{
             channel_sink::{ChannelSink, ChannelSinkRuntime},
             AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkAck, SinkAddr,

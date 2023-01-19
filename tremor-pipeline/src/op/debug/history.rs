@@ -77,7 +77,7 @@ struct History {
 impl Operator for History {
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -119,7 +119,7 @@ impl Operator for History {
     }
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -157,7 +157,7 @@ impl Operator for History {
 
 #[cfg(test)]
 mod test {
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
 
     use super::*;
     use crate::EventId;
@@ -170,7 +170,7 @@ mod test {
                 name: "snot".to_string(),
             },
         };
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let event = Event {
             id: EventId::from_id(0, 0, 1),
             ingest_ns: 1,

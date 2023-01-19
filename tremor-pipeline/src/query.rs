@@ -40,8 +40,8 @@ use std::{
     collections::{BTreeSet, HashSet},
 };
 use tremor_common::{
-    ids::{OperatorId, OperatorIdGen},
     ports::Port,
+    uids::{OperatorUId, OperatorUIdGen},
 };
 use tremor_script::ast::optimizer::Optimizer;
 use tremor_script::{
@@ -158,7 +158,7 @@ impl Query {
     /// if the trickle script can not be parsed
     pub fn parse<S>(script: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
-        S: std::ops::Deref<Target = str>,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         Ok(Self(tremor_script::query::Query::parse(
             script, reg, aggr_reg,
@@ -170,7 +170,7 @@ impl Query {
     /// # Errors
     /// if the graph can not be turned into a pipeline
     #[allow(clippy::too_many_lines)]
-    pub fn to_executable_graph(&self, idgen: &mut OperatorIdGen) -> Result<ExecutableGraph> {
+    pub fn to_executable_graph(&self, idgen: &mut OperatorUIdGen) -> Result<ExecutableGraph> {
         let aggr_reg = tremor_script::aggr_registry();
         let reg = tremor_script::FN_REGISTRY.read()?;
         let mut helper = Helper::new(&reg, &aggr_reg);
@@ -759,7 +759,7 @@ fn into_name(prefix: &str, port: &str) -> String {
 }
 
 fn select(
-    operator_uid: OperatorId,
+    operator_uid: OperatorUId,
     config: &NodeConfig,
     node: &ast::SelectStmt<'static>,
     helper: &Helper<'static, '_>,
@@ -798,7 +798,7 @@ fn select(
 }
 
 fn operator(
-    operator_uid: OperatorId,
+    operator_uid: OperatorUId,
     node: &ast::OperatorDefinition<'static>,
     helper: &mut Helper,
 ) -> Result<Box<dyn Operator>> {
@@ -811,7 +811,7 @@ fn operator(
 
 pub(crate) fn supported_operators(
     config: &NodeConfig,
-    uid: OperatorId,
+    uid: OperatorUId,
     node: Option<&ast::Stmt<'static>>,
     helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode> {
@@ -843,7 +843,7 @@ pub(crate) fn supported_operators(
 mod test {
     use super::*;
     use crate::Result;
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
 
     #[test]
     fn query() -> Result<()> {
@@ -867,7 +867,7 @@ mod test {
         let src = "select event from in/test_in into out/test_out;";
         let q = Query::parse(&src, &*tremor_script::FN_REGISTRY.read()?, &aggr_reg)?;
 
-        let mut idgen = OperatorIdGen::new();
+        let mut idgen = OperatorUIdGen::new();
         let first = idgen.next_id();
         let g = q.to_executable_graph(&mut idgen)?;
         assert!(g.inputs.contains_key("in/test_in"));

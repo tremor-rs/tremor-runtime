@@ -48,7 +48,7 @@ pub(crate) struct Select {
 
 impl Select {
     pub fn from_stmt(
-        operator_uid: OperatorId,
+        operator_uid: OperatorUId,
         windows: Vec<(String, window::Impl)>,
         select: &ast::SelectStmt<'static>,
     ) -> Self {
@@ -172,7 +172,7 @@ impl Operator for Select {
     // so the state can never be changed.
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -312,7 +312,7 @@ impl Operator for Select {
 
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {

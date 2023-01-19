@@ -409,9 +409,10 @@ pub(crate) mod tests {
             impls::gcs::streamer::Mode, reconnect::ConnectionLostNotifier,
             utils::quiescence::QuiescenceBeacon,
         },
+        ids::FlowInstanceId,
     };
     use halfbrown::HashMap;
-    use tremor_common::ids::{ConnectorIdGen, SinkId};
+    use tremor_common::uids::{ConnectorUIdGen, SinkUId};
     use tremor_pipeline::EventId;
     use tremor_value::literal;
 
@@ -527,7 +528,7 @@ pub(crate) mod tests {
         });
 
         let mut config = Config::new(&raw_config).expect("config should be valid");
-        let alias = Alias::new("flow", "conn");
+        let alias = Alias::new(FlowInstanceId::new("app", "flow"), "conn");
         config.normalize(&alias);
         assert_eq!(256 * 1024, config.buffer_size);
     }
@@ -567,9 +568,10 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            SinkId::default(),
+            openraft::NodeId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
@@ -752,9 +754,10 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            SinkId::default(),
+            openraft::NodeId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
@@ -925,9 +928,10 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            SinkId::default(),
+            openraft::NodeId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
@@ -1019,9 +1023,10 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            SinkId::default(),
+            openraft::NodeId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
@@ -1072,9 +1077,10 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            SinkId::default(),
+            openraft::NodeId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
@@ -1296,9 +1302,10 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            SinkId::default(),
+            openraft::NodeId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
@@ -1444,13 +1451,19 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new("snot", "badger");
-        let mut connector_id_gen = ConnectorIdGen::default();
+        let alias = Alias::new(FlowInstanceId::new("app", "snot"), "badger");
+        let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
-        let addr =
-            crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
-                .await?;
+        let addr = crate::connectors::spawn(
+            openraft::NodeId::default(),
+            &alias,
+            &mut connector_id_gen,
+            &builder,
+            cfg,
+            &kill_switch,
+        )
+        .await?;
         let (tx, mut rx) = bounded(1);
         addr.stop(tx).await?;
         assert!(rx.recv().await.expect("rx empty").res.is_ok());
@@ -1474,13 +1487,19 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new("snot", "badger");
-        let mut connector_id_gen = ConnectorIdGen::default();
+        let alias = Alias::new(FlowInstanceId::new("app", "snot"), "badger");
+        let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
-        let addr =
-            crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
-                .await?;
+        let addr = crate::connectors::spawn(
+            openraft::NodeId::default(),
+            &alias,
+            &mut connector_id_gen,
+            &builder,
+            cfg,
+            &kill_switch,
+        )
+        .await?;
         let (tx, mut rx) = bounded(1);
         addr.stop(tx).await?;
         assert!(rx.recv().await.expect("rx empty").res.is_ok());

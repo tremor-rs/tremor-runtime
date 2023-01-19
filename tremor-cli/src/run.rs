@@ -20,11 +20,12 @@ use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use tremor_common::{
     file,
-    ids::OperatorIdGen,
     ports::{Port, IN},
     time::nanotime,
+    uids::OperatorUIdGen,
 };
 use tremor_pipeline::{Event, EventId};
+use tremor_runtime::raft::NodeId;
 use tremor_runtime::{
     codec::Codec,
     config,
@@ -338,7 +339,7 @@ impl Run {
         let mut egress = Egress::from_args(self)?;
 
         let runnable = tremor_pipeline::query::Query(runnable);
-        let mut idgen = OperatorIdGen::new();
+        let mut idgen = OperatorUIdGen::new();
         let mut pipeline = runnable.to_executable_graph(&mut idgen)?;
         let id = 0_u64;
 
@@ -418,7 +419,7 @@ impl Run {
         let config = WorldConfig {
             debug_connectors: true,
         };
-        let (world, handle) = Runtime::start(config).await?;
+        let (world, handle) = Runtime::start(NodeId::default(), config).await?;
         tremor_runtime::load_troy_file(&world, &self.script).await?;
         handle.await??;
         Ok(())

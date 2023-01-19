@@ -17,9 +17,9 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
+use super::{utils::metrics::SourceReporter, CodecReq, Connectivity};
 use crate::channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender};
 use crate::connectors::{
-    metrics::SourceReporter,
     utils::reconnect::{Attempt, ConnectionLostNotifier},
     Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
 };
@@ -44,9 +44,9 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use std::fmt::Display;
 use tokio::task;
 use tremor_common::{
-    ids::{Id, SinkId, SourceId},
     ports::{Port, ERR, OUT},
     time::nanotime,
+    uids::{SinkUId, SourceUId, UId},
 };
 use tremor_pipeline::{
     CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
@@ -54,8 +54,6 @@ use tremor_pipeline::{
 use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
 use tremor_value::{literal, Value};
 use value_trait::Builder;
-
-use super::{CodecReq, Connectivity};
 
 #[derive(Debug)]
 /// Messages a Source can receive
@@ -280,8 +278,9 @@ pub(crate) trait StreamReader: Send {
 /// context for a source
 #[derive(Clone)]
 pub(crate) struct SourceContext {
+    pub(crate) node_id: openraft::NodeId,
     /// connector uid
-    pub uid: SourceId,
+    pub(crate) uid: SourceUId,
     /// connector alias
     pub(crate) alias: Alias,
 
@@ -296,7 +295,7 @@ pub(crate) struct SourceContext {
 
 impl Display for SourceContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Source::{}]", &self.alias)
+        write!(f, "[Node::{}][Source::{}]", self.node_id, &self.alias)
     }
 }
 
@@ -388,7 +387,7 @@ impl SourceManagerBuilder {
 /// # Errors
 /// - on invalid connector configuration
 pub(crate) fn builder(
-    source_uid: SourceId,
+    source_uid: SourceUId,
     config: &ConnectorConfig,
     connector_default_codec: CodecReq,
     source_metrics_reporter: SourceReporter,
@@ -425,7 +424,7 @@ pub(crate) fn builder(
 /// maintaining stream state
 // TODO: there is optimization potential here for reusing codec and preprocessors after a stream got ended
 struct Streams {
-    uid: SourceId,
+    uid: SourceUId,
     codec_config: CodecConfig,
     preprocessor_configs: Vec<PreprocessorConfig>,
     states: BTreeMap<u64, StreamState>,
@@ -437,7 +436,7 @@ impl Streams {
     }
     /// constructor
     fn new(
-        uid: SourceId,
+        uid: SourceUId,
         codec_config: config::Codec,
         preprocessor_configs: Vec<PreprocessorConfig>,
     ) -> Self {
@@ -494,7 +493,7 @@ impl Streams {
 
     /// build a stream
     fn build_stream(
-        source_uid: SourceId,
+        source_uid: SourceUId,
         stream_id: u64,
         codec_config: &CodecConfig,
         codec_overwrite: Option<NameWithConfig>,
@@ -565,7 +564,7 @@ where
     /// Gather all the sinks that reported being started.
     /// This will give us some knowledge on the topology and most importantly
     /// on how many `Drained` messages to wait. Assumes a static topology.
-    started_sinks: HashSet<SinkId>,
+    started_sinks: HashSet<SinkUId>,
     num_started_sinks: u64,
     /// is counted up for each call to `pull_data` in order to identify the pull call
     /// an event is originating from. We can only ack or fail pulls.
