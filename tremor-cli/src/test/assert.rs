@@ -229,14 +229,14 @@ fn process_contains(
         total_condition &= condition;
         status::assert_has(
             prefix,
-            &format!("Assert {}", counter),
+            &format!("Assert {counter}"),
             &format!("  Contains `{}` in `{}`", &c.trim(), &file),
             None,
             condition,
         )?;
     }
     Ok(report::TestElement {
-        description: format!("File `{}` contains", file),
+        description: format!("File `{file}` contains"),
         info: Some(contains.to_vec().join("\n")),
         hidden: false,
         keyword: report::KeywordKind::Predicate,
@@ -276,14 +276,14 @@ fn process_doesnt_contain(
         total_condition &= condition;
         status::assert_has(
             prefix,
-            &format!("Assert {}", counter),
+            &format!("Assert {counter}"),
             &format!("  Does not contain `{}` in `{}`", &c.trim(), &file),
             None,
             condition,
         )?;
     }
     Ok(report::TestElement {
-        description: format!("file `{}` does not contain", file),
+        description: format!("file `{file}` does not contain"),
         info: Some(doesnt_contain.to_vec().join("\n")),
         hidden: false,
         keyword: report::KeywordKind::Predicate,
@@ -315,14 +315,14 @@ fn process_equals_file(
 
     status::assert_has(
         prefix,
-        &format!("Assert {}", counter),
-        &format!("File `{}` equals `{}`", &file, equals_file),
+        &format!("Assert {counter}"),
+        &format!("File `{}` equals `{equals_file}`", &file),
         info.as_ref(),
         condition,
     )?;
 
     Ok(report::TestElement {
-        description: format!("File `{}` equals", file),
+        description: format!("File `{file}` equals"),
         info,
         hidden: false,
         keyword: report::KeywordKind::Predicate,

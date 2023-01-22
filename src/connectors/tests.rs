@@ -123,7 +123,7 @@ impl ConnectorHarness {
         let mid = NodeMeta::new(Location::yolo(), Location::yolo());
         for port in input_ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = DeployEndpoint::new(&format!("TEST__{}_pipeline", port), &IN, &mid);
+            let pipeline_id = DeployEndpoint::new(&format!("TEST__{port}_pipeline"), &IN, &mid);
             // connect pipeline to connector
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
@@ -145,7 +145,7 @@ impl ConnectorHarness {
         }
         for port in output_ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = DeployEndpoint::new(&format!("TEST__{}_pipeline", port), &IN, &mid);
+            let pipeline_id = DeployEndpoint::new(&format!("TEST__{port}_pipeline"), &IN, &mid);
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
                 .send(connectors::Msg::LinkOutput {
@@ -333,6 +333,7 @@ impl ConnectorHarness {
         feature = "socket-integration",
         feature = "net-integration",
         feature = "ws-integration",
+        feature = "s3-integration",
         feature = "gcp-integration"
     ))]
     pub(crate) async fn send_to_sink(&self, event: Event, port: Cow<'static, str>) -> Result<()> {
@@ -414,7 +415,7 @@ impl TestPipeline {
     }
 
     // get all available contraflow events
-    #[cfg(feature = "kafka-integration")]
+    #[cfg(any(feature = "s3-integration", feature = "kafka-integration"))]
     pub(crate) fn get_contraflow_events(&self) -> Result<Vec<Event>> {
         let mut events = Vec::with_capacity(self.rx.len());
         while let Ok(pipeline::CfMsg::Insight(event)) = self.rx_cf.try_recv() {
@@ -513,7 +514,10 @@ impl TestPipeline {
     feature = "http-integration",
     feature = "ws-integration",
     feature = "s3-integration",
-    feature = "gcp-integration"
+    feature = "gcp-integration",
+    feature = "es-integration",
+    feature = "kafka-integration",
+    feature = "clickhouse-integration"
 ))]
 pub(crate) mod free_port {
 

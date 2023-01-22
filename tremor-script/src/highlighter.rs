@@ -105,7 +105,7 @@ impl From<&ScriptError> for Error {
         Self {
             start,
             end,
-            callout: format!("{}", error),
+            callout: format!("{error}"),
             hint: error.hint(),
             level: ErrorLevel::Error,
             token: error.token(),
@@ -164,7 +164,7 @@ pub trait Highlighter {
                 .collect();
             self.highlight_error(None, &tokens, "", true, Some(r), Some(error.into()))?;
         } else {
-            write!(self.get_writer(), "Error: {}", error)?;
+            write!(self.get_writer(), "Error: {error}")?;
         }
         self.finalize()
     }
@@ -261,9 +261,9 @@ pub trait Highlighter {
     ) -> io::Result<()> {
         self.set_color(ColorSpec::new().set_bold(true))?;
         if emit_linenos {
-            write!(self.get_writer(), "{}{:5} | ", line_prefix, line)?;
+            write!(self.get_writer(), "{line_prefix}{line:5} | ")?;
         } else {
-            write!(self.get_writer(), "{}", line_prefix)?;
+            write!(self.get_writer(), "{line_prefix}")?;
         }
         self.reset()?;
         Ok(())
@@ -284,13 +284,13 @@ pub trait Highlighter {
         let prefix = " ".repeat(start_column.saturating_sub(1));
         let underline = "^".repeat(error_len);
         self.set_color(ColorSpec::new().set_bold(true))?;
-        write!(self.get_writer(), "      | {}", prefix)?;
+        write!(self.get_writer(), "      | {prefix}")?;
         self.set_color(
             ColorSpec::new()
                 .set_bold(false)
                 .set_fg(Some(error_level.to_color())),
         )?;
-        writeln!(self.get_writer(), "{} {}", underline, callout)?;
+        writeln!(self.get_writer(), "{underline} {callout}")?;
         self.reset()?;
         Ok(())
     }
@@ -302,9 +302,9 @@ pub trait Highlighter {
     fn write_hint(&mut self, hint: &str, start_column: usize, error_len: usize) -> io::Result<()> {
         let prefix = " ".repeat(start_column + error_len);
         self.set_color(ColorSpec::new().set_bold(true))?;
-        write!(self.get_writer(), "      | {}", prefix)?;
+        write!(self.get_writer(), "      | {prefix}")?;
         self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)))?;
-        writeln!(self.get_writer(), "NOTE: {}", hint)?;
+        writeln!(self.get_writer(), "NOTE: {hint}")?;
 
         self.reset()?;
         Ok(())
@@ -385,14 +385,14 @@ pub trait Highlighter {
                         if let Some(token) = token {
                             let mut lines = token.value.lines();
                             if let Some(first_line) = lines.next() {
-                                writeln!(self.get_writer(), "{}", first_line)?;
+                                writeln!(self.get_writer(), "{first_line}")?;
                             }
 
                             while end.line() >= line {
                                 if let Some(token_line) = lines.next() {
                                     line += 1;
                                     self.write_line_prefix(line_prefix, line, emit_linenos)?;
-                                    writeln!(self.get_writer(), "{}", token_line)?;
+                                    writeln!(self.get_writer(), "{token_line}")?;
                                 } else {
                                     break;
                                 }
@@ -473,11 +473,11 @@ pub trait Highlighter {
                             line += 1;
                             self.reset()?;
                             self.set_color(ColorSpec::new().set_bold(true))?;
-                            write!(self.get_writer(), "\\\n{:5} | ", line)?;
+                            write!(self.get_writer(), "\\\n{line:5} | ")?;
                             self.reset()?;
                             c.set_intense(true).set_fg(Some(Color::Magenta));
                         }
-                        write!(self.get_writer(), "{}{}", " ".repeat(*indent), l)?;
+                        write!(self.get_writer(), "{}{l}", " ".repeat(*indent))?;
                     }
                     self.reset()?;
                     write!(self.get_writer(), "|")?;
@@ -519,14 +519,14 @@ pub trait Highlighter {
 
                     let mut lines = token.value.lines();
                     if let Some(first_line) = lines.next() {
-                        writeln!(self.get_writer(), "{}", first_line)?;
+                        writeln!(self.get_writer(), "{first_line}")?;
                     }
 
                     while end.line() >= line {
                         if let Some(token_line) = lines.next() {
                             line += 1;
                             self.write_line_prefix(line_prefix, line, emit_linenos)?;
-                            writeln!(self.get_writer(), "{}", token_line)?;
+                            writeln!(self.get_writer(), "{token_line}")?;
                         } else {
                             break;
                         }

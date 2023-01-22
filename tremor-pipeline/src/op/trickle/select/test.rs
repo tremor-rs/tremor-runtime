@@ -851,7 +851,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     )?;
     let window_defn = match q.query.scope.content.windows.values().next() {
         Some(defn) => defn,
-        other => return Err(format!("Didnt get a window defn, got: {:?}", other).into()),
+        other => return Err(format!("Didnt get a window defn, got: {other:?}").into()),
     };
     let mut params = halfbrown::HashMap::with_capacity(1);
     params.insert("size".to_string(), Value::from(3));

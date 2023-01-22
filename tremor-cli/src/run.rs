@@ -226,7 +226,7 @@ impl Run {
     fn run_tremor_source(&self) -> Result<()> {
         let raw = slurp_string(&self.script);
         if let Err(e) = raw {
-            eprintln!("Error processing file {}: {}", self.script, e);
+            eprintln!("Error processing file {}: {e}", self.script);
             // ALLOW: main.rs
             std::process::exit(1);
         }
@@ -283,7 +283,7 @@ impl Run {
                                         Ok(()) // error has already been displayed
                                     }
                                 } else {
-                                    eprintln!("Error processing event: {}", e);
+                                    eprintln!("Error processing event: {e}");
                                     Err(e.into())
                                 }
                             }
@@ -295,7 +295,7 @@ impl Run {
             }
             Err(e) => {
                 if let Err(e) = h.format_error(&e) {
-                    eprintln!("Error: {}", e);
+                    eprintln!("Error: {e}");
                 };
 
                 // ALLOW: main.rs
@@ -307,7 +307,7 @@ impl Run {
     fn run_trickle_source(&self) -> Result<()> {
         let raw = slurp_string(&self.script);
         if let Err(e) = raw {
-            eprintln!("Error processing file {}: {}", self.script, e);
+            eprintln!("Error processing file {}: {e}", self.script);
             // ALLOW: main.rs
             std::process::exit(1);
         }
@@ -319,7 +319,7 @@ impl Run {
             Ok(runnable) => runnable,
             Err(e) => {
                 if let Err(e) = h.format_error(&e) {
-                    eprintln!("Error: {}", e);
+                    eprintln!("Error: {e}");
                 };
                 // ALLOW: main.rs
                 std::process::exit(1);

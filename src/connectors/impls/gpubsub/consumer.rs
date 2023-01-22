@@ -84,7 +84,7 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         let url = Url::<HttpsDefaults>::parse(config.url.as_str())?;
-        let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, task::current().id());
+        let client_id = format!("tremor-{}-{alias}-{:?}", hostname(), task::current().id());
 
         Ok(Box::new(GSubWithTokenProvider {
             config,

@@ -31,10 +31,12 @@
 //! ## Output: 🌊 snot badger
 //! ```
 use super::{Error, Result, StdResult};
+use base64::Engine;
+use tremor_common::base64::BASE64;
 use tremor_value::Value;
 
 pub(crate) fn execute(s: &str, result_needed: bool) -> Result<'static> {
-    let decoded = match ::base64::decode(s) {
+    let decoded = match BASE64.decode(s) {
         Ok(d) => d,
         StdResult::Err(_) => return Result::NoMatch,
     };
@@ -42,7 +44,7 @@ pub(crate) fn execute(s: &str, result_needed: bool) -> Result<'static> {
         match String::from_utf8(decoded) {
             Ok(s) => Result::Match(Value::from(s)),
             StdResult::Err(e) => Result::Err(Error {
-                msg: format!("failed to decode: {}", e),
+                msg: format!("failed to decode: {e}"),
             }),
         }
     } else {

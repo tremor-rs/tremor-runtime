@@ -61,7 +61,6 @@ fn is_ident_start(ch: char) -> bool {
 }
 
 fn is_ident_continue(ch: char) -> bool {
-    let ch = ch as char;
     UnicodeXID::is_xid_continue(ch) || ch == '_'
 }
 
@@ -582,13 +581,13 @@ impl<'input> fmt::Display for Token<'input> {
         match self {
             Token::Whitespace(ws) => write!(f, "{}", &ws),
             Token::NewLine => writeln!(f),
-            Token::Ident(ref name, true) => write!(f, "`{}`", name),
-            Token::Ident(ref name, false) => write!(f, "{}", name),
+            Token::Ident(ref name, true) => write!(f, "`{name}`"),
+            Token::Ident(ref name, false) => write!(f, "{name}"),
             Token::ModComment(comment) => write!(f, "### {}", &comment),
             Token::DocComment(comment) => write!(f, "## {}", &comment),
             Token::SingleLineComment(comment) => write!(f, "# {}", &comment),
-            Token::IntLiteral(value) => write!(f, "{}", value),
-            Token::FloatLiteral(_, txt) => write!(f, "{}", txt),
+            Token::IntLiteral(value) => write!(f, "{value}"),
+            Token::FloatLiteral(_, txt) => write!(f, "{txt}"),
             Token::DQuote => write!(f, "\""),
             Token::Interpol => write!(f, "#{{"),
             Token::EscapedHash => write!(f, "\\#"),
@@ -615,7 +614,7 @@ impl<'input> fmt::Display for Token<'input> {
                 let s = Value::from(value).encode();
                 // Strip the quotes
                 if let Some(s) = s.get(1..s.len() - 1) {
-                    write!(f, "{}", s)?;
+                    write!(f, "{s}")?;
                 }
                 if add_linebreak {
                     writeln!(f)?;
@@ -641,7 +640,7 @@ impl<'input> fmt::Display for Token<'input> {
             }
             Token::BoolLiteral(true) => write!(f, "true"),
             Token::BoolLiteral(false) => write!(f, "false"),
-            Token::Bad(value) => write!(f, "{}", value),
+            Token::Bad(value) => write!(f, "{value}"),
             Token::Let => write!(f, "let"),
             Token::Const => write!(f, "const"),
             Token::Match => write!(f, "match"),
@@ -1100,7 +1099,7 @@ impl<'input> Lexer<'input> {
                         if let Some((e, c)) = self.bump() {
                             digits.push(c);
                             end = e;
-                            if u32::from_str_radix(&format!("{}", c), 16).is_err() {
+                            if u32::from_str_radix(&format!("{c}"), 16).is_err() {
                                 return None;
                             }
                         } else {
@@ -1144,7 +1143,7 @@ impl<'input> Lexer<'input> {
                 ErrorKind::UnterminatedIdentLiteral(
                     range.expand_lines(2),
                     range,
-                    UnfinishedToken::new(range, format!("`{}", string)),
+                    UnfinishedToken::new(range, format!("`{string}")),
                 )
             })? {
                 (mut end, '`') => {
@@ -1166,13 +1165,13 @@ impl<'input> Lexer<'input> {
                     return Err(ErrorKind::UnterminatedIdentLiteral(
                         range.expand_lines(2),
                         range,
-                        UnfinishedToken::new(range, format!("`{}", string)),
+                        UnfinishedToken::new(range, format!("`{string}")),
                     )
                     .into());
                 }
 
                 (e, other) => {
-                    string.push(other as char);
+                    string.push(other);
                     end = e;
                     continue;
                 }
@@ -1195,7 +1194,7 @@ impl<'input> Lexer<'input> {
             ErrorKind::UnterminatedStringLiteral(
                 range.expand_lines(2),
                 range,
-                UnfinishedToken::new(range, format!("\"{}", string)),
+                UnfinishedToken::new(range, format!("\"{string}")),
             )
         })? {
             // This would be the second quote
@@ -1218,7 +1217,7 @@ impl<'input> Lexer<'input> {
                     (end, ch) => {
                         let tnk = self
                             .slice_until_eol(start)
-                            .map_or_else(|| format!(r#""""{}"#, ch), ToString::to_string);
+                            .map_or_else(|| format!(r#""""{ch}"#), ToString::to_string);
                         let inner = Span::new(start, end);
                         let outer = inner.expand_lines(2);
                         let tkn = UnfinishedToken::new(inner, tnk);
@@ -1263,7 +1262,7 @@ impl<'input> Lexer<'input> {
         let Error(kind, ..) = error;
 
         let tkn = self.slice_full_lines(total_start, end_location);
-        let tkn = tkn.unwrap_or_else(|| format!("{}{}", error_prefix, content));
+        let tkn = tkn.unwrap_or_else(|| format!("{error_prefix}{content}"));
         let mut end = total_start;
         end.shift_str(&tkn);
         let unfinished_token = UnfinishedToken::new(Span::new(total_start, end_location), tkn);
@@ -1371,7 +1370,7 @@ impl<'input> Lexer<'input> {
                 let end_location = self.chars.current();
                 let token_str = self
                     .slice_full_lines(total_start, end_location)
-                    .unwrap_or_else(|| format!("{}{}", error_prefix, content));
+                    .unwrap_or_else(|| format!("{error_prefix}{content}"));
                 ErrorKind::UnterminatedInterpolation(
                     Span::new(total_start, end.move_down_lines(2)),
                     Span::new(*segment_start, *end),
@@ -1400,7 +1399,7 @@ impl<'input> Lexer<'input> {
                     if first {
                         let end_location = *segment_start;
                         let tkn = self.slice_full_lines(total_start, end_location);
-                        let tkn = tkn.unwrap_or_else(|| format!("{}{}", error_prefix, content));
+                        let tkn = tkn.unwrap_or_else(|| format!("{error_prefix}{content}"));
                         let tkn = UnfinishedToken::new(Span::new(start, end_location), tkn);
                         let outer = Span::new(total_start, end_location);
                         let inner = Span::new(start, end_location);
@@ -1513,7 +1512,7 @@ impl<'input> Lexer<'input> {
                 // We reached EOF
                 let token_str = self
                     .slice_until_eof(heredoc_start)
-                    .map_or_else(|| format!(r#""""\n{}"#, content), ToString::to_string);
+                    .map_or_else(|| format!(r#""""\n{content}"#), ToString::to_string);
                 let range = Span::new(heredoc_start, end);
                 ErrorKind::UnterminatedHereDoc(
                     range.expand_lines(2),
@@ -1615,7 +1614,7 @@ impl<'input> Lexer<'input> {
                 }
                 (end, '\n') => {
                     let tkn = self.slice_until_eol(total_start);
-                    let tkn = tkn.map_or_else(|| format!("\"{}", string), ToString::to_string);
+                    let tkn = tkn.map_or_else(|| format!("\"{string}"), ToString::to_string);
                     let mut token_end = total_start;
                     token_end.shift_str(&tkn);
                     let inner = Span::new(total_start, end);
@@ -1647,7 +1646,7 @@ impl<'input> Lexer<'input> {
             (_, '|') => Ok(Some('|')),
             (_end, '\n') => Ok(None),
             (end, ch) => {
-                let token_str = format!("|{}\\{}", s, ch);
+                let token_str = format!("|{s}\\{ch}");
                 let mut token_end = end;
                 token_end.shift(ch);
                 let inner = Span::new(end, end);
@@ -1661,7 +1660,7 @@ impl<'input> Lexer<'input> {
     fn unfinished_extractor(&self, string: &str, start: Location) -> ErrorKind {
         let token_str = self
             .slice_until_eol(start)
-            .map_or_else(|| format!("|{}", string), ToString::to_string);
+            .map_or_else(|| format!("|{string}"), ToString::to_string);
         let mut token_end = start;
         token_end.shift_str(&token_str);
         let range = Span::new(start, token_end);
@@ -1673,7 +1672,7 @@ impl<'input> Lexer<'input> {
     }
     fn unfinished_string(&self, string: &str, start: Location) -> ErrorKind {
         let tkn = self.slice_until_eol(start);
-        let tkn = tkn.map_or_else(|| format!("\"{}", string), ToString::to_string);
+        let tkn = tkn.map_or_else(|| format!("\"{string}"), ToString::to_string);
         let mut token_end = start;
         token_end.shift_str(&tkn);
         let range = Span::new(start, token_end);
@@ -1721,14 +1720,14 @@ impl<'input> Lexer<'input> {
                 }
                 (end, '\n') => {
                     let tkn = self.slice_until_eol(total_start);
-                    let tkn = tkn.map_or_else(|| format!("|{}", string), ToString::to_string);
+                    let tkn = tkn.map_or_else(|| format!("|{string}"), ToString::to_string);
                     let inner = Span::new(total_start, end);
                     let outer = inner.expand_lines(2);
                     let tkn = UnfinishedToken::new(inner, tkn);
                     return Err(ErrorKind::UnterminatedExtractor(outer, inner, tkn).into());
                 }
                 (_e, other) => {
-                    string.push(other as char);
+                    string.push(other);
                 }
             }
         }
@@ -1751,7 +1750,7 @@ impl<'input> Lexer<'input> {
                     }
                     .unwrap_or((exp_location, ""));
                     let (end, exp) = self.extract_number(exp_location, is_dec_digit);
-                    let float = &format!("{}e{}{}", float, sign, exp);
+                    let float = &format!("{float}e{sign}{exp}");
                     Ok(spanned(
                         start,
                         end,
@@ -1928,7 +1927,7 @@ impl<'input> Iterator for Lexer<'input> {
             return Some(Ok(next));
         }
         let (start, ch) = self.bump()?;
-        match ch as char {
+        match ch {
             // '...' =>  Some(Ok(spanned2(start, self.next_index(), Token::DotDotDot))),
             // ".." =>  Some(Ok(spanned2(start, self.next_index(), Token::DotDot))),
             ',' => Some(Ok(spanned(start, start + ch, Token::Comma))),
@@ -1977,7 +1976,7 @@ impl<'input> Iterator for Lexer<'input> {
             ch if is_dec_digit(ch) => Some(self.number(start)),
             ch if ch.is_whitespace() => Some(Ok(self.whitespace(start))),
             _ => {
-                let str = format!("{}", ch);
+                let str = format!("{ch}");
                 Some(Ok(spanned(start, start, Token::Bad(str))))
             }
         }

@@ -172,7 +172,7 @@ where
         let datetime = data
             .get_i64("timestamp")
             .map_or_else(|| self.now.now(), |t| Utc.timestamp_nanos(t));
-        result.push(format!("<{}>{}", pri, datetime.format("%b %e %H:%M:%S")));
+        result.push(format!("<{pri}>{}", datetime.format("%b %e %H:%M:%S")));
 
         result.push(
             data.get_str("hostname")
@@ -182,8 +182,8 @@ where
             || String::from(":"),
             |appname| {
                 data.get_str("procid").map_or_else(
-                    || format!("{}:", appname),
-                    |procid| format!("{}[{}]:", appname, procid),
+                    || format!("{appname}:"),
+                    |procid| format!("{appname}[{procid}]:"),
                 )
             },
         ));
@@ -621,7 +621,7 @@ mod test {
         // to not have to change this test every year, we use the current one for the expected timestamp
         let year = chrono::Utc::now().year();
         let timestamp =
-            chrono::DateTime::parse_from_rfc3339(format!("{}-01-05T15:33:03Z", year).as_str())?;
+            chrono::DateTime::parse_from_rfc3339(format!("{year}-01-05T15:33:03Z").as_str())?;
         let expected = literal!({
             "hostname": "plertrood-ThinkPad-X220",
             "severity": "info",

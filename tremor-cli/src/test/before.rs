@@ -97,7 +97,7 @@ impl Before {
             "{}{} {}",
             self.env
                 .iter()
-                .map(|(k, v)| format!("{}={} ", k, v))
+                .map(|(k, v)| format!("{k}={v} "))
                 .collect::<String>(),
             self.cmd,
             self.args.join(" ")

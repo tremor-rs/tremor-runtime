@@ -171,7 +171,7 @@ pub(crate) mod url {
             let parsed = if URL_SCHEME_REGEX.is_match(input) {
                 url::Url::parse(input)
             } else {
-                url::Url::parse(&format!("{}://{}", D::SCHEME, input))
+                url::Url::parse(&format!("{}://{input}", D::SCHEME))
             };
             match parsed {
                 Ok(url) => Ok(Self {

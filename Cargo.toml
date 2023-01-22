@@ -9,7 +9,7 @@ license = "Apache-2.0"
 name = "tremor-runtime"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.10"
+version = "0.13.0-rc.11"
 rust-version = "1.62"
 
 [workspace]
@@ -33,7 +33,7 @@ opt-level = 3
 
 [dependencies]
 anyhow = "1"
-async-broadcast = "0.4"
+async-broadcast = "0.5"
 async-compat = "0.2"
 async-compression = { version = "0.3", features = [
   "xz",
@@ -47,7 +47,7 @@ async-std = { version = "1.12.0", features = [
 ] }
 async-stream = "0.3"
 async-trait = "0.1"
-base64 = "0.13"
+base64 = "0.21"
 beef = { version = "0.5", features = ["impl_serde"] }
 bimap = { version = "0.6", features = ["serde"] }
 byteorder = "1"
@@ -222,10 +222,10 @@ prost-types = "0.9.0"
 tremor-otelapis = { version = "=0.2.4" }
 
 # aws-s3
-aws-sdk-s3 = "0.21"
-aws-types = "0.51"
-aws-config = "0.51"
-aws-smithy-http = "0.51"
+aws-sdk-s3 = "0.23"
+aws-types = "0.53"
+aws-config = "0.53"
+aws-smithy-http = "0.53"
 
 # gcp
 googapis = { version = "0.6", default-features = false, features = [
@@ -236,7 +236,7 @@ googapis = { version = "0.6", default-features = false, features = [
 ] }
 gouth = { version = "0.2" }
 http = "0.2.8"
-reqwest = { version = "0.11.13", default-features = false, features = [
+reqwest = { version = "0.11.14", default-features = false, features = [
   "rustls-tls",
   "rustls-tls-native-roots",
 ] }
@@ -252,7 +252,7 @@ lexical = "6.1.1"
 simdutf8 = "0.1"
 
 [dev-dependencies]
-serial_test = { version = "0.10", features = ["logging"] }
+serial_test = { version = "1.0", features = ["logging"] }
 # path = "../serial_test/serial_test" 
 env_logger = "0.10.0"
 matches = "0.1"

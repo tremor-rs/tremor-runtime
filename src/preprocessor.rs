@@ -60,18 +60,18 @@ pub trait Preprocessor: Sync + Send {
 pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preprocessor>> {
     match config.name.as_str() {
         "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
-        "base64" => Ok(Box::new(base64::Base64::default())),
+        "base64" => Ok(Box::<base64::Base64>::default()),
         "decompress" => Ok(Box::new(decompress::Decompress::from_config(
             config.config.as_ref(),
         )?)),
-        "remove-empty" => Ok(Box::new(remove_empty::RemoveEmpty::default())),
-        "gelf-chunking" => Ok(Box::new(gelf_chunking::GelfChunking::default())),
-        "ingest-ns" => Ok(Box::new(ingest_ns::ExtractIngestTs {})),
-        "length-prefixed" => Ok(Box::new(length_prefixed::LengthPrefixed::default())),
-        "textual-length-prefixed" => Ok(Box::new(
-            textual_length_prefixed::TextualLengthPrefixed::default(),
-        )),
-        name => Err(format!("Preprocessor '{}' not found.", name).into()),
+        "remove-empty" => Ok(Box::<remove_empty::RemoveEmpty>::default()),
+        "gelf-chunking" => Ok(Box::<gelf_chunking::GelfChunking>::default()),
+        "ingest-ns" => Ok(Box::<ingest_ns::ExtractIngestTs>::default()),
+        "length-prefixed" => Ok(Box::<length_prefixed::LengthPrefixed>::default()),
+        "textual-length-prefixed" => {
+            Ok(Box::<textual_length_prefixed::TextualLengthPrefixed>::default())
+        }
+        name => Err(format!("Preprocessor '{name}' not found.").into()),
     }
 }
 
@@ -197,7 +197,7 @@ mod test {
     }
 
     fn textual_prefix(len: usize) -> String {
-        format!("{} {}", len, String::from_utf8_lossy(&vec![b'O'; len]))
+        format!("{len} {}", String::from_utf8_lossy(&vec![b'O'; len]))
     }
 
     use proptest::prelude::*;
@@ -208,7 +208,7 @@ mod test {
             .prop_map(|ss| {
                 let s: (Vec<usize>, Vec<String>) = ss
                     .into_iter()
-                    .map(|s| (s.len(), format!("{} {}", s.len(), s))) // for each string, extract the length, and create a textual length prefix
+                    .map(|s| (s.len(), format!("{} {s}", s.len()))) // for each string, extract the length, and create a textual length prefix
                     .unzip();
                 s
             })
@@ -369,6 +369,8 @@ mod test {
         }
         let t = "snot";
         assert!(lookup(t).is_err());
+
+        assert!(lookup("bad_lookup").is_err());
     }
 
     #[test]
@@ -522,5 +524,154 @@ mod test {
         // assert empty finish, no leftovers
         assert!(pre.finish(None)?.is_empty());
         Ok(())
+    }
+
+    struct BadPreprocessor {}
+    impl Preprocessor for BadPreprocessor {
+        fn name(&self) -> &'static str {
+            "chucky"
+        }
+
+        fn process(&mut self, _ingest_ns: &mut u64, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
+            Err("chucky".into())
+        }
+        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+            Ok(vec![])
+        }
+    }
+
+    struct BadFinisher {}
+    impl Preprocessor for BadFinisher {
+        fn name(&self) -> &'static str {
+            "chucky"
+        }
+
+        fn process(&mut self, _ingest_ns: &mut u64, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
+            Ok(vec![])
+        }
+
+        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+            Err("chucky revenge".into())
+        }
+    }
+
+    struct NoOp {}
+    impl Preprocessor for NoOp {
+        fn name(&self) -> &'static str {
+            "nily"
+        }
+
+        fn process(&mut self, _ingest_ns: &mut u64, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
+            Ok(vec![b"non".to_vec()])
+        }
+        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+            Ok(vec![b"nein".to_vec()])
+        }
+    }
+
+    #[test]
+    fn badly_behaved_process() {
+        let mut pre = Box::new(BadPreprocessor {});
+        assert_eq!("chucky", pre.name());
+
+        let mut ingest_ns = 0_u64;
+        let r = pre.process(&mut ingest_ns, b"foo");
+        assert!(r.is_err());
+
+        let r = pre.finish(Some(b"foo"));
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn badly_behaved_finish() {
+        let mut pre = Box::new(BadFinisher {});
+        assert_eq!("chucky", pre.name());
+
+        let mut ingest_ns = 0_u64;
+        let r = pre.process(&mut ingest_ns, b"foo");
+        assert!(r.is_ok());
+
+        let r = pre.finish(Some(b"foo"));
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn single_pre_process_head_ok() {
+        let pre = Box::new(BadPreprocessor {});
+        let alias = crate::connectors::Alias::new(
+            crate::system::flow::Alias::new("chucky"),
+            "chucky".to_string(),
+        );
+        let mut ingest_ns = 0_u64;
+        let r = preprocess(&mut [pre], &mut ingest_ns, b"foo".to_vec(), &alias);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn single_pre_process_tail_err() {
+        let noop = Box::new(NoOp {});
+        assert_eq!("nily", noop.name());
+        let pre = Box::new(BadPreprocessor {});
+        let alias = crate::connectors::Alias::new(
+            crate::system::flow::Alias::new("chucky"),
+            "chucky".to_string(),
+        );
+        let mut ingest_ns = 0_u64;
+        let r = preprocess(&mut [noop, pre], &mut ingest_ns, b"foo".to_vec(), &alias);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn single_pre_finish_ok() {
+        let pre = Box::new(BadPreprocessor {});
+        let alias = crate::connectors::Alias::new(
+            crate::system::flow::Alias::new("chucky"),
+            "chucky".to_string(),
+        );
+        let r = finish(&mut [pre], &alias);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn direct_pre_finish_err() {
+        let mut pre = Box::new(BadFinisher {});
+        let r = pre.finish(Some(b"foo"));
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn preprocess_finish_head_fail() {
+        let alias = crate::connectors::Alias::new(
+            crate::system::flow::Alias::new("chucky"),
+            "chucky".to_string(),
+        );
+        let pre = Box::new(BadFinisher {});
+        let r = finish(&mut [pre], &alias);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn preprocess_finish_tail_fail() {
+        let alias = crate::connectors::Alias::new(
+            crate::system::flow::Alias::new("chucky"),
+            "chucky".to_string(),
+        );
+        let noop = Box::new(NoOp {});
+        let pre = Box::new(BadFinisher {});
+        let r = finish(&mut [noop, pre], &alias);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn preprocess_finish_multi_ok() {
+        let alias = crate::connectors::Alias::new(
+            crate::system::flow::Alias::new("xyz"),
+            "xyz".to_string(),
+        );
+        let noop1 = Box::new(NoOp {});
+        let noop2 = Box::new(NoOp {});
+        let noop3 = Box::new(NoOp {});
+        let r = finish(&mut [noop1, noop2, noop3], &alias);
+        assert!(r.is_ok());
     }
 }

@@ -168,7 +168,7 @@ pub fn mfa(m: &str, f: &str, a: usize) -> Mfa {
 pub fn to_runtime_error<E: core::fmt::Display>(mfa: Mfa, e: E) -> FunctionError {
     FunctionError::RuntimeError {
         mfa,
-        error: format!("{}", e),
+        error: format!("{e}"),
     }
 }
 
@@ -1023,7 +1023,7 @@ mod tests {
     #[test]
     pub fn bad_arity() {
         let f = tremor_fn! (module|name(_context, _a){
-            Ok(format!("{}", _a).into())
+            Ok(format!("{_a}").into())
         });
         let one = Value::from(1);
         let two = Value::from(2);
@@ -1036,7 +1036,7 @@ mod tests {
     #[test]
     pub fn bad_type() {
         let f = tremor_fn!(module|name(_context, _a: String){
-            Ok(format!("{}", _a).into())
+            Ok(format!("{_a}").into())
         });
 
         let one = Value::from(1);

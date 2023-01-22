@@ -11,19 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use super::auth;
 use crate::connectors::prelude::*;
+use async_std::{
+    channel::{self, Receiver, Sender},
+    sync::Arc,
+    task::{self, JoinHandle},
+};
+use aws_sdk_s3::{model::Object, types::ByteStream, Client as S3Client};
 use futures::stream::TryStreamExt;
 use std::error::Error as StdError;
-
-use async_std::channel::{self, Receiver, Sender};
-use async_std::sync::Arc;
-use async_std::task::{self, JoinHandle};
-
-use super::auth;
-use aws_sdk_s3 as s3;
-use s3::model::Object;
-use s3::types::ByteStream;
-use s3::Client as S3Client;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
@@ -51,6 +48,21 @@ pub(crate) struct Config {
 
     #[serde(default = "Config::default_max_connections")]
     max_connections: usize,
+
+    /// Enable path-style access
+    /// So e.g. creating a bucket is done using:
+    ///
+    /// PUT http://<host>:<port>/<bucket>
+    ///
+    /// instead of
+    ///
+    /// PUT http://<bucket>.<host>:<port>/
+    ///
+    /// Set this to `true` for accessing s3 compatible backends
+    /// that do only support path style access, like e.g. minio.
+    /// Defaults to `true` for backward compatibility.
+    #[serde(default = "default_true")]
+    path_style_access: bool,
 }
 
 struct KeyPayload {
@@ -129,8 +141,12 @@ impl Connector for S3Reader {
         for handle in self.handles.drain(..) {
             handle.cancel().await;
         }
-        let client =
-            auth::get_client(self.config.aws_region.clone(), self.config.url.as_ref()).await?;
+        let client = auth::get_client(
+            self.config.aws_region.clone(),
+            self.config.url.as_ref(),
+            self.config.path_style_access,
+        )
+        .await?;
 
         // Check the existence of the bucket.
         client
@@ -141,8 +157,8 @@ impl Connector for S3Reader {
             .map_err(|e| {
                 let msg = if let Some(err) = e.source() {
                     format!(
-                        "Failed to access Bucket \"{}\": {}.",
-                        &self.config.bucket, err
+                        "Failed to access Bucket \"{}\": {err}.",
+                        &self.config.bucket
                     )
                 } else {
                     format!("Failed to access Bucket \"{}\".", &self.config.bucket)
@@ -179,7 +195,7 @@ impl Connector for S3Reader {
                 origin_uri,
             };
             let handle = task::Builder::new()
-                .name(format!("fetch_obj_task{}", i))
+                .name(format!("fetch_obj_task{i}"))
                 .spawn(async move { instance.start().await })?;
             self.handles.push(handle);
         }
@@ -354,7 +370,7 @@ impl S3Instance {
 
         while fetched_bytes < size {
             let fetch_till = (fetched_bytes + self.part_size).min(size);
-            let range = Some(format!("bytes={}-{}", fetched_bytes, fetch_till - 1)); // -1 is reqd here as range is inclusive.
+            let range = Some(format!("bytes={fetched_bytes}-{}", fetch_till - 1)); // -1 is reqd here as range is inclusive.
 
             debug!(
                 "{} Fetching byte range: bytes={fetched_bytes}-{} for key {key:?}",

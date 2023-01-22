@@ -6,7 +6,7 @@ edition = "2021"
 license = "Apache-2.0"
 name = "tremor-common"
 readme = "README.md"
-version = "0.13.0-rc.10"
+version = "0.13.0-rc.11"
 
 [dependencies]
 async-std = { version = "1", features = ["attributes"] }
@@ -15,3 +15,4 @@ beef = { version = "0.5", features = ["impl_serde"] }
 url = "2.3"
 simd-json = { version = "0.7", features = ["known-key"] }
 simd-json-derive = "0.7"
+base64 = "0.21"

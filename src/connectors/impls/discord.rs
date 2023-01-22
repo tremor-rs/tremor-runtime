@@ -144,7 +144,7 @@ impl Connector for Discord {
 
         let mut client = client
             .await
-            .map_err(|e| Error::from(format!("Err discord creating client: {}", e)))?;
+            .map_err(|e| Error::from(format!("Err discord creating client: {e}")))?;
         // set up new client task
         self.client_task = Some(spawn_task(
             ctx.clone(),

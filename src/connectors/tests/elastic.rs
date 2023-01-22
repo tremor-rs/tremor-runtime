@@ -21,9 +21,12 @@ use crate::errors::{Error, Result};
 use async_std::path::Path;
 use elasticsearch::auth::{ClientCertificate, Credentials};
 use elasticsearch::cert::{Certificate, CertificateValidation};
+use elasticsearch::http::response::Response;
 use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
+use elasticsearch::GetParts;
 use elasticsearch::{http::transport::Transport, Elasticsearch};
 use futures::TryFutureExt;
+use http_types::convert::json;
 use serial_test::serial;
 use testcontainers::core::WaitFor;
 use testcontainers::{clients, images::generic::GenericImage, RunnableImage};
@@ -268,17 +271,12 @@ async fn connector_elastic() -> Result<()> {
     };
     harness.send_to_sink(event_batched, IN).await?;
     let out_event1 = out.get_event().await?;
-    let mut meta = out_event1.data.suffix().meta().clone_static();
-    // remove _id
-    assert!(meta
-        .get_mut("elastic")
-        .expect("no elastic in meta")
-        .remove("_id")?
-        .map(|v| v.is_str())
-        .unwrap_or_default());
+    let meta = out_event1.data.suffix().meta().clone_static();
+
     assert_eq!(
         literal!({
             "elastic": {
+                "_id": "versioned_id_001",
                 "_index": "my_index",
                 "version": 42,
                 "action": "index",
@@ -462,6 +460,332 @@ async fn connector_elastic() -> Result<()> {
     // will rm the container
     drop(container);
 
+    Ok(())
+}
+
+#[async_std::test]
+#[serial(elastic)]
+async fn elastic_routing() -> Result<()> {
+    let _ = env_logger::try_init();
+
+    let docker = clients::Cli::default();
+    let port = super::free_port::find_free_tcp_port().await?;
+    let image = RunnableImage::from(
+        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+            .with_env_var("discovery.type", "single-node")
+            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+            .with_env_var("xpack.security.enabled", "false")
+            .with_env_var("xpack.security.http.ssl.enabled", "false"),
+    )
+    .with_mapped_port((port, 9200_u16));
+
+    let container = docker.run(image);
+    let port = container.get_host_port_ipv4(9200);
+
+    // wait for the image to be reachable
+    let elastic = Elasticsearch::new(Transport::single_node(
+        format!("http://127.0.0.1:{port}").as_str(),
+    )?);
+    wait_for_es(&elastic).await?;
+    let index = "snot";
+    elastic
+        .indices()
+        .create(elasticsearch::indices::IndicesCreateParts::Index(index))
+        .body(json!({
+            "settings": {
+                "index": {
+                    "number_of_shards": 5
+                }
+            }
+        }))
+        .send()
+        .await?;
+
+    let connector_config = literal!({
+        "reconnect": {
+            "retry": {
+                "interval_ms": 1000,
+                "max_retries": 10
+            }
+        },
+        "config": {
+            "index": index,
+            "nodes": [
+                format!("http://127.0.0.1:{port}")
+            ]
+        }
+    });
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await?;
+    let out = harness.out().expect("No pipe connected to port OUT");
+    harness.start().await?;
+    harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
+
+    // send a batched event
+    let batched_data = literal!([{
+            "data": {
+                "value": {
+                    "field1": 0.1,
+                    "field2": "another_string",
+                    "field3": [],
+                },
+                "meta": {
+                    "elastic": {
+                        "_id": "01",
+                        "version": 42,
+                        "version_type": "external",
+                    }
+                }
+            }
+        },
+        {
+            "data": {
+                "value": {
+                    "field3": 12,
+                    "field4": {
+                        "nested": false,
+                        "actually": "no"
+                    }
+                },
+                "meta": {
+                    "elastic": {
+                        "_id": "02",
+                    }
+                }
+            }
+           },
+        {
+            "data": {
+                "value": {},
+                "meta": {
+                    "elastic": {
+                        "_id": "03",
+                        "routing": "1"
+                    },
+                    "correlation": "snot",
+                }
+            }
+        }
+    ]);
+    let batched_meta = literal!({
+        "elastic": {
+            "_index": index,
+            "routing": "2"
+        }
+    });
+    let batched_id = EventId::new(0, 0, 1, 1);
+    let event_batched = Event {
+        id: batched_id.clone(),
+        is_batch: true,
+        transactional: true,
+        data: (batched_data, batched_meta).into(),
+        ..Event::default()
+    };
+    harness.send_to_sink(event_batched, IN).await?;
+    let out_event1 = out.get_event().await?;
+    let meta = out_event1.data.suffix().meta();
+    assert_eq!(
+        literal!({
+            "elastic": {
+                "_id": "01",
+                "_index": index,
+                "version": 42,
+                "action": "index",
+                "success": true
+            }
+        }),
+        meta
+    );
+    assert_eq!(
+        literal!({
+            "index": {
+                "_primary_term": 1,
+                "_shards": {
+                    "total": 2,
+                    "successful": 1,
+                    "failed": 0
+                },
+                "_index": index,
+                "result": "created",
+                "_id": "01",
+                "_seq_no": 0,
+                "status": 201,
+                "_version": 42
+            }
+        }),
+        out_event1.data.suffix().value()
+    );
+
+    let out_event2 = out.get_event().await?;
+    let meta = out_event2.data.suffix().meta();
+    assert_eq!(
+        literal!({
+            "elastic": {
+                "_id": "02",
+                "_index": index,
+                "version": 1,
+                "action": "index",
+                "success": true
+            }
+        }),
+        meta
+    );
+    assert_eq!(
+        literal!({
+            "index": {
+                "_primary_term": 1,
+                "_shards": {
+                    "total": 2,
+                    "successful": 1,
+                    "failed": 0
+                },
+                "_index": index,
+                "result": "created",
+                "_id": "02",
+                "_seq_no": 1,
+                "status": 201,
+                "_version": 1
+            }
+
+        }),
+        out_event2.data.suffix().value()
+    );
+
+    let out_event3 = out.get_event().await?;
+    let meta = out_event3.data.suffix().meta();
+    assert_eq!(
+        literal!({
+            "elastic": {
+                "_id": "03",
+                "_index": index,
+                "version": 1,
+                "action": "index",
+                "success": true
+            },
+            "correlation": "snot"
+        }),
+        meta
+    );
+    assert_eq!(
+        literal!({
+            "index": {
+                "_primary_term": 1,
+                "_shards": {
+                    "total": 2,
+                    "successful": 1,
+                    "failed": 0
+                },
+                "_index": index,
+                "result": "created",
+                "_id": "03",
+                "_seq_no": 0,
+                "status": 201,
+                "_version": 1
+            }
+        }),
+        out_event3.data.suffix().value()
+    );
+
+    let res = elastic.get(GetParts::IndexId(index, "01")).send().await?;
+    assert_eq!(
+        literal!({
+            "_index": index,
+            "_id": "01",
+            "found": false
+        }),
+        &res.json::<simd_json::OwnedValue>().await?
+    );
+    let res = elastic
+        .get(GetParts::IndexId(index, "01"))
+        .routing("2")
+        .send()
+        .await?;
+    assert_eq!(
+        literal!({
+            "_index": index,
+            "_id": "01",
+            "_version": 42,
+            "_seq_no": 0,
+            "_primary_term": 1,
+            "_routing": "2",
+            "found": true,
+            "_source": {
+                "field1": 0.1,
+                "field2": "another_string",
+                "field3": []
+            }
+        }),
+        &res.json::<simd_json::OwnedValue>().await?
+    );
+
+    let res = elastic
+        .get(GetParts::IndexId(index, "02"))
+        .routing("2")
+        .send()
+        .await?;
+    assert_eq!(
+        literal!({
+            "_index": index,
+            "_id": "02",
+            "_version": 1,
+            "_seq_no": 1,
+            "_primary_term": 1,
+            "_routing": "2",
+            "found": true,
+            "_source": {
+                "field3": 12,
+                "field4": {
+                    "nested": false,
+                    "actually": "no"
+                }
+            }
+        }),
+        &res.json::<simd_json::OwnedValue>().await?
+    );
+
+    let res = elastic
+        .get(GetParts::IndexId(index, "03"))
+        .routing("2")
+        .send()
+        .await?;
+    assert_eq!(
+        literal!({
+            "_index": index,
+            "_id": "03",
+            "found": false
+        }),
+        res.json::<simd_json::OwnedValue>().await?
+    );
+
+    let res = elastic
+        .get(GetParts::IndexId(index, "03"))
+        .routing("1")
+        .send()
+        .await?;
+    assert_eq!(
+        literal!({
+            "_index": index,
+            "_id": "03",
+            "_version": 1,
+            "_seq_no": 0,
+            "_primary_term": 1,
+            "_routing": "1",
+            "found": true,
+            "_source": {}
+        }),
+        &res.json::<simd_json::OwnedValue>().await?
+    );
+
+    let (out_events, err_events) = harness.stop().await?;
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
+    // will rm the container
+    drop(container);
     Ok(())
 }
 
@@ -902,7 +1226,7 @@ async fn wait_for_es(elastic: &Elasticsearch) -> Result<()> {
         .cluster()
         .health(elasticsearch::cluster::ClusterHealthParts::None)
         .send()
-        .and_then(|r| r.json::<StaticValue>())
+        .and_then(Response::json::<StaticValue>)
         .await
     {
         if start.elapsed() > wait_for {

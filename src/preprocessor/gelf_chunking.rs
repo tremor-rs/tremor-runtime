@@ -59,21 +59,11 @@ use rand::{self, RngCore};
 
 const FIVE_SEC: u64 = 5_000_000_000;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct GelfChunking {
     buffer: HashMap<u64, GelfMsgs>,
     last_buffer: HashMap<u64, GelfMsgs>,
     last_swap: u64,
-}
-
-impl GelfChunking {
-    pub(crate) fn default() -> Self {
-        Self {
-            buffer: HashMap::new(),
-            last_buffer: HashMap::new(),
-            last_swap: 0,
-        }
-    }
 }
 
 #[derive(Clone, Default)]
@@ -269,6 +259,23 @@ fn assemble(key: u64, m: GelfMsgs) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn gelf_chunking_default() {
+        let g = GelfChunking::default();
+        assert!(g.buffer.is_empty());
+        assert!(g.last_buffer.is_empty());
+        assert_eq!(0, g.last_swap);
+        let mut g = g;
+        assert!(g.buffer.is_empty());
+        assert!(g.last_buffer.is_empty());
+        assert_eq!(0, g.last_swap);
+        let d = br#"{"snot": "badger"}"#;
+        let r = g.process(&mut 0, d);
+        assert!(r.is_ok());
+        assert_eq!(r.expect("r should be Ok"), vec![d.to_vec()]);
+    }
+
     #[test]
     fn bad_len() {
         let d = Vec::new();

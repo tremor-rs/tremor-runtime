@@ -42,6 +42,7 @@ async fn connector_s3_no_connection() -> Result<()> {
             "aws_region": MINIO_REGION,
             "bucket": bucket_name.clone(),
             "url": "http://localhost:9090",
+            "path_style_access": true, // required by minio
         }
     });
 
@@ -64,10 +65,14 @@ async fn connector_s3_no_credentials() -> Result<()> {
     let docker = clients::Cli::default();
     let (_container, http_port) = spawn_docker(&docker).await;
 
+    // ensure that we can create the bucket
+    let mut env = EnvHelper::new();
+    env.set_var("AWS_ACCESS_KEY_ID", MINIO_ROOT_USER);
+    env.set_var("AWS_SECRET_ACCESS_KEY", MINIO_ROOT_PASSWORD);
+
     wait_for_s3(http_port).await?;
     create_bucket(&bucket_name, http_port).await?;
 
-    let mut env = EnvHelper::new();
     env.remove_var("AWS_ACCESS_KEY_ID");
     env.remove_var("AWS_SECRET_ACCESS_KEY");
     env.set_var("AWS_REGION", MINIO_REGION);
@@ -77,6 +82,7 @@ async fn connector_s3_no_credentials() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": endpoint,
+            "path_style_access": true // required by minio
         }
     });
 
@@ -115,6 +121,7 @@ async fn connector_s3_no_region() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": endpoint,
+            "path_style_access": true // required by minio
         }
     });
 
@@ -149,7 +156,8 @@ async fn connector_s3_no_bucket() -> Result<()> {
         "config": {
             "aws_region": MINIO_REGION,
             "bucket": bucket_name.clone(),
-            "url": endpoint
+            "url": endpoint,
+            "path_style_access": true // required by minio
         }
     });
     let harness = ConnectorHarness::new(
@@ -209,6 +217,7 @@ async fn connector_s3_reader() -> Result<()> {
             "aws_region": MINIO_REGION,
             "bucket": bucket_name.clone(),
             "url": endpoint,
+            "path_style_access": true, // required by minio
             "multipart_threshold": 1000,
             "multipart_chunksize": 1000,
             "max_connections": 2

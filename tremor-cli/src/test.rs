@@ -225,7 +225,7 @@ fn suite_unit(root: &Path, conf: &TestConfig) -> Result<(stats::Stats, Vec<repor
         .case_insensitive(true)
         .file_type(FileType::FILE)
         .build()
-        .map_err(|e| format!("Unable to walk test path for unit tests: {}", e))?;
+        .map_err(|e| format!("Unable to walk test path for unit tests: {e}"))?;
 
     let suites = suites.filter_map(std::result::Result::ok);
     let mut reports = vec![];
@@ -281,7 +281,7 @@ impl Test {
         let found = GlobWalkerBuilder::new(&config.base_directory, "meta.yaml")
             .case_insensitive(true)
             .build()
-            .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", self.path, e)))?;
+            .map_err(|e| Error::from(format!("failed to walk directory `{}`: {e}", self.path)))?;
 
         let mut reports = HashMap::new();
         let mut bench_stats = stats::Stats::new();
@@ -440,9 +440,8 @@ impl Test {
         if let Some(report) = &self.report {
             let mut file = file::create(report)?;
             let result = simd_json::to_string(&test_run)?;
-            file.write_all(result.as_bytes()).map_err(|e| {
-                Error::from(format!("Failed to write report to `{}`: {}", report, e))
-            })?;
+            file.write_all(result.as_bytes())
+                .map_err(|e| Error::from(format!("Failed to write report to `{report}`: {e}")))?;
         }
 
         if all_stats.fail > 0 {

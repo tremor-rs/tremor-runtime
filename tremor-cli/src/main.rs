@@ -101,7 +101,7 @@ async fn main() -> Result<()> {
         tremor_runtime::INSTANCE = forget_s;
     }
     if let Err(e) = run(cli).await {
-        eprintln!("error: {}", e);
+        eprintln!("error: {e}");
         // ALLOW: this is supposed to exit
         async_std::process::exit(1);
     }
@@ -117,7 +117,7 @@ async fn run(cli: Cli) -> Result<()> {
     }
     if let Some(logger_config) = &cli.logger_config {
         log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
-            .with_context(|| format!("Error loading logger-config from '{}'", logger_config))?;
+            .with_context(|| format!("Error loading logger-config from '{logger_config}'"))?;
     } else {
         env_logger::init();
     }

@@ -220,10 +220,10 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
                 return Err(error_generic(
                     &self,
                     &self,
-                    &format!("negative bits or bits > 64 are are not allowed: {}", bits),
+                    &format!("negative bits or bits > 64 are are not allowed: {bits}"),
                 ));
             }
-            bits as u64
+            bits
         } else {
             match data_type {
                 BytesDataType::SignedInteger | BytesDataType::UnsignedInteger => 8,
@@ -1527,7 +1527,7 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
                 helper.warn(
                     self.mid.range.expand_lines(2),
                     self.mid.range,
-                    &format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of the extractor.", present),
+                    &format!("The field {present} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of the extractor."),
                     warning::Class::Behaviour
                 );
             }
@@ -1545,7 +1545,7 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
                 helper.warn(
                     self.mid.range.expand_lines(2),
                     self.mid.range,
-                    &format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
+                    &format!("The field {absent} is checked with both absence and another extractor, this test can never be true."),
                     warning::Class::Behaviour
                 );
             }

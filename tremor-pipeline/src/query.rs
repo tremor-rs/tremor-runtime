@@ -267,13 +267,13 @@ impl Query {
                         .map(|_| h.to_string().trim_end().to_string());
 
                     let select_in = InputPort {
-                        id: format!("select_{}", select_num).into(),
+                        id: format!("select_{select_num}").into(),
                         port: IN,
                         had_port: false,
                         mid: Box::new(s.meta().clone()),
                     };
                     let select_out = OutputPort {
-                        id: format!("select_{}", select_num,).into(),
+                        id: format!("select_{select_num}").into(),
                         port: OUT,
                         had_port: false,
                         mid: Box::new(s.meta().clone()),
@@ -605,7 +605,7 @@ impl Query {
 
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
-            Err(ErrorKind::CyclicGraphError(format!("{}", dot)).into())
+            Err(ErrorKind::CyclicGraphError(format!("{dot}")).into())
         } else {
             let mut i2pos = HashMap::new();
             let mut graph = Vec::new();
@@ -700,7 +700,7 @@ impl Query {
                 signalflow,
                 metric_interval,
                 insights: Vec::new(),
-                dot: format!("{}", dot),
+                dot: format!("{dot}"),
                 metrics_channel: METRICS_CHANNEL.tx(),
                 logging_channel: LOGGING_CHANNEL.tx(),
                 outputs,

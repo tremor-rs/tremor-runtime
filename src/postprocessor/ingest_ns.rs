@@ -19,6 +19,7 @@ use crate::Result;
 use byteorder::{BigEndian, WriteBytesExt};
 use std::io::Write;
 
+#[derive(Default)]
 pub(crate) struct IngestNs {}
 impl Postprocessor for IngestNs {
     fn name(&self) -> &str {

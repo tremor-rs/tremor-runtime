@@ -141,7 +141,7 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
 {
     async fn bucket_exists(&mut self, url: &Url<HttpsDefaults>, bucket: &str) -> Result<bool> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
-            let url = url::Url::parse(&format!("{}b/{}", url, bucket))?;
+            let url = url::Url::parse(&format!("{url}b/{bucket}"))?;
             Ok(Request::new(Method::Get, url))
         })
         .await?;

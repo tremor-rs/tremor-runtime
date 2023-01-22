@@ -2,10 +2,16 @@
 
 ## Unreleased
 
+### New features
+
+* Add configuration option `path_style_access` to `s3_streamer` and `s3_reader` connectors.
 * Add a Logging connector
+
+## [0.13.0-rc.11]
 
 ### New Features
 
+* Update to rust toolchain 1.66
 * Warning types: now warnings can specify what they are about (performance, behaviour, etc.)
 * New warnings for consistency, behaviour and performance
 * Functions now can create warnings
@@ -16,6 +22,7 @@
 
 ### Fixes
 * Fix google pub sub default api endpoint
+* Handle `routing` and `pipeline` information for each bulk item in the `elastic` connector
 
 ### Breaking Changes
 

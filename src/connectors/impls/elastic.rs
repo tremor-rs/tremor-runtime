@@ -37,7 +37,8 @@ use elasticsearch::{
         transport::{SingleNodeConnectionPool, TransportBuilder},
     },
     params::{Refresh, VersionType},
-    Bulk, BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, Elasticsearch,
+    Bulk, BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, BulkUpdateOperation,
+    Elasticsearch,
 };
 use halfbrown::HashMap;
 use tremor_common::time::nanotime;
@@ -703,99 +704,154 @@ impl<'a, 'value> ESMeta<'a, 'value> {
     fn insert_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
         // index is the default action
         match self.get_action().unwrap_or("index") {
-            "index" => {
-                let mut op = BulkOperation::index(data);
-                if let Some(id) = self.get_id() {
-                    op = op.id(id);
-                }
-                if let Some(index) = self.get_index() {
-                    op = op.index(index);
-                }
-                if let Some(version_type) = self.get_version_type() {
-                    op = op.version_type(version_type);
-                }
-                if let Some(version) = self.get_version() {
-                    op = op.version(version);
-                }
-                if let Some(if_primary_term) = self.get_if_primary_term() {
-                    op = op.if_primary_term(if_primary_term);
-                }
-                if let Some(if_seq_no) = self.get_if_seq_no() {
-                    op = op.if_seq_no(if_seq_no);
-                }
-                ops.push(op).map_err(Into::into)
-            }
-            "delete" => {
-                let mut op: BulkDeleteOperation<()> = self
-                    .get_id()
-                    .map(BulkOperation::delete)
-                    .ok_or_else(|| Error::from(Self::MISSING_ID))?;
-                if let Some(index) = self.get_index() {
-                    op = op.index(index);
-                }
-                if let Some(version_type) = self.get_version_type() {
-                    op = op.version_type(version_type);
-                }
-                if let Some(version) = self.get_version() {
-                    op = op.version(version);
-                }
-                if let Some(if_primary_term) = self.get_if_primary_term() {
-                    op = op.if_primary_term(if_primary_term);
-                }
-                if let Some(if_seq_no) = self.get_if_seq_no() {
-                    op = op.if_seq_no(if_seq_no);
-                }
-                ops.push(op).map_err(Into::into)
-            }
+            "index" => self.insert_index_op(data, ops),
+            "delete" => self.insert_delete_op(ops),
 
-            "create" => {
-                // create requires an `_id` here, which is not according to spec
-                // Actually `_id` should be completely optional here
-                // See: https://github.com/elastic/elasticsearch-rs/issues/190
-                let mut op = self
-                    .get_id()
-                    .map(|id| BulkOperation::create(id, data))
-                    .ok_or_else(|| Error::from(Self::MISSING_ID))?;
-                if let Some(index) = self.get_index() {
-                    op = op.index(index);
-                }
-                ops.push(op).map_err(Into::into)
-            }
+            "create" => self.insert_create_op(data, ops),
             "update" => {
-                let mut op = self
-                    .get_id()
-                    .map(|id| {
-                        // TODO: find a way to not .clone_static()
-                        let src = if self.get_raw_payload() {
-                            data.clone_static()
-                        } else {
-                            literal!({ "doc": data.clone_static() })
-                        };
-                        BulkOperation::update(id, src)
-                    })
-                    .ok_or_else(|| Error::from(Self::MISSING_ID))?;
-                if let Some(index) = self.get_index() {
-                    op = op.index(index);
+                if self.get_raw_payload() {
+                    self.insert_raw_update_op(data, ops)
+                } else {
+                    self.insert_update_op(data, ops)
                 }
-                if let Some(version_type) = self.get_version_type() {
-                    op = op.version_type(version_type);
-                }
-                if let Some(version) = self.get_version() {
-                    op = op.version(version);
-                }
-                if let Some(if_primary_term) = self.get_if_primary_term() {
-                    op = op.if_primary_term(if_primary_term);
-                }
-                if let Some(if_seq_no) = self.get_if_seq_no() {
-                    op = op.if_seq_no(if_seq_no);
-                }
-                if let Some(retry_on_conflict) = self.get_retry_on_conflict() {
-                    op = op.retry_on_conflict(retry_on_conflict);
-                }
-                ops.push(op).map_err(Into::into)
             }
-            other => Err(Error::from(format!("Invalid `$elastic.action` {}", other))),
+            other => Err(Error::from(format!("Invalid `$elastic.action` {other}"))),
         }
+    }
+
+    fn insert_index_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+        let mut op = BulkOperation::index(data);
+        if let Some(id) = self.get_id() {
+            op = op.id(id);
+        }
+        if let Some(index) = self.get_index() {
+            op = op.index(index);
+        }
+        if let Some(version_type) = self.get_version_type() {
+            op = op.version_type(version_type);
+        }
+        if let Some(version) = self.get_version() {
+            op = op.version(version);
+        }
+        if let Some(if_primary_term) = self.get_if_primary_term() {
+            op = op.if_primary_term(if_primary_term);
+        }
+        if let Some(if_seq_no) = self.get_if_seq_no() {
+            op = op.if_seq_no(if_seq_no);
+        }
+        if let Some(routing) = self.get_routing() {
+            op = op.routing(routing);
+        }
+        if let Some(pipeline) = self.get_pipeline() {
+            op = op.pipeline(pipeline);
+        }
+        ops.push(op).map_err(Error::from)?;
+        Ok(())
+    }
+
+    fn insert_delete_op(&self, ops: &mut BulkOperations) -> Result<()> {
+        let mut op: BulkDeleteOperation<()> = self
+            .get_id()
+            .map(BulkOperation::delete)
+            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+        if let Some(index) = self.get_index() {
+            op = op.index(index);
+        }
+        if let Some(version_type) = self.get_version_type() {
+            op = op.version_type(version_type);
+        }
+        if let Some(version) = self.get_version() {
+            op = op.version(version);
+        }
+        if let Some(if_primary_term) = self.get_if_primary_term() {
+            op = op.if_primary_term(if_primary_term);
+        }
+        if let Some(if_seq_no) = self.get_if_seq_no() {
+            op = op.if_seq_no(if_seq_no);
+        }
+        if let Some(routing) = self.get_routing() {
+            op = op.routing(routing);
+        }
+
+        ops.push(op).map_err(Error::from)?;
+        Ok(())
+    }
+
+    fn insert_create_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+        // create requires an `_id` here, which is not according to spec
+        // Actually `_id` should be completely optional here
+        // See: https://github.com/elastic/elasticsearch-rs/issues/190
+        let mut op = self
+            .get_id()
+            .map(|id| BulkOperation::create(id, data))
+            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+        if let Some(index) = self.get_index() {
+            op = op.index(index);
+        }
+        if let Some(pipeline) = self.get_pipeline() {
+            op = op.pipeline(pipeline);
+        }
+        if let Some(routing) = self.get_routing() {
+            op = op.routing(routing);
+        }
+        ops.push(op).map_err(Error::from)?;
+        Ok(())
+    }
+
+    // avoid a `.clone_static()` for the `raw` case
+    fn insert_raw_update_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+        let mut op = self
+            .get_id()
+            .map(|id| BulkOperation::update(id, data))
+            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+
+        op = self.apply_update_params(op);
+        ops.push(op).map_err(Error::from)?;
+        Ok(())
+    }
+
+    fn insert_update_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+        let mut op = self
+            .get_id()
+            .map(|id| {
+                // we are sure that this BulkUpdateOperation lives only as long as the event
+                // so it is fine to only do a `.clone()` here instead of a `.clone_static()`
+                let src = literal!({ "doc": data.clone() });
+                BulkOperation::update(id, src)
+            })
+            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+
+        op = self.apply_update_params(op);
+        ops.push(op).map_err(Error::from)?;
+        Ok(())
+    }
+
+    fn apply_update_params<T: serde::Serialize>(
+        &self,
+        mut op: BulkUpdateOperation<T>,
+    ) -> BulkUpdateOperation<T> {
+        if let Some(index) = self.get_index() {
+            op = op.index(index);
+        }
+        if let Some(version_type) = self.get_version_type() {
+            op = op.version_type(version_type);
+        }
+        if let Some(version) = self.get_version() {
+            op = op.version(version);
+        }
+        if let Some(if_primary_term) = self.get_if_primary_term() {
+            op = op.if_primary_term(if_primary_term);
+        }
+        if let Some(if_seq_no) = self.get_if_seq_no() {
+            op = op.if_seq_no(if_seq_no);
+        }
+        if let Some(retry_on_conflict) = self.get_retry_on_conflict() {
+            op = op.retry_on_conflict(retry_on_conflict);
+        }
+        if let Some(routing) = self.get_routing() {
+            op = op.routing(routing);
+        }
+        op
     }
 
     fn parts<'blk>(&'blk self, default_index: Option<&'blk str>) -> BulkParts<'blk> {
@@ -983,12 +1039,78 @@ mod tests {
     }
 
     #[test]
-    fn es_meta() -> Result<()> {
+    fn es_meta_update() -> Result<()> {
+        // update
+        let meta = literal!({
+            "elastic": {
+                "action": "update",
+                "_id": "1234",
+                "retry_on_conflict": 42,
+                "if_seq_no": 123,
+                "if_primary_term": 456,
+                "version": 12,
+                "version_type": "external",
+                "routing": "snot"
+            }
+        });
+        let es_meta = ESMeta::new(&meta);
+        assert_eq!(Some(42), es_meta.get_retry_on_conflict());
+        assert_eq!(Some(123), es_meta.get_if_seq_no());
+        assert_eq!(Some(456), es_meta.get_if_primary_term());
+        let data = literal!({});
+        let mut ops = BulkOperations::new();
+        es_meta.insert_op(&data, &mut ops)?;
+        assert_eq!(
+            Some(String::from(
+                r#"{"update":{"_id":"1234","if_seq_no":123,"if_primary_term":456,"routing":"snot","retry_on_conflict":42,"version":12,"version_type":"external"}}
+{"doc":{}}
+"#
+            )),
+            ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
+        );
+
+        // raw update
+        let meta = literal!({
+            "elastic": {
+                "action": "update",
+                "raw_payload": true,
+                "_id": "1234",
+                "retry_on_conflict": 42,
+                "if_seq_no": 123,
+                "if_primary_term": 456,
+                "version": 12,
+                "version_type": "external",
+                "routing": "snot"
+            }
+        });
+        let es_meta = ESMeta::new(&meta);
+        assert_eq!(Some(42), es_meta.get_retry_on_conflict());
+        assert_eq!(Some(123), es_meta.get_if_seq_no());
+        assert_eq!(Some(456), es_meta.get_if_primary_term());
+        let data = literal!({});
+        let mut ops = BulkOperations::new();
+        es_meta.insert_op(&data, &mut ops)?;
+        assert_eq!(
+            Some(String::from(
+                r#"{"update":{"_id":"1234","if_seq_no":123,"if_primary_term":456,"routing":"snot","retry_on_conflict":42,"version":12,"version_type":"external"}}
+{}
+"#
+            )),
+            ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn es_meta_index() -> Result<()> {
+        // index
         let meta = literal!({
             "elastic": {
                 "action": "index",
                 "_id": "abcdef",
                 "_index": "snot",
+                "if_primary_term": 2,
+                "if_seq_no": 3,
                 "pipeline": "pipeline",
                 "refresh": "wait_for",
                 "routing": "routing",
@@ -1005,8 +1127,8 @@ mod tests {
         assert_eq!(Some("snot"), es_meta.get_index());
         assert_eq!(Some("pipeline"), es_meta.get_pipeline());
         assert_eq!(false, es_meta.get_raw_payload());
-        assert_eq!(None, es_meta.get_if_primary_term());
-        assert_eq!(None, es_meta.get_if_seq_no());
+        assert_eq!(Some(2), es_meta.get_if_primary_term());
+        assert_eq!(Some(3), es_meta.get_if_seq_no());
         assert_eq!(Ok(Some(Refresh::WaitFor)), es_meta.get_refresh());
         assert_eq!(Some("routing"), es_meta.get_routing());
         assert_eq!(Some("10s"), es_meta.get_timeout());
@@ -1018,37 +1140,66 @@ mod tests {
         es_meta.insert_op(&data, &mut ops)?;
         assert_eq!(
             Some(String::from(
-                r#"{"index":{"_index":"snot","_id":"abcdef","version":12,"version_type":"external"}}
+                r#"{"index":{"_index":"snot","_id":"abcdef","pipeline":"pipeline","if_seq_no":3,"if_primary_term":2,"routing":"routing","version":12,"version_type":"external"}}
+{}
+"#
+            )),
+            ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
+        );
+        // create
+        let meta = literal!({
+            "elastic": {
+                "action": "create",
+                "_id": "badger",
+                "_index": "schmindex",
+                "pipeline": "schnipeline",
+                "routing": "schmouting"
+            }
+        });
+        let data = literal!({});
+
+        let es_meta = ESMeta::new(&meta);
+        let mut ops = BulkOperations::new();
+        es_meta.insert_op(&data, &mut ops)?;
+        assert_eq!(
+            Some(String::from(
+                r#"{"create":{"_index":"schmindex","_id":"badger","pipeline":"schnipeline","routing":"schmouting"}}
 {}
 "#
             )),
             ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn es_meta_delete() -> Result<()> {
         let meta = literal!({
             "elastic": {
-                "action": "update",
-                "_id": "1234",
-                "retry_on_conflict": 42,
-                "if_seq_no": 123,
-                "if_primary_term": 456
+                "action": "delete",
+                "_id": "badger",
+                "_index": "schmindex",
+                "routing": "schmouting",
+                "version": 123,
+                "version_type": "internal",
+                "if_primary_term": 456,
+                "if_seq_no": 890
             }
         });
-        let es_meta = ESMeta::new(&meta);
-        assert_eq!(Some(42), es_meta.get_retry_on_conflict());
-        assert_eq!(Some(123), es_meta.get_if_seq_no());
-        assert_eq!(Some(456), es_meta.get_if_primary_term());
         let data = literal!({});
+
+        let es_meta = ESMeta::new(&meta);
         let mut ops = BulkOperations::new();
         es_meta.insert_op(&data, &mut ops)?;
         assert_eq!(
             Some(String::from(
-                r#"{"update":{"_id":"1234","if_seq_no":123,"if_primary_term":456,"retry_on_conflict":42}}
-{"doc":{}}
+                r#"{"delete":{"_index":"schmindex","_id":"badger","if_seq_no":890,"if_primary_term":456,"routing":"schmouting","version":123,"version_type":"internal"}}
 "#
             )),
             ops.bytes().map(|b| String::from_utf8_lossy(&b).to_string())
         );
+
         Ok(())
     }
 }

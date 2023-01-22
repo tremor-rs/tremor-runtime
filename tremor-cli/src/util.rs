@@ -106,7 +106,7 @@ impl fmt::Display for SourceKind {
             SourceKind::Troy => write!(f, "troy"),
             SourceKind::Json => write!(f, "json"),
             SourceKind::Unsupported(None) => write!(f, "<NONE>"),
-            SourceKind::Unsupported(Some(ext)) => write!(f, "{}", ext),
+            SourceKind::Unsupported(Some(ext)) => write!(f, "{ext}"),
         }
     }
 }

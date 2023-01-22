@@ -23,7 +23,7 @@ pub fn load(registry: &mut Registry) {
             if let Ok(decoded) = ds {
                 Ok(Value::from(decoded.to_string()))
             } else {
-                Err(to_runtime_error(format!("Could not urldecode value: {}", s)))
+                Err(to_runtime_error(format!("Could not urldecode value: {s}")))
             }
         }))
         .insert(tremor_fn! (url|encode(ctx, s: String) {

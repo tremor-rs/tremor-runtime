@@ -64,37 +64,37 @@ pub(crate) fn text(prefix: &str, data: &str) -> Result<()> {
 fn humanize(ts: u64) -> String {
     let ns = ts;
     if ns < 1000 {
-        return format!("{}ns", ns);
+        return format!("{ns}ns");
     };
 
     let ns = ts % 1000;
-    let us = (ts / 1000) as u64;
+    let us = ts / 1000;
     if us < 1000 {
-        return format!("{}us {}ns", us, ns % 1000);
+        return format!("{us}us {}ns", ns % 1000);
     }
 
-    let ms = (ts / 1_000_000) as u64;
+    let ms = ts / 1_000_000;
     if ms < 1000 {
-        return format!("{}ms {}us", ms, us % 1000);
+        return format!("{ms}ms {}us", us % 1000);
     }
 
-    let secs = (ts / 1_000_000_000) as u64;
+    let secs = ts / 1_000_000_000;
     if secs < 60 {
-        return format!("{}s {}ms", secs, ms % 1000);
+        return format!("{secs}s {}ms", ms % 1000);
     }
 
-    let mins = (ts / 60_000_000_000) as u64;
+    let mins = ts / 60_000_000_000;
     if mins < 60 {
-        return format!("{}m {}s", mins, secs % 60);
+        return format!("{mins}m {}s", secs % 60);
     }
-    let hrs = (ts / 3_600_000_000_000) as u64;
-    format!("{}h {}m {:02}s", hrs, mins % 60, secs % 60)
+    let hrs = ts / 3_600_000_000_000;
+    format!("{hrs}h {}m {:02}s", mins % 60, secs % 60)
 }
 
 pub(crate) fn duration(what: u64, prefix: &str) -> Result<()> {
     let mut h = TermHighlighter::default();
     fg_bold!(h, Blue);
-    write!(h.get_writer(), "{}Elapsed", prefix)?;
+    write!(h.get_writer(), "{prefix}Elapsed")?;
     h.reset()?;
     writeln!(h.get_writer(), ": {}", &humanize(what))?;
     h.reset()?;
@@ -117,9 +117,9 @@ pub(crate) fn assert_has(
     let mut h = TermHighlighter::default();
     if ok {
         fg_bold!(h, Green);
-        write!(h.get_writer(), "{}    (+) ", prefix)?;
+        write!(h.get_writer(), "{prefix}    (+) ")?;
     } else {
-        write!(h.get_writer(), "{}    (-) ", prefix)?;
+        write!(h.get_writer(), "{prefix}    (-) ")?;
         fg_bold!(h, Red);
         write!(h.get_writer(), "    (-) ")?;
     }
@@ -130,7 +130,7 @@ pub(crate) fn assert_has(
     h.reset()?;
     if let Some(info) = info {
         if !ok {
-            writeln!(h.get_writer(), "{}", info)?;
+            writeln!(h.get_writer(), "{info}")?;
         }
     };
     h.finalize()?;
@@ -168,7 +168,7 @@ pub(crate) fn stats(stats: &stats::Stats, prefix: &str) -> Result<()> {
 
     let mut h = TermHighlighter::default();
     fg_bold!(h, Blue);
-    write!(h.get_writer(), "{} Stats: ", prefix)?;
+    write!(h.get_writer(), "{prefix} Stats: ")?;
     fg_bold!(h, Green);
     write!(h.get_writer(), "Pass ")?;
     write!(h.get_writer(), "{} ", stats.pass)?;
@@ -206,7 +206,7 @@ pub(crate) fn rollups(label: &str, stats: &stats::Stats) -> Result<()> {
 
     let mut h = TermHighlighter::default();
     fg_bold!(h, Blue);
-    write!(h.get_writer(), "{} Stats: ", label)?;
+    write!(h.get_writer(), "{label} Stats: ")?;
     fg_bold!(h, Green);
     write!(h.get_writer(), "Pass ")?;
     write!(h.get_writer(), "{} ", stats.pass)?;
@@ -258,7 +258,7 @@ pub(crate) fn tagsx(
     let (active, _status) = filter.matches(&[], config.0, config.1);
     let mut h = TermHighlighter::default();
     fg_bold!(h, Yellow);
-    write!(h.get_writer(), "{}Tags: ", prefix)?;
+    write!(h.get_writer(), "{prefix}Tags: ")?;
     for tag in filter.includes() {
         if config.1.contains(&tag) {
             fg_bold!(h, Red);
@@ -267,7 +267,7 @@ pub(crate) fn tagsx(
         } else {
             fg_bold!(h, Black);
         }
-        write!(h.get_writer(), " {}", tag)?;
+        write!(h.get_writer(), " {tag}")?;
     }
     writeln!(h.get_writer())?;
     h.finalize()?;

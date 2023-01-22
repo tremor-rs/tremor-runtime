@@ -115,7 +115,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
                 end: v.get_bytes("end").map(<[u8]>::to_vec),
             })
         } else {
-            Err(format!("Invalid KV command: {}", v).into())
+            Err(format!("Invalid KV command: {v}").into())
         }
     }
 }

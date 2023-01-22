@@ -116,7 +116,7 @@ pub fn load_event_file(base_name: &str) -> crate::errors::Result<Vec<Value<'stat
     } else if Path::new(name).exists() {
         (name, cfile::open(name)?)
     } else {
-        return Err(format!("File not found or not readable: {}", base_name).into());
+        return Err(format!("File not found or not readable: {base_name}").into());
     };
     let mut in_data = Vec::new();
     if is_xz_file(effective_name) {

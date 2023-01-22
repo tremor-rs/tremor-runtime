@@ -205,9 +205,9 @@ fn gen_doc(
         ))
     })?;
     std::fs::create_dir_all(parent)
-        .map_err(|e| Error::from(format!("Unable to generate output module folder: {}", e)))?;
+        .map_err(|e| Error::from(format!("Unable to generate output module folder: {e}")))?;
     std::fs::write(dest_file, &gen)
-        .map_err(|e| Error::from(format!("Unable to generate output: {}", e)))?;
+        .map_err(|e| Error::from(format!("Unable to generate output: {e}")))?;
 
     Ok(())
 }

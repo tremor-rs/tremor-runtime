@@ -88,7 +88,7 @@ impl ConnectorBuilder for Builder {
         // - set librdkafka logger to debug in logger.yaml
         // - configure: debug: "all" for this onramp
         let tid = task::current().id();
-        let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
+        let client_id = format!("tremor-{}-{alias}-{tid:?}", hostname());
         producer_config
             .set("client.id", &client_id)
             .set("bootstrap.servers", config.brokers.join(","));

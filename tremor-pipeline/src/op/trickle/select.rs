@@ -69,7 +69,7 @@ impl Select {
         let max_groups = windows_itr
             .map(|w| w.window_impl.max_groups())
             .min()
-            .unwrap_or(0) as usize;
+            .unwrap_or(0);
         Self {
             windows,
             select: select.clone(),

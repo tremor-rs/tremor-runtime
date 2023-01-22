@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::impls::{
-    object_storage::{
-        BufferPart, ObjectId, ObjectStorageBuffer, ObjectStorageCommon, ObjectStorageSinkImpl,
-        ObjectStorageUpload,
+use crate::connectors::{
+    impls::{
+        object_storage::{
+            BufferPart, ConsistentSink, Mode, ObjectId, ObjectStorageBuffer, ObjectStorageCommon,
+            ObjectStorageSinkImpl, ObjectStorageUpload, YoloSink,
+        },
+        s3::auth,
     },
-    s3::auth,
+    prelude::*,
 };
-use crate::connectors::prelude::*;
 use async_std::channel::Sender;
+use aws_sdk_s3::{
+    model::{CompletedMultipartUpload, CompletedPart},
+    Client as S3Client,
+};
 use tremor_common::time::nanotime;
 use tremor_pipeline::{Event, EventId, OpMeta};
-
-use aws_sdk_s3 as s3;
-use s3::model::{CompletedMultipartUpload, CompletedPart};
-use s3::Client as S3Client;
-
-use crate::connectors::impls::object_storage::{ConsistentSink, Mode, YoloSink};
 
 pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";
 
@@ -46,6 +46,21 @@ pub(crate) struct Config {
 
     #[serde(default = "Config::fivembs")]
     buffer_size: usize,
+
+    /// Enable path-style access
+    /// So e.g. creating a bucket is done using:
+    ///
+    /// PUT http://<host>:<port>/<bucket>
+    ///
+    /// instead of
+    ///
+    /// PUT http://<bucket>.<host>:<port>/
+    ///
+    /// Set this to `true` for accessing s3 compatible backends
+    /// that do only support path style access, like e.g. minio.
+    /// Defaults to `true` for backward compatibility.
+    #[serde(default = "default_true")]
+    path_style_access: bool,
 }
 
 // Defaults for the config.
@@ -213,8 +228,14 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
         self.config.buffer_size
     }
     async fn connect(&mut self, _ctx: &SinkContext) -> Result<()> {
-        self.client =
-            Some(auth::get_client(self.config.aws_region.clone(), self.config.url.as_ref()).await?);
+        self.client = Some(
+            auth::get_client(
+                self.config.aws_region.clone(),
+                self.config.url.as_ref(),
+                self.config.path_style_access,
+            )
+            .await?,
+        );
         Ok(())
     }
 
