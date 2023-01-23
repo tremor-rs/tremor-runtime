@@ -43,7 +43,7 @@ hostname = "0.3"
 jumphash = "0.1"
 lalrpop-util = "0.19"
 lazy_static = "1.4"
-matches = "0.1.9"
+matches = "0.1.10"
 percent-encoding = "2.1"
 rand = { version = "0.8", features = ["small_rng"] }
 regex = "1"

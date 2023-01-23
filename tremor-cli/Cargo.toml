@@ -11,7 +11,7 @@ default-target = "x86_64-unknown-linux-gnu"
 
 [build-dependencies]
 lalrpop = "0.19"
-matches = "0.1.9"
+matches = "0.1.10"
 
 [dev-dependencies]
 temp-dir = "0.1"
