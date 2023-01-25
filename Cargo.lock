@@ -474,9 +474,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.61"
+version = "0.1.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "705339e0e4a9690e2908d2b3d049d85682cf19fbd5782494498fbf7003a6a282"
+checksum = "eff18d764974428cf3a9328e23fc5c986f5fbed46e6cd4cdf42544df5d297ec1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1139,9 +1139,9 @@ dependencies = [
 
 [[package]]
 name = "cached-path"
-version = "0.5.3"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f1c56d30236522ab3393a08746b138d4e16372001f42d29c88d513aeb8ab7ef"
+checksum = "51c0309666fa5020fc4a2d1ead232118ab299170de58b9d9276b20dfdb6abb55"
 dependencies = [
  "flate2",
  "fs2",
@@ -1156,7 +1156,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror",
- "zip 0.5.13",
+ "zip 0.6.3",
  "zip-extensions",
 ]
 
@@ -1313,9 +1313,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.1.1"
+version = "4.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ec7a4128863c188deefe750ac1d1dfe66c236909f845af04beed823638dc1b2"
+checksum = "f13b9c79b5d1dd500d20ef541215a6423c75829ef43117e1b4d17fd8af0b5d76"
 dependencies = [
  "bitflags",
  "clap_derive",
@@ -1332,7 +1332,7 @@ version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce8955d4e8cd4f28f9a01c93a050194c4d131e73ca02f6636bcddbed867014d7"
 dependencies = [
- "clap 4.1.1",
+ "clap 4.1.4",
 ]
 
 [[package]]
@@ -3335,9 +3335,9 @@ checksum = "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4"
 
 [[package]]
 name = "matches"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
+checksum = "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5"
 
 [[package]]
 name = "matrixmultiply"
@@ -4161,7 +4161,7 @@ dependencies = [
 [[package]]
 name = "qwal"
 version = "0.1.0"
-source = "git+https://github.com/tremor-rs/qwal#3eee7cae5a7cc506ea5beee15e820188d5160a79"
+source = "git+https://github.com/tremor-rs/qwal#68010d70ce075042d2288fbd26bc3b98d8fc4636"
 dependencies = [
  "byteorder",
  "tokio",
@@ -4463,15 +4463,16 @@ checksum = "56770675ebc04927ded3e60633437841581c285dc6236109ea25fbf3beb7b59e"
 
 [[package]]
 name = "rust-bert"
-version = "0.19.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ea4119688c0406c009d6b40cc239d85166318887e1353733606348ada04a84d"
+checksum = "82fc88f12e83c88ec44d2b64eaca46937f3c1159d8b038e1502c897388f7e69b"
 dependencies = [
  "cached-path",
  "dirs",
  "half 2.1.0",
  "lazy_static",
  "ordered-float 3.4.0",
+ "regex",
  "rust_tokenizers",
  "serde",
  "serde_json",
@@ -5329,9 +5330,9 @@ dependencies = [
 
 [[package]]
 name = "tch"
-version = "0.8.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "584cc6a09b0a28a9ebd85b64a74cfe0643d54a724ab649379c4ff5edd59b2356"
+checksum = "f4e8ecac1bcd6c92726de9b1e998aa99b3977af0716992382dfd1171289b9575"
 dependencies = [
  "half 1.8.2",
  "lazy_static",
@@ -5790,9 +5791,9 @@ dependencies = [
 
 [[package]]
 name = "torch-sys"
-version = "0.8.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a097a0fe5fda9773f6515d4eaf692caa77818c8628f1be42b79c31de9473300"
+checksum = "877dbdc2732bdb118a71c94d0004333d29f76ebb5e88f193a3abe068f7bd6de9"
 dependencies = [
  "anyhow",
  "cc",
@@ -5903,7 +5904,7 @@ version = "0.13.0-rc.11"
 dependencies = [
  "anyhow",
  "async-std",
- "clap 4.1.1",
+ "clap 4.1.4",
  "clap_complete",
  "criterion",
  "difference",
