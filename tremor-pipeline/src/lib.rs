@@ -139,8 +139,7 @@ pub type NodeLookupFn = fn(
 
 #[derive(Clone, Debug)]
 /// A channel used to send metrics or log betwen different parts of the system
-// MetricsChannel = OverflowingChannel<MetricsMsg>
-// LoggingChannel = OverflowingChannel<LoggingMsg>
+/// 
 pub struct OverflowingChannel<Msg> {
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -158,34 +157,12 @@ impl<T> OverflowingChannel<T> {
 
     /// Get the sender
     #[must_use]
-    pub fn tx(&self) -> Sender<MetricsMsg> {
+    pub fn tx(&self) -> Sender<T> {
         self.tx.clone()
     }
     /// Get the receiver
     #[must_use]
-    pub fn rx(&self) -> Receiver<MetricsMsg> {
-        self.rx.clone()
-    }
-}
-
-impl OverflowingChannel<LoggingMsg> {
-    pub(crate) fn new(qsize: usize) -> Self {
-        let (mut tx, rx) = broadcast(qsize);
-        // We use overflow so that non collected messages can be removed
-        // For Logging it should be good enough we consume them quickly
-        // and if not we got bigger problems
-        tx.set_overflow(true);
-        Self { tx, rx }
-    }
-
-    /// Get the sender
-    #[must_use]
-    pub fn tx(&self) -> Sender<LoggingMsg> {
-        self.tx.clone()
-    }
-    /// Get the receiver
-    #[must_use]
-    pub fn rx(&self) -> Receiver<LoggingMsg> {
+    pub fn rx(&self) -> Receiver<T> {
         self.rx.clone()
     }
 }
