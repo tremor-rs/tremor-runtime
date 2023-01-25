@@ -146,7 +146,7 @@ pub struct OverflowingChannel<Msg> {
     rx: Receiver<Msg>,
 }
 
-impl OverflowingChannel<MetricsMsg> {
+impl<T> OverflowingChannel<T> {
     pub(crate) fn new(qsize: usize) -> Self {
         let (mut tx, rx) = broadcast(qsize);
         // We use overflow so that non collected messages can be removed
