@@ -1,0 +1,53 @@
+## The Content-Type header.
+const CONTENT_TYPE = "Content-Type";
+
+## The Accept header.
+const ACCEPT = "Accept";
+
+## The Authorization header.
+const AUTHORIZATION = "Authorization";
+
+## The Cache-Control header.
+const CACHE_CONTROL = "Cache-Control";
+
+## The Content-Length header.
+const CONTENT_LENGTH = "Content-Length";
+
+## The Content-Disposition header.
+const CONTENT_DISPOSITION = "Content-Disposition";
+
+## The Date header.
+const DATE = "Date";
+
+## The ETag header.
+const ETAG = "ETag";
+
+## The Expires header.
+const EXPIRES = "Expires";
+
+## The Host header.
+const HOST = "Host";
+
+## The If-Modified-Since header.
+const IF_MODIFIED_SINCE = "If-Modified-Since";
+
+## The If-None-Match header.
+const IF_NONE_MATCH = "If-None-Match";
+
+## The Last-Modified header.
+const LAST_MODIFIED = "Last-Modified";
+
+## The Location header.
+const LOCATION = "Location";
+
+## The User-Agent header.
+const USER_AGENT = "User-Agent";
+
+## The X-Forwarded-For header.
+const X_FORWARDED_FOR = "X-Forwarded-For";
+
+## The X-Forwarded-Host header.
+const X_FORWARDED_HOST = "X-Forwarded-Host";
+
+## The X-Forwarded-Proto header.
+const X_FORWARDED_PROTO = "X-Forwarded-Proto";

@@ -1,0 +1,26 @@
+## The GET HTTP method.
+const GET = "GET";
+
+## The POST HTTP method.
+const POST = "POST";
+
+## The PUT HTTP method.
+const PUT = "PUT";
+
+## The DELETE HTTP method.
+const DELETE = "DELETE";
+
+## The HEAD HTTP method.
+const HEAD = "HEAD";
+
+## The OPTIONS HTTP method.
+const OPTIONS = "OPTIONS";
+
+## The CONNECT HTTP method.
+const CONNECT = "CONNECT";
+
+## The TRACE HTTP method.
+const TRACE = "TRACE";
+
+## The PATCH HTTP method.
+const PATCH = "PATCH";ß

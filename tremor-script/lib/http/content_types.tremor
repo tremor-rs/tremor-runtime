@@ -1,0 +1,26 @@
+## The JSON content type.
+const JSON = "application/json";
+
+## The HTML content type.
+const HTML = "text/html";
+
+## The CSS content type.
+const CSS = "text/css";
+
+## The Text content type.
+const TEXT = "text/plain";
+
+## The XML content type.
+const XML = "application/xml";
+
+## The JS content type.
+const JS = "application/javascript";
+
+## The PNG content type.
+const PNG = "image/png";
+
+## The JPG content type.
+const JPG = "image/jpeg";
+
+## The GIF content type.
+const GIF = "image/gif";

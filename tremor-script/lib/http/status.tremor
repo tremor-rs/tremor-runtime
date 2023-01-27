@@ -1,0 +1,32 @@
+## The request was successful.
+const OK = 200;
+
+## The request was successful and a resource was created.
+const CREATED = 201;
+
+## The request was successful but there's no content to return.
+const NO_CONTENT = 204;
+
+## The request was invalid or malformed.
+const BAD_REQUEST = 400;
+
+## The request requires user authentication.
+const UNAUTHORIZED = 401;
+
+## The user is not authorized to perform the requested action.
+const FORBIDDEN = 403;
+
+## The requested resource could not be found.
+const NOT_FOUND = 404;
+
+## An internal server error occurred.
+const INTERNAL_SERVER_ERROR = 500;
+
+## The server received an invalid response from an upstream server.
+const BAD_GATEWAY = 502;
+
+## The server is currently unavailable.
+const SERVICE_UNAVAILABLE = 503;
+
+## The server timed out waiting for a response from an upstream server.
+const GATEWAY_TIMEOUT = 504;
