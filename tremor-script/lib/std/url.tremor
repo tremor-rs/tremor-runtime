@@ -19,3 +19,59 @@ intrinsic fn encode(str) as url::encode;
 ##
 ## Returns a `string`
 intrinsic fn decode(str) as url::decode;
+
+## Constructs a url from the provided scheme, host, path, query and fragment
+##
+## > ```tremor
+## > use std::url;
+## >
+## > "https://example.com/path?query=1#fragment" == url::construct("https","example.com","/path","query=1","fragment")
+## > ```
+##
+## Returns a `string`
+intrinsic fn construct(scheme:str,host:str,path:str,query:str,fragment:str) as url::construct;
+
+## Returns a new URL string with the specified scheme
+##
+## > ```tremor
+## > "https://example.com" == url::set_scheme("http://example.com", "https")
+## > ```
+##
+## Returns a `string`
+intrinsic fn set_scheme(url:str, scheme:str) as url::set_scheme;
+
+## Returns a new URL string with the specified host
+##
+## > ```tremor
+## > "http://newhost.com" == url::set_host("http://example.com", "newhost.com")
+## > ```
+##
+## Returns a `string`
+intrinsic fn set_host(url:str, host:str) as url::set_host;
+
+## Returns a new URL string with the specified path
+##
+## > ```tremor
+## > "http://example.com/newpath" == url::set_path("http://example.com/oldpath", "/newpath")
+## > ```
+##
+## Returns a `string`
+intrinsic fn set_path(url:str, path:str) as url::set_path;
+
+## Returns a new URL string with the specified query
+##
+## > ```tremor
+## > "http://example.com?newquery=value" == url::set_query("http://example.com", "newquery=value")
+## > ```
+##
+## Returns a `string`
+intrinsic fn set_query(url:str, query:str) as url::set_query;
+
+## Returns a new URL string with the specified fragment
+##
+## > ```tremor
+## > "http://example.com#newfragment" == url::set_fragment("http://example.com", "newfragment")
+## > ```
+##
+## Returns a `string`
+intrinsic fn set_fragment(url:str, fragment:str) as url::set_fragment;

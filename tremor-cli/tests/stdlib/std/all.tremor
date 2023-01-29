@@ -865,4 +865,47 @@ test::suite({
   ]
 });
 
+test::suite({
+    "name": "URL Construct and Modification tests",
+    "tags": [ "url", "construct", "modify" ],
+    "tests": [
+        test::test({
+            "name": "Test construct function",
+            "test": test::assert("url::construct", 
+                                 url::construct("http", "www.example.com", "/path", "query=test", "fragment"), 
+                                 "http://www.example.com/path?query=test#fragment"),
+        }),
+        test::test({
+            "name": "Test set_scheme function",
+            "test": test::assert("url::set_scheme", 
+                                 url::set_scheme("http://www.example.com", "https"), 
+                                 "https://www.example.com"),
+        }),
+        test::test({
+            "name": "Test set_host function",
+            "test": test::assert("url::set_host", 
+                                 url::set_host("http://www.example.com", "www.example2.com"), 
+                                 "http://www.example2.com"),
+        }),
+        test::test({
+            "name": "Test set_path function",
+            "test": test::assert("url::set_path", 
+                                 url::set_path("http://www.example.com", "/newpath"), 
+                                 "http://www.example.com/newpath"),
+        }),
+        test::test({
+            "name": "Test set_query function",
+            "test": test::assert("url::set_query", 
+                                 url::set_query("http://www.example.com?query=test", "newquery=test2"), 
+                                 "http://www.example.com?newquery=test2"),
+        }),
+        test::test({
+            "name": "Test set_fragment function",
+            "test": test::assert("url::set_fragment", 
+                                 url::set_fragment("http://www.example.com#fragment", "newfragment"), 
+                                 "http://www.example.com#newfragment"),
+        }),
+    ],
+});
+
 "snot badger";

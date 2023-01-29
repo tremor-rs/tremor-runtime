@@ -15,6 +15,7 @@
 use crate::registry::Registry;
 use crate::tremor_fn;
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
+use url::Url;
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -26,9 +27,69 @@ pub fn load(registry: &mut Registry) {
                 Err(to_runtime_error(format!("Could not urldecode value: {s}")))
             }
         }))
-        .insert(tremor_fn! (url|encode(ctx, s: String) {
-            Ok(Value::from(utf8_percent_encode(s, NON_ALPHANUMERIC).to_string()))
-        }));
+        .insert(tremor_fn!(url|construct(ctx, scheme: String, host: String, path: String, query: String, fragment: String) {
+            let url = Url::build(|b| {
+                b.scheme(scheme)
+                 .host(host)
+                 .path(path)
+                 .query(query)
+                 .fragment(fragment)
+            });
+            match url {
+                Ok(url) => Ok(Value::from(url.as_str().to_owned())),
+                Err(e) => Err(to_runtime_error(format!("Error building URL: {}", e))),
+            }
+        }))
+        .insert(tremor_fn!(url|set_scheme(ctx, url: String, scheme: String) {
+            let parsed_url = Url::parse(&url);
+            match parsed_url {
+                Ok(mut parsed_url) => {
+                    parsed_url.set_scheme(scheme).unwrap();
+                    Ok(Value::from(parsed_url.as_str().to_owned()))
+                }
+                Err(e) => Err(to_runtime_error(format!("Error parsing URL: {}", e))),
+            }
+        }))
+        .insert(tremor_fn!(url|set_host(ctx, url: String, host: String) {
+            let parsed_url = Url::parse(&url);
+            match parsed_url {
+                Ok(mut parsed_url) => {
+                    parsed_url.set_host(Some(host)).unwrap();
+                    Ok(Value::from(parsed_url.as_str().to_owned()))
+                }
+                Err(e) => Err(to_runtime_error(format!("Error parsing URL: {}", e))),
+            }
+        }))
+        .insert(tremor_fn!(url|set_path(ctx, url: String, path: String) {
+            let parsed_url = Url::parse(&url);
+            match parsed_url {
+                Ok(mut parsed_url) => {
+                    parsed_url.set_path(path);
+                    Ok(Value::from(parsed_url.as_str().to_owned()))
+                }
+                Err(e) => Err(to_runtime_error(format!("Error parsing URL: {}", e))),
+            }
+        }))
+        .insert(tremor_fn!(url|set_query(ctx, url: String, query: String) {
+            let parsed_url = Url::parse(&url);
+            match parsed_url {
+                Ok(mut parsed_url) => {
+                    parsed_url.set_query(Some(query));
+                    Ok(Value::from(parsed_url.as_str().to_owned()))
+                }
+                Err(e) => Err(to_runtime_error(format!("Error parsing URL: {}", e))),
+            }
+        }))
+        .insert(tremor_fn! (url|set_fragment(url: String, fragment: String) {
+            let parsed_url = Url::parse(&url);
+            match parsed_url {
+                Ok(mut parsed_url) => {
+                    parsed_url.set_fragment(Some(&fragment));
+                    Ok(Value::from(parsed_url.into_string()))
+                }
+                Err(e) => Err(to_runtime_error(format!("Error parsing URL: {}", e)))
+            }
+        }))
 }
 
 #[cfg(test)]
@@ -53,4 +114,41 @@ mod test {
         let v = Value::from("%22snot%20badger%22");
         assert_val!(d(&[&v]), r#""snot badger""#);
     }
+
+    #[test]
+    fn url_construct_smoke_test() {
+    let c = fun("url", "construct");
+    assert_val!(c(&[Value::from("http"), Value::from("example.com"), Value::from("/path"), Value::from("query"), Value::from("fragment")]), "http://example.com/path?query#fragment");
+    }
+
+    #[test]
+    fn url_set_scheme_smoke_test() {
+    let c = fun("url", "set_scheme");
+    assert_val!(c(&[Value::from("http://example.com"), Value::from("https")]), "https://example.com");
+    }
+
+    #[test]
+    fn url_set_host_smoke_test() {
+    let c = fun("url", "set_host");
+    assert_val!(c(&[Value::from("http://example.com"), Value::from("newexample.com")]), "http://newexample.com");
+    }
+
+    #[test]
+    fn url_set_path_smoke_test() {
+    let c = fun("url", "set_path");
+    assert_val!(c(&[Value::from("http://example.com"), Value::from("/newpath")]), "http://example.com/newpath");
+    }
+
+    #[test]
+    fn url_set_query_smoke_test() {
+    let c = fun("url", "set_query");
+    assert_val!(c(&[Value::from("http://example.com"), Value::from("newquery")]), "http://example.com?newquery");
+    }
+
+    #[test]
+    fn url_set_fragment_smoke_test() {
+    let c = fun("url", "set_fragment");
+    assert_val!(c(&[Value::from("http://example.com"), Value::from("newfragment")]), "http://example.com#newfragment");
+    }
+
 }
