@@ -27,6 +27,9 @@ pub fn load(registry: &mut Registry) {
                 Err(to_runtime_error(format!("Could not urldecode value: {s}")))
             }
         }))
+        .insert(tremor_fn! (url|encode(ctx, s: String) {
+            Ok(Value::from(utf8_percent_encode(s, NON_ALPHANUMERIC).to_string()))
+        }));
         .insert(tremor_fn!(url|construct(ctx, scheme: String, host: String, path: String, query: String, fragment: String) {
             let url = Url::build(|b| {
                 b.scheme(scheme)
