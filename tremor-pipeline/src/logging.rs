@@ -16,9 +16,9 @@ use crate::errors::Result;
 use simd_json::ValueAccess;
 use tremor_script::{
     registry::{mfa, FResult, FunctionError, Mfa, Registry},
-    EventContext, TremorFn, TremorFnWrapper
+    EventContext, TremorFn, TremorFnWrapper,
 };
-use tremor_value::Value;
+use tremor_value::{Object, Value};
 /// Install's common functions into a registry
 ///
 /// # Errors
@@ -339,37 +339,7 @@ fn format_tremor_value(value: &Value) -> Result<String> {
     }
 
     if let Some(array) = value.as_array() {
-        let mut array = array.clone();
-        result.push('[');
-        let mut last = String::new();
-        if !array.is_empty() {
-            // Keeping the last value of the array for a nice formatting
-            // We will be able to get [hello, nice, last] instead of [hello, nice, last, ]
-            if let Some(v) = &array.pop() {
-                last = match format_tremor_value(v) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return parsing_error;
-                    }
-                };
-            } else {
-                return Err("tremor_value::Array is empty but should not be".into());
-            }
-        }
-        for v in &array {
-            result.push_str(&match format_tremor_value(&v.clone_static()) {
-                Ok(v) => v,
-                Err(_) => {
-                    return parsing_error;
-                }
-            });
-            result.push_str(", ");
-        }
-        // last element
-        result.push_str(&last);
-        result.push(']');
-
-        return Ok(result);
+        return format_array(array, parsing_error);
     }
 
     if let Some(bytes) = value.as_bytes() {
@@ -385,41 +355,54 @@ fn format_tremor_value(value: &Value) -> Result<String> {
     }
 
     if let Some(obj) = value.as_object() {
-        let mut obj = obj.clone();
-        result.push('{');
-        let mut last = String::new();
-        if !obj.is_empty() {
-            // Keeping the last pair of key:value of the object for a nice formatting
-            // We will be able to get {hello: nice, ok: last} instead of {hello: nice, ok: last, }
+        return format_object(obj, parsing_error);
+    }
+    parsing_error
+}
 
-            if let Some(pair) = obj.iter().last() {
-                let p: (&str, &String) = (
-                    &pair.0.clone(),
-                    &match format_tremor_value(&pair.1.clone_static()) {
-                        Ok(v) => v,
-                        Err(_) => {
-                            return parsing_error;
-                        }
-                    },
-                );
-
-                obj.remove(p.0);
-                let mut p2 = String::new();
-                p2.push_str(p.0);
-                p2.push_str(": ");
-                p2.push_str(p.1);
-                last = p2;
-            } else {
-                return Err("tremor_value::Object is empty but should not be".into());
-            }
+fn format_array(array: &[Value], parsing_error: Result<String>) -> Result<String> {
+    let mut result = String::new();
+    let mut array = array.to_owned();
+    result.push('[');
+    let mut last = String::new();
+    if !array.is_empty() {
+        // Keeping the last value of the array for a nice formatting
+        // We will be able to get [hello, nice, last] instead of [hello, nice, last, ]
+        if let Some(v) = &array.pop() {
+            last = match format_tremor_value(v) {
+                Ok(v) => v,
+                Err(_) => return parsing_error,
+            };
+        } else {
+            return Err("tremor_value::Array is empty but should not be".into());
         }
+    }
+    for v in &array {
+        result.push_str(&match format_tremor_value(&v.clone_static()) {
+            Ok(v) => v,
+            Err(_) => return parsing_error,
+        });
+        result.push_str(", ");
+    }
+    // last element
+    result.push_str(&last);
+    result.push(']');
 
-        for pair in obj.iter() {
-            let pair = (&pair.0.clone().to_string(), pair.1);
-            result.push_str(pair.0); //  key
-            result.push_str(": "); //  sep
-            result.push_str(
-                // value
+    Ok(result)
+}
+
+fn format_object(obj: &Object, parsing_error: Result<String>) -> Result<String> {
+    let mut result = String::new();
+    let mut obj = obj.clone();
+    result.push('{');
+    let mut last = String::new();
+    if !obj.is_empty() {
+        // Keeping the last pair of key:value of the object for a nice formatting
+        // We will be able to get {hello: nice, ok: last} instead of {hello: nice, ok: last, }
+
+        if let Some(pair) = obj.iter().last() {
+            let p: (&str, &String) = (
+                &pair.0.clone(),
                 &match format_tremor_value(&pair.1.clone_static()) {
                     Ok(v) => v,
                     Err(_) => {
@@ -427,15 +410,38 @@ fn format_tremor_value(value: &Value) -> Result<String> {
                     }
                 },
             );
-            result.push_str(", "); //pair sep
-        }
-        // last element
-        result.push_str(&last);
-        result.push('}');
 
-        return Ok(result);
+            obj.remove(p.0);
+            let mut p2 = String::new();
+            p2.push_str(p.0);
+            p2.push_str(": ");
+            p2.push_str(p.1);
+            last = p2;
+        } else {
+            return Err("tremor_value::Object is empty but should not be".into());
+        }
     }
-    parsing_error
+
+    for pair in obj.iter() {
+        let pair = (&pair.0.clone().to_string(), pair.1);
+        result.push_str(pair.0); //  key
+        result.push_str(": "); //  sep
+        result.push_str(
+            // value
+            &match format_tremor_value(&pair.1.clone_static()) {
+                Ok(v) => v,
+                Err(_) => {
+                    return parsing_error;
+                }
+            },
+        );
+        result.push_str(", "); //pair sep
+    }
+    // last element
+    result.push_str(&last);
+    result.push('}');
+
+    Ok(result)
 }
 
 /// Extend function registry with standard logging functions
@@ -472,8 +478,8 @@ pub fn load(reg: &mut Registry) {
 mod test {
     use super::*;
     use tremor_script::ctx::EventContext;
-    use tremor_script::{Registry};
-    use tremor_value::{Value, Object, literal};
+    use tremor_script::Registry;
+    use tremor_value::{literal, Object, Value};
 
     #[test]
     fn test_info() {

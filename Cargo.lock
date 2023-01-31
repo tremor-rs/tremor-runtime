@@ -6016,7 +6016,6 @@ dependencies = [
  "simd-json-derive",
  "sled",
  "tempfile",
- "test-case",
  "tremor-common",
  "tremor-script",
  "tremor-value",

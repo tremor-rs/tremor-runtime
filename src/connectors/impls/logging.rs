@@ -105,7 +105,7 @@ impl Source for LoggingSource {
                         origin_uri: msg.origin_uri.unwrap_or_else(|| self.origin_uri.clone()),
                         stream: DEFAULT_STREAM_ID,
                         port: None, //TODO Maybe use `port` to store the log level
-                    })
+                    });
                 }
                 Err(RecvError::Overflowed(_)) => continue, // try again, this is expected
                 Err(e) => {

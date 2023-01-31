@@ -30,11 +30,11 @@ pub fn run() -> Result<()> {
         .build(Root::builder().appender("stdout").build(LevelFilter::Debug))
     {
         Ok(config) => config,
-        Err(_) => return Err("pluggable logging config could not be built".into())
+        Err(_) => return Err("pluggable logging config could not be built".into()),
     };
 
     match log4rs::init_config(config) {
         Ok(_) => Ok(()),
-        Err(err) => Err(err.to_string().into())
+        Err(err) => Err(err.to_string().into()),
     }
 }

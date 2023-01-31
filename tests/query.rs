@@ -25,10 +25,8 @@ use std::io::Read;
 use std::time::Duration;
 use tremor_common::{file, ids::OperatorIdGen, ports::IN};
 use tremor_pipeline::{
-	query::Query,
-	EventOriginUri,Event, EventId,
-	ExecutableGraph,
-	PluggableLoggingAppender, LOGGING_CHANNEL
+    query::Query, Event, EventId, EventOriginUri, ExecutableGraph, PluggableLoggingAppender,
+    LOGGING_CHANNEL,
 };
 use tremor_runtime::{
     errors::*,
@@ -136,25 +134,25 @@ async fn query_test_config(contents: String, file: &str) -> Result<()> {
 
     let mut results = Vec::new();
 
-	let origin_uri = EventOriginUri {
-		scheme: "tremor".into(),
-		host: "localhost".into(),
-		port: None,
-		path: vec!["test".into()],
-	};
+    let origin_uri = EventOriginUri {
+        scheme: "tremor".into(),
+        host: "localhost".into(),
+        port: None,
+        path: vec!["test".into()],
+    };
 
-	for (id, json) in in_json.into_iter().enumerate() {
-		let event = Event {
-			id: EventId::new(0, 0, id as u64, id as u64),
-			data: json.clone_static().into(),
-			ingest_ns: id as u64,
-			origin_uri: Some(origin_uri.clone()),
-			..Event::default()
-		};
-		let mut r = vec![];
-		pipeline.enqueue(IN, event, &mut r).await?;
-		results.append(&mut r);
-	}
+    for (id, json) in in_json.into_iter().enumerate() {
+        let event = Event {
+            id: EventId::new(0, 0, id as u64, id as u64),
+            data: json.clone_static().into(),
+            ingest_ns: id as u64,
+            origin_uri: Some(origin_uri.clone()),
+            ..Event::default()
+        };
+        let mut r = vec![];
+        pipeline.enqueue(IN, event, &mut r).await?;
+        results.append(&mut r);
+    }
 
     println!("Loading expected: \"{out_file}\"");
     let mut out_json = load_event_file(&out_file)?;

@@ -1251,19 +1251,19 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         #[cfg(unix)]
         Box::<impls::unix_socket::server::Builder>::default(),
         #[cfg(unix)]
-        Box::new(impls::unix_socket::client::Builder::default()),
-        Box::new(impls::http::client::Builder::default()),
-        Box::new(impls::http::server::Builder::default()),
-        Box::new(impls::otel::client::Builder::default()),
-        Box::new(impls::otel::server::Builder::default()),
-        Box::new(impls::gbq::writer::Builder::default()),
-        Box::new(impls::gpubsub::consumer::Builder::default()),
-        Box::new(impls::gpubsub::producer::Builder::default()),
-        Box::new(impls::clickhouse::Builder::default()),
-        Box::new(impls::gcl::writer::Builder::default()),
-        Box::new(impls::logging::Builder::default()),
-        Box::new(impls::gcs::streamer::Builder::default()),
-        Box::new(impls::null::Builder::default()),
+        Box::<impls::unix_socket::client::Builder>::default(),
+        Box::<impls::http::client::Builder>::default(),
+        Box::<impls::http::server::Builder>::default(),
+        Box::<impls::otel::client::Builder>::default(),
+        Box::<impls::otel::server::Builder>::default(),
+        Box::<impls::gbq::writer::Builder>::default(),
+        Box::<impls::gpubsub::consumer::Builder>::default(),
+        Box::<impls::gpubsub::producer::Builder>::default(),
+        Box::<impls::clickhouse::Builder>::default(),
+        Box::<impls::gcl::writer::Builder>::default(),
+        Box::<impls::logging::Builder>::default(),
+        Box::<impls::gcs::streamer::Builder>::default(),
+        Box::<impls::null::Builder>::default(),
     ]
 }
 

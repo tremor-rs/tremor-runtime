@@ -89,15 +89,11 @@ pub struct PluggableLoggingAppender {
 impl Append for PluggableLoggingAppender {
     fn append(&self, record: &log::Record) -> anyhow::Result<()> {
         let lang = match record.module_path().map(ToString::to_string) {
-            Some(p) => {
-                match p.as_str() {
-                    "tremor_pipeline::logging" => LogSource::Tremor,
-                    _ => LogSource::Rust 
-                }
+            Some(p) => match p.as_str() {
+                "tremor_pipeline::logging" => LogSource::Tremor,
+                _ => LogSource::Rust,
             },
-            None => {
-                LogSource::Rust
-            }
+            None => LogSource::Rust,
         };
 
         let lvl = record.level();
@@ -139,7 +135,7 @@ pub type NodeLookupFn = fn(
 
 #[derive(Clone, Debug)]
 /// A channel used to send metrics or log betwen different parts of the system
-/// 
+///
 pub struct OverflowingChannel<Msg> {
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -187,7 +183,7 @@ pub enum LogSource {
 
 impl std::fmt::Display for LogSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
