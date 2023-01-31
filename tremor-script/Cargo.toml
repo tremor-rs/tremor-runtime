@@ -40,12 +40,9 @@ sha2 = "0.10"
 halfbrown = "0.1"
 hdrhistogram = "7"
 hostname = "0.3"
-indexmap = { version = "1", features = ["serde-1"] }
 jumphash = "0.1"
 lalrpop-util = "0.19"
 lazy_static = "1.4"
-log = "0.4"
-log4rs = "1.2.0"
 matches = "0.1.10"
 percent-encoding = "2.1"
 rand = { version = "0.8", features = ["small_rng"] }
