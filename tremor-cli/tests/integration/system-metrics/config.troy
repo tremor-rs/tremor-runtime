@@ -43,7 +43,6 @@ flow
 
     create script process;
 
-    #select event from in into out;
     select event from in into process;
     select event from process/out into out;
     select event from process/err into err;

@@ -32,6 +32,8 @@ tremor-value = { version = "0.13.0-rc.11", path = "../tremor-value" }
 url = "2.3.1"
 value-trait = "0.5"
 window = { git = "https://github.com/tremor-rs/window.git", tag = "v0.1.1" }
+anyhow = "1.0.58"
+log4rs = "1.1.0"
 
 [dev-dependencies]
 base64 = "0.21"

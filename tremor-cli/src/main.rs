@@ -46,6 +46,7 @@ mod env;
 mod errors;
 // mod explain;
 pub(crate) mod cli;
+mod logging;
 mod report;
 mod run;
 mod server;
@@ -108,7 +109,12 @@ async fn main() -> Result<()> {
 }
 
 async fn run(cli: Cli) -> Result<()> {
-    // Logging
+    if cli.pluggable_logging {
+        match logging::run() {
+            Ok(_) => (),
+            err => return err,
+        }
+    }
     if let Some(logger_config) = &cli.logger_config {
         log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
             .with_context(|| format!("Error loading logger-config from '{logger_config}'"))?;

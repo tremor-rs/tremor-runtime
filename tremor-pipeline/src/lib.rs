@@ -19,8 +19,8 @@
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
-    clippy::unwrap_used,
     clippy::unnecessary_unwrap,
+    clippy::unwrap_used,
     clippy::pedantic,
     clippy::mod_module_files
 )]
@@ -33,11 +33,13 @@ extern crate serde;
 
 use crate::errors::{ErrorKind, Result};
 use async_broadcast::{broadcast, Receiver, Sender};
+use async_std::task::block_on;
 use beef::Cow;
 use either::Either;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
+use log4rs::append::Append;
 use petgraph::graph;
 use simd_json::OwnedValue;
 use std::cmp::Ordering;
@@ -57,6 +59,9 @@ pub mod errors;
 mod event;
 mod executable_graph;
 
+/// Library functions for pluggable-logging
+pub mod logging;
+
 /// Common metrics related code - metrics message formats etc
 /// Placed here because we need it here and in tremor-runtime, but also depend on tremor-value inside of it
 pub mod metrics;
@@ -74,6 +79,48 @@ pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
 pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
+#[derive(Debug, Clone)]
+///Pluggable-logging Appender
+pub struct PluggableLoggingAppender {
+    /// async Sender
+    pub tx: Sender<LoggingMsg>,
+}
+
+impl Append for PluggableLoggingAppender {
+    fn append(&self, record: &log::Record) -> anyhow::Result<()> {
+        let lang = match record.module_path().map(ToString::to_string) {
+            Some(p) => match p.as_str() {
+                "tremor_pipeline::logging" => LogSource::Tremor,
+                _ => LogSource::Rust,
+            },
+            None => LogSource::Rust,
+        };
+
+        let lvl = record.level();
+
+        let vec = literal!({
+            "level": lvl.to_string(),
+            "args": record.args().to_string(),
+            "origin": lang.to_string(),
+            "path": record.module_path().map(ToString::to_string),
+            "file": record.file().map(ToString::to_string),
+            "line": record.line()
+        });
+
+        let msg = LoggingMsg {
+            language: lang,
+            payload: EventPayload::from(vec),
+            origin_uri: None,
+        };
+
+        block_on(self.tx.broadcast(msg))?;
+        Ok(())
+    }
+
+    fn flush(&self) {}
+}
+
+trait Encode {}
 
 /// A configuration map
 pub type ConfigMap = Option<tremor_value::Value<'static>>;
@@ -86,18 +133,19 @@ pub type NodeLookupFn = fn(
     helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode>;
 
-/// A channel used to send metrics betwen different parts of the system
 #[derive(Clone, Debug)]
-pub struct MetricsChannel {
-    tx: Sender<MetricsMsg>,
-    rx: Receiver<MetricsMsg>,
+/// A channel used to send metrics or log betwen different parts of the system
+///
+pub struct OverflowingChannel<Msg> {
+    tx: Sender<Msg>,
+    rx: Receiver<Msg>,
 }
 
-impl MetricsChannel {
+impl<T> OverflowingChannel<T> {
     pub(crate) fn new(qsize: usize) -> Self {
         let (mut tx, rx) = broadcast(qsize);
-        // We user overflow so that non collected messages can be removed
-        // Ffor Metrics it should be good enough we consume them quickly
+        // We use overflow so that non collected messages can be removed
+        // For Metrics it should be good enough we consume them quickly
         // and if not we got bigger problems
         tx.set_overflow(true);
         Self { tx, rx }
@@ -105,15 +153,16 @@ impl MetricsChannel {
 
     /// Get the sender
     #[must_use]
-    pub fn tx(&self) -> Sender<MetricsMsg> {
+    pub fn tx(&self) -> Sender<T> {
         self.tx.clone()
     }
     /// Get the receiver
     #[must_use]
-    pub fn rx(&self) -> Receiver<MetricsMsg> {
+    pub fn rx(&self) -> Receiver<T> {
         self.rx.clone()
     }
 }
+
 /// Metrics message
 #[derive(Debug, Clone)]
 pub struct MetricsMsg {
@@ -121,6 +170,32 @@ pub struct MetricsMsg {
     pub payload: EventPayload,
     /// The origin
     pub origin_uri: Option<EventOriginUri>,
+}
+
+#[derive(Debug, Clone)]
+/// `LogSource` from which the logs are coming (Rust, Tremor, etc.)
+pub enum LogSource {
+    /// The Rust language: system logs
+    Rust,
+    /// Tremor language: user logs
+    Tremor,
+}
+
+impl std::fmt::Display for LogSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+#[derive(Debug, Clone)]
+/// Playload for pluggable logging
+pub struct LoggingMsg {
+    /// The payload
+    pub payload: EventPayload,
+    /// The origin
+    pub origin_uri: Option<EventOriginUri>,
+    /// The language
+    pub language: LogSource,
 }
 
 impl MetricsMsg {
@@ -133,13 +208,33 @@ impl MetricsMsg {
         }
     }
 }
+impl LoggingMsg {
+    /// creates a new message
+    #[must_use]
+    pub fn new(
+        payload: EventPayload,
+        origin_uri: Option<EventOriginUri>,
+        language: LogSource,
+    ) -> Self {
+        Self {
+            payload,
+            origin_uri,
+            language,
+        }
+    }
+}
 
 /// Sender for metrics
 pub type MetricsSender = Sender<MetricsMsg>;
 
+/// Sender for plugging logging messagers
+pub type LoggingSender = Sender<LoggingMsg>;
+
 lazy_static! {
-    /// TODO do we want to change this number or can we make it configurable?
-    pub static ref METRICS_CHANNEL: MetricsChannel = MetricsChannel::new(128);
+    /// TODO metrics do we want to change this number or can we make it configurable?
+    pub static ref METRICS_CHANNEL: OverflowingChannel<MetricsMsg> = OverflowingChannel::<MetricsMsg>::new(128);
+    /// TODO logging do we want to change this number or can we make it configurable?
+    pub static ref LOGGING_CHANNEL: OverflowingChannel<LoggingMsg> = OverflowingChannel::<LoggingMsg>::new(128);
 }
 
 /// Stringified numeric key
