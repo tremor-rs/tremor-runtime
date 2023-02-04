@@ -11,6 +11,9 @@ define connector exit from exit;
 ## in order to send them to any time-series database or metrics store.
 define connector metrics from metrics;
 
+## The logging connector that can be used to receive logs from the Tremor runtime
+define connector logging from logs;
+
 ## A line seperated stdio based connector
 ##
 ## Useful for reading and writing lines to stdout/stderr and reading lines from stdin.

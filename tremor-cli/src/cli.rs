@@ -25,6 +25,9 @@ pub(crate) struct Cli {
     pub(crate) logger_config: Option<String>,
     #[clap(subcommand)]
     pub(crate) command: Command,
+    /// Configuration for pluggable-logging
+    #[clap(short, long)]
+    pub(crate) pluggable_logging: bool,
 }
 
 #[derive(Parser, Debug)]

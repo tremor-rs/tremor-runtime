@@ -41,6 +41,8 @@ pub(crate) mod http;
 pub(crate) mod kafka;
 /// KV
 pub(crate) mod kv;
+/// Logging collector
+pub(crate) mod logging;
 /// Home of the famous metrics collector
 pub(crate) mod metrics;
 /// Metronome

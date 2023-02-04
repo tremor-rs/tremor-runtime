@@ -6,6 +6,7 @@ It starts a kafka node, elasticsearch single-node cluster, kibana and influxdb a
 
 The two main files to check out are the `demo.yaml` compose file and the `configs/tremor/config/main.troy` file,
 containing the plumbing necessary for event routing and the core application logic.
+
 ## The demo system
 
 The demo system consists of three Flows.

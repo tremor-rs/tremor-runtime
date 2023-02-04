@@ -1,0 +1,4 @@
+{"level": "INFO", "msg": "(good) Positional - Multiple things expected"}
+{"level": "INFO", "msg": "(good) Positional - Multiple things expected: {}", "data1": 3}
+{"level": "INFO", "msg": "(good) Positional - Multiple things expected: {} {}", "data1": 3, "data2": [2]}
+{"level": "INFO", "msg": "(good) Positional - Multiple things expected: {} {} {} {} {} {} {}", "data1": 3, "data2": [2],"data3": true,"data4":{"good": false, "with": [1, 2, 3]},"data5": 7.3,"data6": ["hey", "ok"], "data7": {"wow": "okay"}}

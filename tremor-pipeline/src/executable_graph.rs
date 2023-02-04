@@ -17,7 +17,7 @@ use crate::{
     errors::Result,
     errors::{Error, ErrorKind},
     metrics::value_count,
-    ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
+    ConfigMap, ExecPortIndexMap, LoggingSender, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
@@ -257,6 +257,10 @@ pub struct ExecutableGraph {
     pub(crate) last_metrics: u64,
     pub(crate) metric_interval: Option<u64>,
     pub(crate) metrics_channel: MetricsSender,
+
+    // TODO logging `pub(crate) logging_channel: LoggingSender`
+    #[allow(dead_code)]
+    pub(crate) logging_channel: LoggingSender,
     /// outputs in pipeline
     pub outputs: HashMap<Cow<'static, str>, usize>,
     /// snot
@@ -616,7 +620,7 @@ mod test {
             identity::PassthroughFactory,
             prelude::{IN, OUT},
         },
-        Result, METRICS_CHANNEL,
+        Result, LOGGING_CHANNEL, METRICS_CHANNEL,
     };
     use tremor_common::ids::Id;
     use tremor_script::prelude::*;
@@ -838,6 +842,7 @@ mod test {
             insights: vec![],
             dot: String::new(),
             metrics_channel: METRICS_CHANNEL.tx(),
+            logging_channel: LOGGING_CHANNEL.tx(),
         };
 
         // Test with one event
@@ -940,6 +945,7 @@ mod test {
             insights: vec![],
             dot: String::new(),
             metrics_channel: METRICS_CHANNEL.tx(),
+            logging_channel: LOGGING_CHANNEL.tx(),
         };
         assert!(g.optimize().is_some());
         // Test with one event
