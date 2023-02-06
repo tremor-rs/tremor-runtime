@@ -16,7 +16,7 @@
     - "MINIO_REGION=eu-central-1"
     - "--entrypoint"
     - "sh"
-    - "minio/minio:RELEASE.2022-09-01T23-53-36Z"
+    - "minio/minio:RELEASE.2023-01-02T09-40-09Z.hotfix.5c99bdd49"
     - "-c"
     - "mkdir -p /data/bucket && minio server /data --console-address :9001"
   await:
