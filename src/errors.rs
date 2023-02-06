@@ -78,14 +78,14 @@ impl From<glob::PatternError> for Error {
     }
 }
 
-impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
-    fn from(e: tokio::sync::mpsc::error::SendError<T>) -> Self {
+impl<T> From<crate::channel::SendError<T>> for Error {
+    fn from(e: crate::channel::SendError<T>) -> Self {
         Self::from(format!("{e}"))
     }
 }
 
-impl From<tokio::sync::mpsc::error::TryRecvError> for Error {
-    fn from(e: tokio::sync::mpsc::error::TryRecvError) -> Self {
+impl From<crate::channel::TryRecvError> for Error {
+    fn from(e: crate::channel::TryRecvError) -> Self {
         Self::from(format!("{e}"))
     }
 }
@@ -451,11 +451,11 @@ pub(crate) fn already_created_error() -> Error {
     ErrorKind::AlreadyCreated.into()
 }
 #[allow(clippy::needless_pass_by_value)]
-pub(crate) fn pipe_send_e<T>(e: tokio::sync::mpsc::error::SendError<T>) -> Error {
+pub(crate) fn pipe_send_e<T>(e: crate::channel::SendError<T>) -> Error {
     ErrorKind::PipelineSendError(e.to_string()).into()
 }
 #[allow(clippy::needless_pass_by_value)]
-pub(crate) fn connector_send_err<T>(e: tokio::sync::mpsc::error::SendError<T>) -> Error {
+pub(crate) fn connector_send_err<T>(e: crate::channel::SendError<T>) -> Error {
     format!("could not send to connector: {e}").into()
 }
 

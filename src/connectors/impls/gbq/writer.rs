@@ -83,7 +83,7 @@ impl ConnectorBuilder for Builder {
 
 #[cfg(test)]
 mod tests {
-    use tokio::sync::{broadcast, mpsc};
+    use tokio::sync::broadcast;
     use tremor_common::ids::SinkId;
 
     use super::*;
@@ -109,7 +109,7 @@ mod tests {
                     Alias::new("a", "b"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
-                    ConnectionLostNotifier::new(mpsc::channel(128).0),
+                    ConnectionLostNotifier::new(crate::channel::bounded(128).0),
                 ),
                 builder(
                     &ConnectorConfig::default(),

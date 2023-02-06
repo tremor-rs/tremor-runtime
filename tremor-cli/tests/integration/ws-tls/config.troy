@@ -7,7 +7,7 @@ flow
   with
     codec = "json",
     config = {
-      "url": "wss://0.0.0.0:65535",
+      "url": "wss://localhost:6553",
       "socket_options": {
         "TCP_NODELAY": false
       },
@@ -29,7 +29,7 @@ flow
   with
     codec = "json",
     config = {
-      "url": "0.0.0.0:65535",
+      "url": "wss://localhost:6553",
       "tls": {
         "cert": "./before/localhost.cert",
         "key": "./before/localhost.key",

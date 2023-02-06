@@ -1216,8 +1216,8 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::<impls::wal::Builder>::default(),
         Box::<impls::dns::client::Builder>::default(),
         Box::<impls::discord::Builder>::default(),
-        // Box::<impls::ws::client::Builder>::default(),
-        // Box::<impls::ws::server::Builder>::default(),
+        Box::<impls::ws::client::Builder>::default(),
+        Box::<impls::ws::server::Builder>::default(),
         Box::<impls::elastic::Builder>::default(),
         Box::<impls::crononome::Builder>::default(),
         Box::<impls::s3::streamer::Builder>::default(),
@@ -1228,8 +1228,8 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::<impls::unix_socket::server::Builder>::default(),
         #[cfg(unix)]
         Box::<impls::unix_socket::client::Builder>::default(),
-        // Box::<impls::http::client::Builder>::default(),
-        // Box::<impls::http::server::Builder>::default(),
+        Box::<impls::http::client::Builder>::default(),
+        Box::<impls::http::server::Builder>::default(),
         Box::<impls::otel::client::Builder>::default(),
         Box::<impls::otel::server::Builder>::default(),
         Box::<impls::gbq::writer::Builder>::default(),
@@ -1237,7 +1237,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::<impls::gpubsub::producer::Builder>::default(),
         Box::<impls::clickhouse::Builder>::default(),
         Box::<impls::gcl::writer::Builder>::default(),
-        // Box::<impls::gcs::streamer::Builder>::default(),
+        Box::<impls::gcs::streamer::Builder>::default(),
         Box::<impls::null::Builder>::default(),
     ]
 }

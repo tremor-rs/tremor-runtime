@@ -315,6 +315,11 @@ impl ConnectorHarness {
         self.get_pipe(OUT)
     }
 
+    #[cfg(any(
+        feature = "http-integration",
+        feature = "es-integration",
+        feature = "kafka-integration"
+    ))]
     /// get the err pipeline - if any
     pub(crate) fn err(&mut self) -> Result<&mut TestPipeline> {
         self.get_pipe(ERR)
@@ -361,6 +366,8 @@ impl ConnectorHarness {
 #[derive(Debug)]
 pub(crate) struct TestPipeline {
     rx: Receiver<Box<pipeline::Msg>>,
+    // this is only used in some integration tests
+    #[allow(dead_code)]
     rx_cf: UnboundedReceiver<pipeline::CfMsg>,
     addr: pipeline::Addr,
 }
