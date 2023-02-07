@@ -1,11 +1,11 @@
 [build]
-rustflags = ["-C", "target-feature=+avx,+avx2,+sse4.2", "--cfg", "tokio_unstable"]
+rustflags = ["-C", "target-feature=+avx,+avx2,+sse4.2"]
 
 [target.aarch64-unknown-linux-gnu]
-rustflags = ["-C", "target-feature=+neon", "--cfg", "tokio_unstable"]
+rustflags = ["-C", "target-feature=+neon"]
 
 [target.aarch64-apple-darwin]
-rustflags = ["-C", "target-feature=+neon", "--cfg", "tokio_unstable"]
+rustflags = ["-C", "target-feature=+neon"]
 
 [target.x86_64-unknown-linux-musl]
 rustflags = [
@@ -14,8 +14,7 @@ rustflags = [
         "-C", "link-arg=-lstdc++",
         "-C", "link-arg=-lgcc",
         "-C", "link-arg=-lgcc_eh",
-        "--cfg", "tokio_unstable"
     ]
 
 [target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "target-feature=+avx,+avx2,+sse4.2", "--cfg", "tokio_unstable"]
+rustflags = ["-C", "target-feature=+avx,+avx2,+sse4.2"]
