@@ -484,6 +484,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-tls"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfeefd0ca297cbbb3bd34fd6b228401c2a5177038257afd751bc29f0a2da4795"
+dependencies = [
+ "futures-core",
+ "futures-io",
+ "rustls 0.20.7",
+ "rustls-pemfile",
+ "webpki 0.22.0",
+ "webpki-roots 0.22.5",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6089,7 +6103,7 @@ dependencies = [
  "async-std",
  "async-std-resolver",
  "async-stream",
- "async-tls 0.11.0",
+ "async-tls 0.12.0",
  "async-trait",
  "async-tungstenite 0.19.0",
  "aws-config",
