@@ -29,11 +29,11 @@ pub(crate) struct After {
 }
 
 impl After {
-    pub(crate) async fn spawn(
+    pub(crate) fn spawn(
         &self,
         base: &Path,
         env: &HashMap<String, String>,
-    ) -> Result<Option<TargetProcess>> {
+    ) -> Result<TargetProcess> {
         let cmd = target_process::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
         let current_dir = base.join(&self.dir).canonicalize()?;
@@ -42,11 +42,8 @@ impl After {
         for (k, v) in &self.env {
             env.insert(k.clone(), v.clone());
         }
-        let mut process =
-            target_process::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_dir)?;
-        let out_file = base.join("after.out.log");
-        let err_file = base.join("after.err.log");
-        process.stdio_tailer(&out_file, &err_file).await?;
+        let process =
+            target_process::TargetProcess::new_in_dir(cmd, &self.args, &env, &current_dir)?;
 
         debug!(
             "Spawning after: {} in {}",
@@ -54,7 +51,7 @@ impl After {
             current_dir.display()
         );
 
-        Ok(Some(process))
+        Ok(process)
     }
 
     fn cmdline(&self) -> String {
@@ -104,17 +101,12 @@ impl AfterController {
         if after_path.is_file() {
             let after_jsons = load_after_defs(&after_path)?;
             for (i, after_json) in after_jsons.into_iter().enumerate() {
-                let after_process = after_json.spawn(root, &self.env).await?;
-                if let Some(mut process) = after_process {
-                    let after_out_file = root.join(format!("after.out.{i}.log"));
-                    let after_err_file = root.join(format!("after.err.{i}.log"));
-                    let after_process = tokio::task::spawn(async move {
-                        if let Err(e) = process.tail(&after_out_file, &after_err_file).await {
-                            eprintln!("failed to tail tremor process: {e}");
-                        }
-                    });
+                let mut process = after_json.spawn(root, &self.env)?;
+                let after_out_file = root.join(format!("after.out.{i}.log"));
+                let after_err_file = root.join(format!("after.err.{i}.log"));
 
-                    after_process.await?;
+                if let Err(e) = process.tail(&after_out_file, &after_err_file).await {
+                    eprintln!("failed to tail tremor process: {e}");
                 }
             }
         }

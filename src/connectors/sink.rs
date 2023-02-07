@@ -18,10 +18,7 @@
 pub(crate) mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
-/// Providing a `Sink` implementation for connectors handling only a single Stream
-pub(crate) mod single_stream_sink;
 
-pub(crate) use self::channel_sink::SinkMeta;
 use super::{utils::metrics::SinkReporter, CodecReq};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
@@ -242,7 +239,7 @@ pub(crate) trait Sink: Send {
 #[async_trait::async_trait]
 pub(crate) trait StreamWriter: Send + Sync {
     /// write the given data out to the stream
-    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()>;
+    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<&Value>) -> Result<()>;
     /// handle the stream being done, by error or regular end of stream
     /// This controls the reaction of the runtime:
     /// Should the connector be considered disconnected now? Or is this just one stream amongst many?

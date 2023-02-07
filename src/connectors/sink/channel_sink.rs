@@ -308,7 +308,7 @@ where
                         contraflow,
                         start,
                     })) => {
-                        let failed = writer.write(data, meta).await.is_err();
+                        let failed = writer.write(data, meta.as_ref()).await.is_err();
 
                         // send async contraflow insights if requested (only if event.transactional)
                         if let Some((cf_data, sender)) = contraflow {
