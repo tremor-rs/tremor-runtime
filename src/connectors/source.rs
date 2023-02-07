@@ -685,7 +685,7 @@ where
             SourceMsg::Synchronize(sender) => {
                 self.ctx.swallow_err(
                     sender.send(()).map_err(|_| "send err"),
-                    "Error sending Pong",
+                    "Error synchronizing with source ",
                 );
                 Ok(Control::Continue)
             }

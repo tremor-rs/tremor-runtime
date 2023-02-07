@@ -601,20 +601,6 @@ async fn http_client_request_auth_basic() -> Result<()> {
     Ok(())
 }
 
-/*
-
-What we know:
-
-1) we send data
-2) the data is received by the server
-3) the server responds with the data it received
-4) the data is received by the client
-5) the client sends the response to the pipeline
-
-6) the pipele reads the data, but hangs when trying to read it again (for some reason, this is where it gets confusing)
-
-7) if the second event isn't in the batch, the test works
- */
 #[tokio::test(flavor = "multi_thread")]
 async fn chunked() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
