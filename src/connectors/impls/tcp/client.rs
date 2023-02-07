@@ -34,7 +34,7 @@ use crate::{
     errors::err_connector_def,
 };
 use either::Either;
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 use tokio_rustls::TlsConnector;
 
@@ -146,7 +146,8 @@ impl Connector for TcpClient {
         let source = ChannelSource::from_channel(
             self.source_tx.clone(),
             self.source_rx.take().ok_or_else(already_created_error)?,
-            Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+            // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+            Arc::new(AtomicBool::new(false)),
         );
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -161,9 +162,7 @@ struct TcpClientSink {
     tls_connector: Option<TlsConnector>,
     tls_domain: Option<String>,
     config: Config,
-    wrapped_stream: Option<
-        Box<dyn tokio::io::AsyncWrite + std::marker::Unpin + std::marker::Send + std::marker::Sync>,
-    >,
+    wrapped_stream: Option<Box<dyn tokio::io::AsyncWrite + Unpin + Send + Sync>>,
     tcp_stream: Option<TcpStream>,
     source_runtime: ChannelSourceRuntime,
 }

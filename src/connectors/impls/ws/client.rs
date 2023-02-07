@@ -22,9 +22,10 @@ use crate::{
         utils::{
             socket::{tcp_client_socket, TcpSocketOptions},
             tls::TLSClientConfig,
+            ConnectionMeta,
         },
     },
-    errors::err_connector_def,
+    errors::{already_created_error, err_connector_def},
 };
 use either::Either;
 use futures::StreamExt;
@@ -36,7 +37,7 @@ use tokio_tungstenite::client_async;
 
 const URL_SCHEME: &str = "tremor-ws-client";
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     url: Url<super::WsDefaults>,
@@ -90,13 +91,14 @@ impl ConnectorBuilder for Builder {
             ),
             Some(Either::Right(false)) | None => (None, host),
         };
+        let (source_tx, source_rx) = bounded(qsize());
 
         Ok(Box::new(WsClient {
             config,
             tls_connector,
             tls_domain,
-            source_runtime: None,
-            sink_runtime: None,
+            source_tx,
+            source_rx: Some(source_rx),
         }))
     }
 }
@@ -105,8 +107,8 @@ pub(crate) struct WsClient {
     config: Config,
     tls_connector: Option<TlsConnector>,
     tls_domain: String,
-    source_runtime: Option<ChannelSourceRuntime>,
-    sink_runtime: Option<SingleStreamSinkRuntime>,
+    source_tx: Sender<SourceReply>,
+    source_rx: Option<Receiver<SourceReply>>,
 }
 
 impl WsClient {
@@ -124,39 +126,35 @@ impl WsClient {
     }
 }
 
+struct WsClientSink {
+    config: Config,
+    tls_connector: Option<TlsConnector>,
+    tls_domain: String,
+    source_runtime: ChannelSourceRuntime,
+    wrapped_stream: Option<Box<dyn StreamWriter>>,
+}
+
+impl WsClientSink {
+    fn new(
+        config: Config,
+        tls_connector: Option<TlsConnector>,
+        tls_domain: String,
+        source_tx: Sender<SourceReply>,
+    ) -> Self {
+        let source_runtime = ChannelSourceRuntime::new(source_tx);
+        Self {
+            config,
+            tls_connector,
+            tls_domain,
+            source_runtime,
+            wrapped_stream: None,
+        }
+    }
+}
+
 #[async_trait::async_trait]
-impl Connector for WsClient {
-    async fn create_source(
-        &mut self,
-        ctx: SourceContext,
-        builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
-        // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
-        let source = ChannelSource::new(Arc::new(AtomicBool::new(false)));
-        self.source_runtime = Some(source.runtime());
-        Ok(Some(builder.spawn(source, ctx)))
-    }
-
-    async fn create_sink(
-        &mut self,
-        ctx: SinkContext,
-        builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
-        let mut sink = SingleStreamSink::new_with_meta(builder.reply_tx());
-        self.sink_runtime = Some(sink.runtime()?);
-        Ok(Some(builder.spawn(sink, ctx)))
-    }
-
-    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let source_runtime = self
-            .source_runtime
-            .as_ref()
-            .ok_or("Source runtime not initialized")?;
-        let mut sink_runtime = self
-            .sink_runtime
-            .take()
-            .ok_or("Sink runtime not initialized")?;
-
+impl Sink for WsClientSink {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let tcp_stream = tcp_client_socket(&self.config.url, &self.config.socket_options).await?;
         let (local_addr, peer_addr) = (tcp_stream.local_addr()?, tcp_stream.peer_addr()?);
 
@@ -177,11 +175,17 @@ impl Connector for WsClient {
             let meta = ctx.meta(WsClient::meta(peer_addr, true));
             let ws_writer = WsWriter::new_tls_client(writer);
 
-            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer)?;
+            self.wrapped_stream = Some(Box::new(ws_writer));
 
-            let ws_reader =
-                WsReader::new(reader, Some(sink_runtime), origin_uri, meta, ctx.clone());
-            source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
+            let ws_reader = WsReader::new(
+                reader,
+                None::<ChannelSinkRuntime<ConnectionMeta>>,
+                origin_uri,
+                meta,
+                ctx.clone(),
+            );
+            self.source_runtime
+                .register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
         } else {
             // No TLS
             let (ws_stream, _http_response) =
@@ -196,14 +200,84 @@ impl Connector for WsClient {
             let meta = ctx.meta(WsClient::meta(peer_addr, false));
 
             let ws_writer = WsWriter::new_tungstenite_client(writer);
-            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer)?;
-
-            let ws_reader =
-                WsReader::new(reader, Some(sink_runtime), origin_uri, meta, ctx.clone());
-            source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
+            self.wrapped_stream = Some(Box::new(ws_writer));
+            let ws_reader = WsReader::new(
+                reader,
+                None::<ChannelSinkRuntime<ConnectionMeta>>,
+                origin_uri,
+                meta,
+                ctx.clone(),
+            );
+            self.source_runtime
+                .register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
         }
 
         Ok(true)
+    }
+
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: tremor_pipeline::Event,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> Result<SinkReply> {
+        let ingest_ns = event.ingest_ns;
+        let writer = self
+            .wrapped_stream
+            .as_mut()
+            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+        for (value, meta) in event.value_meta_iter() {
+            let data = serializer.serialize(value, ingest_ns)?;
+            if let Err(e) = writer.write(data, Some(meta)).await {
+                error!("{ctx} Error sending data: {e}. Initiating Reconnect...",);
+                // TODO: figure upon which errors to actually reconnect
+                self.wrapped_stream = None;
+                ctx.notifier().connection_lost().await?;
+                return Err(e);
+            }
+        }
+        Ok(SinkReply::NONE)
+    }
+    fn auto_ack(&self) -> bool {
+        true
+    }
+
+    fn asynchronous(&self) -> bool {
+        false
+    }
+}
+
+#[async_trait::async_trait]
+impl Connector for WsClient {
+    async fn create_source(
+        &mut self,
+        ctx: SourceContext,
+        builder: SourceManagerBuilder,
+    ) -> Result<Option<SourceAddr>> {
+        // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+        let source = ChannelSource::from_channel(
+            self.source_tx.clone(),
+            self.source_rx.take().ok_or_else(already_created_error)?,
+            // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+            Arc::new(AtomicBool::new(false)),
+        );
+        Ok(Some(builder.spawn(source, ctx)))
+    }
+
+    async fn create_sink(
+        &mut self,
+        ctx: SinkContext,
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
+        let sink = WsClientSink::new(
+            self.config.clone(),
+            self.tls_connector.clone(),
+            self.tls_domain.clone(),
+            self.source_tx.clone(),
+        );
+        Ok(Some(builder.spawn(sink, ctx)))
     }
 
     fn codec_requirements(&self) -> CodecReq {

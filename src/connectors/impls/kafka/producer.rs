@@ -263,7 +263,7 @@ impl Sink for KafkaProducerSink {
             drop(old_producer);
         };
 
-        let (tx, mut rx) = bounded(1);
+        let (tx, mut rx) = bounded(qsize());
         let (metrics_tx, metrics_rx) = broadcast(1);
         self.metrics_rx = Some(metrics_rx);
         let context = TremorRDKafkaContext::producer(ctx.clone(), tx, metrics_tx);

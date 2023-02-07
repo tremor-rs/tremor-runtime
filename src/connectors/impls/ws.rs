@@ -144,7 +144,7 @@ where
 
 struct WsWriter<S>
 where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + std::marker::Unpin + std::marker::Sync,
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Sync + Send,
 {
     sink: SplitSink<WebSocketStream<S>, Message>,
 }
@@ -180,7 +180,7 @@ impl<S> StreamWriter for WsWriter<S>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Sync + Send + Unpin,
 {
-    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<&Value>) -> Result<()> {
         for chunk in data {
             if let Some(meta) = &meta {
                 // If metadata is set, check for a binary framing flag

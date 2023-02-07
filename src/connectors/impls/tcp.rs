@@ -183,7 +183,7 @@ impl<S> StreamWriter for TcpWriter<S>
 where
     S: tokio::io::AsyncWrite + std::marker::Unpin + std::marker::Sync + std::marker::Send,
 {
-    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<SinkMeta>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<&Value>) -> Result<()> {
         for chunk in data {
             let slice: &[u8] = &chunk;
             self.wrapped_stream.write_all(slice).await?;

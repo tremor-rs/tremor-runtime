@@ -18,9 +18,8 @@ pub(crate) use crate::{
         metrics::make_metrics_payload,
         sink::{
             channel_sink::{ChannelSink, ChannelSinkRuntime},
-            single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime},
             AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkAck, SinkAddr,
-            SinkContext, SinkManagerBuilder, SinkMeta, SinkReply, SinkRuntime, StreamWriter,
+            SinkContext, SinkManagerBuilder, SinkReply, SinkRuntime, StreamWriter,
         },
         source::{
             ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext,

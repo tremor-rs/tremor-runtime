@@ -5,6 +5,7 @@
 ### New features
 
 * Add configuration option `path_style_access` to `s3_streamer` and `s3_reader` connectors.
+* Replace `async-std` runtime wint `tokio`
 
 ## [0.13.0-rc.11]
 

@@ -116,7 +116,7 @@ impl UnixSocketWriter {
 
 #[async_trait::async_trait()]
 impl StreamWriter for UnixSocketWriter {
-    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<SinkMeta>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<&Value>) -> Result<()> {
         for chunk in data {
             let slice: &[u8] = &chunk;
             debug!(
