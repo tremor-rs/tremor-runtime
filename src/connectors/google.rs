@@ -237,7 +237,18 @@ PX8efvDMhv16QqDFF0k80d0=
             listener.await?;
             Ok::<(), Error>(())
         });
-        let token = provider.get_token()?;
+        // Make sure the server is up by retrying a few times
+        let mut attempt = 0;
+        let token = loop {
+            if let Ok(token) = provider.get_token() {
+                break token;
+            }
+            if attempt >= 20 {
+                panic!("Failed to get token");
+            }
+            attempt += 1;
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        };
         assert_eq!(token.as_str(), "snot access_token");
 
         server_handle.abort();
