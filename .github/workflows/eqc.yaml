@@ -1,6 +1,13 @@
 name: EQC Tests
 
-on: [push]
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    branches: [main]
+  push:
+    branches: [main]
+
 
 jobs:
   api:
