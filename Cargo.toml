@@ -64,7 +64,7 @@ clickhouse-chrono-tz = { version = "0.6", package = "chrono-tz" }
 #
 # [1]: https://crates.io/crates/clickhouse-rs/versions
 clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "553f3aa" }
-csv = "1.1"
+csv = "1.2"
 dashmap = "5.4"
 either = { version = "1.8", features = ["serde"] }
 error-chain = "0.12"
