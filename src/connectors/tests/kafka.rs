@@ -14,7 +14,8 @@
 mod consumer;
 mod producer;
 
-use crate::{errors::Result, utils::free_port::find_free_tcp_port};
+use super::free_port::find_free_tcp_port;
+use crate::errors::Result;
 use std::time::Duration;
 use testcontainers::{
     clients::Cli as DockerCli, core::WaitFor, images::generic::GenericImage, Container,

@@ -90,8 +90,9 @@ impl Running {
         listener.config_mut().max_frame_length(usize::MAX);
 
         let http_api_addr = server_state.addr().api().to_string();
-        let mut http_api_server = tide::Server::with_state(server_state.clone());
-        api::install_rest_endpoints(&mut http_api_server);
+        let app = api::endpoints().with_state(server_state.clone());
+        let http_api_server = axum::Server::bind(&http_api_addr.parse().map_err(|_e| "badaddr")?)
+            .serve(app.into_make_service());
 
         let run_handle = task::spawn(async move {
             let mut tcp_future = Box::pin(
@@ -112,7 +113,7 @@ impl Running {
                     .for_each(|_| async {})
                     .fuse(),
             );
-            let mut http_future = Box::pin(http_api_server.listen(http_api_addr).fuse());
+            let mut http_future = Box::pin(http_api_server.fuse());
             let mut runtime_future = Box::pin(runtime_handle.fuse());
             let mut kill_switch_future = Box::pin(kill_switch_rx.recv().fuse());
             futures::select! {

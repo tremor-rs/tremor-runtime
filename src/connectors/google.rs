@@ -116,7 +116,7 @@ pub(crate) mod tests {
 
     use super::*;
     use crate::{
-        connectors::utils::EnvHelper,
+        connectors::{tests::free_port, utils::EnvHelper},
         errors::{Error, Result},
     };
     use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
@@ -199,7 +199,7 @@ PX8efvDMhv16QqDFF0k80d0=
     async fn gouth_token() -> Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
 
-        let port = crate::utils::free_port::find_free_tcp_port().await?;
+        let port = free_port::find_free_tcp_port().await?;
         let sa = ServiceAccount {
             client_email: "snot@tremor.rs".to_string(),
             private_key_id: "badger".to_string(),

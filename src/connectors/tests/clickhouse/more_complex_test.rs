@@ -59,9 +59,11 @@ use tremor_value::literal;
 
 use super::utils;
 use crate::{
-    connectors::{impls::clickhouse, tests::ConnectorHarness},
+    connectors::{
+        impls::clickhouse,
+        tests::{free_port, ConnectorHarness},
+    },
     errors::{Error, Result},
-    utils::free_port,
 };
 
 macro_rules! assert_row_equals {

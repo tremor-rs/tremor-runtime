@@ -19,7 +19,6 @@ use crate::{
         utils::tls::TLSClientConfig,
     },
     errors::Result,
-    utils::free_port,
 };
 use http::StatusCode;
 use http_body::Body as BodyTrait;

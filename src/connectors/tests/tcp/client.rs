@@ -15,10 +15,9 @@
 use crate::{
     connectors::{
         impls::tcp,
-        tests::{setup_for_tls, tcp::EchoServer, ConnectorHarness},
+        tests::{free_port::find_free_tcp_port, setup_for_tls, tcp::EchoServer, ConnectorHarness},
     },
     errors::Result,
-    utils::free_port,
 };
 use std::time::Duration;
 use tokio::net::lookup_host;
@@ -41,7 +40,7 @@ async fn tcp_client() -> Result<()> {
 async fn tcp_client_test(use_tls: bool) -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = free_port::find_free_tcp_port().await?;
+    let free_port = find_free_tcp_port().await?;
 
     let server_addr = format!("localhost:{free_port}");
 

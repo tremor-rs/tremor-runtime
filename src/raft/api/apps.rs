@@ -18,8 +18,8 @@ use crate::{
     instance::IntendedState,
     raft::{
         api::{
-            wrapp, APIRequest, APIResult, APIStoreReq, AppError, ArgsError, ServerState,
-            ToAPIResult, API_WORKER_TIMEOUT,
+            APIRequest, APIResult, APIStoreReq, AppError, ArgsError, ToAPIResult,
+            API_WORKER_TIMEOUT,
         },
         archive::{get_app, TremorAppDef},
         store::{
@@ -28,29 +28,36 @@ use crate::{
         },
     },
 };
+use axum::{
+    extract::{self, Json, State},
+    routing::{delete, post},
+    Router,
+};
 use std::collections::HashMap;
-use std::{fmt::Display, sync::Arc};
-use tide::Route;
+use std::fmt::Display;
 use tokio::time::timeout;
 
-pub(crate) fn install_rest_endpoints(parent: &mut Route<Arc<ServerState>>) {
-    let mut apps_endpoint = parent.at("/apps");
-    apps_endpoint.post(wrapp(install_app)).get(wrapp(list));
-    apps_endpoint.at("/:app").delete(wrapp(uninstall_app));
-    apps_endpoint.at("/:app/flows/:flow").post(wrapp(start));
-    apps_endpoint
-        .at("/:app/instances/:instance")
-        .post(wrapp(manage_instance))
-        .delete(wrapp(stop_instance));
+pub(crate) fn endpoints() -> Router<APIRequest> {
+    Router::<APIRequest>::new()
+        .route("/", post(install_app).get(list))
+        .route("/:app", delete(uninstall_app))
+        .route("/:app/flows/:flow", post(start))
+        .route(
+            "/:app/instances/:instance",
+            post(manage_instance).delete(stop_instance),
+        )
 }
 
-async fn install_app(mut req: APIRequest) -> APIResult<AppId> {
-    let file: Vec<u8> = req.body_json().await?;
+async fn install_app(
+    extract::State(state): extract::State<APIRequest>,
+    extract::OriginalUri(uri): extract::OriginalUri,
+    Json(file): Json<Vec<u8>>,
+) -> APIResult<Json<AppId>> {
     let app = get_app(&file)?;
     let app_id = app.name().clone();
 
     let (tx, mut rx) = bounded(1);
-    req.state()
+    state
         .store_tx
         .send(APIStoreReq::GetApp(app_id.clone(), tx))
         .await?;
@@ -65,19 +72,22 @@ async fn install_app(mut req: APIRequest) -> APIResult<AppId> {
         app,
         file: file.clone(),
     });
-    req.state()
+    state
         .raft
         .client_write(request)
         .await
-        .to_api_result(&req)
+        .to_api_result(&uri, &state)
         .await?;
-    Ok(app_id)
+    Ok(Json(app_id))
 }
 
-async fn uninstall_app(req: APIRequest) -> APIResult<TremorResponse> {
-    let app_id = AppId(req.param("app")?.to_string());
+async fn uninstall_app(
+    extract::State(state): extract::State<APIRequest>,
+    extract::OriginalUri(uri): extract::OriginalUri,
+    extract::Path(app_id): extract::Path<AppId>,
+) -> APIResult<TremorResponse> {
     let (tx, mut rx) = bounded(1);
-    req.state()
+    state
         .store_tx
         .send(APIStoreReq::GetApp(app_id.clone(), tx))
         .await?;
@@ -100,11 +110,11 @@ async fn uninstall_app(req: APIRequest) -> APIResult<TremorResponse> {
         app: app_id.clone(),
         force: false,
     });
-    req.state()
+    state
         .raft
         .client_write(request)
         .await
-        .to_api_result(&req)
+        .to_api_result(&uri, &state)
         .await
 }
 
@@ -172,26 +182,27 @@ impl Display for AppState {
     }
 }
 
-async fn list(req: APIRequest) -> APIResult<HashMap<AppId, AppState>> {
+async fn list(State(state): State<APIRequest>) -> APIResult<Json<HashMap<AppId, AppState>>> {
     let (tx, mut rx) = bounded(1);
-    req.state().store_tx.send(APIStoreReq::GetApps(tx)).await?;
+    state.store_tx.send(APIStoreReq::GetApps(tx)).await?;
     let apps = timeout(API_WORKER_TIMEOUT, rx.recv())
         .await?
         .ok_or(APIError::Recv)?;
-    Ok(apps)
+    Ok(Json(apps))
 }
 
-async fn start(mut req: APIRequest) -> APIResult<FlowInstanceId> {
-    let body: TremorStart = req.body_json().await?;
-
+async fn start(
+    extract::State(state): extract::State<APIRequest>,
+    extract::OriginalUri(uri): extract::OriginalUri,
+    extract::Path((app_id, flow_id)): extract::Path<(AppId, FlowDefinitionId)>,
+    Json(body): Json<TremorStart>,
+) -> APIResult<Json<FlowInstanceId>> {
     let instance_id = body.instance.clone();
-    let app_name = AppId(req.param("app")?.to_string());
-    let flow_name = FlowDefinitionId(req.param("flow")?.to_string());
 
     let (tx, mut rx) = bounded(1);
-    req.state()
+    state
         .store_tx
-        .send(APIStoreReq::GetApp(app_name.clone(), tx))
+        .send(APIStoreReq::GetApp(app_id.clone(), tx))
         .await?;
     let app = timeout(API_WORKER_TIMEOUT, rx.recv())
         .await?
@@ -201,43 +212,44 @@ async fn start(mut req: APIRequest) -> APIResult<FlowInstanceId> {
         if app.instances.contains_key(instance_id.alias()) {
             return Err(AppError::InstanceAlreadyExists(body.instance).into());
         }
-        if let Some(flow) = app.app.flows.get(&flow_name) {
+        if let Some(flow) = app.app.flows.get(&flow_id) {
             if let Some(errors) = config_errors(&flow.args, &body.config) {
                 return Err(AppError::InvalidArgs {
-                    flow: flow_name,
+                    flow: flow_id,
                     instance: body.instance,
                     errors,
                 }
                 .into());
             }
         } else {
-            return Err(AppError::FlowNotFound(app_name, flow_name).into());
+            return Err(AppError::FlowNotFound(app_id, flow_id).into());
         }
     } else {
-        return Err(AppError::AppNotFound(app_name).into());
+        return Err(AppError::AppNotFound(app_id).into());
     }
     let request = TremorRequest::Apps(AppsCmd::Deploy {
-        app: app_name.clone(),
-        flow: flow_name.clone(),
+        app: app_id.clone(),
+        flow: flow_id.clone(),
         instance: body.instance.clone(),
         config: body.config.clone(),
         // FIXME: make this a parameter
         state: body.state(),
     });
-    req.state()
+    state
         .raft
         .client_write(request)
         .await
-        .to_api_result(&req)
+        .to_api_result(&uri, &state)
         .await?;
-    Ok(instance_id)
+    Ok(Json(instance_id))
 }
 
-async fn manage_instance(mut req: APIRequest) -> APIResult<FlowInstanceId> {
-    let body: TremorInstanceState = req.body_json().await?;
-
-    let app_id = AppId(req.param("app")?.to_string());
-    let instance_id = FlowInstanceId::new(app_id.clone(), req.param("instance")?.to_string());
+async fn manage_instance(
+    extract::State(state): extract::State<APIRequest>,
+    extract::OriginalUri(uri): extract::OriginalUri,
+    extract::Path((app_id, instance_id)): extract::Path<(AppId, FlowInstanceId)>,
+    Json(body): Json<TremorInstanceState>,
+) -> APIResult<Json<FlowInstanceId>> {
     // FIXME: this is not only for this but all the API functions as we're running in a potentially
     // problematic situation here.
     //
@@ -263,7 +275,7 @@ async fn manage_instance(mut req: APIRequest) -> APIResult<FlowInstanceId> {
     // serializes all commands to ensure no command is executed before the previous one has been fully
     // handled
     let (tx, mut rx) = bounded(1);
-    req.state()
+    state
         .store_tx
         .send(APIStoreReq::GetApp(app_id.clone(), tx))
         .await?;
@@ -277,29 +289,31 @@ async fn manage_instance(mut req: APIRequest) -> APIResult<FlowInstanceId> {
     } else {
         return Err(AppError::AppNotFound(app_id).into());
     }
-    let state = match body {
+    let body_state = match body {
         TremorInstanceState::Pause => IntendedState::Paused,
         TremorInstanceState::Resume => IntendedState::Running,
     };
 
     let request = TremorRequest::Apps(AppsCmd::InstanceStateChange {
         instance: instance_id.clone(),
-        state,
+        state: body_state,
     });
-    req.state()
+    state
         .raft
         .client_write(request)
         .await
-        .to_api_result(&req)
+        .to_api_result(&uri, &state)
         .await?;
-    Ok(instance_id)
+    Ok(Json(instance_id))
 }
 
-async fn stop_instance(req: APIRequest) -> APIResult<FlowInstanceId> {
-    let app_id = AppId(req.param("app")?.to_string());
-    let instance_id = FlowInstanceId::new(app_id.clone(), req.param("instance")?.to_string());
+async fn stop_instance(
+    extract::State(state): extract::State<APIRequest>,
+    extract::OriginalUri(uri): extract::OriginalUri,
+    extract::Path((app_id, instance_id)): extract::Path<(AppId, FlowInstanceId)>,
+) -> APIResult<Json<FlowInstanceId>> {
     let (tx, mut rx) = bounded(1);
-    req.state()
+    state
         .store_tx
         .send(APIStoreReq::GetApp(app_id.clone(), tx))
         .await?;
@@ -314,13 +328,13 @@ async fn stop_instance(req: APIRequest) -> APIResult<FlowInstanceId> {
         return Err(AppError::AppNotFound(app_id).into());
     }
     let request = TremorRequest::Apps(AppsCmd::Undeploy(instance_id.clone()));
-    req.state()
+    state
         .raft
         .client_write(request)
         .await
-        .to_api_result(&req)
+        .to_api_result(&uri, &state)
         .await?;
-    Ok(instance_id)
+    Ok(Json(instance_id))
 }
 
 /// check the given `args` for errors according to the specified `config` from the flow definition

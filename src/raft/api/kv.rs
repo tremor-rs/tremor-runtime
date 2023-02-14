@@ -15,31 +15,32 @@
 use crate::{
     channel::bounded,
     raft::{
-        api::{wrapp, APIError, APIRequest, APIResult, ServerState, ToAPIResult},
+        api::{APIError, APIRequest, APIResult, ToAPIResult},
         store::{TremorResponse, TremorSet},
     },
 };
-use std::sync::Arc;
-use tide::Route;
+use axum::{extract, routing::post, Router};
 use tokio::time::timeout;
 
 use super::API_WORKER_TIMEOUT;
 
-pub(crate) fn install_rest_endpoints(parent: &mut Route<Arc<ServerState>>) {
-    let mut kv_route = parent.at("/kv");
-    kv_route.at("/write").post(wrapp(write));
-    kv_route.at("/read").post(wrapp(read));
-    kv_route.at("/consistent_read").post(wrapp(consistent_read));
+pub(crate) fn endpoints() -> Router<APIRequest> {
+    Router::<APIRequest>::new()
+        .route("/write", post(write))
+        .route("/read", post(read))
+        .route("/consistent_read", post(consistent_read))
 }
 
-async fn write(mut req: APIRequest) -> APIResult<String> {
-    let body: TremorSet = req.body_json().await?;
-    let tremor_res = req
-        .state()
+async fn write(
+    extract::State(state): extract::State<APIRequest>,
+    extract::OriginalUri(uri): extract::OriginalUri,
+    extract::Json(body): extract::Json<TremorSet>,
+) -> APIResult<String> {
+    let tremor_res = state
         .raft
         .client_write(body.into())
         .await
-        .to_api_result(&req)
+        .to_api_result(&uri, &state)
         .await?;
     debug_assert!(
         tremor_res.value.is_some(),
@@ -55,10 +56,12 @@ async fn write(mut req: APIRequest) -> APIResult<String> {
 }
 
 /// read a value from the current node, not necessarily the leader, thus this value can be stale
-async fn read(mut req: APIRequest) -> APIResult<TremorResponse> {
-    let key: String = req.body_json().await?;
+async fn read(
+    extract::State(state): extract::State<APIRequest>,
+    extract::Json(key): extract::Json<String>,
+) -> APIResult<TremorResponse> {
     let (tx, mut rx) = bounded(1);
-    req.state()
+    state
         .store_tx
         .send(super::APIStoreReq::KVGet(key, tx))
         .await?;
@@ -69,14 +72,21 @@ async fn read(mut req: APIRequest) -> APIResult<TremorResponse> {
 }
 
 /// read a value from the leader. If this request is received by another node, it will return a redirect
-async fn consistent_read(mut req: APIRequest) -> APIResult<TremorResponse> {
-    let key: String = req.body_json().await?;
-    let state = req.state();
+async fn consistent_read(
+    extract::State(state): extract::State<APIRequest>,
+    extract::OriginalUri(uri): extract::OriginalUri,
+    extract::Json(key): extract::Json<String>,
+) -> APIResult<TremorResponse> {
     // this will fail if we are not a leader
-    state.raft.client_read().await.to_api_result(&req).await?;
+    state
+        .raft
+        .client_read()
+        .await
+        .to_api_result(&uri, &state)
+        .await?;
     // here we are safe to read
     let (tx, mut rx) = bounded(1);
-    req.state()
+    state
         .store_tx
         .send(super::APIStoreReq::KVGet(key, tx))
         .await?;

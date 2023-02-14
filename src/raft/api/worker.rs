@@ -24,8 +24,8 @@ use crate::{
 use super::apps::AppState;
 
 async fn send<T>(tx: Sender<T>, t: T) {
-    if tx.send(t).await.is_err() {
-        error!("Error sending response to API");
+    if let Err(e) = tx.send(t).await {
+        error!("Error sending response to API: {e}");
     }
 }
 

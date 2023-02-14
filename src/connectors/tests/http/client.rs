@@ -20,7 +20,6 @@ use crate::{
         utils::url::HttpDefaults,
     },
     errors::Result,
-    utils::free_port::find_free_tcp_port,
 };
 use hyper::StatusCode;
 use hyper::{

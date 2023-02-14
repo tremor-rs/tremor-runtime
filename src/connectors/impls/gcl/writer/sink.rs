@@ -254,6 +254,7 @@ mod test {
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
     use crate::ids::{AppId, FlowInstanceId};
+    use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
     use googapis::google::logging::v2::WriteLogEntriesResponse;
@@ -371,7 +372,7 @@ mod test {
             ConnectionLostNotifier::new(connection_lost_tx),
         );
 
-        sink.connect(&ctx, &Attempt::default()).await?;
+        sink.connect(&sink_context, &Attempt::default()).await?;
 
         let event = Event {
             id: EventId::new(1, 2, 3, 4),
@@ -388,7 +389,7 @@ mod test {
         sink.on_event(
             "",
             event.clone(),
-            &ctx,
+            &sink_context,
             &mut EventSerializer::new(
                 None,
                 CodecReq::Structured,
@@ -460,7 +461,7 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext::new(
-                    // NodeId::default()
+                    openraft::NodeId::default(),
                     SinkUId::default(),
                     Alias::new(FlowInstanceId::new(AppId::default(), ""), ""),
                     ConnectorType::default(),

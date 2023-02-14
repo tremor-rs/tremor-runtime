@@ -18,10 +18,9 @@
 use crate::{
     connectors::{
         impls::clickhouse,
-        tests::{clickhouse::utils, ConnectorHarness},
+        tests::{clickhouse::utils, free_port, ConnectorHarness},
     },
     errors::{Error, Result},
-    utils::free_port,
 };
 
 use std::time::{Duration, Instant};

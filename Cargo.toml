@@ -102,8 +102,9 @@ tremor-script = { path = "tremor-script", features = ["arena-delete"] }
 tremor-value = { path = "tremor-value" }
 url = "2.3"
 value-trait = "0.5"
-tide = "0.16"
 zstd = "*"
+axum = "0.6"
+axum-macros = "0.3"
 
 # blaster / blackhole
 hdrhistogram = "7"
@@ -231,7 +232,7 @@ num_cpus = "*"
 
 
 [features]
-default = []
+default = ["integration"]
 
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]

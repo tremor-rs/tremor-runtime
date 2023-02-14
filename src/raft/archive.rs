@@ -16,9 +16,9 @@ use crate::{
     errors::Result,
     ids::{AppId, FlowDefinitionId},
 };
-use async_std::path::PathBuf;
 use sha2::{Digest, Sha256};
 use simd_json::OwnedValue;
+use std::path::PathBuf;
 use std::{
     collections::{BTreeSet, HashMap},
     io::Read,

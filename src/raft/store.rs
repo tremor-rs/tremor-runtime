@@ -23,7 +23,6 @@ use crate::{
     raft::{archive::TremorAppDef, ClusterError},
     system::Runtime,
 };
-use async_std::sync::RwLock;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use openraft::{
     async_trait::async_trait,
@@ -44,6 +43,7 @@ use std::{
     string::FromUtf8Error,
     sync::{Arc, Mutex},
 };
+use tokio::sync::RwLock;
 
 use super::node::Addr;
 

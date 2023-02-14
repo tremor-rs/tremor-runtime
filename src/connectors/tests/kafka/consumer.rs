@@ -16,12 +16,12 @@ use crate::{
     connectors::{
         impls::kafka,
         tests::{
+            free_port::find_free_tcp_port,
             kafka::{redpanda_container, PRODUCE_TIMEOUT},
             ConnectorHarness,
         },
     },
     errors::Result,
-    utils::free_port,
 };
 use beef::Cow;
 use rdkafka::{
@@ -687,7 +687,7 @@ async fn performance() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
-    let kafka_port = free_port::find_free_tcp_port().await?;
+    let kafka_port = find_free_tcp_port().await?;
     let _ = env_logger::try_init();
     let connector_config = literal!({
         "reconnect": {
@@ -725,7 +725,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn invalid_rdkafka_options() -> Result<()> {
     let _ = env_logger::try_init();
-    let kafka_port = free_port::find_free_tcp_port().await?;
+    let kafka_port = find_free_tcp_port().await?;
     let broker = format!("127.0.0.1:{kafka_port}");
     let topic = "tremor_test_pause_resume";
     let group_id = "invalid_rdkafka_options";

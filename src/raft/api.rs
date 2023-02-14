@@ -21,8 +21,9 @@ mod cluster;
 mod kv;
 pub(crate) mod worker;
 
-use crate::channel::{bounded, Sender};
+use self::apps::AppState;
 use crate::{
+    channel::{bounded, Sender},
     ids::{AppId, FlowDefinitionId, FlowInstanceId},
     raft::{
         node::Addr,
@@ -30,7 +31,12 @@ use crate::{
         TremorRaftImpl,
     },
 };
-use futures::Future;
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json, Router,
+};
+use http::{header::LOCATION, HeaderMap, Uri};
 use openraft::{
     error::{
         AddLearnerError, ChangeMembershipError, ClientReadError, ClientWriteError, Fatal,
@@ -41,17 +47,14 @@ use openraft::{
 };
 use std::collections::HashMap;
 use std::{collections::BTreeSet, num::ParseIntError, sync::Arc, time::Duration};
-use tide::{http::headers::LOCATION, Body, Endpoint, Request, Response, StatusCode};
 use tokio::{task::JoinHandle, time::timeout};
 
-use self::apps::AppState;
-
-type Server = tide::Server<Arc<ServerState>>;
-type APIRequest = Request<Arc<ServerState>>;
+pub(crate) type APIRequest = Arc<ServerState>;
 pub type APIResult<T> = Result<T, APIError>;
 
 const API_WORKER_TIMEOUT: Duration = Duration::from_secs(5);
 
+#[derive(Debug)]
 enum APIStoreReq {
     GetApp(AppId, Sender<Option<StateApp>>),
     GetApps(Sender<HashMap<AppId, AppState>>),
@@ -95,50 +98,11 @@ pub(crate) fn initialize(
     (handle, state)
 }
 
-pub(crate) fn install_rest_endpoints(app: &mut Server) {
-    let mut v1 = app.at("/v1");
-    cluster::install_rest_endpoints(&mut v1);
-
-    let mut api_endpoint = v1.at("/api");
-    apps::install_rest_endpoints(&mut api_endpoint);
-    kv::install_rest_endpoints(&mut api_endpoint);
-}
-
-/// Endpoint implementation that turns our errors into responses
-/// and makes successful results automatically a 200 Ok
-struct WrappingEndpoint<T, F, Fut>
-where
-    T: serde::Serialize + serde::Deserialize<'static>,
-    F: Fn(APIRequest) -> Fut,
-    Fut: Future<Output = APIResult<T>> + Send + 'static,
-{
-    f: F,
-}
-
-#[async_trait::async_trait]
-impl<T, F, Fut> Endpoint<Arc<ServerState>> for WrappingEndpoint<T, F, Fut>
-where
-    T: serde::Serialize + serde::Deserialize<'static> + 'static,
-    F: Send + Sync + 'static + Fn(APIRequest) -> Fut,
-    Fut: Future<Output = APIResult<T>> + Send + 'static,
-{
-    async fn call(&self, req: APIRequest) -> tide::Result {
-        Ok(match (self.f)(req).await {
-            Ok(serializable) => Response::builder(StatusCode::Ok)
-                .body(Body::from_json(&serializable)?)
-                .build(),
-            Err(e) => e.into(),
-        })
-    }
-}
-
-fn wrapp<T, F, Fut>(f: F) -> WrappingEndpoint<T, F, Fut>
-where
-    T: serde::Serialize + serde::Deserialize<'static> + 'static,
-    F: Send + Sync + 'static + Fn(APIRequest) -> Fut,
-    Fut: Future<Output = APIResult<T>> + Send + 'static,
-{
-    WrappingEndpoint { f }
+pub(crate) fn endpoints() -> Router<APIRequest> {
+    Router::new()
+        .nest("/v1/cluster", cluster::endpoints())
+        .nest("/v1/api/apps", apps::endpoints())
+        .nest("/v1/api/kv", kv::endpoints())
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -224,6 +188,14 @@ impl std::fmt::Display for AppError {
     }
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn round_sc<S>(x: &StatusCode, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    s.serialize_u16(x.as_u16())
+}
+
 #[derive(Debug, Serialize)]
 pub enum APIError {
     /// We need to send this API request to the leader_url
@@ -234,6 +206,7 @@ pub enum APIError {
     },
     /// HTTP related error
     HTTP {
+        #[serde(serialize_with = "round_sc")]
         status: StatusCode,
         message: String,
     },
@@ -259,22 +232,57 @@ pub enum APIError {
     Other(String),
 }
 
+impl IntoResponse for APIError {
+    fn into_response(self) -> Response {
+        let status = match &self {
+            APIError::ForwardToLeader { .. } => StatusCode::TEMPORARY_REDIRECT,
+            APIError::ChangeMembership(ChangeMembershipError::LearnerNotFound(_)) => {
+                StatusCode::NOT_FOUND
+            }
+            APIError::ChangeMembership(ChangeMembershipError::EmptyMembership(_)) => {
+                StatusCode::BAD_REQUEST
+            }
+            APIError::Other(_)
+            | APIError::ChangeMembership(_)
+            | APIError::Store(_)
+            | APIError::Storage(_)
+            | APIError::Fatal(_)
+            | APIError::NoQuorum(_)
+            | APIError::Runtime(_)
+            | APIError::Recv
+            | APIError::App(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            APIError::Timeout => StatusCode::GATEWAY_TIMEOUT,
+            APIError::HTTP { status, .. } => *status,
+        };
+
+        if let APIError::ForwardToLeader { leader_url, .. } = &self {
+            let mut headers = HeaderMap::new();
+            if let Ok(v) = leader_url.parse() {
+                headers.insert(LOCATION, v);
+            }
+            (status, headers).into_response()
+        } else {
+            (status, Json(self)).into_response()
+        }
+    }
+}
+
 #[async_trait::async_trait]
 trait ToAPIResult<T>
 where
     T: serde::Serialize + serde::Deserialize<'static>,
 {
-    async fn to_api_result(self, req: &APIRequest) -> APIResult<T>;
+    async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<T>;
 }
 
 #[async_trait::async_trait()]
 impl<T: serde::Serialize + serde::Deserialize<'static> + Send> ToAPIResult<T>
     for Result<T, ClientReadError>
 {
-    async fn to_api_result(self, req: &APIRequest) -> APIResult<T> {
+    async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<T> {
         match self {
             Ok(t) => Ok(t),
-            Err(ClientReadError::ForwardToLeader(e)) => forward_to_leader(e, req).await,
+            Err(ClientReadError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
             Err(ClientReadError::Fatal(e)) => Err(APIError::Fatal(e)),
             Err(ClientReadError::QuorumNotEnough(e)) => Err(APIError::NoQuorum(e)),
         }
@@ -283,10 +291,10 @@ impl<T: serde::Serialize + serde::Deserialize<'static> + Send> ToAPIResult<T>
 
 #[async_trait::async_trait]
 impl ToAPIResult<Option<LogId>> for Result<AddLearnerResponse, AddLearnerError> {
-    async fn to_api_result(self, req: &APIRequest) -> APIResult<Option<LogId>> {
+    async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<Option<LogId>> {
         match self {
             Ok(response) => Ok(response.matched),
-            Err(AddLearnerError::ForwardToLeader(e)) => forward_to_leader(e, req).await,
+            Err(AddLearnerError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
             Err(AddLearnerError::Fatal(e)) => Err(APIError::Fatal(e)),
             Err(AddLearnerError::Exists(_node_id)) => Ok(None), // we want the API call to be idempotent and not error if the node is already a learner
         }
@@ -295,13 +303,13 @@ impl ToAPIResult<Option<LogId>> for Result<AddLearnerResponse, AddLearnerError> 
 
 #[async_trait::async_trait]
 impl ToAPIResult<()> for Result<(), RemoveLearnerError> {
-    async fn to_api_result(self, req: &APIRequest) -> APIResult<()> {
+    async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<()> {
         match self {
             Ok(()) | Err(RemoveLearnerError::NotExists(_)) => Ok(()), // if the node is not part of the cluster, the effect is the same, so we say it is fine
-            Err(RemoveLearnerError::ForwardToLeader(e)) => forward_to_leader(e, req).await,
+            Err(RemoveLearnerError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
             Err(RemoveLearnerError::Fatal(e)) => Err(APIError::Fatal(e)),
             Err(e @ RemoveLearnerError::NotLearner(_)) => Err(APIError::HTTP {
-                status: StatusCode::Conflict,
+                status: StatusCode::CONFLICT,
                 message: e.to_string(),
             }),
         }
@@ -311,32 +319,37 @@ impl ToAPIResult<()> for Result<(), RemoveLearnerError> {
 #[async_trait::async_trait()]
 impl ToAPIResult<TremorResponse> for Result<ClientWriteResponse<TremorResponse>, ClientWriteError> {
     // we need the request context here to construct the redirect url properly
-    async fn to_api_result(self, req: &APIRequest) -> APIResult<TremorResponse> {
+    async fn to_api_result(self, uri: &Uri, state: &APIRequest) -> APIResult<TremorResponse> {
         match self {
             Ok(response) => Ok(response.data),
-            Err(ClientWriteError::ForwardToLeader(e)) => forward_to_leader(e, req).await,
+            Err(ClientWriteError::ForwardToLeader(e)) => forward_to_leader(e, uri, state).await,
             Err(ClientWriteError::Fatal(e)) => Err(APIError::Fatal(e)),
             Err(ClientWriteError::ChangeMembershipError(e)) => Err(APIError::ChangeMembership(e)),
         }
     }
 }
 
-async fn forward_to_leader<T>(e: ForwardToLeader, req: &APIRequest) -> APIResult<T>
+#[allow(clippy::unused_async)]
+async fn forward_to_leader<T>(e: ForwardToLeader, uri: &Uri, state: &APIRequest) -> APIResult<T>
 where
     T: serde::Serialize + serde::Deserialize<'static>,
 {
     Err(if let Some(leader_id) = e.leader_id {
         let (tx, mut rx) = bounded(1);
-        req.state()
+        state
             .store_tx
             .send(APIStoreReq::GetNode(leader_id, tx))
             .await?;
         // we can only forward to the leader if we have the node in our state machine
         if let Some(leader_addr) = timeout(API_WORKER_TIMEOUT, rx.recv()).await?.flatten() {
-            let mut leader_url =
-                url::Url::parse(&format!("{}://{}", req.url().scheme(), leader_addr.api()))?;
-            leader_url.set_path(req.url().path());
-            leader_url.set_query(req.url().query());
+            let mut leader_url = url::Url::parse(&format!(
+                "{}://{}",
+                uri.scheme()
+                    .map_or_else(|| "http".to_string(), ToString::to_string),
+                leader_addr.api()
+            ))?;
+            leader_url.set_path(uri.path());
+            leader_url.set_query(uri.query());
             debug!("Forwarding to leader: {leader_url}");
             // we don't care about fragment
 
@@ -352,45 +365,9 @@ where
     })
 }
 
-impl From<APIError> for Response {
-    fn from(e: APIError) -> Self {
-        let status = match &e {
-            APIError::ForwardToLeader { .. } => StatusCode::TemporaryRedirect,
-            APIError::ChangeMembership(ChangeMembershipError::LearnerNotFound(_)) => {
-                StatusCode::NotFound
-            }
-            APIError::ChangeMembership(ChangeMembershipError::EmptyMembership(_)) => {
-                StatusCode::BadRequest
-            }
-            APIError::Other(_)
-            | APIError::ChangeMembership(_)
-            | APIError::Store(_)
-            | APIError::Storage(_)
-            | APIError::Fatal(_)
-            | APIError::NoQuorum(_)
-            | APIError::Runtime(_)
-            | APIError::Recv
-            | APIError::App(_) => StatusCode::InternalServerError,
-            APIError::Timeout => StatusCode::GatewayTimeout,
-            APIError::HTTP { status, .. } => *status,
-        };
-        let mut builder = Response::builder(status);
-        if let APIError::ForwardToLeader { leader_url, .. } = &e {
-            builder = builder.header(LOCATION, leader_url);
-            builder.build()
-        } else {
-            builder
-                .body(Body::from_json(&e).expect("Serialization should work"))
-                .build()
-        }
-    }
-}
-
-impl From<&TremorResponse> for Response {
-    fn from(e: &TremorResponse) -> Self {
-        Response::builder(StatusCode::Ok)
-            .body(Body::from_json(&e).expect("Serialization should work"))
-            .build()
+impl IntoResponse for TremorResponse {
+    fn into_response(self) -> Response {
+        (StatusCode::OK, Json(self)).into_response()
     }
 }
 
@@ -429,15 +406,6 @@ impl From<store::Error> for APIError {
 impl From<url::ParseError> for APIError {
     fn from(e: url::ParseError) -> Self {
         Self::Other(e.to_string())
-    }
-}
-
-impl From<tide::Error> for APIError {
-    fn from(e: tide::Error) -> Self {
-        Self::HTTP {
-            status: e.status(),
-            message: e.to_string(),
-        }
     }
 }
 
