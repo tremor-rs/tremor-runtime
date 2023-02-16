@@ -256,7 +256,7 @@ pub(crate) mod tests {
     // NOTE so we use mock tests where emulators/simulators are not available at this time
     #[async_std::test]
     async fn appease_the_coverage_gods() -> Result<()> {
-        let mut mock = TremorGoogleAuthz::new_mock(|_| http::Response::new(empty_body())).await;
+        let mut mock = TremorGoogleAuthz::new_mock(|_| http::Response::new(empty_body()));
         let actual = mock.call(http::Request::new(empty_body())).await;
         if let Ok(actual) = actual {
             let actual = hyper::body::to_bytes(actual).await?;
