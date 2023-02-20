@@ -247,7 +247,7 @@ async fn start(
 async fn manage_instance(
     extract::State(state): extract::State<APIRequest>,
     extract::OriginalUri(uri): extract::OriginalUri,
-    extract::Path((app_id, instance_id)): extract::Path<(AppId, FlowInstanceId)>,
+    extract::Path((app_id, flow_id)): extract::Path<(AppId, String)>,
     Json(body): Json<TremorInstanceState>,
 ) -> APIResult<Json<FlowInstanceId>> {
     // FIXME: this is not only for this but all the API functions as we're running in a potentially
@@ -274,6 +274,7 @@ async fn manage_instance(
     // Solution? We might need to put a single process inbetween the API and the raft algorithm that
     // serializes all commands to ensure no command is executed before the previous one has been fully
     // handled
+    let instance_id = FlowInstanceId::new(app_id.clone(), flow_id);
     let (tx, mut rx) = bounded(1);
     state
         .store_tx
@@ -310,8 +311,9 @@ async fn manage_instance(
 async fn stop_instance(
     extract::State(state): extract::State<APIRequest>,
     extract::OriginalUri(uri): extract::OriginalUri,
-    extract::Path((app_id, instance_id)): extract::Path<(AppId, FlowInstanceId)>,
+    extract::Path((app_id, flow_id)): extract::Path<(AppId, String)>,
 ) -> APIResult<Json<FlowInstanceId>> {
+    let instance_id = FlowInstanceId::new(app_id.clone(), flow_id);
     let (tx, mut rx) = bounded(1);
     state
         .store_tx
