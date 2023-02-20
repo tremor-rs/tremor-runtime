@@ -174,7 +174,7 @@ async fn consumer_task<T: TokenProvider>(
             yield initial_req;
 
             while let Ok(pull_id) = ack_recvr.recv().await {
-                if let (Some(ack_id)) = ack_ids_cc.write().await.remove(&pull_id) {
+                if let Some(ack_id) = ack_ids_cc.write().await.remove(&pull_id) {
                     yield StreamingPullRequest {
                         subscription: String::new(),
                         ack_ids: vec![ack_id],
