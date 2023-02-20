@@ -15,6 +15,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
+    base_expr::Ranged,
     deploy::raw::{ConnectorDefinitionRaw, FlowDefinitionRaw},
     docs::{Docs, ModDoc},
     query::raw::{
@@ -34,8 +35,8 @@ use crate::{
     FN_REGISTRY,
 };
 use beef::Cow;
-use std::collections::HashMap;
 use sha2::Digest;
+use std::collections::HashMap;
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     fmt::Debug,
@@ -274,7 +275,7 @@ impl Module {
                         match Manager::load_(&module, ids, precached) {
                             Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
                                 return Err(Error(
-                                    ErrorKind::CyclicUse(meta.range, module.mid.range, uses),
+                                    ErrorKind::CyclicUse(meta.range, meta.range, uses),
                                     o,
                                 ));
                             }
@@ -490,8 +491,8 @@ impl Manager {
 
             let p = path.resolve_id(node_id).ok_or_else(|| {
                 crate::errors::ErrorKind::ModuleNotFound(
-                    Span::yolo(),
-                    Span::yolo(),
+                    node_id.extent().expand_lines(2),
+                    node_id.extent(),
                     node_id.fqn(),
                     path.mounts.clone(),
                 )
