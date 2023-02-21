@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::net::ToSocketAddrs;
+
 use super::{common::OtelDefaults, logs, metrics, trace};
 use crate::{connectors::prelude::*, errors::already_created_error};
 use async_std::channel::{bounded, Receiver, Sender};
@@ -129,7 +131,10 @@ impl Connector for Server {
             .url
             .port()
             .ok_or("Missing prot for otel server")?;
-        let endpoint = format!("{host}:{port}").parse()?;
+        let endpoint = format!("{host}:{port}")
+            .to_socket_addrs()?
+            .next()
+            .ok_or("badaddr")?;
 
         if let Some(previous_handle) = self.accept_task.take() {
             previous_handle.abort();

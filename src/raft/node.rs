@@ -28,6 +28,7 @@ use futures::{future, prelude::*};
 use openraft::{Config, Raft};
 use std::{
     collections::BTreeSet,
+    net::ToSocketAddrs,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -91,8 +92,9 @@ impl Running {
 
         let http_api_addr = server_state.addr().api().to_string();
         let app = api::endpoints().with_state(server_state.clone());
-        let http_api_server = axum::Server::bind(&http_api_addr.parse().map_err(|_e| "badaddr")?)
-            .serve(app.into_make_service());
+        let http_api_server =
+            axum::Server::bind(&http_api_addr.to_socket_addrs()?.next().ok_or("badaddr")?)
+                .serve(app.into_make_service());
 
         let run_handle = task::spawn(async move {
             let mut tcp_future = Box::pin(
@@ -372,7 +374,6 @@ impl Node {
         raft.initialize(nodes).await?;
         // lets make ourselves known to the cluster state as first operation, so new joiners will see us as well
         // this is critical
-        // FIXME: debug_assert that node_id remains 0
         match raft
             .client_write(TremorRequest::Nodes(NodesRequest::AddNode {
                 addr: addr.clone(),
