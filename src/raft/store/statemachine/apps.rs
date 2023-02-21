@@ -411,13 +411,11 @@ impl AppsStateMachine {
             .map_err(store_w_err)?;
 
         // deploy the flow but don't start it yet
-        dbg!("DEPLOY");
         self.world
             .deploy_flow(app_id.clone(), &deploy)
             .await
             .map_err(sm_w_err)?;
         // change the flow state to the intended state
-        dbg!("START");
         self.world
             .change_flow_state(instance, intended_state)
             .await

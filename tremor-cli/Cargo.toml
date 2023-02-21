@@ -61,8 +61,6 @@ port_scanner = "0.1"
 shell-words = "1.1"
 tch = { version = "*", optional = true }
 termcolor = "1.2"
-rand = "0.8"
-tar = "0.4.38"
 serde_json = "1.0"
 
 

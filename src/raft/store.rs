@@ -192,7 +192,10 @@ fn id_to_bin(id: u64) -> Result<Vec<u8>, Error> {
 }
 
 fn bin_to_id(buf: &[u8]) -> Result<u64, Error> {
-    Ok((&buf[0..8]).read_u64::<BigEndian>()?)
+    Ok(buf
+        .get(0..8)
+        .ok_or_else(|| Error::Other(format!("Invalid buffer length: {}", buf.len()).into()))?
+        .read_u64::<BigEndian>()?)
 }
 
 #[derive(Debug)]
@@ -204,7 +207,7 @@ pub enum Error {
     RocksDB(rocksdb::Error),
     Io(std::io::Error),
     Storage(openraft::StorageError),
-    // FIXME: this is horrid, aaaaaahhhhh!
+    // TODO: this is horrid, aaaaaahhhhh!
     Tremor(Mutex<RuntimeError>),
     TremorScript(Mutex<tremor_script::errors::Error>),
     MissingApp(AppId),

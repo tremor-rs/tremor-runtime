@@ -169,7 +169,6 @@ impl Runtime {
         app_id: AppId,
         flow: &ast::DeployFlow<'static>,
     ) -> Result<FlowInstanceId> {
-        // FIXME: return a FlowInstanceId here
         let (tx, rx) = oneshot::channel();
         self.flows
             .send(flow_supervisor::Msg::DeployFlow {

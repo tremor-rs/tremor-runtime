@@ -89,14 +89,15 @@ impl Tremor {
                 }
             }
             Ok(result)
-        } else {
-            let err = resp.error_for_status_ref().expect_err("FIXME");
+        } else if let Err(err) = resp.error_for_status_ref() {
             error!(
                 "Received {} with body: {}",
                 resp.status(),
                 resp.text().await?
             );
             Err(Error::HTTP(err))
+        } else {
+            Err("Heisenerror, not error nor success".into())
         }
     }
 }
@@ -426,12 +427,14 @@ Snapshot:
 #[derive(Debug)]
 pub enum Error {
     HTTP(reqwest::Error),
+    Other(String),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::HTTP(e) => e.fmt(f),
+            Self::Other(e) => e.fmt(f),
         }
     }
 }
@@ -441,5 +444,10 @@ impl std::error::Error for Error {}
 impl From<reqwest::Error> for Error {
     fn from(e: reqwest::Error) -> Self {
         Self::HTTP(e)
+    }
+}
+impl<'s> From<&'s str> for Error {
+    fn from(e: &'s str) -> Self {
+        Self::Other(e.into())
     }
 }

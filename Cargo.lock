@@ -914,18 +914,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-macros"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fbf955307ff8addb48d2399393c9e2740dd491537ec562b66ab364fc4a38841"
-dependencies = [
- "heck 0.4.1",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6299,7 +6287,6 @@ dependencies = [
  "matches",
  "port_scanner",
  "pretty_assertions",
- "rand 0.8.5",
  "serde",
  "serde_json",
  "serde_yaml 0.9.21",
@@ -6309,7 +6296,6 @@ dependencies = [
  "simd-json 0.8.0",
  "snmalloc-rs",
  "surf",
- "tar",
  "tch",
  "temp-dir",
  "termcolor",
@@ -6421,7 +6407,6 @@ dependencies = [
  "aws-smithy-http",
  "aws-types",
  "axum",
- "axum-macros",
  "base64 0.21.0",
  "beef",
  "bimap",

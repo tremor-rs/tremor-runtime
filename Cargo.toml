@@ -104,7 +104,6 @@ url = "2.3"
 value-trait = "0.5"
 zstd = "*"
 axum = "0.6"
-axum-macros = "0.3"
 
 # blaster / blackhole
 hdrhistogram = "7"

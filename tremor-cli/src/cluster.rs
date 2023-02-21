@@ -108,7 +108,6 @@ async fn handle_signals(
 
 impl Cluster {
     /// Run the cluster command
-    #[allow(clippy::too_many_lines)] // FIXME
     pub(crate) async fn run(self) -> Result<()> {
         match self.command {
             // rm -r temp/test-db*; cargo run -p tremor-cli -- cluster bootstrap --db-dir temp/test-db1 --api 127.0.0.1:8001 --rpc 127.0.0.1:9001
@@ -232,11 +231,10 @@ impl Cluster {
 }
 
 impl AppsCommands {
-    #[allow(clippy::too_many_lines)] // FIXME
     pub(crate) async fn run(self, api: &str) -> Result<()> {
+        let client = Client::new(api)?;
         match self {
             AppsCommands::List { json } => {
-                let client = Client::new(api)?;
                 let r = client.list().await.map_err(|e| format!("error: {e}"))?;
                 if json {
                     println!("{}", serde_json::to_string_pretty(&r)?);
@@ -247,35 +245,21 @@ impl AppsCommands {
                 }
             }
             AppsCommands::Install { file } => {
-                let client = Client::new(api)?;
                 let mut file = file::open(&file).await?;
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf).await?;
-                let res = client
-                    .install(&buf)
-                    .await
-                    .map_err(|e| format!("error: {e}"));
-
-                match res {
+                match client.install(&buf).await {
                     Ok(app_id) => println!("Application `{app_id}` successfully installed",),
-                    Err(e) => eprintln!("Application failed to install: {e:?}"),
+                    Err(e) => eprintln!("Application failed to install: {e}"),
                 }
             }
             AppsCommands::Uninstall { app } => {
-                let client = Client::new(api)?;
                 let app_id = AppId(app);
-                let res = client
-                    .uninstall_app(&app_id)
-                    .await
-                    .map_err(|e| format!("error: {e}"));
-
-                if let Err(e) = res {
-                    eprintln!("Application `{app_id}` failed to be uninstalled: {e:?}");
-                } else {
-                    println!("App `{app_id}` successfully uninstalled",);
+                match client.uninstall_app(&app_id).await {
+                    Ok(app_id) => println!("App `{app_id}` successfully uninstalled",),
+                    Err(e) => eprintln!("Application `{app_id}` failed to be uninstalled: {e}"),
                 }
             }
-
             AppsCommands::Start {
                 app,
                 flow,
@@ -283,70 +267,42 @@ impl AppsCommands {
                 config,
                 paused,
             } => {
-                let client = Client::new(api)?;
-                let config: HashMap<String, OwnedValue> = if let Some(config) = config {
-                    serde_json::from_str(&config)?
-                } else {
-                    HashMap::default()
-                };
-                let flow =
-                    flow.map_or_else(|| FlowDefinitionId("main".to_string()), FlowDefinitionId);
+                let config: HashMap<String, OwnedValue> =
+                    config.map_or_else(|| Ok(HashMap::new()), |c| serde_json::from_str(&c))?;
+                let flow = flow.map_or_else(|| FlowDefinitionId::from("main"), FlowDefinitionId);
                 let app_id = AppId(app);
                 let instance_id = FlowInstanceId::new(app_id, instance);
-                let running = !paused;
-                let res = client
-                    .start(&flow, &instance_id, config, running)
-                    .await
-                    .map_err(|e| format!("error: {e}"));
-
-                if let Err(e) = res {
-                    eprintln!("Instance `{instance_id}` failed to start: {e:?}");
-                } else {
-                    println!("Instance `{instance_id}` successfully started",);
+                match client.start(&flow, &instance_id, config, !paused).await {
+                    Ok(instance_id) => println!("Instance `{instance_id}` successfully started",),
+                    Err(e) => eprintln!("Instance `{instance_id}` failed to start: {e}"),
                 }
             }
-
             AppsCommands::Stop { app, instance } => {
-                let client = Client::new(api)?;
                 let instance_id = FlowInstanceId::new(app, instance);
-                let res = client
-                    .stop_instance(&instance_id)
-                    .await
-                    .map_err(|e| format!("error: {e}"));
-                if let Err(e) = res {
-                    eprintln!("Instance `{instance_id}` failed to stop: {e:?}");
-                } else {
-                    println!("Instance `{instance_id}` stopped",);
+                match client.stop_instance(&instance_id).await {
+                    Ok(instance_id) => println!("Instance `{instance_id}` stopped"),
+                    Err(e) => eprintln!("Instance `{instance_id}` failed to stop: {e}"),
                 }
             }
             AppsCommands::Pause { app, instance } => {
-                let client = Client::new(api)?;
                 let app_id = AppId(app);
                 let instance_id = FlowInstanceId::new(app_id, instance);
-                let res = client
+                match client
                     .change_instance_state(&instance_id, TremorInstanceState::Pause)
                     .await
-                    .map_err(|e| format!("error: {e}"));
-
-                if let Err(e) = res {
-                    eprintln!("Instance `{instance_id}` failed to pause: {e:?}");
-                } else {
-                    println!("Instance `{instance_id}` successfully paused",);
+                {
+                    Ok(instance_id) => println!("Instance `{instance_id}` successfully paused"),
+                    Err(e) => eprintln!("Instance `{instance_id}` failed to pause: {e}"),
                 }
             }
             AppsCommands::Resume { app, instance } => {
-                let client = Client::new(api)?;
                 let instance_id = FlowInstanceId::new(app, instance);
-
-                let res = client
+                match client
                     .change_instance_state(&instance_id, TremorInstanceState::Resume)
                     .await
-                    .map_err(|e| format!("error: {e}"));
-
-                if let Err(e) = res {
-                    eprintln!("Instance `{instance_id}` failed to resume: {e:?}");
-                } else {
-                    println!("Instance `{instance_id}` successfully resumed",);
+                {
+                    Ok(instance_id) => println!("Instance `{instance_id}` successfully resumed"),
+                    Err(e) => eprintln!("Instance `{instance_id}` failed to resume: {e}"),
                 }
             }
         }
