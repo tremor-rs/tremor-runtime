@@ -42,10 +42,6 @@ async fn write(
         .await
         .to_api_result(&uri, &state)
         .await?;
-    debug_assert!(
-        tremor_res.value.is_some(),
-        "state machine didn't return the stored value upon write"
-    );
     if let Some(value) = tremor_res.value {
         Ok(value)
     } else {
@@ -93,5 +89,12 @@ async fn consistent_read(
     let value = timeout(API_WORKER_TIMEOUT, rx.recv())
         .await?
         .ok_or(APIError::Recv)?;
+    // Ensure that we are still the leader at the end of the read so we can guarantee freshness
+    state
+        .raft
+        .client_read()
+        .await
+        .to_api_result(&uri, &state)
+        .await?;
     Ok(TremorResponse { value })
 }

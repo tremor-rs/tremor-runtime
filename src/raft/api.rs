@@ -214,6 +214,8 @@ pub enum APIError {
     Fatal(Fatal),
     /// We don't have a quorum to read
     NoQuorum(QuorumNotEnough),
+    /// We don't have a leader
+    NoLeader,
     /// Error when changing a membership
     ChangeMembership(ChangeMembershipError),
     /// Error from our store/statemachine
@@ -247,10 +249,10 @@ impl IntoResponse for APIError {
             | APIError::Store(_)
             | APIError::Storage(_)
             | APIError::Fatal(_)
-            | APIError::NoQuorum(_)
             | APIError::Runtime(_)
             | APIError::Recv
             | APIError::App(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            APIError::NoLeader | APIError::NoQuorum(_) => StatusCode::SERVICE_UNAVAILABLE,
             APIError::Timeout => StatusCode::GATEWAY_TIMEOUT,
             APIError::HTTP { status, .. } => *status,
         };
@@ -361,7 +363,7 @@ where
             APIError::Other(format!("Leader {leader_id} not known"))
         }
     } else {
-        APIError::Other("No leader available".to_string())
+        APIError::NoLeader
     })
 }
 
@@ -374,7 +376,7 @@ impl IntoResponse for TremorResponse {
 impl std::fmt::Display for APIError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ForwardToLeader {
+            APIError::ForwardToLeader {
                 leader_url: leader_addr,
                 node_id,
             } => f
@@ -382,16 +384,17 @@ impl std::fmt::Display for APIError {
                 .field("leader_addr", leader_addr)
                 .field("node_id", node_id)
                 .finish(),
-            Self::Other(s) | Self::Store(s) => write!(f, "{s}"),
-            Self::HTTP { message, status } => write!(f, "HTTP {status} {message}"),
-            Self::Fatal(e) => write!(f, "Fatal Error: {e}"),
-            Self::ChangeMembership(e) => write!(f, "Error changing cluster membership: {e}"),
-            Self::NoQuorum(e) => write!(f, "Quorum: {e}"),
-            Self::Storage(e) => write!(f, "Storage: {e}"),
-            Self::Runtime(e) => write!(f, "Runtime: {e}"),
-            Self::App(e) => write!(f, "App: {e}"),
-            Self::Timeout => write!(f, "Timeout"),
-            Self::Recv => write!(f, "Recv"),
+            APIError::Other(s) | Self::Store(s) => write!(f, "{s}"),
+            APIError::HTTP { message, status } => write!(f, "HTTP {status} {message}"),
+            APIError::Fatal(e) => write!(f, "Fatal Error: {e}"),
+            APIError::ChangeMembership(e) => write!(f, "Error changing cluster membership: {e}"),
+            APIError::NoQuorum(e) => write!(f, "Quorum: {e}"),
+            APIError::Storage(e) => write!(f, "Storage: {e}"),
+            APIError::Runtime(e) => write!(f, "Runtime: {e}"),
+            APIError::App(e) => write!(f, "App: {e}"),
+            APIError::Timeout => write!(f, "Timeout"),
+            APIError::Recv => write!(f, "Recv"),
+            APIError::NoLeader => write!(f, "No Leader"),
         }
     }
 }
