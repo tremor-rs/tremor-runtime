@@ -37,8 +37,8 @@ use tokio::task::JoinError;
 /// When the config isn't valid
 pub fn config() -> ClusterResult<Config> {
     let config = Config {
-        heartbeat_interval: 250,
-        election_timeout_min: 299,
+        // heartbeat_interval: 250,
+        // election_timeout_min: 299,
         ..Default::default()
     };
     Ok(config.validate()?)

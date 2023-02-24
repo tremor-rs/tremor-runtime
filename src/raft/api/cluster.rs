@@ -73,7 +73,6 @@ async fn add_node(
     extract::OriginalUri(uri): extract::OriginalUri,
     Json(addr): Json<Addr>,
 ) -> APIResult<Json<NodeId>> {
-    // FIXME: returns 500 if not the leader
     // FIXME: better client errors
 
     // 1. ensure we are on the leader, as we need to read some state-machine state
