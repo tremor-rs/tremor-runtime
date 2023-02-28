@@ -25,7 +25,7 @@ tokio = { version = "1.23", features = ["full"] }
 # tokio-metrics = { version = "0.1.0", default-features = true }
 anyhow = "1"
 clap = { version = "4.1.6", features = ["color", "derive"] }
-clap_complete = "4.1.2"
+clap_complete = "4.1.4"
 difference = "2"
 env_logger = "0.10.0"
 futures = "0.3"
