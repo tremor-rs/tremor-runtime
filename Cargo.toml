@@ -222,7 +222,7 @@ regex = "1"
 # in the face of high concurrency serial_test 0.7.0 panics after 60 seconds
 signal-hook = "0.3"
 signal-hook-tokio = "0.3"
-tempfile = { version = "3.2" }
+tempfile = { version = "3.4" }
 test-case = "3.0"
 testcontainers = { version = "0.14", features = ["watchdog"] }
 num_cpus = "*"
