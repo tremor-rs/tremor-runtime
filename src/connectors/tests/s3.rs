@@ -22,7 +22,7 @@ use testcontainers::{clients::Cli, images::generic::GenericImage, Container, Run
 
 use super::free_port::find_free_tcp_port;
 const IMAGE: &str = "minio/minio";
-const TAG: &str = "RELEASE.2023-01-12T02-06-16Z";
+const VERSION: &str = "RELEASE.2023-01-12T02-06-16Z";
 
 const MINIO_ROOT_USER: &str = "tremor";
 const MINIO_ROOT_PASSWORD: &str = "snot_badger";
@@ -66,7 +66,7 @@ async fn create_bucket(bucket: &str, http_port: u16) -> Result<()> {
 }
 
 async fn spawn_docker(docker: &Cli) -> (Container<GenericImage>, u16) {
-    let image = GenericImage::new(IMAGE, TAG)
+    let image = GenericImage::new(IMAGE, VERSION)
         .with_env_var("MINIO_ROOT_USER", MINIO_ROOT_USER)
         .with_env_var("MINIO_ROOT_PASSWORD", MINIO_ROOT_PASSWORD)
         .with_env_var("MINIO_REGION", MINIO_REGION);

@@ -36,7 +36,8 @@ use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value::StaticValue};
 use value_trait::{Mutable, Value, ValueAccess};
 
-const ELASTICSEARCH_VERSION: &str = "8.6.1";
+const IMAGE: &str = "elasticsearch";
+const VERSION: &str = "8.6.1";
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
@@ -46,7 +47,8 @@ async fn connector_elastic() -> Result<()> {
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
     let image = RunnableImage::from(
-        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+        GenericImage::new(IMAGE, VERSION)
+            .with_env_var("ingest.geoip.downloader.enabled", "false")
             .with_env_var("discovery.type", "single-node")
             .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
             .with_env_var("xpack.security.enabled", "false")
@@ -470,7 +472,8 @@ async fn elastic_routing() -> Result<()> {
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
     let image = RunnableImage::from(
-        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+        GenericImage::new(IMAGE, VERSION)
+            .with_env_var("ingest.geoip.downloader.enabled", "false")
             .with_env_var("discovery.type", "single-node")
             .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
             .with_env_var("xpack.security.enabled", "false")
@@ -795,7 +798,8 @@ async fn auth_basic() -> Result<()> {
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
-        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+        GenericImage::new(IMAGE, VERSION)
+            .with_env_var("ingest.geoip.downloader.enabled", "false")
             .with_env_var("discovery.type", "single-node")
             .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
             .with_env_var("ELASTIC_PASSWORD", password)
@@ -859,7 +863,8 @@ async fn auth_api_key() -> Result<()> {
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
-        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+        GenericImage::new(IMAGE, VERSION)
+            .with_env_var("ingest.geoip.downloader.enabled", "false")
             .with_env_var("discovery.type", "single-node")
             .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
             .with_env_var("ELASTIC_PASSWORD", password)
@@ -951,7 +956,8 @@ async fn auth_client_cert() -> Result<()> {
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
-        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+        GenericImage::new(IMAGE, VERSION)
+            .with_env_var("ingest.geoip.downloader.enabled", "false")
             .with_env_var("node.name", "snot")
             .with_env_var("discovery.type", "single-node")
             .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
@@ -1092,14 +1098,14 @@ async fn elastic_https() -> Result<()> {
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
-        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+        GenericImage::new(IMAGE, VERSION)
+            .with_env_var("ingest.geoip.downloader.enabled", "false")
             .with_env_var("node.name", "snot")
             .with_env_var("discovery.type", "single-node")
             .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
             .with_env_var("ELASTIC_PASSWORD", password)
             .with_env_var("xpack.security.enabled", "true")
             .with_env_var("xpack.security.http.ssl.enabled", "true")
-            .with_env_var("ingest.geoip.downloader.enabled", "false")
             .with_env_var(
                 "xpack.security.http.ssl.key",
                 "/usr/share/elasticsearch/config/certificates/localhost.key",
