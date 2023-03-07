@@ -274,8 +274,8 @@ impl ConnectorHarness {
     ))]
     pub(crate) async fn consume_initial_sink_contraflow(&mut self) -> Result<()> {
         for cf in [
-            dbg!(self.get_pipe(IN)?.get_contraflow().await?),
-            dbg!(self.get_pipe(IN)?.get_contraflow().await?),
+            self.get_pipe(IN)?.get_contraflow().await?,
+            self.get_pipe(IN)?.get_contraflow().await?,
         ] {
             assert!(
                 matches!(cf.cb, CbAction::SinkStart(_) | CbAction::Restore),
@@ -572,6 +572,7 @@ pub(crate) fn setup_for_tls() {
         let out = cmd.wait().expect("Failed to refresh certs/keys");
         match out.code() {
             Some(0) => {
+                println!("Done refreshing TLS Cert/Key.");
                 warn!("Done refreshing TLS Cert/Key.");
             }
             _ => panic!("Error creating tls certificate and key"),

@@ -37,7 +37,7 @@ use tremor_value::{literal, value::StaticValue};
 use value_trait::{Mutable, Value, ValueAccess};
 
 const IMAGE: &str = "elasticsearch";
-const VERSION: &str = "8.6.1";
+const VERSION: &str = "8.6.2";
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
@@ -884,15 +884,28 @@ async fn auth_api_key() -> Result<()> {
     wait_for_es(&elastic).await?;
 
     let index = "badger";
-    let res = elastic
-        .security()
-        .create_api_key()
-        .body(literal!({
-            "name": "snot",
-            "expiration": "1d"
-        }))
-        .send()
-        .await?;
+    let mut count = 30;
+    let res = loop {
+        let res = elastic
+            .security()
+            .create_api_key()
+            .body(literal!({
+                "name": "snot",
+                "expiration": "1d"
+            }))
+            .send()
+            .await?;
+        if res.status_code().is_success() {
+            break res;
+        }
+        dbg!(&res);
+        dbg!(res.json::<StaticValue>().await?.into_value());
+        if count == 0 {
+            return Err("failed to create api key".into());
+        }
+        count -= 1;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    };
     let json = res.json::<StaticValue>().await?.into_value();
     let api_key_id = json.get_str("id").expect("id missing").to_string();
     let api_key = json
