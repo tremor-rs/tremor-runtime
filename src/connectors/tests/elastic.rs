@@ -39,6 +39,18 @@ use value_trait::{Mutable, Value, ValueAccess};
 const IMAGE: &str = "elasticsearch";
 const VERSION: &str = "8.6.2";
 
+fn default_image() -> GenericImage {
+    GenericImage::new(IMAGE, VERSION)
+        // JVM memory settings
+        .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+        // single node mode
+        .with_env_var("discovery.type", "single-node")
+        // disable geoip downloads
+        .with_env_var("ingest.geoip.downloader.enabled", "false")
+        // disable disk related limits
+        .with_env_var("cluster.routing.allocation.disk.threshold_enabled", "false")
+}
+
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn connector_elastic() -> Result<()> {
@@ -47,10 +59,7 @@ async fn connector_elastic() -> Result<()> {
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
     let image = RunnableImage::from(
-        GenericImage::new(IMAGE, VERSION)
-            .with_env_var("ingest.geoip.downloader.enabled", "false")
-            .with_env_var("discovery.type", "single-node")
-            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+        default_image()
             .with_env_var("xpack.security.enabled", "false")
             .with_env_var("xpack.security.http.ssl.enabled", "false"),
     )
@@ -472,10 +481,7 @@ async fn elastic_routing() -> Result<()> {
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
     let image = RunnableImage::from(
-        GenericImage::new(IMAGE, VERSION)
-            .with_env_var("ingest.geoip.downloader.enabled", "false")
-            .with_env_var("discovery.type", "single-node")
-            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+        default_image()
             .with_env_var("xpack.security.enabled", "false")
             .with_env_var("xpack.security.http.ssl.enabled", "false"),
     )
@@ -798,10 +804,7 @@ async fn auth_basic() -> Result<()> {
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
-        GenericImage::new(IMAGE, VERSION)
-            .with_env_var("ingest.geoip.downloader.enabled", "false")
-            .with_env_var("discovery.type", "single-node")
-            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+        default_image()
             .with_env_var("ELASTIC_PASSWORD", password)
             .with_env_var("xpack.security.enabled", "true"),
     )
@@ -863,10 +866,7 @@ async fn auth_api_key() -> Result<()> {
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
-        GenericImage::new(IMAGE, VERSION)
-            .with_env_var("ingest.geoip.downloader.enabled", "false")
-            .with_env_var("discovery.type", "single-node")
-            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+        default_image()
             .with_env_var("ELASTIC_PASSWORD", password)
             .with_env_var("xpack.security.enabled", "true")
             .with_env_var("xpack.security.authc.api_key.enabled", "true"),
@@ -884,28 +884,15 @@ async fn auth_api_key() -> Result<()> {
     wait_for_es(&elastic).await?;
 
     let index = "badger";
-    let mut count = 30;
-    let res = loop {
-        let res = elastic
-            .security()
-            .create_api_key()
-            .body(literal!({
-                "name": "snot",
-                "expiration": "1d"
-            }))
-            .send()
-            .await?;
-        if res.status_code().is_success() {
-            break res;
-        }
-        dbg!(&res);
-        dbg!(res.json::<StaticValue>().await?.into_value());
-        if count == 0 {
-            return Err("failed to create api key".into());
-        }
-        count -= 1;
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    };
+    let res = elastic
+        .security()
+        .create_api_key()
+        .body(literal!({
+            "name": "snot",
+            "expiration": "1d"
+        }))
+        .send()
+        .await?;
     let json = res.json::<StaticValue>().await?.into_value();
     let api_key_id = json.get_str("id").expect("id missing").to_string();
     let api_key = json
@@ -969,11 +956,7 @@ async fn auth_client_cert() -> Result<()> {
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
-        GenericImage::new(IMAGE, VERSION)
-            .with_env_var("ingest.geoip.downloader.enabled", "false")
-            .with_env_var("node.name", "snot")
-            .with_env_var("discovery.type", "single-node")
-            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+        default_image()
             .with_env_var("ELASTIC_PASSWORD", password)
             .with_env_var("xpack.security.enabled", "true")
             .with_env_var("xpack.security.http.ssl.client_authentication", "required")
@@ -1111,12 +1094,9 @@ async fn elastic_https() -> Result<()> {
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
-        GenericImage::new(IMAGE, VERSION)
-            .with_env_var("ingest.geoip.downloader.enabled", "false")
-            .with_env_var("node.name", "snot")
-            .with_env_var("discovery.type", "single-node")
-            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+        default_image()
             .with_env_var("ELASTIC_PASSWORD", password)
+            .with_env_var("node.name", "snot")
             .with_env_var("xpack.security.enabled", "true")
             .with_env_var("xpack.security.http.ssl.enabled", "true")
             .with_env_var(
