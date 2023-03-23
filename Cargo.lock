@@ -809,7 +809,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8161232eda10290f5136610a1eb9de56aceaccd70c963a26a260af20ac24794f"
 dependencies = [
  "base64-simd",
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "num-integer",
  "ryu",
  "time 0.3.17",
@@ -1622,7 +1622,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af91f40b7355f82b0a891f50e70399475945bb0b0da4f1700ce60761c9d3e359"
 dependencies = [
  "csv-core",
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "ryu",
  "serde",
 ]
@@ -2549,7 +2549,7 @@ checksum = "bd6effc99afb63425aff9b05836f029929e345a6148a14b7ecd5ab67af944482"
 dependencies = [
  "bytes 1.4.0",
  "fnv",
- "itoa 1.0.5",
+ "itoa 1.0.6",
 ]
 
 [[package]]
@@ -2637,7 +2637,7 @@ dependencies = [
  "http-body",
  "httparse",
  "httpdate",
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "pin-project-lite 0.2.9",
  "socket2",
  "tokio",
@@ -2850,9 +2850,9 @@ checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
 
 [[package]]
 name = "itoa"
-version = "1.0.5"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fad582f4b9e86b6caa621cabeb0963332d92eea04729ab12892c2533951e6440"
+checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
 
 [[package]]
 name = "jobserver"
@@ -4618,7 +4618,7 @@ version = "1.0.93"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cad406b69c91885b5107daf2c29572f6c8cdb3c66826821e286c533490c0bc76"
 dependencies = [
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "ryu",
  "serde",
 ]
@@ -4653,7 +4653,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
 dependencies = [
  "form_urlencoded",
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "ryu",
  "serde",
 ]
@@ -4699,7 +4699,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f82e6c8c047aa50a7328632d067bcae6ef38772a79e28daf32f735e0e4f3dd10"
 dependencies = [
  "indexmap",
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "ryu",
  "serde",
  "unsafe-libyaml",
@@ -4879,7 +4879,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e436a97551c1fcaf32577f3e0ce4fe09ca555ad85bd21e1d3bdab4dfc21fea19"
 dependencies = [
  "chrono",
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "ryu",
  "simd-json",
  "simd-json-derive-int",
@@ -5385,7 +5385,7 @@ version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a561bf4617eebd33bca6434b988f39ed798e527f51a1e797d0ee4f61c0a38376"
 dependencies = [
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "serde",
  "time-core",
  "time-macros 0.2.6",
@@ -5921,7 +5921,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "indexmap",
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "lazy_static",
  "lexical",
  "libflate",
@@ -6349,7 +6349,7 @@ checksum = "995de1aa349a0dc50f4aa40870dce12961a30229027230bad09acd2843edbe9e"
 dependencies = [
  "float-cmp",
  "halfbrown",
- "itoa 1.0.5",
+ "itoa 1.0.6",
  "ryu",
 ]
 
