@@ -16,7 +16,7 @@ indexmap = { version = "1", features = ["serde-1"] }
 rand = { version = "0.8", features = ["small_rng"] }
 lazy_static = "1"
 log = "0.4"
-lru = "0.9"
+lru = "0.10"
 petgraph = "0.6"
 regex = "1"
 rust-bert = { version = "0.20.0", optional = true }
