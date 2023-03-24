@@ -13,7 +13,11 @@
         "action.auto_create_index=true",
         "-e",
         "xpack.security.enabled=false",
-        "elasticsearch:8.6.1"
+        "-e",
+        "cluster.routing.allocation.disk.threshold_enabled=false",
+        "-e",
+        "ingest.geoip.downloader.enabled=false",
+        "elasticsearch:8.6.2"
     ],
     "await": {
         "http-ok": [
