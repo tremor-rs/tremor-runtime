@@ -13,7 +13,7 @@
 // limitations under the License.
 use super::prelude::*;
 use crate::{
-    ids::{FlowDefinitionId, FlowInstanceId},
+    ids::{AppFlowInstanceId, FlowDefinitionId},
     raft::archive::build_archive_from_source,
 };
 use std::collections::HashMap;
@@ -138,7 +138,7 @@ end;
     let app_id = client0.install(&archive).await?;
 
     let flow_id = FlowDefinitionId("main".to_string());
-    let instance = FlowInstanceId::new(app_id, "01".to_string());
+    let instance = AppFlowInstanceId::new(app_id, "01".to_string());
     let config = HashMap::new();
     let instance_id = client0.start(&flow_id, &instance, config, true).await?;
 

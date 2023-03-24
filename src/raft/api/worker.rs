@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::channel::{Receiver, Sender};
+use crate::channel::{OneShotSender, Receiver};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -23,9 +23,9 @@ use crate::{
 
 use super::apps::AppState;
 
-async fn send<T>(tx: Sender<T>, t: T) {
-    if let Err(e) = tx.send(t).await {
-        error!("Error sending response to API: {e}");
+fn send<T>(tx: OneShotSender<T>, t: T) {
+    if tx.send(t).is_err() {
+        error!("Error sending response to API");
     }
 }
 
@@ -34,7 +34,7 @@ pub(super) async fn api_worker(store: Arc<Store>, mut store_rx: Receiver<APIStor
         match msg {
             APIStoreReq::GetApp(app_id, tx) => {
                 let sm = store.state_machine.read().await;
-                send(tx, sm.apps.get_app(&app_id).cloned()).await;
+                send(tx, sm.apps.get_app(&app_id).cloned());
             }
             APIStoreReq::GetApps(tx) => {
                 let sm = store.state_machine.read().await;
@@ -44,28 +44,27 @@ pub(super) async fn api_worker(store: Arc<Store>, mut store_rx: Receiver<APIStor
                         .list()
                         .map(|(k, v)| (k.clone(), AppState::from(v)))
                         .collect::<HashMap<AppId, AppState>>(),
-                )
-                .await;
+                );
             }
             APIStoreReq::KVGet(k, tx) => {
                 let sm = store.state_machine.read().await;
                 let v = sm.kv.get(k.as_str()).ok().flatten(); // return errors as not-found here, this might be bad
-                send(tx, v).await;
+                send(tx, v);
             }
             APIStoreReq::GetNode(node_id, tx) => {
                 let sm = store.state_machine.read().await;
                 let node = sm.nodes.get_node(node_id).cloned();
-                send(tx, node).await;
+                send(tx, node);
             }
             APIStoreReq::GetNodes(tx) => {
                 let sm = store.state_machine.read().await;
                 let nodes = sm.nodes.get_nodes().clone();
-                send(tx, nodes).await;
+                send(tx, nodes);
             }
             APIStoreReq::GetNodeId(addr, tx) => {
                 let sm = store.state_machine.read().await;
                 let node_id = sm.nodes.find_node_id(&addr).copied();
-                send(tx, node_id).await;
+                send(tx, node_id);
             }
             APIStoreReq::GetLastMembership(tx) => {
                 let sm = store.state_machine.read().await;
@@ -73,7 +72,7 @@ pub(super) async fn api_worker(store: Arc<Store>, mut store_rx: Receiver<APIStor
                 let last_membership = membership
                     .and_then(|m| m.membership.get_configs().last().cloned())
                     .unwrap_or_default();
-                send(tx, last_membership).await;
+                send(tx, last_membership);
             }
         }
     }

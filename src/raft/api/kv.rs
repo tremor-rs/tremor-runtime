@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{
-    channel::bounded,
+    channel::oneshot,
     raft::{
         api::{APIError, APIRequest, APIResult, ToAPIResult},
         store::{TremorResponse, TremorSet},
@@ -56,14 +56,12 @@ async fn read(
     extract::State(state): extract::State<APIRequest>,
     extract::Json(key): extract::Json<String>,
 ) -> APIResult<TremorResponse> {
-    let (tx, mut rx) = bounded(1);
+    let (tx, rx) = oneshot();
     state
         .store_tx
         .send(super::APIStoreReq::KVGet(key, tx))
         .await?;
-    let value = timeout(API_WORKER_TIMEOUT, rx.recv())
-        .await?
-        .ok_or(APIError::Recv)?;
+    let value = timeout(API_WORKER_TIMEOUT, rx).await??;
     Ok(TremorResponse { value })
 }
 
@@ -81,14 +79,12 @@ async fn consistent_read(
         .to_api_result(&uri, &state)
         .await?;
     // here we are safe to read
-    let (tx, mut rx) = bounded(1);
+    let (tx, rx) = oneshot();
     state
         .store_tx
         .send(super::APIStoreReq::KVGet(key, tx))
         .await?;
-    let value = timeout(API_WORKER_TIMEOUT, rx.recv())
-        .await?
-        .ok_or(APIError::Recv)?;
+    let value = timeout(API_WORKER_TIMEOUT, rx).await??;
     // Ensure that we are still the leader at the end of the read so we can guarantee freshness
     state
         .raft

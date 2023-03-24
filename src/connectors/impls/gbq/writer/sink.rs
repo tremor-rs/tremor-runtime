@@ -676,7 +676,7 @@ mod test {
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
-    use crate::ids::{AppId, FlowInstanceId};
+    use crate::ids::{AppFlowInstanceId, AppId};
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
@@ -802,6 +802,7 @@ mod test {
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
+                None,
             ),
         );
 
@@ -832,6 +833,7 @@ mod test {
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
+                None,
             ),
         );
 
@@ -871,6 +873,7 @@ mod test {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
+                    None,
                 ),
             );
 
@@ -912,6 +915,7 @@ mod test {
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
+                None,
             ),
         );
 
@@ -1133,10 +1137,14 @@ mod test {
         let ctx = SinkContext::new(
             openraft::NodeId::default(),
             SinkUId::default(),
-            Alias::new(FlowInstanceId::new(AppId::default(), "flow"), "connector"),
+            Alias::new(
+                AppFlowInstanceId::new(AppId::default(), "flow"),
+                "connector",
+            ),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
+            None,
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![
@@ -1187,6 +1195,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
+            None,
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![
@@ -1233,6 +1242,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
+            None,
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![
@@ -1280,6 +1290,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
+            None,
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
@@ -1325,6 +1336,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
+            None,
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
@@ -1361,6 +1373,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
+            None,
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
@@ -1422,6 +1435,7 @@ mod test {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
+                    None,
                 ),
                 &mut EventSerializer::new(
                     None,
@@ -1465,6 +1479,7 @@ mod test {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
+                    None,
                 ),
                 &mut EventSerializer::new(
                     None,
@@ -1539,6 +1554,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
+            None,
         );
 
         sink.connect(&ctx, &Attempt::default()).await?;
@@ -1618,28 +1634,28 @@ mod test {
         let ctx = SinkContext::new(
             openraft::NodeId::default(),
             SinkUId::default(),
-            Alias::new(FlowInstanceId::new(AppId::default(), "flow"), "connector"),
+            Alias::new(
+                AppFlowInstanceId::new(AppId::default(), "flow"),
+                "connector",
+            ),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
+            None,
         );
 
         sink.connect(&ctx, &Attempt::default()).await?;
 
         let value = literal!([
             {
-                "data": {
-                    "value": {
-                        "a": "a".repeat(15*1024)
-                    },
-                    "meta": {}
-                }
+              "data": {
+               "value": {"a": "a".repeat(15*1024)},
+                "meta": {}
+              }
             },
             {
                 "data": {
-                    "value": {
-                        "a": "b".repeat(15*1024)
-                    },
+                    "value": {"a": "b".repeat(15*1024)},
                     "meta": {}
                 }
             }
@@ -1661,7 +1677,10 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new(FlowInstanceId::new(AppId::default(), "flow"), "connector"),
+                    &Alias::new(
+                        AppFlowInstanceId::new(AppId::default(), "flow"),
+                        "connector",
+                    ),
                 )?,
                 0,
             )

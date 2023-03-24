@@ -26,7 +26,7 @@ use std::path::Path;
 use tokio::{io::AsyncReadExt, task};
 use tremor_common::asy::file;
 use tremor_runtime::{
-    ids::{AppId, FlowDefinitionId, FlowInstanceId},
+    ids::{AppFlowInstanceId, AppId, FlowDefinitionId},
     raft::{
         api::client::{print_metrics, Tremor as Client},
         archive,
@@ -271,14 +271,14 @@ impl AppsCommands {
                     config.map_or_else(|| Ok(HashMap::new()), |c| serde_json::from_str(&c))?;
                 let flow = flow.map_or_else(|| FlowDefinitionId::from("main"), FlowDefinitionId);
                 let app_id = AppId(app);
-                let instance_id = FlowInstanceId::new(app_id, instance);
+                let instance_id = AppFlowInstanceId::new(app_id, instance);
                 match client.start(&flow, &instance_id, config, !paused).await {
                     Ok(instance_id) => println!("Instance `{instance_id}` successfully started",),
                     Err(e) => eprintln!("Instance `{instance_id}` failed to start: {e}"),
                 }
             }
             AppsCommands::Stop { app, instance } => {
-                let instance_id = FlowInstanceId::new(app, instance);
+                let instance_id = AppFlowInstanceId::new(app, instance);
                 match client.stop_instance(&instance_id).await {
                     Ok(instance_id) => println!("Instance `{instance_id}` stopped"),
                     Err(e) => eprintln!("Instance `{instance_id}` failed to stop: {e}"),
@@ -286,7 +286,7 @@ impl AppsCommands {
             }
             AppsCommands::Pause { app, instance } => {
                 let app_id = AppId(app);
-                let instance_id = FlowInstanceId::new(app_id, instance);
+                let instance_id = AppFlowInstanceId::new(app_id, instance);
                 match client
                     .change_instance_state(&instance_id, TremorInstanceState::Pause)
                     .await
@@ -296,7 +296,7 @@ impl AppsCommands {
                 }
             }
             AppsCommands::Resume { app, instance } => {
-                let instance_id = FlowInstanceId::new(app, instance);
+                let instance_id = AppFlowInstanceId::new(app, instance);
                 match client
                     .change_instance_state(&instance_id, TremorInstanceState::Resume)
                     .await

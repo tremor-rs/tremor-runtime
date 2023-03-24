@@ -276,7 +276,7 @@ mod tests {
             })
             .expect("No deploy in the given troy file");
         let app_id = AppId::default();
-        let flow_id = world.deploy_flow(app_id, &deploy).await?;
+        let flow_id = world.deploy_flow(app_id, &deploy, None).await?;
         world.start_flow(flow_id).await?;
 
         // check the status endpoint

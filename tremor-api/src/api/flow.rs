@@ -18,7 +18,7 @@ use crate::{
     api::prelude::*,
     model::{ApiConnectorStatusReport, ApiFlowStatusReport, PatchStatus},
 };
-use tremor_runtime::ids::FlowInstanceId;
+use tremor_runtime::ids::AppFlowInstanceId;
 
 pub(crate) async fn list_flows(req: Request) -> Result<Response> {
     let world = &req.state().world;
@@ -35,7 +35,7 @@ pub(crate) async fn get_flow(req: Request) -> Result<Response> {
     let world = &req.state().world;
     let app_id = req.param("app_id")?.to_string();
     let flow_id = req.param("id")?.to_string();
-    let flow_id = FlowInstanceId::new(app_id, flow_id);
+    let flow_id = AppFlowInstanceId::new(app_id, flow_id);
     let flow = world.get_flow(flow_id).await?;
     let report = flow.report_status().await?;
     reply(&req, ApiFlowStatusReport::from(report), StatusCode::Ok)
@@ -46,7 +46,7 @@ pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
     let world = &req.state().world;
     let app_id = req.param("app_id")?.to_string();
     let flow_id = req.param("id")?.to_string();
-    let flow_id = FlowInstanceId::new(app_id, flow_id);
+    let flow_id = AppFlowInstanceId::new(app_id, flow_id);
     let flow = world.get_flow(flow_id.clone()).await?;
     let current_status = flow.report_status().await?;
     let report = match (current_status.status, patch_status_payload.status) {
@@ -78,7 +78,7 @@ pub(crate) async fn get_flow_connectors(req: Request) -> Result<Response> {
     let world = &req.state().world;
     let app_id = req.param("app_id")?.to_string();
     let flow_id = req.param("id")?.to_string();
-    let flow_id = FlowInstanceId::new(app_id, flow_id);
+    let flow_id = AppFlowInstanceId::new(app_id, flow_id);
     let flow = world.get_flow(flow_id).await?;
     let connectors = flow.get_connectors().await?;
     let mut result: Vec<ApiConnectorStatusReport> = Vec::with_capacity(connectors.len());
@@ -93,7 +93,7 @@ pub(crate) async fn get_flow_connector_status(req: Request) -> Result<Response> 
     let world = &req.state().world;
     let app_id = req.param("app_id")?.to_string();
     let flow_id = req.param("id")?.to_string();
-    let flow_id = FlowInstanceId::new(app_id, flow_id);
+    let flow_id = AppFlowInstanceId::new(app_id, flow_id);
     let connector_id = req.param("connector")?.to_string();
     let flow = world.get_flow(flow_id).await?;
 
@@ -106,7 +106,7 @@ pub(crate) async fn patch_flow_connector_status(mut req: Request) -> Result<Resp
     let patch_status_payload: PatchStatus = req.body_json().await?;
     let app_id = req.param("app_id")?.to_string();
     let flow_id = req.param("id")?.to_string();
-    let flow_id = FlowInstanceId::new(app_id, flow_id);
+    let flow_id = AppFlowInstanceId::new(app_id, flow_id);
     let connector_id = req.param("connector")?.to_string();
 
     let world = &req.state().world;

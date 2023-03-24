@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{collections::HashSet, sync::Arc};
-
 use crate::{
-    ids::{AppId, FlowDefinitionId, FlowInstanceId},
+    channel::Sender,
+    ids::{AppFlowInstanceId, AppId, FlowDefinitionId, InstanceId},
     instance::IntendedState,
     raft::{
+        api::APIStoreReq,
         archive::{extract, get_app, TremorAppDef},
         store::{
             self,
@@ -29,6 +29,7 @@ use crate::{
 };
 use rocksdb::ColumnFamily;
 use std::collections::HashMap;
+use std::{collections::HashSet, sync::Arc};
 use tremor_script::{
     arena::{self, Arena},
     ast::{
@@ -44,16 +45,16 @@ use tremor_script::{
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FlowInstance {
     /// Identifier of the instance
-    pub id: FlowInstanceId,
+    pub id: AppFlowInstanceId,
     /// the id of the flow definition this instance is based upon
     pub definition: FlowDefinitionId,
     pub config: HashMap<String, simd_json::OwnedValue>,
     pub state: IntendedState,
 }
-pub type Instances = HashMap<String, FlowInstance>;
+pub type Instances = HashMap<InstanceId, FlowInstance>;
 
 #[derive(Debug, Clone)]
-pub(crate) struct StateApp {
+pub struct StateApp {
     pub app: TremorAppDef,
     pub instances: Instances,
     /// we keep the arena indices around, so we can safely delete its contents
@@ -66,6 +67,7 @@ pub(crate) struct AppsStateMachine {
     db: Arc<rocksdb::DB>,
     apps: HashMap<AppId, StateApp>,
     world: Runtime,
+    raft_api_tx: Sender<APIStoreReq>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -79,7 +81,11 @@ pub(crate) struct AppsSnapshot {
 
 #[async_trait::async_trait]
 impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
-    async fn load(db: &Arc<rocksdb::DB>, world: &Runtime) -> Result<Self, store::Error>
+    async fn load(
+        db: &Arc<rocksdb::DB>,
+        world: &Runtime,
+        raft_api_tx: Sender<APIStoreReq>,
+    ) -> Result<Self, store::Error>
     where
         Self: std::marker::Sized,
     {
@@ -87,6 +93,7 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
             db: db.clone(),
             apps: HashMap::new(),
             world: world.clone(),
+            raft_api_tx,
         };
         // load apps
         for kv in db.iterator_cf(Self::cf_apps(db)?, rocksdb::IteratorMode::Start) {
@@ -176,7 +183,7 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                             // same flow, same config, different state - just change state
 
                             self.change_flow_state(
-                                &FlowInstanceId::new(app_id.clone(), instance_id),
+                                &AppFlowInstanceId::new(app_id.clone(), instance_id.clone()),
                                 s_flow.state,
                             )
                             .await
@@ -184,21 +191,20 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                         }
                     } else {
                         // stop and remove instances that are not in the snapshot
-                        self.stop_and_remove_flow(&FlowInstanceId::new(
+                        self.stop_and_remove_flow(&AppFlowInstanceId::new(
                             app_id.clone(),
-                            instance_id,
+                            instance_id.clone(),
                         ))
                         .await?;
                     }
                 }
                 // deploy instances that are not in self
                 for (s_instance_id, s_flow) in snapshot_instances {
-                    let flow_id = FlowInstanceId::new(app_id.clone(), s_instance_id);
-                    if !instances.contains_key(flow_id.alias()) {
+                    if !instances.contains_key(s_instance_id) {
                         self.deploy_flow(
                             app_id,
                             s_flow.definition.clone(),
-                            flow_id,
+                            AppFlowInstanceId::new(app_id.clone(), s_instance_id.clone()),
                             s_flow.config.clone(),
                             s_flow.state,
                         )
@@ -325,7 +331,7 @@ impl AppsStateMachine {
         &mut self,
         app_id: &AppId,
         flow: FlowDefinitionId,
-        instance: FlowInstanceId,
+        instance: AppFlowInstanceId,
         config: HashMap<String, simd_json::OwnedValue>,
         intended_state: IntendedState,
     ) -> StorageResult<()> {
@@ -387,12 +393,12 @@ impl AppsStateMachine {
                 vec![app_id.0.clone()],
                 mid,
             ),
-            instance_alias: instance.alias().to_string(),
+            instance_alias: instance.instance_id().to_string(),
             defn,
             docs: None,
         };
         app.instances.insert(
-            instance.alias().to_string(),
+            instance.instance_id().clone(),
             FlowInstance {
                 id: instance.clone(),
                 definition: flow,
@@ -412,7 +418,7 @@ impl AppsStateMachine {
 
         // deploy the flow but don't start it yet
         self.world
-            .deploy_flow(app_id.clone(), &deploy)
+            .deploy_flow(app_id.clone(), &deploy, Some(self.raft_api_tx.clone()))
             .await
             .map_err(sm_w_err)?;
         // change the flow state to the intended state
@@ -423,15 +429,15 @@ impl AppsStateMachine {
         Ok(())
     }
 
-    async fn stop_and_remove_flow(&mut self, instance_id: &FlowInstanceId) -> StorageResult<()> {
+    async fn stop_and_remove_flow(&mut self, instance_id: &AppFlowInstanceId) -> StorageResult<()> {
         info!("Stop and remove flow {instance_id}");
         if let Some(app) = self.apps.get_mut(instance_id.app_id()) {
-            if app.instances.get(instance_id.alias()).is_some() {
+            if app.instances.get(instance_id.instance_id()).is_some() {
                 self.world
                     .stop_flow(instance_id.clone())
                     .await
                     .map_err(sm_d_err)?;
-                app.instances.remove(instance_id.alias());
+                app.instances.remove(instance_id.instance_id());
             }
         }
         Ok(())
@@ -446,7 +452,7 @@ impl AppsStateMachine {
             }
             // stop instances then delete the app
             for (instance_id, _instance) in app.instances {
-                let flow_instance_id = FlowInstanceId::new(app.app.name().clone(), instance_id);
+                let flow_instance_id = AppFlowInstanceId::new(app.app.name().clone(), instance_id);
                 self.world
                     .stop_flow(flow_instance_id)
                     .await
@@ -468,7 +474,7 @@ impl AppsStateMachine {
 
     async fn change_flow_state(
         &mut self,
-        instance_id: &FlowInstanceId,
+        instance_id: &AppFlowInstanceId,
         intended_state: IntendedState,
     ) -> StorageResult<()> {
         info!("Change flow state {instance_id} to {intended_state}");
@@ -478,7 +484,7 @@ impl AppsStateMachine {
             .ok_or_else(|| store::Error::MissingApp(instance_id.app_id().clone()))?;
         let instance = app
             .instances
-            .get_mut(instance_id.alias())
+            .get_mut(instance_id.instance_id())
             .ok_or_else(|| store::Error::MissingInstance(instance_id.clone()))?;
         // set the intended state in our state machine
         instance.state = intended_state;

@@ -409,7 +409,7 @@ pub(crate) mod tests {
             impls::gcs::streamer::Mode, reconnect::ConnectionLostNotifier,
             utils::quiescence::QuiescenceBeacon,
         },
-        ids::FlowInstanceId,
+        ids::AppFlowInstanceId,
     };
     use halfbrown::HashMap;
     use tremor_common::uids::{ConnectorUIdGen, SinkUId};
@@ -528,7 +528,7 @@ pub(crate) mod tests {
         });
 
         let mut config = Config::new(&raw_config).expect("config should be valid");
-        let alias = Alias::new(FlowInstanceId::new("app", "flow"), "conn");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "flow"), "conn");
         config.normalize(&alias);
         assert_eq!(256 * 1024, config.buffer_size);
     }
@@ -568,7 +568,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
             openraft::NodeId::default(),
             SinkUId::default(),
@@ -576,6 +576,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            None,
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -754,7 +755,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
             openraft::NodeId::default(),
             SinkUId::default(),
@@ -762,6 +763,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            None,
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -928,7 +930,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
             openraft::NodeId::default(),
             SinkUId::default(),
@@ -936,6 +938,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            None,
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1023,7 +1026,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
             openraft::NodeId::default(),
             SinkUId::default(),
@@ -1031,6 +1034,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            None,
         );
 
         // simulate sink lifecycle
@@ -1077,7 +1081,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
             openraft::NodeId::default(),
             SinkUId::default(),
@@ -1085,6 +1089,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            None,
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1302,7 +1307,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(FlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
             openraft::NodeId::default(),
             SinkUId::default(),
@@ -1310,6 +1315,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            None,
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1451,7 +1457,7 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new(FlowInstanceId::new("app", "snot"), "badger");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "snot"), "badger");
         let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
@@ -1462,6 +1468,7 @@ pub(crate) mod tests {
             &builder,
             cfg,
             &kill_switch,
+            None,
         )
         .await?;
         let (tx, mut rx) = bounded(1);
@@ -1487,7 +1494,7 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new(FlowInstanceId::new("app", "snot"), "badger");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "snot"), "badger");
         let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
@@ -1498,6 +1505,7 @@ pub(crate) mod tests {
             &builder,
             cfg,
             &kill_switch,
+            None,
         )
         .await?;
         let (tx, mut rx) = bounded(1);

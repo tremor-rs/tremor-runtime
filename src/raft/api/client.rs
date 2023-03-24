@@ -14,7 +14,7 @@
 
 //! Tremor Rest API Client
 use crate::errors::Result;
-use crate::ids::{AppId, FlowDefinitionId, FlowInstanceId};
+use crate::ids::{AppFlowInstanceId, AppId, FlowDefinitionId};
 use crate::raft::{
     api::apps::AppState,
     node::Addr,
@@ -185,16 +185,16 @@ impl Tremor {
     pub async fn start(
         &self,
         flow: &FlowDefinitionId,
-        instance: &FlowInstanceId,
+        instance: &AppFlowInstanceId,
         config: std::collections::HashMap<String, OwnedValue>,
         running: bool,
-    ) -> ClientResult<FlowInstanceId> {
+    ) -> ClientResult<AppFlowInstanceId> {
         let req = TremorStart {
             instance: instance.clone(),
             config,
             running,
         };
-        self.api_req::<TremorStart, FlowInstanceId>(
+        self.api_req::<TremorStart, AppFlowInstanceId>(
             &format!("api/apps/{}/flows/{flow}", instance.app_id()),
             Method::POST,
             Some(&req),
@@ -213,14 +213,14 @@ impl Tremor {
     /// if the api call fails
     pub async fn change_instance_state(
         &self,
-        instance: &FlowInstanceId,
+        instance: &AppFlowInstanceId,
         state: TremorInstanceState,
-    ) -> ClientResult<FlowInstanceId> {
+    ) -> ClientResult<AppFlowInstanceId> {
         self.api_req(
             &format!(
                 "api/apps/{}/instances/{}",
                 instance.app_id(),
-                instance.alias()
+                instance.instance_id()
             ),
             Method::POST,
             Some(&state),
@@ -237,12 +237,15 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn stop_instance(&self, instance: &FlowInstanceId) -> ClientResult<FlowInstanceId> {
+    pub async fn stop_instance(
+        &self,
+        instance: &AppFlowInstanceId,
+    ) -> ClientResult<AppFlowInstanceId> {
         self.api_req(
             &format!(
                 "api/apps/{}/instances/{}",
                 instance.app_id(),
-                instance.alias()
+                instance.instance_id()
             ),
             Method::DELETE,
             None::<&()>,
@@ -406,9 +409,8 @@ Cluster:
         println!(
             r#"
 Membership:
-    Log: {}
+    Log: {log_id}
     Nodes:"#,
-            log_id,
         );
         for id in config {
             println!("     - {id}");

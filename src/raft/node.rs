@@ -16,6 +16,7 @@
 use crate::{
     channel::{bounded, Sender},
     errors::Result,
+    qsize,
     raft::{
         api::{self, ServerState},
         network::{raft, Raft as TarPCRaftService},
@@ -260,14 +261,22 @@ impl Node {
 
         let world_config = WorldConfig::default(); // TODO: make configurable
         let (runtime, runtime_handle) = Runtime::start(node_id, world_config).await?;
+        let (store_tx, store_rx) = bounded(qsize());
 
-        let store: Arc<Store> = Store::load(Arc::new(db), runtime.clone()).await?;
+        let store: Arc<Store> =
+            Store::load(Arc::new(db), runtime.clone(), store_tx.clone()).await?;
         let node = Self::new(db_dir, raft_config.clone());
 
         let network = Network::new(store.clone());
         let raft = Raft::new(node_id, node.raft_config.clone(), network, store.clone());
-        let (api_worker_handle, server_state) =
-            api::initialize(node_id, addr, raft.clone(), store.clone());
+        let (api_worker_handle, server_state) = api::initialize(
+            node_id,
+            addr,
+            raft.clone(),
+            store.clone(),
+            store_tx,
+            store_rx,
+        );
         Running::start(
             node,
             raft,
@@ -322,10 +331,19 @@ impl Node {
 
         let world_config = WorldConfig::default(); // TODO: make configurable
         let (runtime, runtime_handle) = Runtime::start(node_id, world_config).await?;
-        let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
+        let (store_tx, store_rx) = bounded(qsize());
+        let store = Store::bootstrap(
+            node_id,
+            &addr,
+            &self.db_dir,
+            runtime.clone(),
+            store_tx.clone(),
+        )
+        .await?;
         let network = Network::new(store.clone());
         let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone());
-        let (api_worker_handle, server_state) = api::initialize(node_id, addr, raft.clone(), store);
+        let (api_worker_handle, server_state) =
+            api::initialize(node_id, addr, raft.clone(), store, store_tx, store_rx);
         let running = Running::start(
             self.clone(),
             raft,
@@ -363,7 +381,16 @@ impl Node {
         let node_id = openraft::NodeId::default();
         let world_config = WorldConfig::default(); // TODO: make configurable
         let (runtime, runtime_handle) = Runtime::start(node_id, world_config).await?;
-        let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
+        let (store_tx, store_rx) = bounded(qsize());
+
+        let store = Store::bootstrap(
+            node_id,
+            &addr,
+            &self.db_dir,
+            runtime.clone(),
+            store_tx.clone(),
+        )
+        .await?;
         let network = Network::new(store.clone());
 
         let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone());
@@ -393,7 +420,7 @@ impl Node {
                     })?;
                 debug_assert_eq!(node_id, assigned_node_id, "Adding initial leader resulted in a differing node_id: {assigned_node_id}, expected: {node_id}");
                 let (worker_handle, server_state) =
-                    api::initialize(node_id, addr, raft.clone(), store);
+                    api::initialize(node_id, addr, raft.clone(), store, store_tx, store_rx);
 
                 Running::start(
                     self.clone(),

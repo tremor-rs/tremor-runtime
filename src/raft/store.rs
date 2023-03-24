@@ -17,8 +17,9 @@ mod statemachine;
 pub(crate) use self::statemachine::apps::{FlowInstance, Instances, StateApp};
 use self::statemachine::{SerializableTremorStateMachine, TremorStateMachine};
 use crate::{
+    channel::Sender,
     errors::Error as RuntimeError,
-    ids::{AppId, FlowDefinitionId, FlowInstanceId},
+    ids::{AppFlowInstanceId, AppId, FlowDefinitionId},
     instance::IntendedState,
     raft::{archive::TremorAppDef, ClusterError},
     system::Runtime,
@@ -45,7 +46,7 @@ use std::{
 };
 use tokio::sync::RwLock;
 
-use super::node::Addr;
+use super::{api::APIStoreReq, node::Addr};
 
 /// Kv Operation
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -80,17 +81,17 @@ pub enum AppsRequest {
     Deploy {
         app: AppId,
         flow: FlowDefinitionId,
-        instance: FlowInstanceId,
+        instance: AppFlowInstanceId,
         config: std::collections::HashMap<String, OwnedValue>,
         state: IntendedState,
     },
 
     /// Stopps and Undeploys an instance of a app
-    Undeploy(FlowInstanceId),
+    Undeploy(AppFlowInstanceId),
 
     /// Requests a instance state change
     InstanceStateChange {
-        instance: FlowInstanceId,
+        instance: AppFlowInstanceId,
         state: IntendedState,
     },
 }
@@ -113,7 +114,7 @@ impl AppData for TremorRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct TremorStart {
-    pub(crate) instance: FlowInstanceId,
+    pub(crate) instance: AppFlowInstanceId,
     pub(crate) config: std::collections::HashMap<String, OwnedValue>,
     pub(crate) running: bool,
 }
@@ -212,7 +213,7 @@ pub enum Error {
     TremorScript(Mutex<tremor_script::errors::Error>),
     MissingApp(AppId),
     MissingFlow(AppId, FlowDefinitionId),
-    MissingInstance(FlowInstanceId),
+    MissingInstance(AppFlowInstanceId),
     RunningInstances(AppId),
     NodeAlreadyAdded(openraft::NodeId),
     Other(Box<dyn std::error::Error + Send + Sync>),
@@ -724,13 +725,14 @@ impl Store {
         addr: &Addr,
         db_path: P,
         world: Runtime,
+        raft_api_tx: Sender<APIStoreReq>,
     ) -> Result<Arc<Store>, ClusterError> {
         let db = Self::init_db(db_path)?;
         Self::set_self(&db, node_id, addr)?;
 
         let db = Arc::new(db);
         let state_machine = RwLock::new(
-            TremorStateMachine::new(db.clone(), world.clone())
+            TremorStateMachine::new(db.clone(), world, raft_api_tx)
                 .await
                 .map_err(Error::from)?,
         );
@@ -752,9 +754,13 @@ impl Store {
     }
 
     /// loading constructor - loading the given database
-    pub(crate) async fn load(db: Arc<DB>, world: Runtime) -> Result<Arc<Store>, ClusterError> {
+    pub(crate) async fn load(
+        db: Arc<DB>,
+        world: Runtime,
+        raft_api_tx: Sender<APIStoreReq>,
+    ) -> Result<Arc<Store>, ClusterError> {
         let state_machine = RwLock::new(
-            TremorStateMachine::new(db.clone(), world.clone())
+            TremorStateMachine::new(db.clone(), world.clone(), raft_api_tx)
                 .await
                 .map_err(Error::from)?,
         );

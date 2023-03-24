@@ -18,7 +18,7 @@ use crate::{
 use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
     errors::{pipe_send_e, Result},
-    ids::FlowInstanceId,
+    ids::AppFlowInstanceId,
     instance::State,
     primerge::PriorityMerge,
 };
@@ -39,13 +39,13 @@ type EventSet = Vec<(Port<'static>, Event)>;
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
 pub(crate) struct Alias {
-    flow_alias: FlowInstanceId,
+    flow_alias: AppFlowInstanceId,
     pipeline_alias: String,
 }
 
 impl Alias {
     pub(crate) fn new(
-        flow_alias: impl Into<FlowInstanceId>,
+        flow_alias: impl Into<AppFlowInstanceId>,
         pipeline_alias: impl Into<String>,
     ) -> Self {
         Self {
@@ -54,7 +54,7 @@ impl Alias {
         }
     }
 
-    pub(crate) fn flow_alias(&self) -> &FlowInstanceId {
+    pub(crate) fn flow_alias(&self) -> &AppFlowInstanceId {
         &self.flow_alias
     }
 
@@ -735,19 +735,19 @@ mod tests {
             tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(
             openraft::NodeId::default(),
-            Alias::new(FlowInstanceId::new("app", "report"), "test-pipe1"),
+            Alias::new(AppFlowInstanceId::new("app", "report"), "test-pipe1"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr2 = spawn(
             openraft::NodeId::default(),
-            Alias::new(FlowInstanceId::new("app", "report"), "test-pipe2"),
+            Alias::new(AppFlowInstanceId::new("app", "report"), "test-pipe2"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr3 = spawn(
             openraft::NodeId::default(),
-            Alias::new(FlowInstanceId::new("app", "report"), "test-pipe3"),
+            Alias::new(AppFlowInstanceId::new("app", "report"), "test-pipe3"),
             &query,
             &mut operator_id_gen,
         )?;
@@ -840,7 +840,7 @@ mod tests {
         let mut operator_id_gen = OperatorUIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
-        let pipeline_id = Alias::new(FlowInstanceId::new("app", "flow"), "test-pipe");
+        let pipeline_id = Alias::new(AppFlowInstanceId::new("app", "flow"), "test-pipe");
         let query =
             tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(

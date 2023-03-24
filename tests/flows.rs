@@ -17,7 +17,7 @@ use std::time::Duration;
 use tremor_common::file;
 use tremor_runtime::{
     errors::*,
-    ids::{AppId, FlowInstanceId},
+    ids::{AppFlowInstanceId, AppId},
     system::{Runtime, ShutdownMode, WorldConfig},
 };
 use tremor_script::{deploy::Deploy, module::Manager};
@@ -56,8 +56,8 @@ macro_rules! test_cases {
                             let (runtime, h) = Runtime::start(openraft::NodeId::default(), config).await?;
                             let app_id = AppId::default();
                             for flow in deployable.iter_flows() {
-                                let flow_alias = FlowInstanceId::new(app_id.clone(), &flow.instance_alias);
-                                runtime.deploy_flow(app_id.clone(), flow).await?;
+                                let flow_alias = AppFlowInstanceId::new(app_id.clone(), flow.instance_alias.clone());
+                                runtime.deploy_flow(app_id.clone(), flow, None).await?;
                                 runtime.start_flow(flow_alias).await?;
                             }
                             runtime.stop(ShutdownMode::Forceful).await?;
@@ -65,7 +65,7 @@ macro_rules! test_cases {
                             tokio::time::timeout(Duration::from_secs(10), h).await???;
                         },
                         otherwise => {
-                            println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
+                            println!("Expected valid deployment file, compile phase, but got an unexpected error: {otherwise:?}");
                             assert!(false);
                         }
                     }

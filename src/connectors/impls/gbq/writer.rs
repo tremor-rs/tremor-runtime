@@ -90,7 +90,7 @@ mod tests {
     use crate::connectors::sink::builder;
     use crate::connectors::utils::quiescence::QuiescenceBeacon;
     use crate::connectors::{reconnect::ConnectionLostNotifier, utils::metrics::SinkReporter};
-    use crate::ids::FlowInstanceId;
+    use crate::ids::AppFlowInstanceId;
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn can_spawn_sink() -> Result<()> {
@@ -108,17 +108,18 @@ mod tests {
                 SinkContext::new(
                     openraft::NodeId::default(),
                     SinkUId::default(),
-                    Alias::new(FlowInstanceId::new("app", "a"), "b"),
+                    Alias::new(AppFlowInstanceId::new("app", "a"), "b"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(crate::channel::bounded(128).0),
+                    None,
                 ),
                 builder(
                     &ConnectorConfig::default(),
                     CodecReq::Structured,
-                    &Alias::new(FlowInstanceId::new("app", "a"), "b"),
+                    &Alias::new(AppFlowInstanceId::new("app", "a"), "b"),
                     SinkReporter::new(
-                        Alias::new(FlowInstanceId::new("app", "a"), "b"),
+                        Alias::new(AppFlowInstanceId::new("app", "a"), "b"),
                         broadcast::channel(1).0,
                         None,
                     ),

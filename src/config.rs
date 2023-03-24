@@ -322,7 +322,7 @@ mod tests {
     use serde::Deserialize;
 
     use super::*;
-    use crate::{errors::Result, ids::FlowInstanceId};
+    use crate::{errors::Result, ids::AppFlowInstanceId};
 
     #[test]
     fn test_reconnect_serde() -> Result<()> {
@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn test_config_builtin_preproc_with_config() -> Result<()> {
         let c = Connector::from_config(
-            &Alias::new(FlowInstanceId::new("app", "flow"), "my_otel_client"),
+            &Alias::new(AppFlowInstanceId::new("app", "flow"), "my_otel_client"),
             ConnectorType::from("otel_client".to_string()),
             &literal!({
                 "preprocessors": [ {"name": "snot", "config": { "separator": "\n" }}],
@@ -382,7 +382,7 @@ mod tests {
             "reconnect": {},
             "metrics_interval_s": "wrong_type"
         });
-        let id = Alias::new(FlowInstanceId::new("app", "flow"), "my_id");
+        let id = Alias::new(AppFlowInstanceId::new("app", "flow"), "my_id");
         let res = Connector::from_config(&id, "fancy_schmancy".into(), &config);
         assert!(res.is_err());
         assert_eq!(String::from("Invalid Definition for connector \"app/flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());

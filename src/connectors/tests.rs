@@ -68,7 +68,7 @@ use crate::{
         StatusReport,
     },
     errors::Result,
-    ids::FlowInstanceId,
+    ids::AppFlowInstanceId,
     instance::State,
     pipeline, qsize, Event,
 };
@@ -98,7 +98,7 @@ impl ConnectorHarness {
         input_ports: Vec<Port<'static>>,
         output_ports: Vec<Port<'static>>,
     ) -> Result<Self> {
-        let alias = ConnectorAlias::new(FlowInstanceId::new("app", "test"), alias);
+        let alias = ConnectorAlias::new(AppFlowInstanceId::new("app", "test"), alias);
         let mut connector_id_gen = ConnectorUIdGen::new();
         let mut known_connectors = HashMap::new();
 
@@ -113,6 +113,7 @@ impl ConnectorHarness {
             builder,
             raw_config,
             &kill_switch,
+            None,
         )
         .await?;
         let mut pipes = HashMap::new();
@@ -377,7 +378,7 @@ impl TestPipeline {
         self.addr.send_mgmt(pipeline::MgmtMsg::Stop).await
     }
     pub(crate) fn new(alias: String) -> Self {
-        let flow_id = FlowInstanceId::new("TEST", "test");
+        let flow_id = AppFlowInstanceId::new("TEST", "test");
         let qsize = qsize();
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = unbounded();

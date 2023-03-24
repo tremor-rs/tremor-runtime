@@ -30,7 +30,7 @@ jobs:
 
     env:
       TREMOR_PATH: "${{ github.workspace }}/tremor-script/lib:${{ github.workspace }}/tremor-cli/tests/lib"
-      RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }} --cfg tokio_unstable
+      RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }}
 
     runs-on: ${{ matrix.os }}
     steps:

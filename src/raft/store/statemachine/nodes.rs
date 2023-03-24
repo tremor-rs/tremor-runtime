@@ -15,25 +15,26 @@
 //! nodes raft sub-statemachine
 //! handling all the nodes that are known to the cluster and is responsible for assigning node ids
 
-use rocksdb::ColumnFamily;
-use std::collections::HashMap;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
-
 use crate::{
+    channel::Sender,
     raft::{
+        api::APIStoreReq,
         node::Addr,
         store::{
-            bin_to_id, id_to_bin, store_w_err, Error as StoreError, StorageResult, TremorResponse,
-        },
-        store::{
+            bin_to_id, id_to_bin,
             statemachine::{sm_d_err, sm_w_err, RaftStateMachine},
-            NodesRequest,
+            store_w_err, Error as StoreError, NodesRequest, StorageResult, TremorResponse,
         },
     },
     system::Runtime,
+};
+use rocksdb::ColumnFamily;
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -56,7 +57,11 @@ impl NodesStateMachine {
 
 #[async_trait::async_trait]
 impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
-    async fn load(db: &Arc<rocksdb::DB>, _world: &Runtime) -> Result<Self, StoreError>
+    async fn load(
+        db: &Arc<rocksdb::DB>,
+        _world: &Runtime,
+        _raft_api_tx: Sender<APIStoreReq>,
+    ) -> Result<Self, StoreError>
     where
         Self: std::marker::Sized,
     {

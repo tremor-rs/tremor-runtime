@@ -23,8 +23,8 @@ pub(crate) mod worker;
 
 use self::apps::AppState;
 use crate::{
-    channel::{bounded, Sender},
-    ids::{AppId, FlowDefinitionId, FlowInstanceId},
+    channel::{oneshot, OneShotSender, Receiver, Sender},
+    ids::{AppFlowInstanceId, AppId, FlowDefinitionId},
     raft::{
         node::Addr,
         store::{self, StateApp, Store, TremorResponse},
@@ -54,15 +54,17 @@ pub type APIResult<T> = Result<T, APIError>;
 
 const API_WORKER_TIMEOUT: Duration = Duration::from_secs(5);
 
+pub(crate) type ReplySender<T> = OneShotSender<T>;
+
 #[derive(Debug)]
-enum APIStoreReq {
-    GetApp(AppId, Sender<Option<StateApp>>),
-    GetApps(Sender<HashMap<AppId, AppState>>),
-    KVGet(String, Sender<Option<String>>),
-    GetNode(NodeId, Sender<Option<Addr>>),
-    GetNodes(Sender<HashMap<NodeId, Addr>>),
-    GetNodeId(Addr, Sender<Option<NodeId>>),
-    GetLastMembership(Sender<BTreeSet<NodeId>>),
+pub enum APIStoreReq {
+    GetApp(AppId, ReplySender<Option<StateApp>>),
+    GetApps(ReplySender<HashMap<AppId, AppState>>),
+    KVGet(String, ReplySender<Option<String>>),
+    GetNode(NodeId, ReplySender<Option<Addr>>),
+    GetNodes(ReplySender<HashMap<NodeId, Addr>>),
+    GetNodeId(Addr, ReplySender<Option<NodeId>>),
+    GetLastMembership(ReplySender<BTreeSet<NodeId>>),
 }
 
 pub(crate) struct ServerState {
@@ -86,8 +88,9 @@ pub(crate) fn initialize(
     addr: Addr,
     raft: TremorRaftImpl,
     store: Arc<Store>,
+    store_tx: Sender<APIStoreReq>,
+    store_rx: Receiver<APIStoreReq>,
 ) -> (JoinHandle<()>, Arc<ServerState>) {
-    let (store_tx, store_rx) = bounded(64); // arbitrary choice to block upon too much concurrent incoming requests
     let handle = tokio::task::spawn(worker::api_worker(store, store_rx));
     let state = Arc::new(ServerState {
         id,
@@ -128,14 +131,14 @@ pub enum AppError {
     /// app not found
     AppNotFound(AppId),
     FlowNotFound(AppId, FlowDefinitionId),
-    InstanceNotFound(FlowInstanceId),
+    InstanceNotFound(AppFlowInstanceId),
     /// App has at least 1 running instances (and thus cannot be uninstalled)
-    HasInstances(AppId, Vec<FlowInstanceId>),
-    InstanceAlreadyExists(FlowInstanceId),
+    HasInstances(AppId, Vec<AppFlowInstanceId>),
+    InstanceAlreadyExists(AppFlowInstanceId),
     /// provided flow args are invalid
     InvalidArgs {
         flow: FlowDefinitionId,
-        instance: FlowInstanceId,
+        instance: AppFlowInstanceId,
         errors: Vec<ArgsError>,
     },
 }
@@ -160,12 +163,12 @@ impl std::fmt::Display for AppError {
                 f,
                 "App \"{}\" already has an instance \"{}\"",
                 instance_id.app_id(),
-                instance_id.alias()
+                instance_id.instance_id()
             ),
             Self::InstanceNotFound(instance_id) => write!(
                 f,
                 "No instance \"{}\" in App \"{}\" found",
-                instance_id.alias(),
+                instance_id.instance_id(),
                 instance_id.app_id()
             ),
             Self::FlowNotFound(app_id, flow_id) => {
@@ -337,13 +340,13 @@ where
     T: serde::Serialize + serde::Deserialize<'static>,
 {
     Err(if let Some(leader_id) = e.leader_id {
-        let (tx, mut rx) = bounded(1);
+        let (tx, rx) = oneshot();
         state
             .store_tx
             .send(APIStoreReq::GetNode(leader_id, tx))
             .await?;
         // we can only forward to the leader if we have the node in our state machine
-        if let Some(leader_addr) = timeout(API_WORKER_TIMEOUT, rx.recv()).await?.flatten() {
+        if let Some(leader_addr) = timeout(API_WORKER_TIMEOUT, rx).await?? {
             let mut leader_url = url::Url::parse(&format!(
                 "{}://{}",
                 uri.scheme()
@@ -439,6 +442,13 @@ impl From<crate::Error> for APIError {
 impl<T> From<crate::channel::SendError<T>> for APIError {
     fn from(e: crate::channel::SendError<T>) -> Self {
         Self::Other(e.to_string())
+    }
+}
+
+impl From<tokio::sync::oneshot::error::RecvError> for APIError {
+    fn from(_: tokio::sync::oneshot::error::RecvError) -> Self {
+        // FIXME: add error
+        Self::Recv
     }
 }
 

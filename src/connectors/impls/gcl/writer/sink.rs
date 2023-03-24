@@ -253,7 +253,7 @@ mod test {
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
-    use crate::ids::{AppId, FlowInstanceId};
+    use crate::ids::{AppFlowInstanceId, AppId};
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
@@ -370,6 +370,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            None,
         );
 
         sink.connect(&sink_context, &Attempt::default()).await?;
@@ -395,7 +396,7 @@ mod test {
                 CodecReq::Structured,
                 vec![],
                 &"a".into(),
-                &Alias::new(FlowInstanceId::new(AppId::default(), "a"), "b"),
+                &Alias::new(AppFlowInstanceId::new(AppId::default(), "a"), "b"),
             )?,
             0,
         )
@@ -463,17 +464,18 @@ mod test {
                 &SinkContext::new(
                     openraft::NodeId::default(),
                     SinkUId::default(),
-                    Alias::new(FlowInstanceId::new(AppId::default(), ""), ""),
+                    Alias::new(AppFlowInstanceId::new(AppId::default(), ""), ""),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
+                    None,
                 ),
                 &mut EventSerializer::new(
                     None,
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new(FlowInstanceId::new(AppId::default(), ""), ""),
+                    &Alias::new(AppFlowInstanceId::new(AppId::default(), ""), ""),
                 )?,
                 0,
             )

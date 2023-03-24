@@ -16,9 +16,10 @@ use crate::{
     channel::{bounded, Sender},
     connectors::{self, ConnectorBuilder, ConnectorType},
     errors::{empty_error, Kind as ErrorKind, Result},
-    ids::{AppId, FlowInstanceId},
+    ids::{AppFlowInstanceId, AppId},
     instance::IntendedState,
     log_error, qsize,
+    raft::api::APIStoreReq,
     system::{flow::Flow, KillSwitch, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT},
 };
 use std::collections::{hash_map::Entry, HashMap};
@@ -42,12 +43,14 @@ pub(crate) enum Msg {
         /// the `deploy flow` AST
         flow: Box<DeployFlow<'static>>,
         /// result sender
-        sender: oneshot::Sender<Result<FlowInstanceId>>,
+        sender: oneshot::Sender<Result<AppFlowInstanceId>>,
+        /// API request sender
+        raft_api_tx: Option<Sender<APIStoreReq>>,
     },
     /// change instance state
     ChangeInstanceState {
         /// unique ID for the `Flow` instance to start
-        id: FlowInstanceId,
+        id: AppFlowInstanceId,
         /// The state the instance should be changed to
         intended_state: IntendedState,
         /// result sender
@@ -60,7 +63,7 @@ pub(crate) enum Msg {
         builder: Box<dyn ConnectorBuilder>,
     },
     GetFlows(oneshot::Sender<Result<Vec<Flow>>>),
-    GetFlow(FlowInstanceId, oneshot::Sender<Result<Flow>>),
+    GetFlow(AppFlowInstanceId, oneshot::Sender<Result<Flow>>),
     /// Initiate the Quiescence process
     Drain(oneshot::Sender<Result<()>>),
     /// stop this manager
@@ -70,7 +73,7 @@ pub(crate) enum Msg {
 #[derive(Debug)]
 pub(crate) struct FlowSupervisor {
     node_id: openraft::NodeId,
-    flows: HashMap<FlowInstanceId, Flow>,
+    flows: HashMap<AppFlowInstanceId, Flow>,
     operator_id_gen: OperatorUIdGen,
     connector_id_gen: ConnectorUIdGen,
     known_connectors: connectors::Known,
@@ -101,10 +104,11 @@ impl FlowSupervisor {
         &mut self,
         app_id: AppId,
         flow: DeployFlow<'static>,
-        sender: oneshot::Sender<Result<FlowInstanceId>>,
+        sender: oneshot::Sender<Result<AppFlowInstanceId>>,
         kill_switch: &KillSwitch,
+        raft_api_tx: Option<Sender<APIStoreReq>>,
     ) {
-        let id = FlowInstanceId::from_deploy(app_id, &flow);
+        let id = AppFlowInstanceId::from_deploy(app_id, &flow);
         let res = match self.flows.entry(id.clone()) {
             Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
             Entry::Vacant(vacant) => Flow::deploy(
@@ -115,6 +119,7 @@ impl FlowSupervisor {
                 &mut self.connector_id_gen,
                 &self.known_connectors,
                 kill_switch,
+                raft_api_tx,
             )
             .await
             .map(|deploy| {
@@ -134,7 +139,7 @@ impl FlowSupervisor {
             "Error sending ListFlows response: {e}"
         );
     }
-    fn handle_get_flow(&self, id: &FlowInstanceId, reply_tx: oneshot::Sender<Result<Flow>>) {
+    fn handle_get_flow(&self, id: &AppFlowInstanceId, reply_tx: oneshot::Sender<Result<Flow>>) {
         log_error!(
             reply_tx
                 .send(
@@ -221,7 +226,7 @@ impl FlowSupervisor {
 
     async fn handle_change_state(
         &mut self,
-        id: FlowInstanceId,
+        id: AppFlowInstanceId,
         intended_state: IntendedState,
         reply_tx: Sender<Result<()>>,
     ) -> Result<()> {
@@ -255,8 +260,13 @@ impl FlowSupervisor {
                         builder,
                         ..
                     } => self.handle_register_connector_type(connector_type, builder),
-                    Msg::DeployFlow { app, flow, sender } => {
-                        self.handle_deploy(app, *flow, sender, &task_kill_switch)
+                    Msg::DeployFlow {
+                        app,
+                        flow,
+                        sender,
+                        raft_api_tx,
+                    } => {
+                        self.handle_deploy(app, *flow, sender, &task_kill_switch, raft_api_tx)
                             .await;
                     }
                     Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx),

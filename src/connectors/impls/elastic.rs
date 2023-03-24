@@ -959,7 +959,7 @@ mod tests {
     use elasticsearch::http::request::Body;
 
     use super::*;
-    use crate::{config::Connector as ConnectorConfig, ids::FlowInstanceId};
+    use crate::{config::Connector as ConnectorConfig, ids::AppFlowInstanceId};
 
     #[tokio::test(flavor = "multi_thread")]
     async fn connector_builder_empty_nodes() -> Result<()> {
@@ -968,7 +968,7 @@ mod tests {
                 "nodes": []
             }
         });
-        let alias = Alias::new(FlowInstanceId::new("app", "flow"), "my_elastic");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "flow"), "my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
@@ -997,7 +997,7 @@ mod tests {
                 ]
             }
         });
-        let alias = Alias::new(FlowInstanceId::new("app", "snot"), "my_elastic");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "snot"), "my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;

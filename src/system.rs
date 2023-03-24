@@ -24,9 +24,10 @@ use crate::{
     channel::{bounded, Sender},
     connectors,
     errors::{empty_error, Error, Kind as ErrorKind, Result},
-    ids::{AppId, FlowInstanceId},
+    ids::{AppFlowInstanceId, AppId},
     instance::IntendedState as IntendedInstanceState,
     log_error,
+    raft::api::APIStoreReq,
 };
 use openraft::NodeId;
 use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
@@ -148,12 +149,15 @@ impl Runtime {
         let mut count = 0;
         // first deploy them
         for flow in deployable.iter_flows() {
-            self.deploy_flow(AppId::default(), flow).await?;
+            self.deploy_flow(AppId::default(), flow, None).await?;
         }
         // start flows in a second step
         for flow in deployable.iter_flows() {
-            self.start_flow(FlowInstanceId::new(AppId::default(), &flow.instance_alias))
-                .await?;
+            self.start_flow(AppFlowInstanceId::new(
+                AppId::default(),
+                flow.instance_alias.clone(),
+            ))
+            .await?;
             count += 1;
         }
         Ok(count)
@@ -168,13 +172,15 @@ impl Runtime {
         &self,
         app_id: AppId,
         flow: &ast::DeployFlow<'static>,
-    ) -> Result<FlowInstanceId> {
+        raft_api_tx: Option<Sender<APIStoreReq>>,
+    ) -> Result<AppFlowInstanceId> {
         let (tx, rx) = oneshot::channel();
         self.flows
             .send(flow_supervisor::Msg::DeployFlow {
                 app: app_id,
                 flow: Box::new(flow.clone()),
                 sender: tx,
+                raft_api_tx,
             })
             .await?;
         match rx.await? {
@@ -206,7 +212,7 @@ impl Runtime {
     /// if the flow state change fails
     pub async fn change_flow_state(
         &self,
-        id: FlowInstanceId,
+        id: AppFlowInstanceId,
         intended_state: IntendedInstanceState,
     ) -> Result<()> {
         let (reply_tx, mut reply_rx) = bounded(1);
@@ -224,7 +230,7 @@ impl Runtime {
     ///
     /// # Errors
     /// if the flow can't be started
-    pub async fn start_flow(&self, id: FlowInstanceId) -> Result<()> {
+    pub async fn start_flow(&self, id: AppFlowInstanceId) -> Result<()> {
         self.change_flow_state(id, IntendedInstanceState::Running)
             .await
     }
@@ -233,7 +239,7 @@ impl Runtime {
     ///
     /// # Errors
     /// if the flow can't be stopped
-    pub async fn stop_flow(&self, id: FlowInstanceId) -> Result<()> {
+    pub async fn stop_flow(&self, id: AppFlowInstanceId) -> Result<()> {
         self.change_flow_state(id, IntendedInstanceState::Stopped)
             .await
     }
@@ -242,7 +248,7 @@ impl Runtime {
     ///
     /// # Errors
     /// if the flow can't be paused
-    pub async fn pause_flow(&self, id: FlowInstanceId) -> Result<()> {
+    pub async fn pause_flow(&self, id: AppFlowInstanceId) -> Result<()> {
         self.change_flow_state(id, IntendedInstanceState::Paused)
             .await
     }
@@ -250,7 +256,7 @@ impl Runtime {
     ///
     /// # Errors
     /// if the flow can't be resumed
-    pub async fn resume_flow(&self, id: FlowInstanceId) -> Result<()> {
+    pub async fn resume_flow(&self, id: AppFlowInstanceId) -> Result<()> {
         self.start_flow(id).await // equivalent
     }
 
@@ -277,7 +283,7 @@ impl Runtime {
     ///
     /// # Errors
     ///  * if we fail to send the request or fail to receive it
-    pub async fn get_flow(&self, flow_id: FlowInstanceId) -> Result<Flow> {
+    pub async fn get_flow(&self, flow_id: AppFlowInstanceId) -> Result<Flow> {
         let (flow_tx, flow_rx) = oneshot::channel();
         self.flows
             .send(flow_supervisor::Msg::GetFlow(flow_id, flow_tx))

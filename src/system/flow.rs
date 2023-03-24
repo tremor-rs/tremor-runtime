@@ -15,11 +15,12 @@
 use crate::{
     channel::{bounded, Sender},
     errors::empty_error,
+    raft::api::APIStoreReq,
 };
 use crate::{
     connectors::{self, ConnectorResult, Known},
     errors::{Error, Kind as ErrorKind, Result},
-    ids::FlowInstanceId,
+    ids::AppFlowInstanceId,
     instance::{IntendedState, State},
     log_error,
     pipeline::{self, InputTarget},
@@ -63,7 +64,7 @@ type Addr = Sender<Msg>;
 /// A deployed Flow instance
 #[derive(Debug, Clone)]
 pub struct Flow {
-    alias: FlowInstanceId,
+    alias: AppFlowInstanceId,
     addr: Addr,
 }
 
@@ -71,7 +72,7 @@ pub struct Flow {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StatusReport {
     /// the id of the instance this report describes
-    pub alias: FlowInstanceId,
+    pub alias: AppFlowInstanceId,
     /// the current state
     pub status: State,
     /// the created connectors
@@ -79,7 +80,7 @@ pub struct StatusReport {
 }
 
 impl Flow {
-    pub(crate) fn id(&self) -> &FlowInstanceId {
+    pub(crate) fn id(&self) -> &AppFlowInstanceId {
         &self.alias
     }
 
@@ -166,14 +167,16 @@ impl Flow {
     /// # Errors
     /// If any of the operations of spawning connectors, linking pipelines and connectors or spawning the flow instance
     /// fails.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn deploy(
         node_id: openraft::NodeId,
-        flow_id: FlowInstanceId,
+        flow_id: AppFlowInstanceId,
         flow: ast::DeployFlow<'static>,
         operator_id_gen: &mut OperatorUIdGen,
         connector_id_gen: &mut ConnectorUIdGen,
         known_connectors: &Known,
         kill_switch: &KillSwitch,
+        raft_api_tx: Option<Sender<APIStoreReq>>,
         // FIXME: add AppContext
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
@@ -202,6 +205,7 @@ impl Flow {
                             builder.as_ref(),
                             config,
                             kill_switch,
+                            raft_api_tx.clone(),
                         )
                         .await?,
                     );
@@ -385,7 +389,7 @@ enum MsgWrapper {
 }
 
 struct RunningFlow {
-    id: FlowInstanceId,
+    id: AppFlowInstanceId,
     state: State,
     expected_starts: usize,
     expected_drains: usize,
@@ -404,7 +408,7 @@ struct RunningFlow {
 
 impl RunningFlow {
     fn new(
-        id: FlowInstanceId,
+        id: AppFlowInstanceId,
         pipelines: HashMap<String, pipeline::Addr>,
         connectors: &HashMap<String, connectors::Addr>,
         links: &[ConnectStmt],
@@ -903,7 +907,7 @@ impl RunningFlow {
 /// task handling flow instance control plane
 #[allow(clippy::too_many_lines)]
 fn spawn_task(
-    id: FlowInstanceId,
+    id: AppFlowInstanceId,
     pipelines: HashMap<String, pipeline::Addr>,
     connectors: &HashMap<String, connectors::Addr>,
     links: &[ConnectStmt],
@@ -919,7 +923,7 @@ mod tests {
     use super::*;
     use crate::{
         connectors::ConnectorBuilder,
-        ids::{FlowInstanceId, BOOTSTRAP_NODE_ID},
+        ids::{AppFlowInstanceId, BOOTSTRAP_NODE_ID},
         instance, qsize,
     };
     use tremor_common::uids::{ConnectorUIdGen, OperatorUIdGen};
@@ -1082,12 +1086,13 @@ mod tests {
         known_connectors.insert(builder.connector_type(), Box::new(builder));
         let flow = Flow::deploy(
             BOOTSTRAP_NODE_ID,
-            FlowInstanceId::new("app", "test"),
+            AppFlowInstanceId::new("app", "test"),
             deploy,
             &mut operator_id_gen,
             &mut connector_id_gen,
             &known_connectors,
             &kill_switch,
+            None,
         )
         .await?;
 

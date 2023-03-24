@@ -16,6 +16,26 @@ use std::fmt::{Display, Formatter};
 
 use tremor_script::ast::DeployFlow;
 
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq, PartialOrd)]
+pub struct InstanceId(pub String);
+impl Display for InstanceId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for InstanceId {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for InstanceId {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
 /// An `App` is an isolated container that is defined by
 /// a troy file with possibly multiple flow definitions.
 /// An `App` needs to have a unique name inside a tremor cluster.
@@ -74,24 +94,24 @@ impl From<&str> for FlowDefinitionId {
 /// The `Flow` id needs to be unique within the App, regardless of the flow definition this instance is based upon.
 /// An actual running instance of a flow
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct FlowInstanceId {
+pub struct AppFlowInstanceId {
     app_id: AppId,
-    alias: String,
+    instance_id: InstanceId,
 }
 
-impl FlowInstanceId {
+impl AppFlowInstanceId {
     /// construct a new flow if from some stringy thingy
-    pub fn new(app_id: impl Into<AppId>, alias: impl Into<String>) -> Self {
+    pub fn new(app_id: impl Into<AppId>, alias: impl Into<InstanceId>) -> Self {
         Self {
             app_id: app_id.into(),
-            alias: alias.into(),
+            instance_id: alias.into(),
         }
     }
 
     pub fn from_deploy(app_id: impl Into<AppId>, deploy: &DeployFlow) -> Self {
         Self {
             app_id: app_id.into(),
-            alias: deploy.instance_alias.clone(),
+            instance_id: deploy.instance_alias.clone().into(),
         }
     }
 
@@ -101,18 +121,18 @@ impl FlowInstanceId {
     }
 
     #[must_use]
-    pub fn alias(&self) -> &String {
-        &self.alias
+    pub fn instance_id(&self) -> &InstanceId {
+        &self.instance_id
     }
 }
 
-impl std::fmt::Display for FlowInstanceId {
+impl std::fmt::Display for AppFlowInstanceId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{}", &self.app_id, &self.alias)
+        write!(f, "{}/{}", &self.app_id, &self.instance_id)
     }
 }
 
-impl From<&str> for FlowInstanceId {
+impl From<&str> for AppFlowInstanceId {
     fn from(value: &str) -> Self {
         Self::new(AppId::default(), value)
     }
@@ -120,3 +140,23 @@ impl From<&str> for FlowInstanceId {
 
 /// fixed node id used for root cluster nodes that have been bootstrapping the cluster
 pub const BOOTSTRAP_NODE_ID: openraft::NodeId = 0;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+pub(crate) enum AliasType {
+    Connector,
+}
+
+impl std::fmt::Display for AliasType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Connector => write!(f, "connector"),
+        }
+    }
+}
+
+pub(crate) trait GenericAlias {
+    fn app_id(&self) -> &AppId;
+    fn app_instance(&self) -> &InstanceId;
+    fn alias_type(&self) -> AliasType;
+    fn alias(&self) -> &str;
+}

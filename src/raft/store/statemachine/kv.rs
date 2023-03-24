@@ -15,18 +15,22 @@
 //! KV raft sub-statemachine
 //! storing key value stores in rocksdb only
 
-use std::{collections::BTreeMap, marker::Sized, sync::Arc};
-
 use crate::{
-    raft::store::{
-        self,
-        statemachine::{sm_r_err, sm_w_err, RaftStateMachine},
-        store_r_err, store_w_err, Error as StoreError, KvRequest, StorageResult, TremorResponse,
+    channel::Sender,
+    raft::{
+        api::APIStoreReq,
+        store::{
+            self,
+            statemachine::{sm_r_err, sm_w_err, RaftStateMachine},
+            store_r_err, store_w_err, Error as StoreError, KvRequest, StorageResult,
+            TremorResponse,
+        },
     },
     system::Runtime,
 };
 use openraft::StorageError;
 use rocksdb::ColumnFamily;
+use std::{collections::BTreeMap, marker::Sized, sync::Arc};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub(crate) struct KvSnapshot(BTreeMap<String, String>);
@@ -71,7 +75,11 @@ impl KvStateMachine {
 
 #[async_trait::async_trait]
 impl RaftStateMachine<KvSnapshot, KvRequest> for KvStateMachine {
-    async fn load(db: &Arc<rocksdb::DB>, _world: &Runtime) -> Result<Self, store::Error>
+    async fn load(
+        db: &Arc<rocksdb::DB>,
+        _world: &Runtime,
+        _raft_api_tx: Sender<APIStoreReq>,
+    ) -> Result<Self, store::Error>
     where
         Self: Sized,
     {

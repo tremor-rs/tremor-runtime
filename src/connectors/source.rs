@@ -18,7 +18,6 @@
 pub mod channel_source;
 
 use super::{utils::metrics::SourceReporter, CodecReq, Connectivity};
-use crate::channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender};
 use crate::connectors::{
     utils::reconnect::{Attempt, ConnectionLostNotifier},
     Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
@@ -26,6 +25,10 @@ use crate::connectors::{
 use crate::errors::{Error, Result};
 use crate::pipeline;
 use crate::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors};
+use crate::{
+    channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender},
+    raft::api::APIStoreReq,
+};
 use crate::{
     codec::{self, Codec},
     pipeline::InputTarget,
@@ -291,6 +294,9 @@ pub(crate) struct SourceContext {
 
     /// tool to notify the connector when the connection is lost
     pub(crate) notifier: ConnectionLostNotifier,
+
+    /// sender for raft requests
+    pub(crate) raft_api_tx: Option<Sender<APIStoreReq>>,
 }
 
 impl Display for SourceContext {
@@ -311,9 +317,11 @@ impl Context for SourceContext {
     fn notifier(&self) -> &ConnectionLostNotifier {
         &self.notifier
     }
-
     fn connector_type(&self) -> &ConnectorType {
         &self.connector_type
+    }
+    fn raft_api_sender(&self) -> Option<&Sender<APIStoreReq>> {
+        self.raft_api_tx.as_ref()
     }
 }
 

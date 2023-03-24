@@ -199,7 +199,7 @@ impl Source for OtelSource {
 
 #[cfg(test)]
 mod tests {
-    use crate::ids::FlowInstanceId;
+    use crate::ids::AppFlowInstanceId;
 
     use super::*;
     // use env_logger;
@@ -207,7 +207,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn otel_client_builder() -> Result<()> {
-        let alias = Alias::new(FlowInstanceId::new("app", "test"), "my_otel_server");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "test"), "my_otel_server");
         let with_processors = literal!({
             "config": {
                 "url": "localhost:4317",
@@ -218,7 +218,7 @@ mod tests {
             ConnectorType("otel_server".into()),
             &with_processors,
         )?;
-        let alias = Alias::new(FlowInstanceId::new("app", "flow"), "my_otel_server");
+        let alias = Alias::new(AppFlowInstanceId::new("app", "flow"), "my_otel_server");
 
         let builder = super::Builder::default();
         let kill_switch = KillSwitch::dummy();

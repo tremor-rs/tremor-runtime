@@ -16,7 +16,7 @@ use crate::api::prelude::*;
 use halfbrown::HashMap;
 use tremor_runtime::{
     connectors::{Connectivity, StatusReport as ConnectorStatusReport},
-    ids::FlowInstanceId,
+    ids::AppFlowInstanceId,
     instance::State,
     system::flow::StatusReport as FlowStatusReport,
 };
@@ -24,7 +24,7 @@ use tremor_script::ast::DeployEndpoint;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ApiFlowStatusReport {
-    pub(crate) alias: FlowInstanceId,
+    pub(crate) alias: AppFlowInstanceId,
     pub(crate) status: State,
     pub(crate) connectors: Vec<String>,
 }
