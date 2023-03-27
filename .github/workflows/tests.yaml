@@ -14,7 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install deps
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
+        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
       - name: Install Docker Image
         run: ./.github/scripts/install-docker-images.sh
       - uses: actions-rs/toolchain@v1
