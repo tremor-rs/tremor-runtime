@@ -38,8 +38,9 @@ jobs:
 
       - name: Install deps
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
-
+        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
+      - name: cleanup disks
+        run: sudo rm -rf /usr/share/dotnet; sudo rm -rf /opt/ghc; sudo rm -rf "/usr/local/share/boost"; sudo rm -rf "$AGENT_TOOLSDIRECTORY"; df -h
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
