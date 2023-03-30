@@ -38,7 +38,7 @@ jobs:
         run: cargo llvm-cov --workspace --lcov --output-path lcov.txt --features integration
       - uses: codecov/codecov-action@v3
         with:
-          #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+          token: ${{ secrets.CODECOV_TOKEN }} # required because codecov is often broken
           files: ./lcov.txt # optional
           flags: unittests # optional
           fail_ci_if_error: ${{ github.event_name == 'pull_request' }} # only fail upon pull requests, where coverage is important
