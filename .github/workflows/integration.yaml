@@ -24,7 +24,7 @@ jobs:
             target_feature: "+sse4.2"
           - os: macos-11.0
             target_feature: "+sse4.2"
-          - os: ubuntu-20.04
+          - os: ubuntu-latest
             exclude_tests: ""
             target_feature: "+avx,+avx2,+sse4.2"
 
@@ -39,12 +39,12 @@ jobs:
       - name: Install deps
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # this might remove tools that are actually needed,
-          # if set to "true" but frees about 6 GB
-          tool-cache: false
+      # - name: Free Disk Space (Ubuntu)
+      #   uses: jlumbroso/free-disk-space@main
+      #   with:
+      #     # this might remove tools that are actually needed,
+      #     # if set to "true" but frees about 6 GB
+      #     tool-cache: false
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
