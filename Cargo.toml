@@ -195,7 +195,7 @@ googapis = { version = "0.6", default-features = false, features = [
 ] }
 gouth = { version = "0.2" }
 http = "0.2.9"
-reqwest = { version = "0.11.14", default-features = false, features = [
+reqwest = { version = "0.11.16", default-features = false, features = [
   "rustls-tls",
   "rustls-tls-native-roots",
 ] }
