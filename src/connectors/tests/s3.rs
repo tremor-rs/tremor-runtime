@@ -15,7 +15,10 @@ mod reader;
 mod streamer;
 
 use crate::errors::{Error, Result};
-use aws_sdk_s3::{Client, Config, Credentials, Region};
+use aws_sdk_s3::{
+    config::{Credentials, Region},
+    Client, Config,
+};
 use rand::{distributions::Alphanumeric, Rng};
 use std::time::{Duration, Instant};
 use testcontainers::{clients::Cli, images::generic::GenericImage, Container, RunnableImage};
