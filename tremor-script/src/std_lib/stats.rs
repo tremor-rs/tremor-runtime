@@ -46,7 +46,7 @@ pub fn ceil(value: f64, scale: i8) -> f64 {
 #[derive(Clone, Debug, Default)]
 struct Count(i64);
 impl TremorAggrFn for Count {
-    fn accumulate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, _args: &[&Value]) -> FResult<()> {
         self.0 += 1;
         Ok(())
     }
@@ -76,7 +76,7 @@ impl TremorAggrFn for Count {
 #[derive(Clone, Debug, Default)]
 struct Sum(f64);
 impl TremorAggrFn for Sum {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
@@ -116,7 +116,7 @@ impl TremorAggrFn for Sum {
 #[derive(Clone, Debug, Default)]
 struct Mean(i64, f64);
 impl TremorAggrFn for Mean {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
@@ -162,7 +162,7 @@ impl TremorAggrFn for Mean {
 #[derive(Clone, Debug, Default)]
 struct Min(Option<f64>);
 impl TremorAggrFn for Min {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
@@ -206,7 +206,7 @@ impl TremorAggrFn for Min {
 #[derive(Clone, Debug, Default)]
 struct Max(Option<f64>);
 impl TremorAggrFn for Max {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
@@ -255,7 +255,7 @@ struct Var {
 }
 
 impl TremorAggrFn for Var {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
@@ -311,7 +311,7 @@ impl TremorAggrFn for Var {
 struct Stdev(Var);
 
 impl TremorAggrFn for Stdev {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         self.0.accumulate(args)
     }
 
@@ -381,7 +381,7 @@ impl std::default::Default for Dds {
 }
 
 impl TremorAggrFn for Dds {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         if !self.percentiles_set {
             // either we have a second argument (which overwrites the defaults)
             // or we use the defaults
@@ -591,7 +591,7 @@ impl Hdr {
     }
 }
 impl TremorAggrFn for Hdr {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         if !self.percentiles_set {
             // either we get the percentiles set via the second argument
             // or we use the defaults - either way after the first `accumulate` call we have the percentiles set in stone
@@ -601,8 +601,7 @@ impl TremorAggrFn for Hdr {
                     .filter_map(|v| v.as_str().map(String::from))
                     .map(|s| {
                         let p = s.parse().map_err(Self::err(&format!(
-                            "Provided percentile '{}' isn't a float",
-                            s
+                            "Provided percentile '{s}' isn't a float",
                         )))?;
                         Ok((s, p))
                     })

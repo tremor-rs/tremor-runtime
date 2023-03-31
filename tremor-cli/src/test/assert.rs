@@ -122,14 +122,12 @@ pub(crate) fn load_assert(path: &Path) -> Result<AssertSpec> {
                             b.push(f);
                             if !b.is_file() {
                                 return Err(Error::from(format!(
-                                    "equals_file  `{}` not found in `assert.yaml`",
-                                    f
+                                    "equals_file  `{f}` not found in `assert.yaml`",
                                 )));
                             }
                         } else {
                             return Err(Error::from(format!(
-                                "equals_file  `{}` not found in `assert.yaml`",
-                                f
+                                "equals_file  `{f}` not found in `assert.yaml`",
                             )));
                         }
                     }

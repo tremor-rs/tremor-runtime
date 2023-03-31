@@ -154,29 +154,19 @@ impl<'script> ScriptRaw<'script> {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone, Copy, Eq)]
+#[derive(Debug, PartialEq, Serialize, Clone, Copy, Eq, Default)]
 pub enum BytesDataType {
     SignedInteger,
+    #[default]
     UnsignedInteger,
     Binary,
 }
 
-impl Default for BytesDataType {
-    fn default() -> Self {
-        BytesDataType::UnsignedInteger
-    }
-}
-
-#[derive(Debug, PartialEq, Serialize, Clone, Copy, Eq)]
+#[derive(Debug, PartialEq, Serialize, Clone, Copy, Eq, Default)]
 pub enum Endian {
     Little,
+    #[default]
     Big,
-}
-
-impl Default for Endian {
-    fn default() -> Self {
-        Endian::Big
-    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]

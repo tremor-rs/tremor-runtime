@@ -75,8 +75,7 @@ pub(crate) fn from_config(config: Option<&Value>) -> Result<Box<dyn Codec>> {
         Some("sorted") => Ok(Box::<Json<Sorted>>::default()),
         None | Some("unsorted") => Ok(Box::<Json<Unsorted>>::default()),
         Some(mode) => Err(format!(
-            "Unknown json codec mode: {}, can only be one of `sorted` or `unsorted`",
-            mode
+            "Unknown json codec mode: {mode}, can only be one of `sorted` or `unsorted`",
         )
         .into()),
     }

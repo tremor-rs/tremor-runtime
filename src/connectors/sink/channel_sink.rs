@@ -221,9 +221,9 @@ where
         self.streams_meta.remove_by_right(&stream_id);
     }
 
-    fn resolve_stream_from_meta<'lt, 'value>(
+    fn resolve_stream_from_meta(
         &self,
-        meta: &'lt Value<'value>,
+        meta: &Value,
         ctx: &SinkContext,
     ) -> Option<(&u64, &Sender<SinkData>)> {
         let sink_meta = get_sink_meta(meta, ctx)?;

@@ -45,7 +45,7 @@ pub(crate) fn visit_path_str(path: &str, visitor: &PathVisitor) -> Result<()> {
     visit_path(path, path, visitor)
 }
 
-pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor) -> Result<()> {
+pub(crate) fn visit_path(base: &Path, path: &Path, visitor: &PathVisitor) -> Result<()> {
     if path.is_file() {
         visitor(None, path)?;
     } else if path.is_dir() {

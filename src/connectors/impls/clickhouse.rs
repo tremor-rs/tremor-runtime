@@ -112,17 +112,12 @@ impl Defaults for ClickHouseDefaults {
 
 impl ConfigImpl for ClickhouseConfig {}
 
-#[derive(Clone, Copy, Deserialize)]
+#[derive(Clone, Copy, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 enum Compression {
+    #[default]
     None,
     Lz4,
-}
-
-impl Default for Compression {
-    fn default() -> Compression {
-        Compression::None
-    }
 }
 
 impl Display for Compression {

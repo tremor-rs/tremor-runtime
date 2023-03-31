@@ -243,9 +243,7 @@ PX8efvDMhv16QqDFF0k80d0=
             if let Ok(token) = provider.get_token() {
                 break token;
             }
-            if attempt >= 20 {
-                panic!("Failed to get token");
-            }
+            assert!(attempt < 20, "Failed to get token");
             attempt += 1;
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         };

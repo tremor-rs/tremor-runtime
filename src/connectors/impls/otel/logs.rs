@@ -32,11 +32,10 @@ fn affirm_traceflags_valid(traceflags: u32) -> Result<u32> {
     if (traceflags == 128) || (traceflags == 0) {
         Ok(traceflags)
     } else {
-        Err(format!(
-            "The `traceflags` is invalid, expected: 0b10000000, actual: {}",
-            traceflags
+        Err(
+            format!("The `traceflags` is invalid, expected: 0b10000000, actual: {traceflags}",)
+                .into(),
         )
-        .into())
     }
 }
 
@@ -45,11 +44,10 @@ fn affirm_severity_number_valid(severity_number: i32) -> Result<i32> {
         // NOTE `0` implies unspecified severity
         Ok(severity_number)
     } else {
-        Err(format!(
-            "The `severity_number` is NOT in the valid range 0 <= {} <= 24",
-            severity_number
+        Err(
+            format!("The `severity_number` is NOT in the valid range 0 <= {severity_number} <= 24")
+                .into(),
         )
-        .into())
     }
 }
 

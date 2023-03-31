@@ -1258,10 +1258,10 @@ pub(crate) fn error_assign_to_const<T, O: Ranged>(outer: &O) -> Result<T> {
 
     Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner).into())
 }
-pub(crate) fn error_array_out_of_bound<'script, T, O: Ranged, I: Ranged>(
+pub(crate) fn error_array_out_of_bound<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
-    path: &ast::Path<'script>,
+    path: &ast::Path,
     r: RangeExclusive<usize>,
     len: usize,
 ) -> Result<T> {
@@ -1279,11 +1279,11 @@ pub(crate) fn error_array_out_of_bound<'script, T, O: Ranged, I: Ranged>(
     })
 }
 
-pub(crate) fn error_bad_array_index<'script, 'idx, T, O: Ranged, I: Ranged>(
+pub(crate) fn error_bad_array_index<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
-    path: &ast::Path<'script>,
-    idx: &Value<'idx>,
+    path: &ast::Path,
+    idx: &Value,
     len: usize,
 ) -> Result<T> {
     let expr: Span = outer.extent();
@@ -1297,10 +1297,10 @@ pub(crate) fn error_bad_array_index<'script, 'idx, T, O: Ranged, I: Ranged>(
         | ast::Path::Expr(_) => ErrorKind::BadArrayIndex(expr, inner.extent(), idx, len).into(),
     })
 }
-pub(crate) fn error_decreasing_range<'script, T, O: Ranged, I: Ranged>(
+pub(crate) fn error_decreasing_range<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
-    path: &ast::Path<'script>,
+    path: &ast::Path,
     start_idx: usize,
     end_idx: usize,
 ) -> Result<T> {
@@ -1317,10 +1317,10 @@ pub(crate) fn error_decreasing_range<'script, T, O: Ranged, I: Ranged>(
     })
 }
 
-pub(crate) fn error_bad_key<'script, T, O: Ranged, I: Ranged>(
+pub(crate) fn error_bad_key<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
-    path: &ast::Path<'script>,
+    path: &ast::Path,
     key: String,
     options: Vec<String>,
 ) -> Result<T> {
@@ -1336,10 +1336,10 @@ pub(crate) fn unknown_local<O: Ranged, I: BaseExpr>(outer: &O, inner: &I) -> Err
     .into()
 }
 
-pub(crate) fn error_bad_key_err<'script, O: Ranged, I: Ranged>(
+pub(crate) fn error_bad_key_err<O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
-    path: &ast::Path<'script>,
+    path: &ast::Path,
     key: String,
     options: Vec<String>,
 ) -> Error {

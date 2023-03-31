@@ -924,8 +924,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
             Ok(Some(Refresh::WaitFor))
         } else if let Some(other) = refresh {
             Err(Error::from(format!(
-                "Invalid value for `$elastic.refresh`: {}",
-                other
+                "Invalid value for `$elastic.refresh`: {other}",
             )))
         } else {
             Ok(None)

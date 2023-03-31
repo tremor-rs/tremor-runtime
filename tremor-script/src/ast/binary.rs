@@ -192,7 +192,7 @@ fn write_bits(
     clippy::cast_sign_loss,
     clippy::too_many_arguments
 )]
-pub(crate) fn extend_bytes_from_value<'value, O: Ranged, I: Ranged>(
+pub(crate) fn extend_bytes_from_value<O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     data_type: BytesDataType,
@@ -201,7 +201,7 @@ pub(crate) fn extend_bytes_from_value<'value, O: Ranged, I: Ranged>(
     buf: &mut u8,
     pending: &mut u8,
     bytes: &mut Vec<u8>,
-    value: &Value<'value>,
+    value: &Value,
 ) -> Result<()> {
     let err =
         |e: &str, v: &Value| -> Result<()> { err_generic(outer, inner, &format!("{e}: {v}")) };

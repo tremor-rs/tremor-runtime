@@ -421,11 +421,7 @@ impl Blackhole {
             data2: T2,
         ) -> std::io::Result<()> {
             writer.write_all(
-                format!(
-                    "#[{:10} = {:12.2}, {:14} = {:12.2}]\n",
-                    label1, data1, label2, data2
-                )
-                .as_ref(),
+                format!("#[{label1:10} = {data1:12.2}, {label2:14} = {data2:12.2}]\n",).as_ref(),
             )
         }
         writer.write_all(

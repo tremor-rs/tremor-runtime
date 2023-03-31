@@ -487,10 +487,7 @@ where
                                 ctx,
                             )
                             .await,
-                        &format!(
-                            "Error uploading data for bytes {}-{} for {}",
-                            start, end, object_id
-                        ),
+                        &format!("Error uploading data for bytes {start}-{end} for {object_id}",),
                     ) {
                         // if this fails, we corrupted our internal state somehow
                         self.buffer.mark_done_until(done_until)?;
