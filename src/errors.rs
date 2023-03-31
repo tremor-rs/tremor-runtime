@@ -127,8 +127,8 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
     }
 }
 
-impl<T: std::fmt::Debug> From<aws_sdk_s3::types::SdkError<T>> for Error {
-    fn from(e: aws_sdk_s3::types::SdkError<T>) -> Self {
+impl<T: std::fmt::Debug> From<aws_sdk_s3::error::SdkError<T>> for Error {
+    fn from(e: aws_sdk_s3::error::SdkError<T>) -> Self {
         Self::from(ErrorKind::S3Error(format!("{e:?}")))
     }
 }
@@ -493,5 +493,20 @@ mod test {
             r,
             ErrorKind::TypeError(ValueType::Object, ValueType::String)
         );
+    }
+    #[test]
+    fn aws_error() {
+        use aws_sdk_s3::error::SdkError;
+        #[derive(Debug)]
+        struct DemoError();
+        impl std::fmt::Display for DemoError {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "DemoError")
+            }
+        }
+        impl std::error::Error for DemoError {}
+        let e: SdkError<()> = SdkError::timeout_error(Box::new(DemoError()));
+        let r = Error::from(e);
+        assert_matches!(r.0, ErrorKind::S3Error(_));
     }
 }

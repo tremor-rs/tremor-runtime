@@ -23,7 +23,7 @@ use crate::connectors::{
     prelude::*,
 };
 use aws_sdk_s3::{
-    model::{CompletedMultipartUpload, CompletedPart},
+    types::{CompletedMultipartUpload, CompletedPart},
     Client as S3Client,
 };
 use tremor_common::time::nanotime;
