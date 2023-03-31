@@ -178,7 +178,7 @@ prost = "0.9.0"
 prost-types = "0.9.0"
 # This is related to https://github.com/tremor-rs/tremor-runtime/issues/1688 the otel API's need to
 # be updated together with tonic
-tremor-otelapis = { version = "=0.2.4" }
+tremor-otelapis = { version = "=0.3.0" }
 
 # aws-s3
 aws-sdk-s3 = "0.24"
