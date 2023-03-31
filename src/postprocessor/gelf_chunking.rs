@@ -40,10 +40,7 @@ impl Gelf {
         let n = chunks.len();
         let id = self.id;
         if n > 128 {
-            return Err(format!(
-            "[GELF encoder] Maximum number of chunks is 128 this package would cause {} chunks.",
-            n
-            )
+            return Err(format!("[GELF encoder] Maximum number of chunks is 128 this package would cause {n} chunks.")
             .into());
         };
         self.id += 1;

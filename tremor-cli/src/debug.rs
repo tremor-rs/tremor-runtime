@@ -82,10 +82,7 @@ where
         let banner = banner.set_fg(Some(Color::Green));
 
         h.set_color(banner)?;
-        let spec = format!(
-            "\n\n****************\n* {} - {}\n****************\n\n",
-            section, detail
-        );
+        let spec = format!("\n\n****************\n* {section} - {detail}\n****************\n\n",);
         write!(h.get_writer(), "{spec}")?;
     }
     Ok(())

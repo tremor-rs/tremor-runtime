@@ -34,9 +34,9 @@ macro_rules! map_function {
 #[derive(Clone, Debug, Default)]
 struct StringFormat {}
 impl TremorFn for StringFormat {
-    fn invoke<'event, 'c>(
+    fn invoke<'event>(
         &self,
-        _ctx: &'c EventContext,
+        _ctx: &EventContext,
         args: &[&Value<'event>],
     ) -> FResult<Value<'event>> {
         let this_mfa = || mfa("string", "format", args.len());

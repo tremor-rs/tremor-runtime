@@ -155,6 +155,7 @@ impl std::fmt::Debug for Grouper {
 }
 
 impl Operator for Grouper {
+    #[allow(clippy::manual_let_else)] // clippy bug
     fn on_event(
         &mut self,
         _uid: OperatorId,
@@ -175,29 +176,25 @@ impl Operator for Grouper {
 
             let d = meta.get("dimensions").unwrap_or(&NULL);
             let dimensions = d.encode();
-            let window = match groups.cache.get_mut(&dimensions) {
-                None => {
-                    let rate = if let Some(rate) = Rate::from_meta(meta) {
-                        rate
-                    } else {
+            let window = if let Some(window) = groups.cache.get_mut(&dimensions) {
+                window
+            } else {
+                let Some(rate) = Rate::from_meta(meta) else {
                         return Ok(vec![(ERR, event)].into());
-                    };
-                    groups.cache.put(
-                        dimensions.clone(),
-                        TimeWindow::new(
-                            rate.windows,
-                            rate.time_range / (rate.windows as u64),
-                            rate.rate,
-                        ),
-                    );
-                    if let Some(g) = groups.cache.get_mut(&dimensions) {
-                        g
-                    } else {
-                        //ALLOW: we just put this entry in. The Entry API https://github.com/jeromefroe/lru-rs/issues/30 would solve this
-                        unreachable!()
-                    }
-                }
-                Some(m) => m,
+                };
+                groups.cache.put(
+                    dimensions.clone(),
+                    TimeWindow::new(
+                        rate.windows,
+                        rate.time_range / (rate.windows as u64),
+                        rate.rate,
+                    ),
+                );
+                let Some(g) = groups.cache.get_mut(&dimensions) else {
+                    //ALLOW: we just put this entry in. The Entry API https://github.com/jeromefroe/lru-rs/issues/30 would solve this
+                    unreachable!()
+                };
+                g
             };
             if window.inc_t(event.ingest_ns).is_ok() {
                 groups.pass += 1;

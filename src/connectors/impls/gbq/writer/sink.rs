@@ -981,8 +981,7 @@ mod test {
                     &mut result
                 )
                 .is_ok(),
-                "TableType: {:?} did not encode correctly",
-                item
+                "TableType: {item:?} did not encode correctly",
             );
 
             assert_eq!([218u8, 7u8, 1u8, 73u8], result[..]);

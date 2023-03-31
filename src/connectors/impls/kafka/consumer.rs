@@ -337,7 +337,7 @@ fn set_client_config<V: Into<String>>(
 }
 
 impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
-    fn post_rebalance<'a>(&self, rebalance: &rdkafka::consumer::Rebalance<'a>) {
+    fn post_rebalance(&self, rebalance: &rdkafka::consumer::Rebalance) {
         // store the last timestamp
         self.last_rebalance_ts.store(nanotime(), Ordering::Release);
         match rebalance {
@@ -447,7 +447,7 @@ impl Connector for KafkaConsumerConnector {
     }
 }
 
-fn kafka_meta<'a>(msg: &BorrowedMessage<'a>) -> Value<'static> {
+fn kafka_meta(msg: &BorrowedMessage) -> Value<'static> {
     let headers = msg.headers().map(|headers| {
         let mut headers_meta = Value::object_with_capacity(headers.count());
         for i in 0..headers.count() {

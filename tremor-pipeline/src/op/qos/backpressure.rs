@@ -49,18 +49,14 @@ use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
 use tremor_script::prelude::*;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Method {
     /// messages are discarded
+    #[default]
     Discard,
     /// a circuit breaker is triggerd
     Pause,
-}
-impl Default for Method {
-    fn default() -> Self {
-        Method::Discard
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

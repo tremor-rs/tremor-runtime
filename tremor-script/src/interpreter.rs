@@ -878,9 +878,9 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
 
 #[inline]
 #[allow(clippy::too_many_lines)]
-fn patch_value<'run, 'event>(
+fn patch_value<'event>(
     opts: ExecOpts,
-    env: &Env<'run, 'event>,
+    env: &Env<'_, 'event>,
     event: &Value<'event>,
     state: &Value<'static>,
     meta: &Value<'event>,
@@ -1222,9 +1222,7 @@ where
                     }
                 }
                 PredicatePattern::TildeEq { test, .. } => {
-                    let testee = if let Some(v) = known_key.map_lookup(record) {
-                        v
-                    } else {
+                    let Some(testee) =  known_key.map_lookup(record) else {
                         return Ok(None);
                     };
                     if let Some(x) = test
@@ -1240,9 +1238,7 @@ where
                     }
                 }
                 PredicatePattern::Bin { rhs, kind, .. } => {
-                    let testee = if let Some(v) = known_key.map_lookup(record) {
-                        v
-                    } else {
+                    let Some(testee) = known_key.map_lookup(record) else {
                         return Ok(None);
                     };
 
@@ -1255,9 +1251,7 @@ where
                     }
                 }
                 PredicatePattern::RecordPatternEq { pattern, .. } => {
-                    let testee = if let Some(v) = known_key.map_lookup(record) {
-                        v
-                    } else {
+                    let Some(testee) = known_key.map_lookup(record) else {
                         return Ok(None);
                     };
 
@@ -1276,9 +1270,7 @@ where
                     }
                 }
                 PredicatePattern::ArrayPatternEq { pattern, .. } => {
-                    let testee = if let Some(v) = known_key.map_lookup(record) {
-                        v
-                    } else {
+                    let Some(testee)  = known_key.map_lookup(record) else {
                         return Ok(None);
                     };
 
@@ -1297,9 +1289,7 @@ where
                     }
                 }
                 PredicatePattern::TuplePatternEq { pattern, .. } => {
-                    let testee = if let Some(v) = known_key.map_lookup(record) {
-                        v
-                    } else {
+                    let Some(testee)  = known_key.map_lookup(record) else {
                         return Ok(None);
                     };
 

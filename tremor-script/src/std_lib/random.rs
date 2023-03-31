@@ -30,9 +30,9 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 #[derive(Clone, Debug, Default)]
 struct RandomInteger {}
 impl TremorFn for RandomInteger {
-    fn invoke<'event, 'c>(
+    fn invoke<'event>(
         &self,
-        ctx: &'c EventContext,
+        ctx: &EventContext,
         args: &[&Value<'event>],
     ) -> FResult<Value<'event>> {
         let this_mfa = || mfa("random", "integer", args.len());
@@ -97,9 +97,9 @@ impl TremorFn for RandomInteger {
 #[derive(Clone, Debug, Default)]
 struct RandomFloat {}
 impl TremorFn for RandomFloat {
-    fn invoke<'event, 'c>(
+    fn invoke<'event>(
         &self,
-        ctx: &'c EventContext,
+        ctx: &EventContext,
         args: &[&Value<'event>],
     ) -> FResult<Value<'event>> {
         let this_mfa = || mfa("random", "float", args.len());

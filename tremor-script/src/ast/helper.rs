@@ -42,17 +42,13 @@ pub struct Scope<'script> {
 }
 impl<'script> Scope<'script> {
     pub(crate) fn get_module(&self, id: &[String]) -> Result<Option<module::Index>> {
-        let (first, rest) = if let Some(r) = id.split_first() {
-            r
-        } else {
+        let Some((first, rest)) =  id.split_first() else {
             return Ok(None);
         };
-        let id = if let Some(i) = self.modules.get(first) {
-            *i
-        } else {
+        let Some(id) = self.modules.get(first) else {
             return Ok(None);
         };
-        Manager::find_module(id, rest)
+        Manager::find_module(*id, rest)
     }
     pub(crate) fn add_module_alias(&mut self, alias: String, module_id: module::Index) {
         self.modules.insert(alias, module_id);

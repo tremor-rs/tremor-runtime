@@ -654,7 +654,7 @@ mod test {
         Ok(())
     }
 
-    fn test_metric<'value>(v: &Value<'value>, m: &str, c: u64) {
+    fn test_metric(v: &Value, m: &str, c: u64) {
         assert_eq!(v.get_str("measurement"), Some(m));
         assert!(v.get_object("tags").is_some());
         assert_eq!(v.get("fields").get_u64("count"), Some(c));

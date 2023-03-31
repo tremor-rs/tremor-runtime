@@ -74,9 +74,7 @@ trait Generator: BaseGenerator {
             stry!(self.write(b"{"));
 
             // We know this exists since it's not empty
-            let (key, value) = if let Some(v) = iter.next() {
-                v
-            } else {
+            let Some((key, value)) =  iter.next() else {
                 // ALLOW: We check against size
                 unreachable!()
             };
@@ -120,9 +118,7 @@ trait Generator: BaseGenerator {
                     let mut iter = <[Value]>::iter(array);
                     // We know we have one item
 
-                    let item = if let Some(v) = iter.next() {
-                        v
-                    } else {
+                    let Some(item) = iter.next() else {
                         // ALLOW: We check against size
                         unreachable!()
                     };
@@ -168,9 +164,7 @@ trait FastGenerator: BaseGenerator {
             stry!(self.write(b"{\""));
 
             // We know this exists since it's not empty
-            let (key, value) = if let Some(v) = iter.next() {
-                v
-            } else {
+            let Some((key, value)) =  iter.next() else {
                 // ALLOW: We check against size
                 unreachable!()
             };
@@ -208,9 +202,7 @@ trait FastGenerator: BaseGenerator {
                 } else {
                     let mut iter = <[Value]>::iter(array);
                     // We know we have one item
-                    let item = if let Some(v) = iter.next() {
-                        v
-                    } else {
+                    let Some(item) = iter.next() else {
                         // ALLOW: We check against size
                         unreachable!()
                     };

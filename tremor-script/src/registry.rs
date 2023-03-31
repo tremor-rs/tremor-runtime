@@ -36,7 +36,7 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
     ///
     /// # Errors
     /// if the data can not be acumulated
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()>;
     /// Emits the function
     ///
     /// # Errors
@@ -830,7 +830,7 @@ impl TremorAggrFnWrapper {
     ///
     /// # Errors
     /// if accumulating the function fails
-    pub fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    pub fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         self.fun.accumulate(args)
     }
 

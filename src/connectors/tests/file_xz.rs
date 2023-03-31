@@ -68,14 +68,12 @@ async fn file_connector_xz() -> Result<()> {
     let (out_events, err_events) = harness.stop().await?;
     assert!(
         out_events.is_empty(),
-        "got some events on OUT port: {:?}",
-        err_events
+        "got some events on OUT port: {err_events:?}",
     );
 
     assert!(
         err_events.is_empty(),
-        "got some events on ERR port: {:?}",
-        err_events
+        "got some events on ERR port: {err_events:?}",
     );
 
     Ok(())

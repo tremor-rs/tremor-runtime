@@ -469,10 +469,7 @@ mod test {
     use tremor_value::Object;
 
     #[allow(clippy::unnecessary_wraps)] // as this is a function that gets passed as an argument and needs to fulful the bounds
-    fn merge<'iref, 'head>(
-        this: &'iref mut ValueAndMeta<'head>,
-        other: ValueAndMeta<'head>,
-    ) -> Result<()> {
+    fn merge<'head>(this: &mut ValueAndMeta<'head>, other: ValueAndMeta<'head>) -> Result<()> {
         if let Some(ref mut a) = this.value_mut().as_array_mut() {
             let mut e = Object::with_capacity(7);
             let mut data = Object::with_capacity(2);

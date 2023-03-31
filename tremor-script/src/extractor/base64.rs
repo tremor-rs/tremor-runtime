@@ -36,10 +36,7 @@ use tremor_common::base64::BASE64;
 use tremor_value::Value;
 
 pub(crate) fn execute(s: &str, result_needed: bool) -> Result<'static> {
-    let decoded = match BASE64.decode(s) {
-        Ok(d) => d,
-        StdResult::Err(_) => return Result::NoMatch,
-    };
+    let Ok(decoded) = BASE64.decode(s) else { return Result::NoMatch};
     if result_needed {
         match String::from_utf8(decoded) {
             Ok(s) => Result::Match(Value::from(s)),

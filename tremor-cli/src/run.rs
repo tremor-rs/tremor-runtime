@@ -273,8 +273,7 @@ impl Run {
                                         Some(HighlighterError::from(&e)),
                                     ) {
                                         eprintln!(
-                                            "Error during error highlighting: {}",
-                                            highlight_error
+                                            "Error during error highlighting: {highlight_error}",
                                         );
                                         Err(highlight_error.into())
                                     } else {
@@ -381,10 +380,7 @@ impl Run {
                                     Some(r),
                                     Some(HighlighterError::from(&script_error)),
                                 ) {
-                                    eprintln!(
-                                        "Error during error highlighting: {}",
-                                        highlight_error
-                                    );
+                                    eprintln!("Error during error highlighting: {highlight_error}");
                                     return Err(highlight_error.into());
                                 }
                                 inner.finalize()?;

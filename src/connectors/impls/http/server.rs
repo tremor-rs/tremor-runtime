@@ -544,10 +544,10 @@ struct SinkResponse {
 }
 
 impl SinkResponse {
-    fn build<'event>(
+    fn build(
         request_id: RequestId,
         tx: oneshot::Sender<Response<Body>>,
-        http_meta: Option<&Value<'event>>,
+        http_meta: Option<&Value>,
         codec_map: &MimeCodecMap,
     ) -> Result<Self> {
         let mut response = Response::builder();

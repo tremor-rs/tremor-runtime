@@ -73,9 +73,8 @@ impl<'script> CustomFn<'script> {
         if self.inline {
             return true;
         }
-        let i = match self.body.first() {
-            Some(Expr::Imut(Invoke1(i) | Invoke2(i) | Invoke3(i) | Invoke(i))) => i,
-            _ => return false,
+        let Some(Expr::Imut(Invoke1(i) | Invoke2(i) | Invoke3(i) | Invoke(i))) =  self.body.first() else {
+            return false;
         };
         let mut a_idx = 0;
         for a in &i.args {

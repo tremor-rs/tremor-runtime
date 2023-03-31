@@ -24,7 +24,7 @@ use std::ops::RangeInclusive;
 #[derive(Clone, Debug, Default)]
 struct First(Option<Value<'static>>);
 impl TremorAggrFn for First {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         if self.0.is_none() {
             self.0 = args.first().map(|v| (*v).clone_static());
         }
@@ -63,7 +63,7 @@ impl TremorAggrFn for First {
 #[derive(Clone, Debug, Default)]
 struct Last(Option<Value<'static>>);
 impl TremorAggrFn for Last {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         self.0 = args.first().map(|v| (*v).clone_static());
         Ok(())
     }
@@ -100,7 +100,7 @@ impl TremorAggrFn for Last {
 #[derive(Clone, Debug, Default)]
 struct CollectFlattened(Vec<Value<'static>>);
 impl TremorAggrFn for CollectFlattened {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         if let Some(a) = args.first().map(|v| (*v).clone_static()) {
             self.0.push(a);
         }
@@ -144,7 +144,7 @@ impl TremorAggrFn for CollectFlattened {
 #[derive(Clone, Debug, Default)]
 struct CollectNested(Vec<Value<'static>>);
 impl TremorAggrFn for CollectNested {
-    fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    fn accumulate(&mut self, args: &[&Value]) -> FResult<()> {
         if let Some(a) = args.first().map(|v| (*v).clone_static()) {
             self.0.push(a);
         }

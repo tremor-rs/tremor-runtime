@@ -459,8 +459,7 @@ async fn connector_task(
     let codec_requirement = connector.codec_requirements();
     if connector.codec_requirements() == CodecReq::Structured && (config.codec.is_some()) {
         return Err(format!(
-            "[Connector::{}] is a structured connector and can't be configured with a codec",
-            alias
+            "[Connector::{alias}] is a structured connector and can't be configured with a codec",
         )
         .into());
     }
