@@ -32,7 +32,7 @@ lto = "thin"
 opt-level = 3
 
 [dependencies]
-tokio = { version = "1.26", features = ["full"] }
+tokio = { version = "1.27", features = ["full"] }
 tokio-stream = "0.1"
 anyhow = "1"
 async-compression = { version = "0.3", features = ["xz", "stream", "tokio"] }

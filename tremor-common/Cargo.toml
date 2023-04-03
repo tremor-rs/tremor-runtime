@@ -9,7 +9,7 @@ readme = "README.md"
 version = "0.13.0-rc.11"
 
 [dependencies]
-tokio = { version = "1.26", features = ["full"] }
+tokio = { version = "1.27", features = ["full"] }
 rand = { version = "0.8", features = ["small_rng"] }
 beef = { version = "0.5", features = ["impl_serde"] }
 serde = "*"
@@ -19,4 +19,4 @@ simd-json-derive = "0.7"
 base64 = "0.21"
 
 [dev-dependencies]
-tokio = { version = "1.26", features = ["full"] }
+tokio = { version = "1.27", features = ["full"] }
