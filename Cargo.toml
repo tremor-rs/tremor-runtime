@@ -223,7 +223,7 @@ regex = "1"
 signal-hook = "0.3"
 signal-hook-tokio = "0.3"
 tempfile = { version = "3.5" }
-test-case = "3.0"
+test-case = "3.1"
 testcontainers = { version = "0.14", features = ["watchdog"] }
 num_cpus = "*"
 
