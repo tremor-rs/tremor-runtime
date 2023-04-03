@@ -709,7 +709,7 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "hyper-rustls",
+ "hyper-rustls 0.23.2",
  "lazy_static",
  "pin-project-lite 0.2.9",
  "serde",
@@ -2678,6 +2678,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper-rustls"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0646026eb1b3eea4cd9ba47912ea5ce9cc07713d105b1a14698f4e6433d348b7"
+dependencies = [
+ "http",
+ "hyper",
+ "log",
+ "rustls 0.21.0",
+ "rustls-native-certs",
+ "tokio",
+ "tokio-rustls 0.24.0",
+]
+
+[[package]]
 name = "hyper-timeout"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4258,7 +4273,7 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "hyper-rustls",
+ "hyper-rustls 0.23.2",
  "hyper-tls",
  "ipnet",
  "js-sys",
@@ -5624,6 +5639,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-rustls"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0d409377ff5b1e3ca6437aa86c1eb7d40c134bfec254e44c830defa92669db5"
+dependencies = [
+ "rustls 0.21.0",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-stream"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6006,7 +6031,7 @@ dependencies = [
  "http-body",
  "http-types",
  "hyper",
- "hyper-rustls",
+ "hyper-rustls 0.24.0",
  "indexmap",
  "itoa 1.0.6",
  "lazy_static",
@@ -6052,7 +6077,7 @@ dependencies = [
  "test-case",
  "testcontainers",
  "tokio",
- "tokio-rustls 0.23.4",
+ "tokio-rustls 0.24.0",
  "tokio-stream",
  "tokio-tungstenite",
  "tonic",

@@ -187,7 +187,7 @@ error_chain! {
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         InvalidHeaderName(reqwest::header::InvalidHeaderName);
-        RustlsError(rustls::TLSError);
+        RustlsError(rustls::Error);
         Sled(sled::Error);
         SnappyError(snap::Error);
         TonicStatusError(tonic::Status);
