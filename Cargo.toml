@@ -123,7 +123,7 @@ elasticsearch = { version = "=8.5.0-alpha.1", default-features = false, features
 # for tcp & ws
 tokio-rustls = "0.23"
 async-channel = "1.6"
-rustls = "0.20"
+rustls = "0.21"
 rustls-pemfile = "1"
 rustls-native-certs = "0.6"
 tokio-tungstenite = "0.18"
