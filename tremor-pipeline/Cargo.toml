@@ -37,7 +37,7 @@ base64 = "0.21"
 criterion = "0.4"
 tempfile = "3.5"
 xz2 = "0.1"
-tokio = { version = "1.26", features = ["full"] }
+tokio = { version = "1.27", features = ["full"] }
 
 [features]
 bert = ["rust-bert"]
