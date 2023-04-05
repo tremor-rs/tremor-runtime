@@ -17,13 +17,12 @@ use crate::{
     cli::{ServerCommand, ServerRun},
     errors::{Error, ErrorKind, Result},
 };
-use futures::{future, StreamExt};
+use futures::StreamExt;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::low_level::signal_name;
 use signal_hook_tokio::Signals;
 use std::io::Write;
 use std::sync::atomic::Ordering;
-use tremor_api as api;
 use tremor_common::file;
 use tremor_runtime::raft::NodeId;
 use tremor_runtime::system::{Runtime, ShutdownMode};
@@ -126,36 +125,12 @@ impl ServerRun {
             }
         }
 
-        let api_handle = if self.no_api {
-            // dummy task never finishing
-            tokio::task::spawn(async move {
-                future::pending::<()>().await;
-                Ok(())
-            })
-        } else {
-            eprintln!("Listening at: http://{}", &self.api_host);
-            info!("Listening at: http://{}", &self.api_host);
-            api::serve(self.api_host.clone(), &world)
-        };
         // waiting for either
-        match future::select(handle, api_handle).await {
-            future::Either::Left((manager_res, api_handle)) => {
-                // manager stopped
-                if let Err(e) = manager_res {
-                    error!("Manager failed with: {}", e);
-                    result = 1;
-                }
-                api_handle.abort();
-            }
-            future::Either::Right((_api_res, manager_handle)) => {
-                // api stopped
-                if let Err(e) = world.stop(ShutdownMode::Graceful).await {
-                    error!("Error shutting down gracefully: {}", e);
-                    result = 2;
-                }
-                manager_handle.abort();
-            }
-        };
+
+        if let Err(e) = handle.await {
+            error!("Manager failed with: {}", e);
+            result = 1;
+        }
         signal_handle.close();
         signal_handler_task.abort();
         warn!("Tremor stopped.");

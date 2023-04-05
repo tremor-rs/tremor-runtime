@@ -15,7 +15,6 @@ rust-version = "1.62"
 [workspace]
 
 members = [
-  "tremor-api",
   "tremor-cli",
   "tremor-common",
   "tremor-influx",

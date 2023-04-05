@@ -92,25 +92,6 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in library 'tremor-api'",
-      "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--lib",
-          "--package=tremor-api"
-        ],
-        "filter": {
-          "name": "tremor-api",
-          "kind": "lib"
-        }
-      },
-      "args": [],
-      "cwd": "${workspaceFolder}"
-    },
-    {
-      "type": "lldb",
-      "request": "launch",
       "name": "Debug unit tests in library 'tremor-pipeline'",
       "cargo": {
         "args": [

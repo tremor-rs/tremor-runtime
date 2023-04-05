@@ -25,7 +25,6 @@ COPY src ./src
 COPY tremor-pipeline ./tremor-pipeline
 COPY tremor-script ./tremor-script
 COPY tremor-script-nif /app/tremor-script-nif
-COPY tremor-api ./tremor-api
 COPY tremor-influx ./tremor-influx
 COPY tremor-value ./tremor-value
 # Binaries

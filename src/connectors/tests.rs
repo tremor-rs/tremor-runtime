@@ -530,6 +530,7 @@ pub(crate) mod free_port {
             loop {
                 if let Ok(listener) = TcpListener::bind(("127.0.0.1", candidate)).await {
                     let port = listener.local_addr()?.port();
+                    assert_eq!(candidate, port);
                     drop(listener);
                     return Ok(port);
                 }
