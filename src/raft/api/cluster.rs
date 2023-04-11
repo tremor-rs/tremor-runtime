@@ -12,14 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{APIRequest, APIStoreReq, API_WORKER_TIMEOUT};
-use crate::{
-    channel::oneshot,
-    raft::{
-        api::{APIError, APIResult, ToAPIResult},
-        node::Addr,
-        store::{NodesRequest, TremorRequest},
-    },
+use super::{APIRequest, API_WORKER_TIMEOUT};
+use crate::raft::{
+    api::{APIError, APIResult, ToAPIResult},
+    node::Addr,
+    store::{NodesRequest, TremorRequest},
 };
 use axum::{
     extract::{self, Json},
@@ -57,9 +54,8 @@ async fn get_nodes(
         .await
         .to_api_result(&uri, &state)
         .await?;
-    let (tx, rx) = oneshot();
-    state.store_tx.send(APIStoreReq::GetNodes(tx)).await?;
-    let nodes = timeout(API_WORKER_TIMEOUT, rx).await??;
+
+    let nodes = timeout(API_WORKER_TIMEOUT, state.raft_manager.get_nodes()).await??;
     Ok(Json(nodes))
 }
 
@@ -82,13 +78,12 @@ async fn add_node(
 
     // 2. ensure we don't add the node twice if it is already there
     // we need to make sure we don't hold on to the state machine lock any further here
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetNodeId(addr.clone(), tx))
-        .await?;
 
-    let maybe_existing_node_id = timeout(API_WORKER_TIMEOUT, rx).await??;
+    let maybe_existing_node_id = timeout(
+        API_WORKER_TIMEOUT,
+        state.raft_manager.get_node_id(addr.clone()),
+    )
+    .await??;
     if let Some(existing_node_id) = maybe_existing_node_id {
         Ok(Json(existing_node_id))
     } else {
@@ -124,12 +119,9 @@ async fn remove_node(
     extract::Path(node_id): extract::Path<NodeId>,
 ) -> APIResult<Json<()>> {
     // make sure the node is not a learner or a voter
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetLastMembership(tx))
-        .await?;
-    let membership = timeout(API_WORKER_TIMEOUT, rx).await??;
+
+    let membership =
+        timeout(API_WORKER_TIMEOUT, state.raft_manager.get_last_membership()).await??;
     if membership.contains(&node_id) {
         return Err(APIError::HTTP {
             status: StatusCode::CONFLICT,
@@ -167,12 +159,8 @@ async fn add_learner(
 
     // 2. check that the node has already been added
     // we need to make sure we don't hold on to the state machine lock any further here
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetNode(node_id, tx))
-        .await?;
-    let node_addr = timeout(API_WORKER_TIMEOUT, rx).await??;
+
+    let node_addr = timeout(API_WORKER_TIMEOUT, state.raft_manager.get_node(node_id)).await??;
     if node_addr.is_none() {
         return Err(APIError::HTTP {
             status: StatusCode::NOT_FOUND,
@@ -212,12 +200,9 @@ async fn promote_voter(
 ) -> APIResult<Json<Option<NodeId>>> {
     // we introduce a new scope here to release the lock on the state machine
     // not releasing it can lead to dead-locks, if executed on the leader (as the store is shared between the API and the raft engine)
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetLastMembership(tx))
-        .await?;
-    let mut membership = timeout(API_WORKER_TIMEOUT, rx).await??;
+
+    let mut membership =
+        timeout(API_WORKER_TIMEOUT, state.raft_manager.get_last_membership()).await??;
 
     let value = if membership.insert(node_id) {
         // only update state if not already in the membership config
@@ -242,12 +227,9 @@ async fn demote_voter(
     extract::Path(node_id): extract::Path<NodeId>,
 ) -> APIResult<Json<Option<NodeId>>> {
     // scoping here to not hold the state machine locked for too long
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetLastMembership(tx))
-        .await?;
-    let mut membership = timeout(API_WORKER_TIMEOUT, rx).await??;
+
+    let mut membership =
+        timeout(API_WORKER_TIMEOUT, state.raft_manager.get_last_membership()).await??;
     let value = if membership.remove(&node_id) {
         state
             .raft

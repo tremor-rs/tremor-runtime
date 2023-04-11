@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    channel::oneshot,
-    raft::{
-        api::{APIError, APIRequest, APIResult, ToAPIResult},
-        store::{TremorResponse, TremorSet},
-    },
+use crate::raft::{
+    api::{APIError, APIRequest, APIResult, ToAPIResult},
+    store::{TremorResponse, TremorSet},
 };
 use axum::{extract, routing::post, Router};
 use tokio::time::timeout;
@@ -56,12 +53,7 @@ async fn read(
     extract::State(state): extract::State<APIRequest>,
     extract::Json(key): extract::Json<String>,
 ) -> APIResult<TremorResponse> {
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(super::APIStoreReq::KVGet(key, tx))
-        .await?;
-    let value = timeout(API_WORKER_TIMEOUT, rx).await??;
+    let value = timeout(API_WORKER_TIMEOUT, state.raft_manager.kv_get_local(key)).await??;
     Ok(TremorResponse { value })
 }
 
@@ -79,12 +71,8 @@ async fn consistent_read(
         .to_api_result(&uri, &state)
         .await?;
     // here we are safe to read
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(super::APIStoreReq::KVGet(key, tx))
-        .await?;
-    let value = timeout(API_WORKER_TIMEOUT, rx).await??;
+    let value = timeout(API_WORKER_TIMEOUT, state.raft_manager.kv_get_local(key)).await??;
+
     // Ensure that we are still the leader at the end of the read so we can guarantee freshness
     state
         .raft

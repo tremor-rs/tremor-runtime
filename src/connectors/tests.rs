@@ -60,6 +60,7 @@ use super::{prelude::KillSwitch, sink::SinkMsg};
 use crate::{
     channel::{bounded, unbounded, Receiver, UnboundedReceiver},
     errors::empty_error,
+    raft,
 };
 use crate::{
     config,
@@ -113,7 +114,7 @@ impl ConnectorHarness {
             builder,
             raw_config,
             &kill_switch,
-            None,
+            raft::Manager::default(),
         )
         .await?;
         let mut pipes = HashMap::new();

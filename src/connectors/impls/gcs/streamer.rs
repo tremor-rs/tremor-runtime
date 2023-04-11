@@ -401,7 +401,7 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::channel::bounded;
+    use crate::{channel::bounded, raft};
     use crate::{
         channel::unbounded,
         config::{Codec as CodecConfig, Reconnect},
@@ -576,7 +576,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            None,
+            raft::Manager::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -763,7 +763,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            None,
+            raft::Manager::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -938,7 +938,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            None,
+            raft::Manager::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1034,7 +1034,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            None,
+            raft::Manager::default(),
         );
 
         // simulate sink lifecycle
@@ -1089,7 +1089,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            None,
+            raft::Manager::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1315,7 +1315,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            None,
+            raft::Manager::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1468,7 +1468,7 @@ pub(crate) mod tests {
             &builder,
             cfg,
             &kill_switch,
-            None,
+            raft::Manager::default(),
         )
         .await?;
         let (tx, mut rx) = bounded(1);
@@ -1505,7 +1505,7 @@ pub(crate) mod tests {
             &builder,
             cfg,
             &kill_switch,
-            None,
+            raft::Manager::default(),
         )
         .await?;
         let (tx, mut rx) = bounded(1);

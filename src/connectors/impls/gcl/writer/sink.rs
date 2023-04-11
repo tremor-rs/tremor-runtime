@@ -246,7 +246,6 @@ where
 mod test {
     #![allow(clippy::cast_possible_wrap)]
     use super::*;
-    use crate::channel::bounded;
     use crate::connectors::impls::gcl;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
@@ -254,6 +253,7 @@ mod test {
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
     use crate::ids::{AppFlowInstanceId, AppId};
+    use crate::{channel::bounded, raft};
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
@@ -370,7 +370,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            None,
+            raft::Manager::default(),
         );
 
         sink.connect(&sink_context, &Attempt::default()).await?;
@@ -468,7 +468,7 @@ mod test {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
-                    None,
+                    raft::Manager::default(),
                 ),
                 &mut EventSerializer::new(
                     None,

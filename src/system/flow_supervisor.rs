@@ -18,8 +18,7 @@ use crate::{
     errors::{empty_error, Kind as ErrorKind, Result},
     ids::{AppFlowInstanceId, AppId},
     instance::IntendedState,
-    log_error, qsize,
-    raft::api::APIStoreReq,
+    log_error, qsize, raft,
     system::{flow::Flow, KillSwitch, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT},
 };
 use std::collections::{hash_map::Entry, HashMap};
@@ -45,7 +44,7 @@ pub(crate) enum Msg {
         /// result sender
         sender: oneshot::Sender<Result<AppFlowInstanceId>>,
         /// API request sender
-        raft_api_tx: Option<Sender<APIStoreReq>>,
+        raft: raft::Manager,
     },
     /// change instance state
     ChangeInstanceState {
@@ -106,7 +105,7 @@ impl FlowSupervisor {
         flow: DeployFlow<'static>,
         sender: oneshot::Sender<Result<AppFlowInstanceId>>,
         kill_switch: &KillSwitch,
-        raft_api_tx: Option<Sender<APIStoreReq>>,
+        raft_api_tx: raft::Manager,
     ) {
         let id = AppFlowInstanceId::from_deploy(app_id, &flow);
         let res = match self.flows.entry(id.clone()) {
@@ -264,7 +263,7 @@ impl FlowSupervisor {
                         app,
                         flow,
                         sender,
-                        raft_api_tx,
+                        raft: raft_api_tx,
                     } => {
                         self.handle_deploy(app, *flow, sender, &task_kill_switch, raft_api_tx)
                             .await;

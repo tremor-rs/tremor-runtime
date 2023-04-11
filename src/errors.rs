@@ -223,6 +223,10 @@ error_chain! {
     }
 
     errors {
+        RaftNotRunning {
+            description("Raft is not running")
+                display("Raft is not running")
+        }
         TypeError(expected: ValueType, found: ValueType) {
             description("Type error")
                 display("Type error: Expected {}, found {}", expected, found)

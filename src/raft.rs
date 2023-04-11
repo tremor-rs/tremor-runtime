@@ -14,6 +14,7 @@
 
 pub mod api;
 pub mod archive;
+pub(crate) mod manager;
 pub mod network;
 pub mod node;
 pub mod store;
@@ -21,6 +22,7 @@ pub mod store;
 #[cfg(test)]
 mod test;
 
+pub(crate) use self::manager::Manager;
 use api::client::Error;
 use network::raft_network_impl::Network;
 pub use openraft::NodeId;

@@ -387,7 +387,7 @@ mod tests {
     use crate::{
         connectors::{utils::quiescence::QuiescenceBeacon, CodecReq},
         ids::AppFlowInstanceId,
-        qsize,
+        qsize, raft,
     };
 
     /// does not connect
@@ -466,7 +466,7 @@ mod tests {
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
-            raft_api_tx: None,
+            raft_api_tx: raft::Manager::default(),
         };
         // failing attempt
         assert_eq!(
@@ -505,7 +505,7 @@ mod tests {
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
-            raft_api_tx: None,
+            raft_api_tx: raft::Manager::default(),
         };
         // 1st failing attempt
         assert!(matches!(

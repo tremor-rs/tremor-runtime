@@ -87,10 +87,10 @@ mod tests {
     use tremor_common::uids::SinkUId;
 
     use super::*;
-    use crate::connectors::sink::builder;
     use crate::connectors::utils::quiescence::QuiescenceBeacon;
     use crate::connectors::{reconnect::ConnectionLostNotifier, utils::metrics::SinkReporter};
     use crate::ids::AppFlowInstanceId;
+    use crate::{connectors::sink::builder, raft};
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn can_spawn_sink() -> Result<()> {
@@ -112,7 +112,7 @@ mod tests {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(crate::channel::bounded(128).0),
-                    None,
+                    raft::Manager::default(),
                 ),
                 builder(
                     &ConnectorConfig::default(),

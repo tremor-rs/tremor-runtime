@@ -15,7 +15,7 @@
 use crate::{
     channel::{bounded, Sender},
     errors::empty_error,
-    raft::api::APIStoreReq,
+    raft,
 };
 use crate::{
     connectors::{self, ConnectorResult, Known},
@@ -176,7 +176,7 @@ impl Flow {
         connector_id_gen: &mut ConnectorUIdGen,
         known_connectors: &Known,
         kill_switch: &KillSwitch,
-        raft_api_tx: Option<Sender<APIStoreReq>>,
+        raft_api_tx: raft::Manager,
         // FIXME: add AppContext
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
@@ -1092,7 +1092,7 @@ mod tests {
             &mut connector_id_gen,
             &known_connectors,
             &kill_switch,
-            None,
+            raft::Manager::default(),
         )
         .await?;
 

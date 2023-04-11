@@ -26,8 +26,7 @@ use crate::{
     errors::{empty_error, Error, Kind as ErrorKind, Result},
     ids::{AppFlowInstanceId, AppId},
     instance::IntendedState as IntendedInstanceState,
-    log_error,
-    raft::api::APIStoreReq,
+    log_error, raft,
 };
 use openraft::NodeId;
 use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
@@ -149,7 +148,7 @@ impl Runtime {
         let mut count = 0;
         // first deploy them
         for flow in deployable.iter_flows() {
-            self.deploy_flow(AppId::default(), flow, None).await?;
+            self.deploy_flow_standalone(AppId::default(), flow).await?;
         }
         // start flows in a second step
         for flow in deployable.iter_flows() {
@@ -168,11 +167,24 @@ impl Runtime {
     /// This flow instance is not started yet.
     /// # Errors
     /// If the flow can't be deployed
-    pub async fn deploy_flow(
+    pub async fn deploy_flow_standalone(
         &self,
         app_id: AppId,
         flow: &ast::DeployFlow<'static>,
-        raft_api_tx: Option<Sender<APIStoreReq>>,
+    ) -> Result<AppFlowInstanceId> {
+        self.deploy_flow(app_id, flow, raft::Manager::default())
+            .await
+    }
+    /// Deploy a flow - create an instance of it
+    ///
+    /// This flow instance is not started yet.
+    /// # Errors
+    /// If the flow can't be deployed
+    pub(crate) async fn deploy_flow(
+        &self,
+        app_id: AppId,
+        flow: &ast::DeployFlow<'static>,
+        raft: raft::Manager,
     ) -> Result<AppFlowInstanceId> {
         let (tx, rx) = oneshot::channel();
         self.flows
@@ -180,7 +192,7 @@ impl Runtime {
                 app: app_id,
                 flow: Box::new(flow.clone()),
                 sender: tx,
-                raft_api_tx,
+                raft,
             })
             .await?;
         match rx.await? {

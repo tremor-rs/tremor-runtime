@@ -12,14 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-    channel::oneshot,
     ids::{AppFlowInstanceId, AppId, FlowDefinitionId},
     instance::IntendedState,
     raft::{
-        api::{
-            APIRequest, APIResult, APIStoreReq, AppError, ArgsError, ToAPIResult,
-            API_WORKER_TIMEOUT,
-        },
+        api::{APIRequest, APIResult, AppError, ArgsError, ToAPIResult, API_WORKER_TIMEOUT},
         archive::{get_app, TremorAppDef},
         store::{
             AppsRequest as AppsCmd, FlowInstance, Instances, StateApp, TremorInstanceState,
@@ -55,12 +51,13 @@ async fn install_app(
     let app = get_app(&file)?;
     let app_id = app.name().clone();
 
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetApp(app_id.clone(), tx))
-        .await?;
-    if timeout(API_WORKER_TIMEOUT, rx).await??.is_some() {
+    if timeout(
+        API_WORKER_TIMEOUT,
+        state.raft_manager.get_app(app_id.clone()),
+    )
+    .await??
+    .is_some()
+    {
         return Err(AppError::AlreadyInstalled(app.name).into());
     }
     let request = TremorRequest::Apps(AppsCmd::InstallApp {
@@ -81,12 +78,11 @@ async fn uninstall_app(
     extract::OriginalUri(uri): extract::OriginalUri,
     extract::Path(app_id): extract::Path<AppId>,
 ) -> APIResult<TremorResponse> {
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetApp(app_id.clone(), tx))
-        .await?;
-    let app = timeout(API_WORKER_TIMEOUT, rx).await??;
+    let app = timeout(
+        API_WORKER_TIMEOUT,
+        state.raft_manager.get_app(app_id.clone()),
+    )
+    .await??;
     if let Some(app) = app {
         if !app.instances.is_empty() {
             return Err(AppError::HasInstances(
@@ -178,9 +174,7 @@ impl Display for AppState {
 }
 
 async fn list(State(state): State<APIRequest>) -> APIResult<Json<HashMap<AppId, AppState>>> {
-    let (tx, rx) = oneshot();
-    state.store_tx.send(APIStoreReq::GetApps(tx)).await?;
-    let apps = timeout(API_WORKER_TIMEOUT, rx).await??;
+    let apps = timeout(API_WORKER_TIMEOUT, state.raft_manager.get_apps()).await??;
     Ok(Json(apps))
 }
 
@@ -192,12 +186,11 @@ async fn start(
 ) -> APIResult<Json<AppFlowInstanceId>> {
     let instance_id = body.instance.clone();
 
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetApp(app_id.clone(), tx))
-        .await?;
-    let app = timeout(API_WORKER_TIMEOUT, rx).await??;
+    let app = timeout(
+        API_WORKER_TIMEOUT,
+        state.raft_manager.get_app(app_id.clone()),
+    )
+    .await??;
 
     if let Some(app) = app {
         if app.instances.contains_key(instance_id.instance_id()) {
@@ -265,12 +258,12 @@ async fn manage_instance(
     // serializes all commands to ensure no command is executed before the previous one has been fully
     // handled
     let instance_id = AppFlowInstanceId::new(app_id.clone(), flow_id);
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetApp(app_id.clone(), tx))
-        .await?;
-    let app = timeout(API_WORKER_TIMEOUT, rx).await??;
+
+    let app = timeout(
+        API_WORKER_TIMEOUT,
+        state.raft_manager.get_app(app_id.clone()),
+    )
+    .await??;
     if let Some(app) = app {
         if !app.instances.contains_key(instance_id.instance_id()) {
             return Err(AppError::InstanceNotFound(instance_id).into());
@@ -302,12 +295,13 @@ async fn stop_instance(
     extract::Path((app_id, flow_id)): extract::Path<(AppId, String)>,
 ) -> APIResult<Json<AppFlowInstanceId>> {
     let instance_id = AppFlowInstanceId::new(app_id.clone(), flow_id);
-    let (tx, rx) = oneshot();
-    state
-        .store_tx
-        .send(APIStoreReq::GetApp(app_id.clone(), tx))
-        .await?;
-    if let Some(app) = timeout(API_WORKER_TIMEOUT, rx).await?? {
+
+    if let Some(app) = timeout(
+        API_WORKER_TIMEOUT,
+        state.raft_manager.get_app(app_id.clone()),
+    )
+    .await??
+    {
         if !app.instances.contains_key(instance_id.instance_id()) {
             return Err(AppError::InstanceNotFound(instance_id).into());
         }

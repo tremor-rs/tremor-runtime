@@ -15,7 +15,7 @@
 //! This module contains the HTTP API exposed externally.
 //! for inter-node communication look into the `network` module
 
-mod apps;
+pub(crate) mod apps;
 pub mod client;
 mod cluster;
 mod kv;
@@ -23,7 +23,7 @@ pub(crate) mod worker;
 
 use self::apps::AppState;
 use crate::{
-    channel::{oneshot, OneShotSender, Receiver, Sender},
+    channel::{OneShotSender, Receiver, Sender},
     ids::{AppFlowInstanceId, AppId, FlowDefinitionId},
     raft::{
         node::Addr,
@@ -57,7 +57,7 @@ const API_WORKER_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) type ReplySender<T> = OneShotSender<T>;
 
 #[derive(Debug)]
-pub enum APIStoreReq {
+pub(crate) enum APIStoreReq {
     GetApp(AppId, ReplySender<Option<StateApp>>),
     GetApps(ReplySender<HashMap<AppId, AppState>>),
     KVGet(String, ReplySender<Option<String>>),
@@ -71,7 +71,7 @@ pub(crate) struct ServerState {
     id: NodeId,
     addr: Addr,
     raft: TremorRaftImpl,
-    store_tx: Sender<APIStoreReq>,
+    raft_manager: super::Manager,
 }
 
 impl ServerState {
@@ -96,7 +96,7 @@ pub(crate) fn initialize(
         id,
         addr,
         raft,
-        store_tx,
+        raft_manager: super::Manager::new(store_tx),
     });
     (handle, state)
 }
@@ -340,13 +340,10 @@ where
     T: serde::Serialize + serde::Deserialize<'static>,
 {
     Err(if let Some(leader_id) = e.leader_id {
-        let (tx, rx) = oneshot();
-        state
-            .store_tx
-            .send(APIStoreReq::GetNode(leader_id, tx))
-            .await?;
         // we can only forward to the leader if we have the node in our state machine
-        if let Some(leader_addr) = timeout(API_WORKER_TIMEOUT, rx).await?? {
+        if let Some(leader_addr) =
+            timeout(API_WORKER_TIMEOUT, state.raft_manager.get_node(leader_id)).await??
+        {
             let mut leader_url = url::Url::parse(&format!(
                 "{}://{}",
                 uri.scheme()

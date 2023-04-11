@@ -19,7 +19,9 @@ pub(crate) mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
 
-use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
+use crate::config::{
+    Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
+};
 use crate::connectors::{utils::metrics::SinkReporter, CodecReq};
 use crate::connectors::{Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
 use crate::errors::Result;
@@ -35,10 +37,8 @@ use crate::{
     config::NameWithConfig,
 };
 use crate::{
-    config::{
-        Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
-    },
-    raft::api::APIStoreReq,
+    connectors::utils::reconnect::{Attempt, ConnectionLostNotifier},
+    raft,
 };
 use futures::StreamExt; // for .next() on PriorityMerge
 use std::collections::{btree_map::Entry, BTreeMap, HashSet};
@@ -273,7 +273,7 @@ pub(crate) struct SinkContextInner {
     pub(crate) notifier: ConnectionLostNotifier,
 
     /// sender for raft requests
-    pub(crate) raft_api_tx: Option<Sender<APIStoreReq>>,
+    pub(crate) raft: raft::Manager,
 }
 #[derive(Clone)]
 pub(crate) struct SinkContext(Arc<SinkContextInner>);
@@ -291,7 +291,7 @@ impl SinkContext {
         connector_type: ConnectorType,
         quiescence_beacon: QuiescenceBeacon,
         notifier: ConnectionLostNotifier,
-        raft_api_tx: Option<Sender<APIStoreReq>>,
+        raft_api_tx: raft::Manager,
     ) -> SinkContext {
         Self(Arc::new(SinkContextInner {
             node_id,
@@ -300,7 +300,7 @@ impl SinkContext {
             connector_type,
             quiescence_beacon,
             notifier,
-            raft_api_tx,
+            raft: raft_api_tx,
         }))
     }
 }
@@ -331,8 +331,8 @@ impl Context for SinkContext {
         &self.0.connector_type
     }
 
-    fn raft_api_sender(&self) -> Option<&Sender<APIStoreReq>> {
-        self.0.raft_api_tx.as_ref()
+    fn raft(&self) -> &raft::Manager {
+        &self.0.raft
     }
 }
 

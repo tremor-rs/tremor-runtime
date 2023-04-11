@@ -17,6 +17,7 @@ use crate::{
     ids::{AppFlowInstanceId, AppId, FlowDefinitionId, InstanceId},
     instance::IntendedState,
     raft::{
+        self,
         api::APIStoreReq,
         archive::{extract, get_app, TremorAppDef},
         store::{
@@ -418,7 +419,11 @@ impl AppsStateMachine {
 
         // deploy the flow but don't start it yet
         self.world
-            .deploy_flow(app_id.clone(), &deploy, Some(self.raft_api_tx.clone()))
+            .deploy_flow(
+                app_id.clone(),
+                &deploy,
+                raft::Manager::new(self.raft_api_tx.clone()),
+            )
             .await
             .map_err(sm_w_err)?;
         // change the flow state to the intended state

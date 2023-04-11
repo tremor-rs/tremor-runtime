@@ -46,7 +46,7 @@ use crate::{
     ids::{AliasType, AppFlowInstanceId, AppId, GenericAlias, InstanceId},
     instance::State,
     log_error, pipeline, qsize,
-    raft::api::APIStoreReq,
+    raft::{self},
     system::{KillSwitch, Runtime},
 };
 use beef::Cow;
@@ -264,7 +264,7 @@ pub(crate) trait Context: Display + Clone {
     fn connector_type(&self) -> &ConnectorType;
 
     /// gets the API sender
-    fn raft_api_sender(&self) -> Option<&Sender<APIStoreReq>>;
+    fn raft(&self) -> &raft::Manager;
 
     /// only log an error and swallow the result
     #[inline]
@@ -331,7 +331,7 @@ pub(crate) struct ConnectorContext {
     /// Notifier
     notifier: reconnect::ConnectionLostNotifier,
     /// sender for raft requests
-    raft_api_tx: Option<Sender<APIStoreReq>>,
+    raft_api_tx: raft::Manager,
 }
 
 impl Display for ConnectorContext {
@@ -357,8 +357,8 @@ impl Context for ConnectorContext {
         &self.notifier
     }
 
-    fn raft_api_sender(&self) -> Option<&Sender<APIStoreReq>> {
-        self.raft_api_tx.as_ref()
+    fn raft(&self) -> &raft::Manager {
+        &self.raft_api_tx
     }
 }
 
@@ -441,7 +441,7 @@ pub(crate) async fn spawn(
     builder: &dyn ConnectorBuilder,
     config: ConnectorConfig,
     kill_switch: &KillSwitch,
-    raft_api_tx: Option<Sender<APIStoreReq>>,
+    raft: raft::Manager,
 ) -> Result<Addr> {
     // instantiate connector
     let connector = builder.build(alias, &config, kill_switch).await?;
@@ -451,7 +451,7 @@ pub(crate) async fn spawn(
         connector,
         config,
         connector_id_gen.next_id(),
-        raft_api_tx,
+        raft,
     )
     .await?;
 
@@ -466,7 +466,7 @@ async fn connector_task(
     mut connector: Box<dyn Connector>,
     config: ConnectorConfig,
     uid: ConnectorUId,
-    raft_api_tx: Option<Sender<APIStoreReq>>,
+    raft: raft::Manager,
 ) -> Result<Addr> {
     let qsize = qsize();
     // channel for connector-level control plane communication
@@ -502,7 +502,7 @@ async fn connector_task(
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier: notifier.clone(),
-        raft_api_tx: raft_api_tx.clone(),
+        raft: raft.clone(),
     };
 
     let sink_metrics_reporter = SinkReporter::new(
@@ -518,7 +518,7 @@ async fn connector_task(
         config.connector_type.clone(),
         quiescence_beacon.clone(),
         notifier.clone(),
-        raft_api_tx.clone(),
+        raft.clone(),
     );
     // create source instance
     let source_addr = connector.create_source(source_ctx, source_builder).await?;
@@ -542,7 +542,7 @@ async fn connector_task(
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier,
-        raft_api_tx,
+        raft_api_tx: raft,
     };
 
     let send_addr = connector_addr.clone();
@@ -1358,6 +1358,7 @@ pub(crate) mod unit_tests {
         alias: Alias,
         notifier: reconnect::ConnectionLostNotifier,
         beacon: QuiescenceBeacon,
+        raft: raft::Manager,
     }
 
     impl FakeContext {
@@ -1367,6 +1368,7 @@ pub(crate) mod unit_tests {
                 alias: Alias::new(AppFlowInstanceId::new("app", "fake"), "fake"),
                 notifier: reconnect::ConnectionLostNotifier::new(tx),
                 beacon: QuiescenceBeacon::default(),
+                raft: raft::Manager::default(),
             }
         }
     }
@@ -1393,8 +1395,8 @@ pub(crate) mod unit_tests {
         fn connector_type(&self) -> &ConnectorType {
             &self.t
         }
-        fn raft_api_sender(&self) -> Option<&Sender<APIStoreReq>> {
-            None
+        fn raft(&self) -> &raft::Manager {
+            &self.raft
         }
     }
 

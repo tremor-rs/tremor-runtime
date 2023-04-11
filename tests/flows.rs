@@ -57,7 +57,7 @@ macro_rules! test_cases {
                             let app_id = AppId::default();
                             for flow in deployable.iter_flows() {
                                 let flow_alias = AppFlowInstanceId::new(app_id.clone(), flow.instance_alias.clone());
-                                runtime.deploy_flow(app_id.clone(), flow, None).await?;
+                                runtime.deploy_flow_standalone(app_id.clone(), flow).await?;
                                 runtime.start_flow(flow_alias).await?;
                             }
                             runtime.stop(ShutdownMode::Forceful).await?;

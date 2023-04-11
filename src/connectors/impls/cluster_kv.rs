@@ -14,9 +14,9 @@
 
 // #![cfg_attr(coverage, no_coverage)]
 use crate::{
-    channel::{bounded, oneshot, Receiver, Sender},
+    channel::{bounded, Receiver, Sender},
     errors::already_created_error,
-    raft::api::APIStoreReq,
+    raft,
 };
 use crate::{
     codec::{
@@ -177,7 +177,7 @@ impl Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        "cluster-kv".into()
+        "cluster_kv".into()
     }
     async fn build(
         &self,
@@ -231,10 +231,7 @@ impl Connector for Kv {
             path: vec![],
         };
         let sink = KvSink {
-            raft_tx: ctx
-                .raft_api_sender()
-                .ok_or("Raft API not available")?
-                .clone(),
+            raft_tx: ctx.raft().clone(),
             tx: self.tx.clone(),
             codec,
             origin_uri,
@@ -249,7 +246,7 @@ impl Connector for Kv {
 }
 
 struct KvSink {
-    raft_tx: Sender<APIStoreReq>,
+    raft_tx: raft::Manager,
     tx: Sender<SourceReply>,
     codec: Json<Sorted>,
     origin_uri: EventOriginUri,
@@ -283,29 +280,21 @@ impl KvSink {
     ) -> Result<Vec<(Value<'static>, Value<'static>)>> {
         match cmd {
             Command::Get { key, .. } => {
-                let (tx, rx) = oneshot();
                 let key_parts = vec![key.clone()];
                 let combined_key = key_parts.join(".");
-                let command = APIStoreReq::KVGet(combined_key, tx);
-                // if strict {
-                //     APIStoreReq::KVGet(combined_key, tx)
-                // } else {
-                // };
-                self.raft_tx.send(command).await?;
-                self.decode(rx.await?, ingest_ns)
-                    .map(|v| oks(op_name, key, v))
 
-                // self.decode(self.db.get(&key)?, ingest_ns)
-                // .map(|v| oks(op_name, key, v))
+                self.decode(
+                    dbg!(self.raft_tx.kv_get_local(combined_key).await)?,
+                    ingest_ns,
+                )
+                .map(|v| oks(op_name, key, v))
             }
             Command::Put { key } => {
                 // return the new value
-                let _value_vec = self.encode(value)?;
+                let value_str = String::from_utf8(self.encode(value)?)?;
                 let key_parts = vec![key.clone()];
-                let _key = key_parts.join(".");
-                // FIXME: todo
-                // let command = APIStoreReq::(key, value_vec);
-                // rx.await?;
+                let combined_key = key_parts.join(".");
+                self.raft_tx.kv_set(combined_key, value_str).await?;
                 Ok(oks(op_name, key, value.clone_static()))
             } // Command::Swap { key } => {
               //     // return the old value
@@ -370,10 +359,10 @@ impl Sink for KvSink {
             let executed = match Command::try_from(m) {
                 Ok(cmd) => {
                     let name = cmd.op_name();
-                    let key = cmd.key();
+                    let key = cmd.key().to_string();
                     self.execute(cmd, name, v, ingest_ns)
                         .await
-                        .map_err(|e| (Some(name), Some(key.to_string()), e))
+                        .map_err(|e| (Some(name), Some(key), e))
                 }
                 Err(e) => {
                     error!("{ctx} Invalid KV command: {e}");
