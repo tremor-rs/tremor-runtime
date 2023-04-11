@@ -36,10 +36,13 @@ jobs:
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_BACKTRACE: full
         run: cargo llvm-cov --workspace --lcov --output-path lcov.txt --features integration
-      - uses: codecov/codecov-action@v3
+      - name: Upload coverage to Codecov
+        uses: Wandalen/wretry.action@master
         with:
-          token: ${{ secrets.CODECOV_TOKEN }} # required because codecov is often broken
-          files: ./lcov.txt # optional
-          flags: unittests # optional
-          fail_ci_if_error: ${{ github.event_name == 'pull_request' }} # only fail upon pull requests, where coverage is important
-          verbose: true # optional (default = false)      
+          action: codecov/codecov-action@v3
+          # token: ${{ secrets.CODECOV_TOKEN }} # required because codecov is often broken
+          with: |
+            files: ./lcov.txt
+            flags: unittests
+            fail_ci_if_error: ${{ github.event_name == 'pull_request' }}
+            verbose: true
