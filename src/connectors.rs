@@ -1256,6 +1256,7 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
 pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
         Box::<impls::clickhouse::Builder>::default(),
+        Box::<impls::cluster_kv::Builder>::default(),
         Box::<impls::crononome::Builder>::default(),
         Box::<impls::discord::Builder>::default(),
         Box::<impls::dns::client::Builder>::default(),
