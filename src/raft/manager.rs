@@ -14,6 +14,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use crate::errors::{Error, ErrorKind};
 use openraft::raft::ClientWriteResponse;
 
 use crate::raft::api::APIStoreReq;
@@ -121,10 +122,13 @@ impl Manager {
 
     // kv
     pub async fn kv_set(&self, key: String, value: String) -> Result<Option<String>> {
-        self.is_leader().await?;
-        let res = self.kv_set_local(key, value).await?;
-        self.is_leader().await?;
-        Ok(res)
+        match self.is_leader().await {
+            Ok(_) => self.kv_set_local(key, value).await,
+            Err(Error(ErrorKind::ClientReadError(_), _)) => {
+                unimplemented!()
+            }
+            Err(e) => Err(e),
+        }
     }
     pub async fn kv_set_local(&self, key: String, value: String) -> Result<Option<String>> {
         let tremor_res = self.client_write(TremorSet { key, value }).await?;
