@@ -1856,7 +1856,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87db6b38290fce5fcf39a92b2b15f066d16d6bf1f19f42c59bda83c9b75b5e25"
 dependencies = [
  "halfbrown",
- "simd-json",
+ "simd-json 0.7.0",
 ]
 
 [[package]]
@@ -4908,6 +4908,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "simd-json"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1663db38e6e50038d4de020667c364490d43473ad6d073822a6af6576fc343a5"
+dependencies = [
+ "halfbrown",
+ "lexical-core 0.8.5",
+ "serde",
+ "serde_json",
+ "simdutf8",
+ "value-trait",
+]
+
+[[package]]
 name = "simd-json-derive"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4916,7 +4930,7 @@ dependencies = [
  "chrono",
  "itoa 1.0.6",
  "ryu",
- "simd-json",
+ "simd-json 0.7.0",
  "simd-json-derive-int",
  "value-trait",
 ]
@@ -4929,7 +4943,7 @@ checksum = "c399b07ea91f9e228c7910c56b2be63115b0a4256a68f5a321fcce83bbcbba89"
 dependencies = [
  "proc-macro2",
  "quote",
- "simd-json",
+ "simd-json 0.7.0",
  "syn 1.0.105",
 ]
 
@@ -5803,7 +5817,7 @@ dependencies = [
  "log",
  "serde",
  "serde_yaml 0.9.21",
- "simd-json",
+ "simd-json 0.8.0",
  "surf",
  "tide",
  "tokio",
@@ -5841,7 +5855,7 @@ dependencies = [
  "shell-words",
  "signal-hook",
  "signal-hook-tokio",
- "simd-json",
+ "simd-json 0.8.0",
  "snmalloc-rs",
  "surf",
  "tch",
@@ -5865,7 +5879,7 @@ dependencies = [
  "beef",
  "rand 0.8.5",
  "serde",
- "simd-json",
+ "simd-json 0.8.0",
  "simd-json-derive",
  "tokio",
  "url",
@@ -5878,7 +5892,7 @@ dependencies = [
  "criterion",
  "lexical",
  "pretty_assertions",
- "simd-json",
+ "simd-json 0.8.0",
  "snmalloc-rs",
  "value-trait",
 ]
@@ -5890,7 +5904,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abdf0a98b2e69a52e5f3a516ae0faab3d222a0b0f4e6e34ad6e3b764e1b3a1ed"
 dependencies = [
  "serde",
- "simd-json",
+ "simd-json 0.7.0",
 ]
 
 [[package]]
@@ -5925,7 +5939,7 @@ dependencies = [
  "rust-bert",
  "serde",
  "serde_yaml 0.9.21",
- "simd-json",
+ "simd-json 0.8.0",
  "simd-json-derive",
  "sled",
  "tempfile",
@@ -6019,7 +6033,7 @@ dependencies = [
  "serial_test",
  "signal-hook",
  "signal-hook-tokio",
- "simd-json",
+ "simd-json 0.8.0",
  "simd-json-derive",
  "simdutf8",
  "sled",
@@ -6084,7 +6098,7 @@ dependencies = [
  "regex",
  "serde",
  "sha2 0.10.6",
- "simd-json",
+ "simd-json 0.8.0",
  "simd-json-derive",
  "sketches-ddsketch",
  "strip-ansi-escapes",
@@ -6113,7 +6127,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "simd-json",
+ "simd-json 0.8.0",
  "simd-json-derive",
  "tremor-common",
  "value-trait",
