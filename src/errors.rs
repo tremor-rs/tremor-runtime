@@ -17,6 +17,7 @@
 
 use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
+use openraft::error::{ClientReadError, ClientWriteError};
 use tokio::sync::broadcast;
 use tremor_common::ports::Port;
 use tremor_influx as influx;
@@ -220,6 +221,8 @@ error_chain! {
         HeaderToStringError(http::header::ToStrError);
         MimeParsingError(mime::FromStrError);
         InvalidStatusCode(http::status::InvalidStatusCode);
+        ClientWriteError(ClientWriteError);
+        ClientReadError(ClientReadError);
     }
 
     errors {

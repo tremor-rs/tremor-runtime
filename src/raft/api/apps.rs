@@ -53,7 +53,7 @@ async fn install_app(
 
     if timeout(
         API_WORKER_TIMEOUT,
-        state.raft_manager.get_app(app_id.clone()),
+        state.raft_manager.get_app_local(app_id.clone()),
     )
     .await??
     .is_some()
@@ -80,7 +80,7 @@ async fn uninstall_app(
 ) -> APIResult<TremorResponse> {
     let app = timeout(
         API_WORKER_TIMEOUT,
-        state.raft_manager.get_app(app_id.clone()),
+        state.raft_manager.get_app_local(app_id.clone()),
     )
     .await??;
     if let Some(app) = app {
@@ -174,7 +174,7 @@ impl Display for AppState {
 }
 
 async fn list(State(state): State<APIRequest>) -> APIResult<Json<HashMap<AppId, AppState>>> {
-    let apps = timeout(API_WORKER_TIMEOUT, state.raft_manager.get_apps()).await??;
+    let apps = timeout(API_WORKER_TIMEOUT, state.raft_manager.get_apps_local()).await??;
     Ok(Json(apps))
 }
 
@@ -188,7 +188,7 @@ async fn start(
 
     let app = timeout(
         API_WORKER_TIMEOUT,
-        state.raft_manager.get_app(app_id.clone()),
+        state.raft_manager.get_app_local(app_id.clone()),
     )
     .await??;
 
@@ -261,7 +261,7 @@ async fn manage_instance(
 
     let app = timeout(
         API_WORKER_TIMEOUT,
-        state.raft_manager.get_app(app_id.clone()),
+        state.raft_manager.get_app_local(app_id.clone()),
     )
     .await??;
     if let Some(app) = app {
@@ -298,7 +298,7 @@ async fn stop_instance(
 
     if let Some(app) = timeout(
         API_WORKER_TIMEOUT,
-        state.raft_manager.get_app(app_id.clone()),
+        state.raft_manager.get_app_local(app_id.clone()),
     )
     .await??
     {

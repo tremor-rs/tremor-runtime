@@ -14,6 +14,8 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use openraft::raft::ClientWriteResponse;
+
 use crate::raft::api::APIStoreReq;
 use crate::Result;
 use crate::{
@@ -21,7 +23,11 @@ use crate::{
     ids::AppId,
 };
 
-use super::{node::Addr, store::StateApp, TremorRaftImpl};
+use super::{
+    node::Addr,
+    store::{StateApp, TremorRequest, TremorResponse, TremorSet},
+    TremorRaftImpl,
+};
 
 #[derive(Clone, Default)]
 pub(crate) struct Manager {
@@ -47,6 +53,25 @@ impl Manager {
             .await?;
         Ok(())
     }
+
+    fn raft(&self) -> Result<&TremorRaftImpl> {
+        Ok(self
+            .raft
+            .as_ref()
+            .ok_or(crate::errors::ErrorKind::RaftNotRunning)?)
+    }
+
+    async fn client_write<T>(&self, command: T) -> Result<ClientWriteResponse<TremorResponse>>
+    where
+        T: Into<TremorRequest> + Send + 'static,
+    {
+        Ok(self.raft()?.client_write(command.into()).await?)
+    }
+
+    pub async fn is_leader(&self) -> Result<()> {
+        Ok(self.raft()?.client_read().await?)
+    }
+
     pub(crate) fn new(sender: Sender<APIStoreReq>, raft: TremorRaftImpl) -> Self {
         Self {
             raft: Some(raft),
@@ -79,14 +104,15 @@ impl Manager {
         self.send(command).await?;
         Ok(rx.await?)
     }
+
     // apps
-    pub async fn get_app(&self, app_id: AppId) -> Result<Option<StateApp>> {
+    pub async fn get_app_local(&self, app_id: AppId) -> Result<Option<StateApp>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::GetApp(app_id, tx);
         self.send(command).await?;
         Ok(rx.await?)
     }
-    pub async fn get_apps(&self) -> Result<HashMap<AppId, crate::raft::api::apps::AppState>> {
+    pub async fn get_apps_local(&self) -> Result<HashMap<AppId, crate::raft::api::apps::AppState>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::GetApps(tx);
         self.send(command).await?;
@@ -94,12 +120,15 @@ impl Manager {
     }
 
     // kv
-    pub async fn kv_set(&self, _key: String, _value: String) -> Result<()> {
-        // let command = APIStoreReq::KVSet(key, value, tx);
-        // self.send(command).await?;
-        // Ok(rx.await?)
-        tokio::task::yield_now().await;
-        unimplemented!()
+    pub async fn kv_set(&self, key: String, value: String) -> Result<Option<String>> {
+        self.is_leader().await?;
+        let res = self.kv_set_local(key, value).await?;
+        self.is_leader().await?;
+        Ok(res)
+    }
+    pub async fn kv_set_local(&self, key: String, value: String) -> Result<Option<String>> {
+        let tremor_res = self.client_write(TremorSet { key, value }).await?;
+        Ok(tremor_res.data.value)
     }
     pub async fn kv_get_local(&self, key: String) -> Result<Option<String>> {
         let (tx, rx) = oneshot();
