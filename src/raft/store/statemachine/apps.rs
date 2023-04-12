@@ -13,12 +13,9 @@
 // limitations under the License.
 
 use crate::{
-    channel::Sender,
     ids::{AppFlowInstanceId, AppId, FlowDefinitionId, InstanceId},
     instance::IntendedState,
     raft::{
-        self,
-        api::APIStoreReq,
         archive::{extract, get_app, TremorAppDef},
         store::{
             self,
@@ -68,7 +65,6 @@ pub(crate) struct AppsStateMachine {
     db: Arc<rocksdb::DB>,
     apps: HashMap<AppId, StateApp>,
     world: Runtime,
-    raft_api_tx: Sender<APIStoreReq>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -82,11 +78,7 @@ pub(crate) struct AppsSnapshot {
 
 #[async_trait::async_trait]
 impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
-    async fn load(
-        db: &Arc<rocksdb::DB>,
-        world: &Runtime,
-        raft_api_tx: Sender<APIStoreReq>,
-    ) -> Result<Self, store::Error>
+    async fn load(db: &Arc<rocksdb::DB>, world: &Runtime) -> Result<Self, store::Error>
     where
         Self: std::marker::Sized,
     {
@@ -94,7 +86,6 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
             db: db.clone(),
             apps: HashMap::new(),
             world: world.clone(),
-            raft_api_tx,
         };
         // load apps
         for kv in db.iterator_cf(Self::cf_apps(db)?, rocksdb::IteratorMode::Start) {
@@ -418,12 +409,10 @@ impl AppsStateMachine {
             .map_err(store_w_err)?;
 
         // deploy the flow but don't start it yet
+        // ensure the cluster is running
+        self.world.wait_for_cluster().await;
         self.world
-            .deploy_flow(
-                app_id.clone(),
-                &deploy,
-                raft::Manager::new(self.raft_api_tx.clone()),
-            )
+            .deploy_flow(app_id.clone(), &deploy)
             .await
             .map_err(sm_w_err)?;
         // change the flow state to the intended state

@@ -16,9 +16,7 @@
 //! handling all the nodes that are known to the cluster and is responsible for assigning node ids
 
 use crate::{
-    channel::Sender,
     raft::{
-        api::APIStoreReq,
         node::Addr,
         store::{
             bin_to_id, id_to_bin,
@@ -57,11 +55,7 @@ impl NodesStateMachine {
 
 #[async_trait::async_trait]
 impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
-    async fn load(
-        db: &Arc<rocksdb::DB>,
-        _world: &Runtime,
-        _raft_api_tx: Sender<APIStoreReq>,
-    ) -> Result<Self, StoreError>
+    async fn load(db: &Arc<rocksdb::DB>, _world: &Runtime) -> Result<Self, StoreError>
     where
         Self: std::marker::Sized,
     {

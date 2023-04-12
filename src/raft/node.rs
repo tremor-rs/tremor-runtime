@@ -21,7 +21,7 @@ use crate::{
         api::{self, ServerState},
         network::{raft, Raft as TarPCRaftService},
         store::{NodesRequest, Store, TremorRequest, TremorResponse},
-        ClusterError, ClusterResult, Network,
+        ClusterError, ClusterResult, Manager, Network,
     },
     system::{Runtime, ShutdownMode, WorldConfig},
 };
@@ -263,12 +263,16 @@ impl Node {
         let (runtime, runtime_handle) = Runtime::start(node_id, world_config).await?;
         let (store_tx, store_rx) = bounded(qsize());
 
-        let store: Arc<Store> =
-            Store::load(Arc::new(db), runtime.clone(), store_tx.clone()).await?;
+        let store: Arc<Store> = Store::load(Arc::new(db), runtime.clone()).await?;
         let node = Self::new(db_dir, raft_config.clone());
 
         let network = Network::new(store.clone());
         let raft = Raft::new(node_id, node.raft_config.clone(), network, store.clone());
+        let manager = Manager::new(store_tx.clone(), raft.clone());
+        *(runtime
+            .cluster_manager
+            .write()
+            .map_err(|_| "Failed to set world manager")?) = Some(manager);
         let (api_worker_handle, server_state) = api::initialize(
             node_id,
             addr,
@@ -332,16 +336,14 @@ impl Node {
         let world_config = WorldConfig::default(); // TODO: make configurable
         let (runtime, runtime_handle) = Runtime::start(node_id, world_config).await?;
         let (store_tx, store_rx) = bounded(qsize());
-        let store = Store::bootstrap(
-            node_id,
-            &addr,
-            &self.db_dir,
-            runtime.clone(),
-            store_tx.clone(),
-        )
-        .await?;
+        let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
         let network = Network::new(store.clone());
         let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone());
+        let manager = Manager::new(store_tx.clone(), raft.clone());
+        *(runtime
+            .cluster_manager
+            .write()
+            .map_err(|_| "Failed to set world manager")?) = Some(manager);
         let (api_worker_handle, server_state) =
             api::initialize(node_id, addr, raft.clone(), store, store_tx, store_rx);
         let running = Running::start(
@@ -383,17 +385,15 @@ impl Node {
         let (runtime, runtime_handle) = Runtime::start(node_id, world_config).await?;
         let (store_tx, store_rx) = bounded(qsize());
 
-        let store = Store::bootstrap(
-            node_id,
-            &addr,
-            &self.db_dir,
-            runtime.clone(),
-            store_tx.clone(),
-        )
-        .await?;
+        let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
         let network = Network::new(store.clone());
 
         let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone());
+        let manager = Manager::new(store_tx.clone(), raft.clone());
+        *(runtime
+            .cluster_manager
+            .write()
+            .map_err(|_| "Failed to set world manager")?) = Some(manager);
 
         let mut nodes = BTreeSet::new();
         nodes.insert(node_id);

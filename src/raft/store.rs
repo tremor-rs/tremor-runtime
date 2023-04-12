@@ -17,7 +17,6 @@ mod statemachine;
 pub(crate) use self::statemachine::apps::{FlowInstance, Instances, StateApp};
 use self::statemachine::{SerializableTremorStateMachine, TremorStateMachine};
 use crate::{
-    channel::Sender,
     errors::Error as RuntimeError,
     ids::{AppFlowInstanceId, AppId, FlowDefinitionId},
     instance::IntendedState,
@@ -46,7 +45,7 @@ use std::{
 };
 use tokio::sync::RwLock;
 
-use super::{api::APIStoreReq, node::Addr};
+use super::node::Addr;
 
 /// Kv Operation
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -725,14 +724,13 @@ impl Store {
         addr: &Addr,
         db_path: P,
         world: Runtime,
-        raft_api_tx: Sender<APIStoreReq>,
     ) -> Result<Arc<Store>, ClusterError> {
         let db = Self::init_db(db_path)?;
         Self::set_self(&db, node_id, addr)?;
 
         let db = Arc::new(db);
         let state_machine = RwLock::new(
-            TremorStateMachine::new(db.clone(), world, raft_api_tx)
+            TremorStateMachine::new(db.clone(), world)
                 .await
                 .map_err(Error::from)?,
         );
@@ -754,13 +752,9 @@ impl Store {
     }
 
     /// loading constructor - loading the given database
-    pub(crate) async fn load(
-        db: Arc<DB>,
-        world: Runtime,
-        raft_api_tx: Sender<APIStoreReq>,
-    ) -> Result<Arc<Store>, ClusterError> {
+    pub(crate) async fn load(db: Arc<DB>, world: Runtime) -> Result<Arc<Store>, ClusterError> {
         let state_machine = RwLock::new(
-            TremorStateMachine::new(db.clone(), world.clone(), raft_api_tx)
+            TremorStateMachine::new(db.clone(), world.clone())
                 .await
                 .map_err(Error::from)?,
         );

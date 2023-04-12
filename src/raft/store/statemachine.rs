@@ -13,13 +13,8 @@
 // limitations under the License.
 
 use crate::{
-    channel::Sender,
-    raft::{
-        api::APIStoreReq,
-        store::{
-            self, statemachine::nodes::NodesStateMachine, StorageResult, TremorRequest,
-            TremorResponse,
-        },
+    raft::store::{
+        self, statemachine::nodes::NodesStateMachine, StorageResult, TremorRequest, TremorResponse,
     },
     system::Runtime,
 };
@@ -106,11 +101,7 @@ impl TryFrom<&TremorStateMachine> for SerializableTremorStateMachine {
 /// abstract raft statemachine for implementing sub-statemachines
 #[async_trait::async_trait]
 trait RaftStateMachine<Ser: Serialize + Deserialize<'static>, Cmd> {
-    async fn load(
-        db: &Arc<rocksdb::DB>,
-        world: &Runtime,
-        raft_api_tx: Sender<APIStoreReq>,
-    ) -> Result<Self, store::Error>
+    async fn load(db: &Arc<rocksdb::DB>, world: &Runtime) -> Result<Self, store::Error>
     where
         Self: std::marker::Sized;
     async fn apply_diff_from_snapshot(&mut self, snapshot: &Ser) -> StorageResult<()>;
@@ -165,11 +156,10 @@ impl TremorStateMachine {
     pub(crate) async fn new(
         db: Arc<rocksdb::DB>,
         world: Runtime,
-        raft_api_tx: Sender<APIStoreReq>,
     ) -> Result<TremorStateMachine, store::Error> {
-        let nodes = NodesStateMachine::load(&db, &world, raft_api_tx.clone()).await?;
-        let kv = kv::KvStateMachine::load(&db, &world, raft_api_tx.clone()).await?;
-        let apps = apps::AppsStateMachine::load(&db, &world, raft_api_tx).await?;
+        let nodes = NodesStateMachine::load(&db, &world).await?;
+        let kv = kv::KvStateMachine::load(&db, &world).await?;
+        let apps = apps::AppsStateMachine::load(&db, &world).await?;
         Ok(Self {
             db: db.clone(),
             nodes,

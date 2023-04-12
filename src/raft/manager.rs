@@ -21,11 +21,21 @@ use crate::{
     ids::AppId,
 };
 
-use super::{node::Addr, store::StateApp};
+use super::{node::Addr, store::StateApp, TremorRaftImpl};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub(crate) struct Manager {
+    raft: Option<TremorRaftImpl>,
     sender: Option<Sender<APIStoreReq>>,
+}
+
+impl std::fmt::Debug for Manager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Manager")
+            .field("raft", &self.raft.is_some())
+            .field("sender", &self.sender.is_some())
+            .finish()
+    }
 }
 
 impl Manager {
@@ -37,8 +47,9 @@ impl Manager {
             .await?;
         Ok(())
     }
-    pub(crate) fn new(sender: Sender<APIStoreReq>) -> Self {
+    pub(crate) fn new(sender: Sender<APIStoreReq>, raft: TremorRaftImpl) -> Self {
         Self {
+            raft: Some(raft),
             sender: Some(sender),
         }
     }

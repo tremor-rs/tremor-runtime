@@ -95,8 +95,8 @@ pub(crate) fn initialize(
     let state = Arc::new(ServerState {
         id,
         addr,
-        raft,
-        raft_manager: super::Manager::new(store_tx),
+        raft: raft.clone(),
+        raft_manager: super::Manager::new(store_tx, raft),
     });
     (handle, state)
 }

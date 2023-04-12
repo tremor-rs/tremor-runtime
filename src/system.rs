@@ -17,7 +17,10 @@ pub mod flow;
 /// contains the runtime actor starting and maintaining flows
 pub mod flow_supervisor;
 
-use std::time::Duration;
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 use self::flow::Flow;
 use crate::{
@@ -118,9 +121,31 @@ impl KillSwitch {
 pub struct Runtime {
     pub(crate) flows: flow_supervisor::Channel,
     pub(crate) kill_switch: KillSwitch,
+    pub(crate) cluster_manager: Arc<RwLock<Option<raft::Manager>>>,
 }
 
 impl Runtime {
+    // pub(crate) fn get_manager(&self) -> Result<raft::Manager> {
+    //     self.cluster_manager
+    //         .read()?
+    //         .as_ref()
+    //         .cloned()
+    //         .ok_or_else(|| ErrorKind::RaftNotRunning.into())
+    // }
+    pub(crate) fn maybe_get_manager(&self) -> Result<Option<raft::Manager>> {
+        Ok(self.cluster_manager.read()?.as_ref().cloned())
+    }
+
+    pub async fn wait_for_cluster(&self) {
+        while self
+            .cluster_manager
+            .read()
+            .ok()
+            .map_or(true, |v| v.is_none())
+        {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
     /// Loads a Troy src and starts all deployed flows.
     /// Returns the number of deployed and started flows
     ///
@@ -148,7 +173,7 @@ impl Runtime {
         let mut count = 0;
         // first deploy them
         for flow in deployable.iter_flows() {
-            self.deploy_flow_standalone(AppId::default(), flow).await?;
+            self.deploy_flow(AppId::default(), flow).await?;
         }
         // start flows in a second step
         for flow in deployable.iter_flows() {
@@ -167,24 +192,10 @@ impl Runtime {
     /// This flow instance is not started yet.
     /// # Errors
     /// If the flow can't be deployed
-    pub async fn deploy_flow_standalone(
+    pub async fn deploy_flow(
         &self,
         app_id: AppId,
         flow: &ast::DeployFlow<'static>,
-    ) -> Result<AppFlowInstanceId> {
-        self.deploy_flow(app_id, flow, raft::Manager::default())
-            .await
-    }
-    /// Deploy a flow - create an instance of it
-    ///
-    /// This flow instance is not started yet.
-    /// # Errors
-    /// If the flow can't be deployed
-    pub(crate) async fn deploy_flow(
-        &self,
-        app_id: AppId,
-        flow: &ast::DeployFlow<'static>,
-        raft: raft::Manager,
     ) -> Result<AppFlowInstanceId> {
         let (tx, rx) = oneshot::channel();
         self.flows
@@ -192,7 +203,7 @@ impl Runtime {
                 app: app_id,
                 flow: Box::new(flow.clone()),
                 sender: tx,
-                raft,
+                raft: self.maybe_get_manager()?.unwrap_or_default(),
             })
             .await?;
         match rx.await? {
@@ -328,6 +339,7 @@ impl Runtime {
         let world = Self {
             flows: system,
             kill_switch,
+            cluster_manager: Arc::new(RwLock::new(None)),
         };
 
         connectors::register_builtin_connector_types(&world, config.debug_connectors).await?;
