@@ -17,7 +17,7 @@ beef = "0.5"
 halfbrown = { version = "0.1", features = ["fxhash"] }
 serde = "1.0"
 simd-json = "0.8"
-simd-json-derive = "0.7"
+simd-json-derive = "0.8"
 value-trait = { version = "0.5", features = ["custom-types"] }
 tremor-common = { version = "0.13.0-rc.11", path = "../tremor-common" }
 
