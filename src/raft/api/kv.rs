@@ -33,13 +33,13 @@ async fn write(
     extract::OriginalUri(uri): extract::OriginalUri,
     extract::Json(body): extract::Json<TremorSet>,
 ) -> APIResult<String> {
-    let tremor_res = state
+    let res = state
         .raft
         .client_write(body.into())
         .await
         .to_api_result(&uri, &state)
         .await?;
-    if let Some(value) = tremor_res.value {
+    if let Some(value) = res.data.value {
         Ok(value)
     } else {
         Err(APIError::Store(
@@ -60,25 +60,15 @@ async fn read(
 /// read a value from the leader. If this request is received by another node, it will return a redirect
 async fn consistent_read(
     extract::State(state): extract::State<APIRequest>,
-    extract::OriginalUri(uri): extract::OriginalUri,
+    extract::OriginalUri(_uri): extract::OriginalUri,
     extract::Json(key): extract::Json<String>,
 ) -> APIResult<TremorResponse> {
     // this will fail if we are not a leader
-    state
-        .raft
-        .client_read()
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    state.ensure_leader().await?;
     // here we are safe to read
     let value = timeout(API_WORKER_TIMEOUT, state.raft_manager.kv_get_local(key)).await??;
 
     // Ensure that we are still the leader at the end of the read so we can guarantee freshness
-    state
-        .raft
-        .client_read()
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    state.ensure_leader().await?;
     Ok(TremorResponse { value })
 }

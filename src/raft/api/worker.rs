@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::apps::AppState;
 use crate::channel::{OneShotSender, Receiver};
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use crate::{
     ids::AppId,
     raft::{api::APIStoreReq, store::Store},
 };
-
-use super::apps::AppState;
+use std::collections::HashMap;
 
 fn send<T>(tx: OneShotSender<T>, t: T) {
     if tx.send(t).is_err() {
@@ -29,7 +26,7 @@ fn send<T>(tx: OneShotSender<T>, t: T) {
     }
 }
 
-pub(super) async fn api_worker(store: Arc<Store>, mut store_rx: Receiver<APIStoreReq>) {
+pub(super) async fn api_worker(store: Store, mut store_rx: Receiver<APIStoreReq>) {
     while let Some(msg) = store_rx.recv().await {
         match msg {
             APIStoreReq::GetApp(app_id, tx) => {
@@ -70,7 +67,7 @@ pub(super) async fn api_worker(store: Arc<Store>, mut store_rx: Receiver<APIStor
                 let sm = store.state_machine.read().await;
                 let membership = sm.get_last_membership().ok().flatten(); // return errors as option here, this might be bad
                 let last_membership = membership
-                    .and_then(|m| m.membership.get_configs().last().cloned())
+                    .and_then(|m| m.membership().get_joint_config().last().cloned())
                     .unwrap_or_default();
                 send(tx, last_membership);
             }

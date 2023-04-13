@@ -19,6 +19,7 @@ use crate::raft::{
     api::apps::AppState,
     node::Addr,
     store::{TremorInstanceState, TremorResponse, TremorSet, TremorStart},
+    NodeId,
 };
 use halfbrown::HashMap;
 use openraft::{LogId, RaftMetrics};
@@ -272,7 +273,7 @@ impl Tremor {
     /// Make the given node known to the cluster and assign it a unique `node_id`
     /// # Errors
     /// If the api call fails
-    pub async fn add_node(&self, addr: &Addr) -> ClientResult<openraft::NodeId> {
+    pub async fn add_node(&self, addr: &Addr) -> ClientResult<NodeId> {
         self.api_req("cluster/nodes", Method::POST, Some(addr))
             .await
     }
@@ -282,7 +283,7 @@ impl Tremor {
     /// After this call a node is not reachable anymore for all nodes still participating in the cluster
     /// # Errors
     /// if the api call fails
-    pub async fn remove_node(&self, node_id: &openraft::NodeId) -> ClientResult<()> {
+    pub async fn remove_node(&self, node_id: &NodeId) -> ClientResult<()> {
         self.api_req(
             &format!("cluster/nodes/{node_id}"),
             Method::DELETE,
@@ -295,7 +296,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn get_nodes(&self) -> ClientResult<HashMap<openraft::NodeId, Addr>> {
+    pub async fn get_nodes(&self) -> ClientResult<HashMap<NodeId, Addr>> {
         self.api_req("cluster/nodes", Method::GET, None::<&()>)
             .await
     }
@@ -307,7 +308,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails e.g. because the node is already a learner
-    pub async fn add_learner(&self, node_id: &openraft::NodeId) -> ClientResult<Option<LogId>> {
+    pub async fn add_learner(&self, node_id: &NodeId) -> ClientResult<Option<LogId<NodeId>>> {
         self.api_req(
             &format!("cluster/learners/{node_id}"),
             Method::PUT,
@@ -322,7 +323,7 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn remove_learner(&self, id: &openraft::NodeId) -> ClientResult<()> {
+    pub async fn remove_learner(&self, id: &NodeId) -> ClientResult<()> {
         self.api_req::<(), ()>(&format!("cluster/learners/{id}"), Method::DELETE, None)
             .await
     }
@@ -334,16 +335,9 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn promote_voter(
-        &self,
-        id: &openraft::NodeId,
-    ) -> ClientResult<Option<openraft::NodeId>> {
-        self.api_req::<(), Option<openraft::NodeId>>(
-            &format!("cluster/voters/{id}"),
-            Method::PUT,
-            None,
-        )
-        .await
+    pub async fn promote_voter(&self, id: &NodeId) -> ClientResult<Option<NodeId>> {
+        self.api_req::<(), Option<NodeId>>(&format!("cluster/voters/{id}"), Method::PUT, None)
+            .await
     }
 
     /// Demote node with `node_id` from voter back to learner.
@@ -353,16 +347,9 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn demote_voter(
-        &self,
-        id: &openraft::NodeId,
-    ) -> ClientResult<Option<openraft::NodeId>> {
-        self.api_req::<(), Option<openraft::NodeId>>(
-            &format!("cluster/voters/{id}"),
-            Method::DELETE,
-            None,
-        )
-        .await
+    pub async fn demote_voter(&self, id: &NodeId) -> ClientResult<Option<NodeId>> {
+        self.api_req::<(), Option<NodeId>>(&format!("cluster/voters/{id}"), Method::DELETE, None)
+            .await
     }
 
     /// Get the metrics about the cluster.
@@ -373,8 +360,8 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn metrics(&self) -> ClientResult<RaftMetrics> {
-        self.api_req::<(), RaftMetrics>("cluster/metrics", Method::GET, None)
+    pub async fn metrics(&self) -> ClientResult<RaftMetrics<NodeId, Addr>> {
+        self.api_req::<(), RaftMetrics<NodeId, Addr>>("cluster/metrics", Method::GET, None)
             .await
     }
 }
@@ -385,7 +372,7 @@ fn maybe_id<T: ToString>(id: Option<T>) -> String {
         None => "-".to_string(),
     }
 }
-pub fn print_metrics(metrics: &RaftMetrics) {
+pub fn print_metrics(metrics: &RaftMetrics<NodeId, Addr>) {
     println!(
         r#"Node:
     Id: {}
@@ -404,8 +391,8 @@ Cluster:
         maybe_id(metrics.current_leader),
     );
     let membership = &metrics.membership_config;
-    let log_id = membership.log_id;
-    if let Some(config) = membership.membership.get_configs().last() {
+    let log_id = membership.log_id().unwrap_or_default();
+    if let Some(config) = membership.membership().get_joint_config().last() {
         println!(
             r#"
 Membership:

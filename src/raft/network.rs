@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::store::TremorRequest;
+use super::TremorRaftConfig;
 use openraft::raft::{
     AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse,
     VoteRequest, VoteResponse,
@@ -25,9 +25,13 @@ pub mod raft_network_impl;
 
 #[tarpc::service]
 pub(crate) trait Raft {
-    async fn vote(vote: VoteRequest) -> Result<VoteResponse, AnyError>;
+    async fn vote(
+        vote: VoteRequest<crate::raft::NodeId>,
+    ) -> Result<VoteResponse<crate::raft::NodeId>, AnyError>;
     async fn append(
-        req: AppendEntriesRequest<TremorRequest>,
-    ) -> Result<AppendEntriesResponse, AnyError>;
-    async fn snapshot(req: InstallSnapshotRequest) -> Result<InstallSnapshotResponse, AnyError>;
+        req: AppendEntriesRequest<TremorRaftConfig>,
+    ) -> Result<AppendEntriesResponse<crate::raft::NodeId>, AnyError>;
+    async fn snapshot(
+        req: InstallSnapshotRequest<TremorRaftConfig>,
+    ) -> Result<InstallSnapshotResponse<crate::raft::NodeId>, AnyError>;
 }

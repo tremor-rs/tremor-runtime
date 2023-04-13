@@ -14,7 +14,10 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use crate::errors::{Error, ErrorKind};
+use crate::{
+    errors::{Error, ErrorKind},
+    raft::NodeId,
+};
 use openraft::raft::ClientWriteResponse;
 
 use crate::raft::api::APIStoreReq;
@@ -26,12 +29,13 @@ use crate::{
 
 use super::{
     node::Addr,
-    store::{StateApp, TremorRequest, TremorResponse, TremorSet},
-    TremorRaftImpl,
+    store::{StateApp, TremorRequest, TremorSet},
+    TremorRaftConfig, TremorRaftImpl,
 };
 
 #[derive(Clone, Default)]
 pub(crate) struct Manager {
+    node_id: NodeId,
     raft: Option<TremorRaftImpl>,
     sender: Option<Sender<APIStoreReq>>,
 }
@@ -46,6 +50,9 @@ impl std::fmt::Debug for Manager {
 }
 
 impl Manager {
+    pub(crate) fn id(&self) -> NodeId {
+        self.node_id
+    }
     async fn send(&self, command: APIStoreReq) -> Result<()> {
         self.sender
             .as_ref()
@@ -62,7 +69,7 @@ impl Manager {
             .ok_or(crate::errors::ErrorKind::RaftNotRunning)?)
     }
 
-    async fn client_write<T>(&self, command: T) -> Result<ClientWriteResponse<TremorResponse>>
+    async fn client_write<T>(&self, command: T) -> Result<ClientWriteResponse<TremorRaftConfig>>
     where
         T: Into<TremorRequest> + Send + 'static,
     {
@@ -70,11 +77,12 @@ impl Manager {
     }
 
     pub async fn is_leader(&self) -> Result<()> {
-        Ok(self.raft()?.client_read().await?)
+        Ok(self.raft()?.is_leader().await?)
     }
 
-    pub(crate) fn new(sender: Sender<APIStoreReq>, raft: TremorRaftImpl) -> Self {
+    pub(crate) fn new(node_id: NodeId, sender: Sender<APIStoreReq>, raft: TremorRaftImpl) -> Self {
         Self {
+            node_id,
             raft: Some(raft),
             sender: Some(sender),
         }
@@ -124,7 +132,7 @@ impl Manager {
     pub async fn kv_set(&self, key: String, value: String) -> Result<Option<String>> {
         match self.is_leader().await {
             Ok(_) => self.kv_set_local(key, value).await,
-            Err(Error(ErrorKind::ClientReadError(_), _)) => {
+            Err(Error(ErrorKind::CheckIsLeaderError(_), _)) => {
                 unimplemented!()
             }
             Err(e) => Err(e),

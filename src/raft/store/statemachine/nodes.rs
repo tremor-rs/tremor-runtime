@@ -39,7 +39,7 @@ use std::{
 pub(crate) struct NodesStateMachine {
     db: Arc<rocksdb::DB>,
     next_node_id: Arc<AtomicU64>,
-    known_nodes: HashMap<openraft::NodeId, Addr>,
+    known_nodes: HashMap<crate::raft::NodeId, Addr>,
 }
 
 impl NodesStateMachine {
@@ -83,7 +83,7 @@ impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
                 let addr: Addr = serde_json::from_slice(&value_raw)?;
                 Ok((node_id, addr))
             })
-            .collect::<Result<HashMap<openraft::NodeId, Addr>, StoreError>>()?;
+            .collect::<Result<HashMap<crate::raft::NodeId, Addr>, StoreError>>()?;
 
         Ok(Self {
             db: db.clone(),
@@ -130,7 +130,7 @@ impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
 }
 
 impl NodesStateMachine {
-    fn next_node_id(&self) -> StorageResult<openraft::NodeId> {
+    fn next_node_id(&self) -> StorageResult<crate::raft::NodeId> {
         let s = self.next_node_id.fetch_add(1, Ordering::SeqCst);
         let s_bytes = id_to_bin(s)?;
         self.db
@@ -149,7 +149,7 @@ impl NodesStateMachine {
     }
 
     /// find a `NodeId` for the given `addr` if it is already stored
-    pub(crate) fn find_node_id(&self, addr: &Addr) -> Option<&openraft::NodeId> {
+    pub(crate) fn find_node_id(&self, addr: &Addr) -> Option<&crate::raft::NodeId> {
         self.known_nodes
             .iter()
             .find(|(_node_id, existing_addr)| *existing_addr == addr)
@@ -157,17 +157,17 @@ impl NodesStateMachine {
     }
 
     /// get the `Addr` of the node identified by `node_id` if it is stored
-    pub(crate) fn get_node(&self, node_id: openraft::NodeId) -> Option<&Addr> {
+    pub(crate) fn get_node(&self, node_id: crate::raft::NodeId) -> Option<&Addr> {
         self.known_nodes.get(&node_id)
     }
 
     /// get all known nodes with their `NodeId` and `Addr`
-    pub(crate) fn get_nodes(&self) -> &HashMap<openraft::NodeId, Addr> {
+    pub(crate) fn get_nodes(&self) -> &HashMap<crate::raft::NodeId, Addr> {
         &self.known_nodes
     }
 
     /// add the node identified by `addr` if not already there and assign and return a new `node_id`
-    fn add_node(&mut self, addr: &Addr) -> StorageResult<openraft::NodeId> {
+    fn add_node(&mut self, addr: &Addr) -> StorageResult<crate::raft::NodeId> {
         if let Some(node_id) = self.find_node_id(addr) {
             Err(store_w_err(StoreError::NodeAlreadyAdded(*node_id)))
         } else {
@@ -179,7 +179,7 @@ impl NodesStateMachine {
     }
 
     /// store the given addr under the given `node_id`, without creating a new one
-    fn store_node(&mut self, node_id: openraft::NodeId, addr: &Addr) -> StorageResult<()> {
+    fn store_node(&mut self, node_id: crate::raft::NodeId, addr: &Addr) -> StorageResult<()> {
         let node_id_bytes = id_to_bin(node_id)?;
         self.db
             .put_cf(
@@ -192,7 +192,7 @@ impl NodesStateMachine {
         Ok(())
     }
 
-    fn remove_node(&mut self, node_id: openraft::NodeId) -> StorageResult<()> {
+    fn remove_node(&mut self, node_id: crate::raft::NodeId) -> StorageResult<()> {
         self.known_nodes.remove(&node_id);
         let node_id_bytes = id_to_bin(node_id)?;
         self.db
@@ -205,5 +205,5 @@ impl NodesStateMachine {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct NodesSnapshot {
     next_node_id: u64,
-    nodes: HashMap<openraft::NodeId, Addr>,
+    nodes: HashMap<crate::raft::NodeId, Addr>,
 }

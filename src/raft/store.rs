@@ -25,11 +25,9 @@ use crate::{
 };
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use openraft::{
-    async_trait::async_trait,
-    storage::{LogState, Snapshot},
-    AnyError, AppData, AppDataResponse, EffectiveMembership, Entry, EntryPayload, ErrorSubject,
-    ErrorVerb, HardState, LogId, RaftStorage, SnapshotMeta, StateMachineChanges, StorageError,
-    StorageIOError,
+    async_trait::async_trait, storage::Snapshot, AnyError, Entry, EntryPayload, ErrorSubject,
+    ErrorVerb, LogId, LogState, RaftLogReader, RaftSnapshotBuilder, RaftStorage, SnapshotMeta,
+    StorageError, StorageIOError, StoredMembership, Vote,
 };
 use rocksdb::{ColumnFamily, Direction, FlushOptions, Options, DB};
 use serde::{Deserialize, Serialize};
@@ -45,7 +43,7 @@ use std::{
 };
 use tokio::sync::RwLock;
 
-use super::node::Addr;
+use super::{node::Addr, NodeId, TremorRaftConfig};
 
 /// Kv Operation
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -62,7 +60,7 @@ pub enum NodesRequest {
     AddNode { addr: Addr },
     /// Remove Node with the given `node_id`
     /// This command should be committed after removing a learner from the cluster.
-    RemoveNode { node_id: openraft::NodeId },
+    RemoveNode { node_id: crate::raft::NodeId },
 }
 
 /// Operations on apps and their instances
@@ -108,8 +106,6 @@ pub enum TremorRequest {
     Nodes(NodesRequest),
     Apps(AppsRequest),
 }
-
-impl AppData for TremorRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct TremorStart {
@@ -163,25 +159,23 @@ pub struct TremorResponse {
     pub value: Option<String>,
 }
 
-impl AppDataResponse for TremorResponse {}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TremorSnapshot {
-    pub meta: SnapshotMeta,
+    pub meta: SnapshotMeta<crate::raft::NodeId, crate::raft::node::Addr>,
 
     /// The data of the state machine at the time of this snapshot.
     pub data: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Store {
     /// The Raft state machine.
-    pub(crate) state_machine: RwLock<TremorStateMachine>,
+    pub(crate) state_machine: Arc<RwLock<TremorStateMachine>>,
     // the database
     db: Arc<rocksdb::DB>,
 }
 
-type StorageResult<T> = Result<T, StorageError>;
+type StorageResult<T> = Result<T, StorageError<crate::raft::NodeId>>;
 
 /// converts an id to a byte vector for storing in the database.
 /// Note that we're using big endian encoding to ensure correct sorting of keys
@@ -206,7 +200,7 @@ pub enum Error {
     JSON(serde_json::Error),
     RocksDB(rocksdb::Error),
     Io(std::io::Error),
-    Storage(openraft::StorageError),
+    Storage(openraft::StorageError<crate::raft::NodeId>),
     // TODO: this is horrid, aaaaaahhhhh!
     Tremor(Mutex<RuntimeError>),
     TremorScript(Mutex<tremor_script::errors::Error>),
@@ -214,7 +208,7 @@ pub enum Error {
     MissingFlow(AppId, FlowDefinitionId),
     MissingInstance(AppFlowInstanceId),
     RunningInstances(AppId),
-    NodeAlreadyAdded(openraft::NodeId),
+    NodeAlreadyAdded(crate::raft::NodeId),
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -265,8 +259,8 @@ impl From<tremor_script::errors::Error> for Error {
     }
 }
 
-impl From<StorageError> for Error {
-    fn from(e: StorageError) -> Self {
+impl From<StorageError<crate::raft::NodeId>> for Error {
+    fn from(e: StorageError<crate::raft::NodeId>) -> Self {
         Error::Storage(e)
     }
 }
@@ -298,29 +292,32 @@ impl Display for Error {
     }
 }
 
-fn store_w_err(e: impl StdError + 'static) -> StorageError {
+fn store_w_err(e: impl StdError + 'static) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(ErrorSubject::Store, ErrorVerb::Write, AnyError::new(&e)).into()
 }
-fn store_r_err(e: impl StdError + 'static) -> StorageError {
+fn store_r_err(e: impl StdError + 'static) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(ErrorSubject::Store, ErrorVerb::Read, AnyError::new(&e)).into()
 }
-fn logs_r_err(e: impl StdError + 'static) -> StorageError {
+fn logs_r_err(e: impl StdError + 'static) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(ErrorSubject::Logs, ErrorVerb::Read, AnyError::new(&e)).into()
 }
-fn logs_w_err(e: impl StdError + 'static) -> StorageError {
+fn logs_w_err(e: impl StdError + 'static) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(ErrorSubject::Logs, ErrorVerb::Read, AnyError::new(&e)).into()
 }
-fn snap_w_err(meta: &SnapshotMeta, e: impl StdError + 'static) -> StorageError {
+fn snap_w_err(
+    meta: &SnapshotMeta<crate::raft::NodeId, crate::raft::node::Addr>,
+    e: impl StdError + 'static,
+) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
-        ErrorSubject::Snapshot(meta.clone()),
+        ErrorSubject::Snapshot(meta.signature()),
         ErrorVerb::Write,
         AnyError::new(&e),
     )
     .into()
 }
 
-impl From<Error> for StorageError {
-    fn from(e: Error) -> StorageError {
+impl From<Error> for StorageError<crate::raft::NodeId> {
+    fn from(e: Error) -> StorageError<crate::raft::NodeId> {
         StorageIOError::new(ErrorSubject::Store, ErrorVerb::Read, AnyError::new(&e)).into()
     }
 }
@@ -367,18 +364,18 @@ impl Store {
         Ok(())
     }
 
-    fn get_hard_state_(&self) -> StorageResult<Option<HardState>> {
+    fn get_vote_(&self) -> StorageResult<Option<Vote<NodeId>>> {
         Ok(self
             .db
-            .get_cf(self.db.cf_store()?, Self::HARD_STATE)
+            .get_cf(self.db.cf_store()?, Self::VOTE)
             .map_err(store_r_err)?
             .and_then(|v| serde_json::from_slice(&v).ok()))
     }
 
-    fn set_hard_state_(&self, hard_state: &HardState) -> StorageResult<()> {
+    fn set_vote_(&self, hard_state: &Vote<NodeId>) -> StorageResult<()> {
         self.put(
             self.db.cf_store()?,
-            Self::HARD_STATE,
+            Self::VOTE,
             serde_json::to_vec(hard_state)
                 .map_err(Error::JSON)?
                 .as_slice(),
@@ -386,7 +383,7 @@ impl Store {
         .map_err(store_w_err)
     }
 
-    fn get_last_purged_(&self) -> StorageResult<Option<LogId>> {
+    fn get_last_purged_(&self) -> StorageResult<Option<LogId<crate::raft::NodeId>>> {
         Ok(self
             .db
             .get_cf(self.db.cf_store()?, Store::LAST_PURGED_LOG_ID)
@@ -394,7 +391,7 @@ impl Store {
             .and_then(|v| serde_json::from_slice(&v).ok()))
     }
 
-    fn set_last_purged_(&self, log_id: &LogId) -> StorageResult<()> {
+    fn set_last_purged_(&self, log_id: &LogId<crate::raft::NodeId>) -> StorageResult<()> {
         self.put(
             self.db.cf_store()?,
             Self::LAST_PURGED_LOG_ID,
@@ -445,18 +442,9 @@ impl Store {
 }
 
 #[async_trait]
-impl RaftStorage<TremorRequest, TremorResponse> for Store {
-    type SnapshotData = Cursor<Vec<u8>>;
 
-    async fn save_hard_state(&self, hs: &HardState) -> Result<(), StorageError> {
-        self.set_hard_state_(hs)
-    }
-
-    async fn read_hard_state(&self) -> Result<Option<HardState>, StorageError> {
-        self.get_hard_state_()
-    }
-
-    async fn get_log_state(&self) -> StorageResult<LogState> {
+impl RaftLogReader<TremorRaftConfig> for Store {
+    async fn get_log_state(&mut self) -> StorageResult<LogState<TremorRaftConfig>> {
         let last = self
             .db
             .iterator_cf(self.db.cf_logs()?, rocksdb::IteratorMode::End)
@@ -464,7 +452,7 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
             .and_then(|d| {
                 let (_, ent) = d.ok()?;
                 Some(
-                    serde_json::from_slice::<Entry<TremorRequest>>(&ent)
+                    serde_json::from_slice::<Entry<TremorRaftConfig>>(&ent)
                         .ok()?
                         .log_id,
                 )
@@ -483,9 +471,9 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
     }
 
     async fn try_get_log_entries<RB: RangeBounds<u64> + Clone + Debug + Send + Sync>(
-        &self,
+        &mut self,
         range: RB,
-    ) -> StorageResult<Vec<Entry<TremorRequest>>> {
+    ) -> StorageResult<Vec<Entry<TremorRaftConfig>>> {
         let start = match range.start_bound() {
             std::ops::Bound::Included(x) => id_to_bin(*x),
             std::ops::Bound::Excluded(x) => id_to_bin(*x + 1),
@@ -509,9 +497,86 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
             })
             .collect::<StorageResult<_>>()
     }
+}
+#[async_trait]
+
+impl RaftSnapshotBuilder<TremorRaftConfig, Cursor<Vec<u8>>> for Store {
+    async fn build_snapshot(
+        &mut self,
+    ) -> StorageResult<Snapshot<NodeId, crate::raft::node::Addr, Cursor<Vec<u8>>>> {
+        let data;
+        let last_applied_log;
+        let last_membership;
+
+        {
+            // Serialize the data of the state machine.
+            let state_machine =
+                SerializableTremorStateMachine::try_from(&*self.state_machine.read().await)?;
+            data = state_machine.to_vec()?;
+
+            last_applied_log = state_machine.last_applied_log;
+            last_membership = state_machine.last_membership;
+        }
+
+        // TODO: we probably want thius to be atomic.
+        let snapshot_idx: u64 = self.get_snapshot_index_()? + 1;
+        self.set_snapshot_index_(snapshot_idx)?;
+
+        let snapshot_id = format!(
+            "{}-{}-{}",
+            last_applied_log.map(|x| x.leader_id).unwrap_or_default(),
+            last_applied_log.map_or(0, |l| l.index),
+            snapshot_idx
+        );
+
+        let meta = SnapshotMeta {
+            last_log_id: last_applied_log,
+            last_membership: last_membership.unwrap_or_default(),
+            snapshot_id,
+        };
+
+        let snapshot = TremorSnapshot {
+            meta: meta.clone(),
+            data: data.clone(),
+        };
+
+        self.set_current_snapshot_(&snapshot)?;
+
+        Ok(Snapshot {
+            meta,
+            snapshot: Box::new(Cursor::new(data)),
+        })
+    }
+}
+#[async_trait]
+impl RaftStorage<TremorRaftConfig> for Store {
+    type SnapshotData = Cursor<Vec<u8>>;
+    type LogReader = Self;
+    type SnapshotBuilder = Self;
+
+    async fn get_snapshot_builder(&mut self) -> Self::SnapshotBuilder {
+        self.clone()
+    }
+
+    async fn get_log_reader(&mut self) -> Self::LogReader {
+        self.clone()
+    }
+
+    async fn save_vote(
+        &mut self,
+        vote: &Vote<NodeId>,
+    ) -> Result<(), StorageError<crate::raft::NodeId>> {
+        self.set_vote_(vote)
+    }
+
+    async fn read_vote(
+        &mut self,
+    ) -> Result<Option<Vote<NodeId>>, StorageError<crate::raft::NodeId>> {
+        self.get_vote_()
+    }
 
     // #[tracing::instrument(level = "trace", skip(self, entries))]
-    async fn append_to_log(&self, entries: &[&Entry<TremorRequest>]) -> StorageResult<()> {
+    async fn append_to_log(&mut self, entries: &[&Entry<TremorRaftConfig>]) -> StorageResult<()> {
         for entry in entries {
             let id = id_to_bin(entry.log_id.index)?;
             assert_eq!(bin_to_id(&id)?, entry.log_id.index);
@@ -526,7 +591,10 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
     }
 
     // #[tracing::instrument(level = "debug", skip(self))]
-    async fn delete_conflict_logs_since(&self, log_id: LogId) -> StorageResult<()> {
+    async fn delete_conflict_logs_since(
+        &mut self,
+        log_id: LogId<crate::raft::NodeId>,
+    ) -> StorageResult<()> {
         debug!("delete_conflict_logs_since: [{log_id}, +oo)");
 
         let from = id_to_bin(log_id.index)?;
@@ -537,7 +605,7 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
     }
 
     // #[tracing::instrument(level = "debug", skip(self))]
-    async fn purge_logs_upto(&self, log_id: LogId) -> StorageResult<()> {
+    async fn purge_logs_upto(&mut self, log_id: LogId<crate::raft::NodeId>) -> StorageResult<()> {
         debug!("purge_logs_upto: [0, {log_id}]");
 
         self.set_last_purged_(&log_id)?;
@@ -549,20 +617,23 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
     }
 
     async fn last_applied_state(
-        &self,
-    ) -> StorageResult<(Option<LogId>, Option<EffectiveMembership>)> {
+        &mut self,
+    ) -> StorageResult<(
+        std::option::Option<openraft::LogId<u64>>,
+        openraft::StoredMembership<u64, crate::raft::node::Addr>,
+    )> {
         let state_machine = self.state_machine.read().await;
         Ok((
             state_machine.get_last_applied_log()?,
-            state_machine.get_last_membership()?,
+            state_machine.get_last_membership()?.unwrap_or_default(),
         ))
     }
 
     //#[tracing::instrument(level = "trace", skip(self, entries))]
     /// apply committed entries to the state machine, start the operation encoded in the `TremorRequest`
     async fn apply_to_state_machine(
-        &self,
-        entries: &[&Entry<TremorRequest>],
+        &mut self,
+        entries: &[&Entry<TremorRaftConfig>],
     ) -> StorageResult<Vec<TremorResponse>> {
         //debug!("apply_to_state_machine {entries:?}");
         let mut result = Vec::with_capacity(entries.len());
@@ -581,10 +652,10 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
                 }
                 EntryPayload::Membership(ref mem) => {
                     debug!("[{}] replicate membership to sm", entry.log_id);
-                    sm.set_last_membership(&EffectiveMembership {
-                        log_id: entry.log_id,
-                        membership: mem.clone(),
-                    })?;
+                    sm.set_last_membership(&StoredMembership::new(
+                        Some(entry.log_id),
+                        mem.clone(),
+                    ))?;
                     result.push(TremorResponse { value: None });
                 }
             };
@@ -593,62 +664,18 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
         Ok(result)
     }
 
-    // -- snapshot stuff
-
-    async fn build_snapshot(&self) -> StorageResult<Snapshot<Self::SnapshotData>> {
-        let data;
-        let last_applied_log;
-
-        {
-            // Serialize the data of the state machine.
-            let state_machine =
-                SerializableTremorStateMachine::try_from(&*self.state_machine.read().await)?;
-            data = state_machine.to_vec()?;
-
-            last_applied_log = state_machine.last_applied_log;
-        }
-
-        // TODO: we probably want thius to be atomic.
-        let snapshot_idx: u64 = self.get_snapshot_index_()? + 1;
-        self.set_snapshot_index_(snapshot_idx)?;
-
-        let snapshot_id = format!(
-            "{}-{}-{}",
-            last_applied_log.map(|x| x.term).unwrap_or_default(),
-            last_applied_log.map_or(0, |l| l.index),
-            snapshot_idx
-        );
-
-        let meta = SnapshotMeta {
-            last_log_id: last_applied_log,
-            snapshot_id,
-        };
-
-        let snapshot = TremorSnapshot {
-            meta: meta.clone(),
-            data: data.clone(),
-        };
-
-        self.set_current_snapshot_(&snapshot)?;
-
-        Ok(Snapshot {
-            meta,
-            snapshot: Box::new(Cursor::new(data)),
-        })
-    }
-
     // #[tracing::instrument(level = "trace", skip(self))]
-    async fn begin_receiving_snapshot(&self) -> StorageResult<Box<Self::SnapshotData>> {
+    async fn begin_receiving_snapshot(&mut self) -> StorageResult<Box<Self::SnapshotData>> {
         Ok(Box::new(Cursor::new(Vec::new())))
     }
 
     // #[tracing::instrument(level = "trace", skip(self, snapshot))]
     /// installs snapshot and applies all the deltas to statemachine and runtime
     async fn install_snapshot(
-        &self,
-        meta: &SnapshotMeta,
+        &mut self,
+        meta: &SnapshotMeta<crate::raft::NodeId, crate::raft::node::Addr>,
         snapshot: Box<Self::SnapshotData>,
-    ) -> StorageResult<StateMachineChanges> {
+    ) -> StorageResult<()> {
         info!(
             "decoding snapshot for installation size: {} ",
             snapshot.get_ref().len()
@@ -664,7 +691,7 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
             let updated_state_machine: SerializableTremorStateMachine =
                 serde_json::from_slice(&new_snapshot.data).map_err(|e| {
                     StorageIOError::new(
-                        ErrorSubject::Snapshot(new_snapshot.meta.clone()),
+                        ErrorSubject::Snapshot(new_snapshot.meta.signature()),
                         ErrorVerb::Read,
                         AnyError::new(&e),
                     )
@@ -676,14 +703,15 @@ impl RaftStorage<TremorRequest, TremorResponse> for Store {
             self.set_current_snapshot_(&new_snapshot)?;
         }
 
-        Ok(StateMachineChanges {
-            last_applied: meta.last_log_id,
-            is_snapshot: true,
-        })
+        Ok(())
     }
 
     // #[tracing::instrument(level = "trace", skip(self))]
-    async fn get_current_snapshot(&self) -> StorageResult<Option<Snapshot<Self::SnapshotData>>> {
+    async fn get_current_snapshot(
+        &mut self,
+    ) -> StorageResult<
+        Option<Snapshot<crate::raft::NodeId, crate::raft::node::Addr, Self::SnapshotData>>,
+    > {
         match Store::get_current_snapshot_(self)? {
             Some(snapshot) => {
                 let data = snapshot.data.clone();
@@ -713,28 +741,28 @@ impl Store {
     const LAST_PURGED_LOG_ID: &'static str = "last_purged_log_id";
     const SNAPSHOT_INDEX: &'static str = "snapshot_index";
     const SNAPSHOT: &'static str = "snapshot";
-    const HARD_STATE: &'static str = "hard_state";
+    const VOTE: &'static str = "vote";
     /// for storing the own `node_id`
     const NODE_ID: &'static str = "node_id";
     const NODE_ADDR: &'static str = "node_addr";
 
     /// bootstrapping constructor - storing the given node data in the db
     pub(crate) async fn bootstrap<P: AsRef<Path>>(
-        node_id: openraft::NodeId,
+        node_id: crate::raft::NodeId,
         addr: &Addr,
         db_path: P,
         world: Runtime,
-    ) -> Result<Arc<Store>, ClusterError> {
+    ) -> Result<Store, ClusterError> {
         let db = Self::init_db(db_path)?;
         Self::set_self(&db, node_id, addr)?;
 
         let db = Arc::new(db);
-        let state_machine = RwLock::new(
+        let state_machine = Arc::new(RwLock::new(
             TremorStateMachine::new(db.clone(), world)
                 .await
                 .map_err(Error::from)?,
-        );
-        Ok(Arc::new(Self { state_machine, db }))
+        ));
+        Ok(Self { state_machine, db })
     }
 
     /// Initialize the database
@@ -752,18 +780,18 @@ impl Store {
     }
 
     /// loading constructor - loading the given database
-    pub(crate) async fn load(db: Arc<DB>, world: Runtime) -> Result<Arc<Store>, ClusterError> {
-        let state_machine = RwLock::new(
+    pub(crate) async fn load(db: Arc<DB>, world: Runtime) -> Result<Store, ClusterError> {
+        let state_machine = Arc::new(RwLock::new(
             TremorStateMachine::new(db.clone(), world.clone())
                 .await
                 .map_err(Error::from)?,
-        );
+        ));
         let this = Self { state_machine, db };
-        Ok(Arc::new(this))
+        Ok(this)
     }
 
     /// Store the information about the current node itself in the `db`
-    fn set_self(db: &DB, node_id: openraft::NodeId, addr: &Addr) -> Result<(), ClusterError> {
+    fn set_self(db: &DB, node_id: crate::raft::NodeId, addr: &Addr) -> Result<(), ClusterError> {
         let node_id_bytes = id_to_bin(node_id)?;
         let addr_bytes = serde_json::to_vec(addr)?;
         let cf = db.cf_self()?;
@@ -772,7 +800,7 @@ impl Store {
         Ok(())
     }
 
-    pub(crate) fn get_self(db: &DB) -> Result<(openraft::NodeId, Addr), ClusterError> {
+    pub(crate) fn get_self(db: &DB) -> Result<(crate::raft::NodeId, Addr), ClusterError> {
         let id = Self::get_self_node_id(db)?.ok_or("invalid cluster store, node_id missing")?;
         let addr = Self::get_self_addr(db)?.ok_or("invalid cluster store, node_addr missing")?;
 
@@ -790,7 +818,7 @@ impl Store {
 
     /// # Errors
     /// if the store fails to read the node id
-    pub fn get_self_node_id(db: &DB) -> Result<Option<openraft::NodeId>, Error> {
+    pub fn get_self_node_id(db: &DB) -> Result<Option<crate::raft::NodeId>, Error> {
         db.get_cf(db.cf_self()?, Store::NODE_ID)?
             .map(|v| bin_to_id(&v))
             .transpose()

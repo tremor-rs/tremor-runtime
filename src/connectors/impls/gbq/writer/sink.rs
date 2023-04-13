@@ -796,7 +796,6 @@ mod test {
                 scale: 0,
             }],
             &SinkContext::new(
-                openraft::NodeId::default(),
                 SinkUId::default(),
                 Alias::new("flow", "connector"),
                 ConnectorType::default(),
@@ -827,7 +826,6 @@ mod test {
                 scale: 0,
             }],
             &SinkContext::new(
-                openraft::NodeId::default(),
                 SinkUId::default(),
                 Alias::new("flow", "connector"),
                 ConnectorType::default(),
@@ -867,7 +865,6 @@ mod test {
                     scale: 0,
                 }],
                 &SinkContext::new(
-                    openraft::NodeId::default(),
                     SinkUId::default(),
                     Alias::new("flow", "connector"),
                     ConnectorType::default(),
@@ -909,7 +906,6 @@ mod test {
                 scale: 0,
             }],
             &SinkContext::new(
-                openraft::NodeId::default(),
                 SinkUId::default(),
                 Alias::new("flow", "connector"),
                 ConnectorType::default(),
@@ -1135,7 +1131,6 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             Alias::new(
                 AppFlowInstanceId::new(AppId::default(), "flow"),
@@ -1189,7 +1184,6 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
@@ -1236,7 +1230,6 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
@@ -1284,7 +1277,6 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
@@ -1330,7 +1322,6 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
@@ -1367,7 +1358,6 @@ mod test {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
@@ -1429,7 +1419,6 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext::new(
-                    openraft::NodeId::default(),
                     SinkUId::default(),
                     Alias::new("flow", "connector"),
                     ConnectorType::default(),
@@ -1473,7 +1462,6 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext::new(
-                    openraft::NodeId::default(),
                     SinkUId::default(),
                     Alias::new("flow", "connector"),
                     ConnectorType::default(),
@@ -1548,7 +1536,6 @@ mod test {
         );
 
         let ctx = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             Alias::new("flow", "connector"),
             ConnectorType::default(),
@@ -1632,7 +1619,6 @@ mod test {
         );
 
         let ctx = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             Alias::new(
                 AppFlowInstanceId::new(AppId::default(), "flow"),

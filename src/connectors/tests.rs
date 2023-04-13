@@ -108,7 +108,6 @@ impl ConnectorHarness {
         }
         let raw_config = config::Connector::from_config(&alias, builder.connector_type(), defn)?;
         let connector_addr = connectors::spawn(
-            openraft::NodeId::default(),
             &alias,
             &mut connector_id_gen,
             builder,

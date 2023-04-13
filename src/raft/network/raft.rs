@@ -23,7 +23,7 @@ use openraft::{
 };
 use tarpc::context;
 
-use crate::raft::{store::TremorRequest, TremorRaftImpl};
+use crate::raft::{TremorRaftConfig, TremorRaftImpl};
 
 // --- Raft communication server side
 #[derive(Clone)]
@@ -39,14 +39,18 @@ impl Server {
 
 #[tarpc::server]
 impl super::Raft for Server {
-    async fn vote(self, _: context::Context, vote: VoteRequest) -> Result<VoteResponse, AnyError> {
+    async fn vote(
+        self,
+        _: context::Context,
+        vote: VoteRequest<crate::raft::NodeId>,
+    ) -> Result<VoteResponse<crate::raft::NodeId>, AnyError> {
         self.raft.vote(vote).await.map_err(|e| AnyError::new(&e))
     }
     async fn append(
         self,
         _: context::Context,
-        req: AppendEntriesRequest<TremorRequest>,
-    ) -> Result<AppendEntriesResponse, AnyError> {
+        req: AppendEntriesRequest<TremorRaftConfig>,
+    ) -> Result<AppendEntriesResponse<crate::raft::NodeId>, AnyError> {
         self.raft
             .append_entries(req)
             .await
@@ -55,8 +59,8 @@ impl super::Raft for Server {
     async fn snapshot(
         self,
         _: context::Context,
-        req: InstallSnapshotRequest,
-    ) -> Result<InstallSnapshotResponse, AnyError> {
+        req: InstallSnapshotRequest<TremorRaftConfig>,
+    ) -> Result<InstallSnapshotResponse<crate::raft::NodeId>, AnyError> {
         self.raft
             .install_snapshot(req)
             .await

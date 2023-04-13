@@ -570,7 +570,6 @@ pub(crate) mod tests {
 
         let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
@@ -757,7 +756,6 @@ pub(crate) mod tests {
 
         let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
@@ -932,7 +930,6 @@ pub(crate) mod tests {
 
         let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
@@ -1028,7 +1025,6 @@ pub(crate) mod tests {
 
         let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
@@ -1083,7 +1079,6 @@ pub(crate) mod tests {
 
         let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
@@ -1309,7 +1304,6 @@ pub(crate) mod tests {
 
         let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
         let context = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
@@ -1462,7 +1456,6 @@ pub(crate) mod tests {
 
         // lets cover create-sink here
         let addr = crate::connectors::spawn(
-            openraft::NodeId::default(),
             &alias,
             &mut connector_id_gen,
             &builder,
@@ -1499,7 +1492,6 @@ pub(crate) mod tests {
 
         // lets cover create-sink here
         let addr = crate::connectors::spawn(
-            openraft::NodeId::default(),
             &alias,
             &mut connector_id_gen,
             &builder,

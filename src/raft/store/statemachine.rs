@@ -19,7 +19,7 @@ use crate::{
     system::Runtime,
 };
 use openraft::{
-    AnyError, EffectiveMembership, ErrorSubject, ErrorVerb, LogId, StorageError, StorageIOError,
+    AnyError, ErrorSubject, ErrorVerb, LogId, StorageError, StorageIOError, StoredMembership,
 };
 use rocksdb::ColumnFamily;
 use serde::{Deserialize, Serialize};
@@ -32,7 +32,7 @@ mod nodes;
 // kv state machine
 mod kv;
 
-fn sm_r_err<E: Error + 'static>(e: E) -> StorageError {
+fn sm_r_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Read,
@@ -40,7 +40,7 @@ fn sm_r_err<E: Error + 'static>(e: E) -> StorageError {
     )
     .into()
 }
-fn sm_w_err<E: Error + 'static>(e: E) -> StorageError {
+fn sm_w_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Write,
@@ -48,7 +48,7 @@ fn sm_w_err<E: Error + 'static>(e: E) -> StorageError {
     )
     .into()
 }
-fn sm_d_err<E: Error + 'static>(e: E) -> StorageError {
+fn sm_d_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Delete,
@@ -59,9 +59,9 @@ fn sm_d_err<E: Error + 'static>(e: E) -> StorageError {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SerializableTremorStateMachine {
-    pub last_applied_log: Option<LogId>,
+    pub last_applied_log: Option<LogId<crate::raft::NodeId>>,
 
-    pub last_membership: Option<EffectiveMembership>,
+    pub last_membership: Option<StoredMembership<crate::raft::NodeId, crate::raft::node::Addr>>,
 
     /// Application data, for the k/v store
     pub(crate) kv: kv::KvSnapshot,
@@ -80,7 +80,7 @@ impl SerializableTremorStateMachine {
 }
 
 impl TryFrom<&TremorStateMachine> for SerializableTremorStateMachine {
-    type Error = StorageError;
+    type Error = StorageError<crate::raft::NodeId>;
 
     fn try_from(state: &TremorStateMachine) -> Result<Self, Self::Error> {
         let nodes = state.nodes.as_snapshot()?;
@@ -168,7 +168,9 @@ impl TremorStateMachine {
         })
     }
 
-    pub(crate) fn get_last_membership(&self) -> StorageResult<Option<EffectiveMembership>> {
+    pub(crate) fn get_last_membership(
+        &self,
+    ) -> StorageResult<Option<StoredMembership<crate::raft::NodeId, crate::raft::node::Addr>>> {
         self.db
             .get_cf(self.cf_state_machine()?, Self::LAST_MEMBERSHIP)
             .map_err(sm_r_err)
@@ -181,7 +183,7 @@ impl TremorStateMachine {
 
     pub(crate) fn set_last_membership(
         &self,
-        membership: &EffectiveMembership,
+        membership: &StoredMembership<crate::raft::NodeId, crate::raft::node::Addr>,
     ) -> StorageResult<()> {
         self.db
             .put_cf(
@@ -192,7 +194,7 @@ impl TremorStateMachine {
             .map_err(sm_w_err)
     }
 
-    pub(crate) fn get_last_applied_log(&self) -> StorageResult<Option<LogId>> {
+    pub(crate) fn get_last_applied_log(&self) -> StorageResult<Option<LogId<crate::raft::NodeId>>> {
         self.db
             .get_cf(self.cf_state_machine()?, Self::LAST_APPLIED_LOG)
             .map_err(sm_r_err)
@@ -203,7 +205,10 @@ impl TremorStateMachine {
             })
     }
 
-    pub(crate) fn set_last_applied_log(&self, log_id: LogId) -> StorageResult<()> {
+    pub(crate) fn set_last_applied_log(
+        &self,
+        log_id: LogId<crate::raft::NodeId>,
+    ) -> StorageResult<()> {
         self.db
             .put_cf(
                 self.cf_state_machine()?,
@@ -246,7 +251,7 @@ impl TremorStateMachine {
 
     pub(crate) async fn handle_request(
         &mut self,
-        log_id: LogId,
+        log_id: LogId<crate::raft::NodeId>,
         req: &TremorRequest,
     ) -> StorageResult<TremorResponse> {
         match req {

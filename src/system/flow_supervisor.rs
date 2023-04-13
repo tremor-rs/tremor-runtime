@@ -71,7 +71,6 @@ pub(crate) enum Msg {
 
 #[derive(Debug)]
 pub(crate) struct FlowSupervisor {
-    node_id: openraft::NodeId,
     flows: HashMap<AppFlowInstanceId, Flow>,
     operator_id_gen: OperatorUIdGen,
     connector_id_gen: ConnectorUIdGen,
@@ -79,9 +78,8 @@ pub(crate) struct FlowSupervisor {
 }
 
 impl FlowSupervisor {
-    pub fn new(node_id: openraft::NodeId) -> Self {
+    pub fn new() -> Self {
         Self {
-            node_id,
             flows: HashMap::new(),
             known_connectors: connectors::Known::new(),
             operator_id_gen: OperatorUIdGen::new(),
@@ -111,7 +109,6 @@ impl FlowSupervisor {
         let res = match self.flows.entry(id.clone()) {
             Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
             Entry::Vacant(vacant) => Flow::deploy(
-                self.node_id,
                 id.clone(),
                 flow,
                 &mut self.operator_id_gen,

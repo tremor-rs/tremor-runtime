@@ -28,7 +28,7 @@ use crate::{
     raft::{
         node::Addr,
         store::{self, StateApp, Store, TremorResponse},
-        TremorRaftImpl,
+        NodeId, TremorRaftImpl,
     },
 };
 use axum::{
@@ -39,11 +39,9 @@ use axum::{
 use http::{header::LOCATION, HeaderMap, Uri};
 use openraft::{
     error::{
-        AddLearnerError, ChangeMembershipError, ClientReadError, ClientWriteError, Fatal,
-        ForwardToLeader, QuorumNotEnough, RemoveLearnerError,
+        ChangeMembershipError, ClientWriteError, Fatal, ForwardToLeader, QuorumNotEnough, RaftError,
     },
-    raft::{AddLearnerResponse, ClientWriteResponse},
-    LogId, NodeId, StorageError,
+    StorageError,
 };
 use std::collections::HashMap;
 use std::{collections::BTreeSet, num::ParseIntError, sync::Arc, time::Duration};
@@ -75,6 +73,24 @@ pub(crate) struct ServerState {
 }
 
 impl ServerState {
+    pub(crate) async fn ensure_leader(&self) -> Result<(), APIError> {
+        // FIXME do the forwardery thing, or not
+        // self.raft
+        //     .client_read()
+        //     .await
+        //     .to_api_result(&uri, &state)
+        //     .await?;
+        self.raft.is_leader().await.map_err(|e| match e {
+            RaftError::APIError(e) => match e {
+                openraft::error::CheckIsLeaderError::ForwardToLeader(_e) => {
+                    // forward_to_leader(e, uri, state).await
+                    todo!()
+                }
+                openraft::error::CheckIsLeaderError::QuorumNotEnough(e) => APIError::NoQuorum(e),
+            },
+            RaftError::Fatal(e) => APIError::Fatal(e),
+        })
+    }
     pub(crate) fn id(&self) -> NodeId {
         self.id
     }
@@ -87,7 +103,7 @@ pub(crate) fn initialize(
     id: NodeId,
     addr: Addr,
     raft: TremorRaftImpl,
-    store: Arc<Store>,
+    store: Store,
     store_tx: Sender<APIStoreReq>,
     store_rx: Receiver<APIStoreReq>,
 ) -> (JoinHandle<()>, Arc<ServerState>) {
@@ -96,7 +112,7 @@ pub(crate) fn initialize(
         id,
         addr,
         raft: raft.clone(),
-        raft_manager: super::Manager::new(store_tx, raft),
+        raft_manager: super::Manager::new(id, store_tx, raft),
     });
     (handle, state)
 }
@@ -214,17 +230,17 @@ pub enum APIError {
         message: String,
     },
     /// raft fatal error, includes StorageError
-    Fatal(Fatal),
+    Fatal(Fatal<NodeId>),
     /// We don't have a quorum to read
-    NoQuorum(QuorumNotEnough),
+    NoQuorum(QuorumNotEnough<NodeId>),
     /// We don't have a leader
     NoLeader,
     /// Error when changing a membership
-    ChangeMembership(ChangeMembershipError),
+    ChangeMembership(ChangeMembershipError<NodeId>),
     /// Error from our store/statemachine
     Store(String),
     /// openraft storage error
-    Storage(StorageError),
+    Storage(StorageError<NodeId>),
     /// Errors around tremor apps
     App(AppError),
     /// Error in the runtime
@@ -280,62 +296,60 @@ where
     async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<T>;
 }
 
+// #[async_trait::async_trait()]
+// impl<T: serde::Serialize + serde::Deserialize<'static> + Send> ToAPIResult<T>
+//     for Result<T, ClientReadError>
+// {
+//     async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<T> {
+//         match self {
+//             Ok(t) => Ok(t),
+//             Err(ClientReadError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
+//             Err(ClientReadError::Fatal(e)) => Err(APIError::Fatal(e)),
+//             Err(ClientReadError::QuorumNotEnough(e)) => Err(APIError::NoQuorum(e)),
+//         }
+//     }
+// }
+
+// #[async_trait::async_trait]
+// impl ToAPIResult<()> for Result<(), RemoveLearnerError> {
+//     async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<()> {
+//         match self {
+//             Ok(()) | Err(RemoveLearnerError::NotExists(_)) => Ok(()), // if the node is not part of the cluster, the effect is the same, so we say it is fine
+//             Err(RemoveLearnerError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
+//             Err(RemoveLearnerError::Fatal(e)) => Err(APIError::Fatal(e)),
+//             Err(e @ RemoveLearnerError::NotLearner(_)) => Err(APIError::HTTP {
+//                 status: StatusCode::CONFLICT,
+//                 message: e.to_string(),
+//             }),
+//         }
+//     }
+// }
+
 #[async_trait::async_trait()]
 impl<T: serde::Serialize + serde::Deserialize<'static> + Send> ToAPIResult<T>
-    for Result<T, ClientReadError>
+    for Result<T, RaftError<NodeId, ClientWriteError<NodeId, Addr>>>
 {
-    async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<T> {
-        match self {
-            Ok(t) => Ok(t),
-            Err(ClientReadError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
-            Err(ClientReadError::Fatal(e)) => Err(APIError::Fatal(e)),
-            Err(ClientReadError::QuorumNotEnough(e)) => Err(APIError::NoQuorum(e)),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl ToAPIResult<Option<LogId>> for Result<AddLearnerResponse, AddLearnerError> {
-    async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<Option<LogId>> {
-        match self {
-            Ok(response) => Ok(response.matched),
-            Err(AddLearnerError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
-            Err(AddLearnerError::Fatal(e)) => Err(APIError::Fatal(e)),
-            Err(AddLearnerError::Exists(_node_id)) => Ok(None), // we want the API call to be idempotent and not error if the node is already a learner
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl ToAPIResult<()> for Result<(), RemoveLearnerError> {
-    async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<()> {
-        match self {
-            Ok(()) | Err(RemoveLearnerError::NotExists(_)) => Ok(()), // if the node is not part of the cluster, the effect is the same, so we say it is fine
-            Err(RemoveLearnerError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
-            Err(RemoveLearnerError::Fatal(e)) => Err(APIError::Fatal(e)),
-            Err(e @ RemoveLearnerError::NotLearner(_)) => Err(APIError::HTTP {
-                status: StatusCode::CONFLICT,
-                message: e.to_string(),
-            }),
-        }
-    }
-}
-
-#[async_trait::async_trait()]
-impl ToAPIResult<TremorResponse> for Result<ClientWriteResponse<TremorResponse>, ClientWriteError> {
     // we need the request context here to construct the redirect url properly
-    async fn to_api_result(self, uri: &Uri, state: &APIRequest) -> APIResult<TremorResponse> {
+    async fn to_api_result(self, uri: &Uri, state: &APIRequest) -> APIResult<T> {
         match self {
-            Ok(response) => Ok(response.data),
-            Err(ClientWriteError::ForwardToLeader(e)) => forward_to_leader(e, uri, state).await,
-            Err(ClientWriteError::Fatal(e)) => Err(APIError::Fatal(e)),
-            Err(ClientWriteError::ChangeMembershipError(e)) => Err(APIError::ChangeMembership(e)),
+            Ok(response) => Ok(response),
+            Err(RaftError::APIError(ClientWriteError::ForwardToLeader(e))) => {
+                forward_to_leader(e, uri, state).await
+            }
+            Err(RaftError::APIError(ClientWriteError::ChangeMembershipError(e))) => {
+                Err(APIError::ChangeMembership(e))
+            }
+            Err(RaftError::Fatal(e)) => Err(APIError::Fatal(e)),
         }
     }
 }
 
 #[allow(clippy::unused_async)]
-async fn forward_to_leader<T>(e: ForwardToLeader, uri: &Uri, state: &APIRequest) -> APIResult<T>
+async fn forward_to_leader<T>(
+    e: ForwardToLeader<NodeId, Addr>,
+    uri: &Uri,
+    state: &APIRequest,
+) -> APIResult<T>
 where
     T: serde::Serialize + serde::Deserialize<'static>,
 {
@@ -412,8 +426,8 @@ impl From<url::ParseError> for APIError {
     }
 }
 
-impl From<StorageError> for APIError {
-    fn from(e: StorageError) -> Self {
+impl From<StorageError<NodeId>> for APIError {
+    fn from(e: StorageError<NodeId>) -> Self {
         Self::Storage(e)
     }
 }

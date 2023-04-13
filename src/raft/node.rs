@@ -20,7 +20,7 @@ use crate::{
     raft::{
         api::{self, ServerState},
         network::{raft, Raft as TarPCRaftService},
-        store::{NodesRequest, Store, TremorRequest, TremorResponse},
+        store::{NodesRequest, Store, TremorRequest},
         ClusterError, ClusterResult, Manager, Network,
     },
     system::{Runtime, ShutdownMode, WorldConfig},
@@ -40,6 +40,8 @@ use tarpc::{
 };
 
 use tokio::task::{self, JoinHandle};
+
+use super::TremorRaftImpl;
 
 #[derive(Clone, Debug)]
 pub struct ClusterNodeKillSwitch {
@@ -66,7 +68,7 @@ pub struct Running {
 
 impl Running {
     #[must_use]
-    pub fn node_data(&self) -> (openraft::NodeId, Addr) {
+    pub fn node_data(&self) -> (crate::raft::NodeId, Addr) {
         (self.server_state.id(), self.server_state.addr().clone())
     }
 
@@ -77,7 +79,7 @@ impl Running {
 
     async fn start(
         node: Node,
-        raft: Raft<TremorRequest, TremorResponse, Network, Store>,
+        raft: TremorRaftImpl,
         api_worker_handle: JoinHandle<()>,
         server_state: Arc<ServerState>,
         runtime: Runtime,
@@ -208,6 +210,15 @@ pub struct Addr {
     rpc: String,
 }
 
+impl Default for Addr {
+    fn default() -> Self {
+        Self {
+            api: String::from("127.0.0.1:8001"),
+            rpc: String::from("127.0.0.1:9001"),
+        }
+    }
+}
+
 impl std::fmt::Display for Addr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Addr")
@@ -260,15 +271,15 @@ impl Node {
         let (node_id, addr) = Store::get_self(&db)?;
 
         let world_config = WorldConfig::default(); // TODO: make configurable
-        let (runtime, runtime_handle) = Runtime::start(node_id, world_config).await?;
+        let (runtime, runtime_handle) = Runtime::start(world_config).await?;
         let (store_tx, store_rx) = bounded(qsize());
 
-        let store: Arc<Store> = Store::load(Arc::new(db), runtime.clone()).await?;
+        let store: Store = Store::load(Arc::new(db), runtime.clone()).await?;
         let node = Self::new(db_dir, raft_config.clone());
 
-        let network = Network::new(store.clone());
-        let raft = Raft::new(node_id, node.raft_config.clone(), network, store.clone());
-        let manager = Manager::new(store_tx.clone(), raft.clone());
+        let network = Network::new();
+        let raft = Raft::new(node_id, node.raft_config.clone(), network, store.clone()).await?;
+        let manager = Manager::new(node_id, store_tx.clone(), raft.clone());
         *(runtime
             .cluster_manager
             .write()
@@ -334,12 +345,12 @@ impl Node {
         };
 
         let world_config = WorldConfig::default(); // TODO: make configurable
-        let (runtime, runtime_handle) = Runtime::start(node_id, world_config).await?;
+        let (runtime, runtime_handle) = Runtime::start(world_config).await?;
         let (store_tx, store_rx) = bounded(qsize());
         let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
-        let network = Network::new(store.clone());
-        let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone());
-        let manager = Manager::new(store_tx.clone(), raft.clone());
+        let network = Network::new();
+        let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone()).await?;
+        let manager = Manager::new(node_id, store_tx.clone(), raft.clone());
         *(runtime
             .cluster_manager
             .write()
@@ -380,16 +391,16 @@ impl Node {
     /// # Errors
     /// if bootstrapping a a leader fails
     pub async fn bootstrap_as_single_node_cluster(&mut self, addr: Addr) -> ClusterResult<Running> {
-        let node_id = openraft::NodeId::default();
+        let node_id = crate::raft::NodeId::default();
         let world_config = WorldConfig::default(); // TODO: make configurable
-        let (runtime, runtime_handle) = Runtime::start(node_id, world_config).await?;
+        let (runtime, runtime_handle) = Runtime::start(world_config).await?;
         let (store_tx, store_rx) = bounded(qsize());
 
         let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
-        let network = Network::new(store.clone());
+        let network = Network::new();
 
-        let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone());
-        let manager = Manager::new(store_tx.clone(), raft.clone());
+        let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone()).await?;
+        let manager = Manager::new(node_id, store_tx.clone(), raft.clone());
         *(runtime
             .cluster_manager
             .write()
@@ -414,7 +425,7 @@ impl Node {
                     .ok_or_else(|| {
                         ClusterError::Other("Invalid Response from raft for AddNode".to_string())
                     })?
-                    .parse::<openraft::NodeId>()
+                    .parse::<crate::raft::NodeId>()
                     .map_err(|e| {
                         ClusterError::Other(format!("Invalid node_id returned from AddNode: {e}"))
                     })?;

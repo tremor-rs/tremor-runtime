@@ -45,8 +45,7 @@ use crate::{
     errors::{connector_send_err, Error, Kind as ErrorKind, Result},
     ids::{AliasType, AppFlowInstanceId, AppId, GenericAlias, InstanceId},
     instance::State,
-    log_error, pipeline, qsize,
-    raft::{self},
+    log_error, pipeline, qsize, raft,
     system::{KillSwitch, Runtime},
 };
 use beef::Cow;
@@ -321,7 +320,6 @@ pub(crate) trait Context: Display + Clone {
 /// connector context
 #[derive(Clone)]
 pub(crate) struct ConnectorContext {
-    node_id: openraft::NodeId,
     /// alias of the connector instance
     pub(crate) alias: Alias,
     /// type of the connector
@@ -331,12 +329,12 @@ pub(crate) struct ConnectorContext {
     /// Notifier
     notifier: reconnect::ConnectionLostNotifier,
     /// sender for raft requests
-    raft_api_tx: raft::Manager,
+    raft: raft::Manager,
 }
 
 impl Display for ConnectorContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Node::{}][Connector::{}]", self.node_id, &self.alias)
+        write!(f, "[Node::{}][Connector::{}]", self.raft.id(), &self.alias)
     }
 }
 
@@ -358,7 +356,7 @@ impl Context for ConnectorContext {
     }
 
     fn raft(&self) -> &raft::Manager {
-        &self.raft_api_tx
+        &self.raft
     }
 }
 
@@ -435,7 +433,6 @@ pub(crate) type Known =
 /// # Errors
 /// if the connector can not be built or the config is invalid
 pub(crate) async fn spawn(
-    node_id: openraft::NodeId,
     alias: &Alias,
     connector_id_gen: &mut ConnectorUIdGen,
     builder: &dyn ConnectorBuilder,
@@ -446,7 +443,6 @@ pub(crate) async fn spawn(
     // instantiate connector
     let connector = builder.build(alias, &config, kill_switch).await?;
     let r = connector_task(
-        node_id,
         alias.clone(),
         connector,
         config,
@@ -461,7 +457,6 @@ pub(crate) async fn spawn(
 #[allow(clippy::too_many_lines)]
 // instantiates the connector and starts listening for control plane messages
 async fn connector_task(
-    node_id: openraft::NodeId,
     alias: Alias,
     mut connector: Box<dyn Connector>,
     config: ConnectorConfig,
@@ -496,7 +491,6 @@ async fn connector_task(
         source_metrics_reporter,
     )?;
     let source_ctx = SourceContext {
-        node_id,
         alias: alias.clone(),
         uid: uid.into(),
         connector_type: config.connector_type.clone(),
@@ -512,7 +506,6 @@ async fn connector_task(
     );
     let sink_builder = sink::builder(&config, codec_requirement, &alias, sink_metrics_reporter)?;
     let sink_ctx = SinkContext::new(
-        node_id,
         uid.into(),
         alias.clone(),
         config.connector_type.clone(),
@@ -537,12 +530,11 @@ async fn connector_task(
     let notifier = reconnect.notifier();
 
     let ctx = ConnectorContext {
-        node_id,
         alias: alias.clone(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier,
-        raft_api_tx: raft,
+        raft,
     };
 
     let send_addr = connector_addr.clone();

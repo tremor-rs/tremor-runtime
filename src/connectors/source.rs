@@ -281,7 +281,6 @@ pub(crate) trait StreamReader: Send {
 /// context for a source
 #[derive(Clone)]
 pub(crate) struct SourceContext {
-    pub(crate) node_id: openraft::NodeId,
     /// connector uid
     pub(crate) uid: SourceUId,
     /// connector alias
@@ -301,7 +300,7 @@ pub(crate) struct SourceContext {
 
 impl Display for SourceContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Node::{}][Source::{}]", self.node_id, &self.alias)
+        write!(f, "[Node::{}][Source::{}]", self.raft.id(), &self.alias)
     }
 }
 

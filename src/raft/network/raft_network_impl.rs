@@ -12,131 +12,160 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::raft::{
-    network::RaftClient,
-    store::{Store, TremorRequest},
-};
+use crate::raft::{network::RaftClient, node::Addr, NodeId, TremorRaftConfig};
 use async_trait::async_trait;
-use dashmap::{mapref::entry::Entry, DashMap};
 use openraft::{
+    error::{InstallSnapshotError, NetworkError, RaftError},
     raft::{
         AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest,
         InstallSnapshotResponse, VoteRequest, VoteResponse,
     },
-    AnyError, RaftNetwork,
+    AnyError, RaftNetwork, RaftNetworkFactory,
 };
-use std::sync::Arc;
 use tarpc::{client::RpcError, context};
 
 #[derive(Clone, Debug)]
-pub struct Network {
-    store: Arc<Store>,
-    pool: DashMap<openraft::NodeId, RaftClient>,
-}
+pub struct Network {}
 
 impl Network {
-    pub(crate) fn new(store: Arc<Store>) -> Arc<Self> {
-        Arc::new(Self {
-            store,
-            pool: DashMap::default(),
-        })
+    pub(crate) fn new() -> Self {
+        Self {}
+    }
+}
+
+// NOTE: This could be implemented also on `Arc<ExampleNetwork>`, but since it's empty, implemented
+// directly.
+#[async_trait]
+impl RaftNetworkFactory<TremorRaftConfig> for Network {
+    type Network = NetworkConnection;
+
+    async fn new_client(&mut self, target: NodeId, node: &Addr) -> Self::Network {
+        NetworkConnection {
+            client: None,
+            target,
+            addr: node.clone(),
+        }
+    }
+}
+
+pub struct NetworkConnection {
+    client: Option<RaftClient>,
+    target: NodeId,
+    addr: Addr,
+}
+
+// We need this for the types :sob:
+#[derive(Debug)]
+struct SendError(String);
+
+impl std::fmt::Display for SendError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Send error: {}", self.0)
+    }
+}
+
+impl std::error::Error for SendError {}
+
+impl NetworkConnection {
+    /// Ensure we have a client to the node identified by `target`
+    ///
+    /// Pick it from the pool first, if that fails, create a new one
+    ///     /// Ensure we have a client to the node identified by `target`
+    ///
+    /// Pick it from the pool first, if that fails, create a new one
+    async fn ensure_client<E: std::error::Error>(&mut self) -> Result<RaftClient, RPCError<E>> {
+        // TODO: get along without the cloning
+        match &self.client {
+            Some(client) => Ok(client.clone()),
+            None => {
+                let client = self.new_client().await?;
+                self.client = Some(client.clone());
+                Ok(client)
+            }
+        }
     }
 
     /// Create a new TCP client for the given `target` node
     ///
     /// This requires the `target` to be known to the cluster state.
-    async fn new_client(&self, target: openraft::NodeId) -> anyhow::Result<RaftClient> {
-        let sm = self.store.state_machine.read().await;
-        let addr = sm
-            .nodes
-            .get_node(target)
-            .ok_or_else(|| anyhow::anyhow!(format!("Node {target} not known to the cluster")))?;
+    async fn new_client<E: std::error::Error>(&mut self) -> Result<RaftClient, RPCError<E>> {
         let transport = tarpc::serde_transport::tcp::connect(
-            addr.rpc(),
+            self.addr.rpc(),
             tarpc::tokio_serde::formats::Json::default,
         )
-        .await?;
+        .await
+        .map_err(|e| RPCError::Network(NetworkError::new(&e)))?;
         let client = RaftClient::new(tarpc::client::Config::default(), transport).spawn();
         Ok(client)
     }
-
-    /// Ensure we have a client to the node identified by `target`
-    ///
-    /// Pick it from the pool first, if that fails, create a new one
-    async fn ensure_client(&self, target: openraft::NodeId) -> anyhow::Result<RaftClient> {
-        // TODO: get along without the cloning
-        let client = match self.pool.entry(target) {
-            Entry::Occupied(oe) => oe.get().clone(),
-            Entry::Vacant(ve) => {
-                let client = self.new_client(target).await?;
-                ve.insert(client.clone());
-                client
-            }
-        };
-        Ok(client)
-    }
-
-    fn drop_client(&self, target: openraft::NodeId) {
-        self.pool.remove(&target);
-    }
-
-    fn handle_response<T>(
-        &self,
-        target: openraft::NodeId,
+    fn handle_response<T, E: std::error::Error>(
+        &mut self,
+        target: NodeId,
         response: Result<Result<T, AnyError>, RpcError>,
-    ) -> anyhow::Result<T> {
+    ) -> Result<T, RPCError<E>> {
         match response {
-            Ok(res) => res.map_err(Into::into),
-            Err(e @ RpcError::Disconnected) => {
-                self.drop_client(target);
+            Ok(res) => res.map_err(|e| RPCError::Network(NetworkError::new(&e))),
+            Err(e @ RpcError::Shutdown) => {
+                self.client = None;
                 error!("Client disconnected from node {target}");
-                Err(e.into())
+                Err(RPCError::Network(NetworkError::new(&e)))
             }
             Err(e @ RpcError::DeadlineExceeded) => {
                 // no need to drop the client here
                 // TODO: implement some form of backoff
                 error!("Request against node {target} timed out");
-                Err(e.into())
+                Err(RPCError::Network(NetworkError::new(&e)))
             }
-            Err(e @ RpcError::Server(_)) => {
-                self.drop_client(target); // TODO necessary here?
+            Err(RpcError::Server(e)) => {
+                self.client = None; // TODO necessary here?
                 error!("Server error from node {target}: {e}");
-                Err(e.into())
+                Err(RPCError::Network(NetworkError::new(&e)))
+            }
+            Err(RpcError::Send(e)) => {
+                self.client = None; // TODO necessary here?
+                error!("Server error from node {target}: {e}");
+                Err(RPCError::Network(NetworkError::new(&SendError(format!(
+                    "{e}"
+                )))))
+            }
+            Err(RpcError::Receive(e)) => {
+                self.client = None; // TODO necessary here?
+                error!("Server error from node {target}: {e}");
+                Err(RPCError::Network(NetworkError::new(&e)))
             }
         }
     }
 }
-
+type RPCError<T> = openraft::error::RPCError<NodeId, Addr, T>;
 #[async_trait]
-impl RaftNetwork<TremorRequest> for Network {
+impl RaftNetwork<TremorRaftConfig> for NetworkConnection {
     // the raft engine will retry upon network failures
     // so all we need to do is to drop the client if need be to trigger a reconnect
     // it would be nice to have some kind of backoff, but this might halt the raft engine
     // and might lead to some nasty timeouts
     async fn send_append_entries(
-        &self,
-        target: openraft::NodeId,
-        rpc: AppendEntriesRequest<TremorRequest>,
-    ) -> anyhow::Result<AppendEntriesResponse> {
-        let client = self.ensure_client(target).await?;
-        self.handle_response(target, client.append(context::current(), rpc).await)
+        &mut self,
+        rpc: AppendEntriesRequest<TremorRaftConfig>,
+    ) -> Result<AppendEntriesResponse<NodeId>, RPCError<RaftError<NodeId>>> {
+        let client = self.ensure_client().await?;
+        self.handle_response(self.target, client.append(context::current(), rpc).await)
     }
 
     async fn send_install_snapshot(
-        &self,
-        target: openraft::NodeId,
-        rpc: InstallSnapshotRequest,
-    ) -> anyhow::Result<InstallSnapshotResponse> {
-        let client = self.ensure_client(target).await?;
-        self.handle_response(target, client.snapshot(context::current(), rpc).await)
+        &mut self,
+        rpc: InstallSnapshotRequest<TremorRaftConfig>,
+    ) -> Result<InstallSnapshotResponse<NodeId>, RPCError<RaftError<NodeId, InstallSnapshotError>>>
+    {
+        let client = self.ensure_client().await?;
+        let r = client.snapshot(context::current(), rpc).await;
+        self.handle_response(self.target, r)
     }
 
     async fn send_vote(
-        &self,
-        target: openraft::NodeId,
-        rpc: VoteRequest,
-    ) -> anyhow::Result<VoteResponse> {
-        let client = self.ensure_client(target).await?;
-        self.handle_response(target, client.vote(context::current(), rpc).await)
+        &mut self,
+        rpc: VoteRequest<NodeId>,
+    ) -> Result<VoteResponse<NodeId>, RPCError<RaftError<NodeId>>> {
+        let client = self.ensure_client().await?;
+        self.handle_response(self.target, client.vote(context::current(), rpc).await)
     }
 }

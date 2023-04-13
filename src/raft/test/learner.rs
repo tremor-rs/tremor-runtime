@@ -33,8 +33,8 @@ async fn add_learner_test() -> ClusterResult<()> {
     let metrics = client0.metrics().await?;
     let members = metrics
         .membership_config
-        .membership
-        .get_configs()
+        .membership()
+        .get_joint_config()
         .last()
         .expect("No nodes in membership config");
     assert_eq!(3, members.len());
@@ -48,8 +48,8 @@ async fn add_learner_test() -> ClusterResult<()> {
     let metrics = client0.metrics().await?;
     let members = metrics
         .membership_config
-        .membership
-        .get_configs()
+        .membership()
+        .get_joint_config()
         .last()
         .expect("No nodes in membership config");
     assert!(
@@ -90,8 +90,8 @@ async fn learner_runs_app() -> ClusterResult<()> {
     let metrics = client0.metrics().await?;
     let members = metrics
         .membership_config
-        .membership
-        .get_configs()
+        .membership()
+        .get_joint_config()
         .last()
         .expect("No nodes in membership config");
     assert_eq!(3, members.len());

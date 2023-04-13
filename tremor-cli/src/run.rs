@@ -25,7 +25,6 @@ use tremor_common::{
     uids::OperatorUIdGen,
 };
 use tremor_pipeline::{Event, EventId};
-use tremor_runtime::raft::NodeId;
 use tremor_runtime::{
     codec::Codec,
     config,
@@ -419,7 +418,7 @@ impl Run {
         let config = WorldConfig {
             debug_connectors: true,
         };
-        let (world, handle) = Runtime::start(NodeId::default(), config).await?;
+        let (world, handle) = Runtime::start(config).await?;
         tremor_runtime::load_troy_file(&world, &self.script).await?;
         handle.await??;
         Ok(())

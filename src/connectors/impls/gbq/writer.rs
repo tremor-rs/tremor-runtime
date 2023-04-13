@@ -106,7 +106,6 @@ mod tests {
         let sink_address = connector
             .create_sink(
                 SinkContext::new(
-                    openraft::NodeId::default(),
                     SinkUId::default(),
                     Alias::new(AppFlowInstanceId::new("app", "a"), "b"),
                     ConnectorType::default(),

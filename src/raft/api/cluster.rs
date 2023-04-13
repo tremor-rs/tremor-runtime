@@ -17,6 +17,7 @@ use crate::raft::{
     api::{APIError, APIResult, ToAPIResult},
     node::Addr,
     store::{NodesRequest, TremorRequest},
+    NodeId,
 };
 use axum::{
     extract::{self, Json},
@@ -24,8 +25,8 @@ use axum::{
     Router,
 };
 use http::StatusCode;
-use openraft::{LogId, NodeId, RaftMetrics};
-use std::collections::HashMap;
+use openraft::{ChangeMembers, LogId, RaftMetrics};
+use std::collections::{BTreeSet, HashMap};
 use tokio::time::timeout;
 
 pub(crate) fn endpoints() -> Router<APIRequest> {
@@ -46,14 +47,9 @@ pub(crate) fn endpoints() -> Router<APIRequest> {
 /// Get a list of all currently known nodes (be it learner, leader, voter etc.)
 async fn get_nodes(
     extract::State(state): extract::State<APIRequest>,
-    extract::OriginalUri(uri): extract::OriginalUri,
+    extract::OriginalUri(_uri): extract::OriginalUri,
 ) -> APIResult<Json<HashMap<NodeId, Addr>>> {
-    state
-        .raft
-        .client_read()
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    state.ensure_leader().await?;
 
     let nodes = timeout(API_WORKER_TIMEOUT, state.raft_manager.get_nodes()).await??;
     Ok(Json(nodes))
@@ -69,12 +65,7 @@ async fn add_node(
 ) -> APIResult<Json<NodeId>> {
     // 1. ensure we are on the leader, as we need to read some state-machine state
     //    in order to give a good answer here
-    state
-        .raft
-        .client_read()
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    state.ensure_leader().await?;
 
     // 2. ensure we don't add the node twice if it is already there
     // we need to make sure we don't hold on to the state machine lock any further here
@@ -101,6 +92,7 @@ async fn add_node(
             .to_api_result(&uri, &state)
             .await?;
         let node_id = response
+            .data
             .value
             .ok_or_else(|| APIError::Other("Invalid node_id".to_string()))?
             .parse::<NodeId>()?;
@@ -147,36 +139,30 @@ async fn add_learner(
     extract::State(state): extract::State<APIRequest>,
     extract::OriginalUri(uri): extract::OriginalUri,
     extract::Path(node_id): extract::Path<NodeId>,
-) -> APIResult<Json<Option<LogId>>> {
+) -> APIResult<Json<LogId<crate::raft::NodeId>>> {
     // 1. ensure we are on the leader, as we need to read some state-machine state
     //    in order to give a good answer here
-    state
-        .raft
-        .client_read()
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    state.ensure_leader().await?;
 
     // 2. check that the node has already been added
     // we need to make sure we don't hold on to the state machine lock any further here
 
-    let node_addr = timeout(API_WORKER_TIMEOUT, state.raft_manager.get_node(node_id)).await??;
-    if node_addr.is_none() {
-        return Err(APIError::HTTP {
+    let node_addr = timeout(API_WORKER_TIMEOUT, state.raft_manager.get_node(node_id))
+        .await??
+        .ok_or(APIError::HTTP {
             status: StatusCode::NOT_FOUND,
             message: format!("Node {node_id} is not known to the cluster yet."),
-        });
-    }
+        })?;
 
     // add the node as learner
     debug!("Adding node {node_id} as learner...");
     state
         .raft
-        .add_learner(node_id, true)
+        .add_learner(node_id, node_addr, true)
         .await
         .to_api_result(&uri, &state)
         .await
-        .map(Json)
+        .map(|d| Json(d.log_id))
 }
 
 /// Removes a node from **Learners** only
@@ -188,8 +174,17 @@ async fn remove_learner(
 ) -> APIResult<Json<()>> {
     debug!("[API] Removing learner {node_id}",);
     // remove the node as learner
-    let result = state.raft.remove_learner(node_id).await;
-    result.to_api_result(&uri, &state).await.map(Json)
+    // let result = state.raft.remove_learner(node_id).await;
+    let mut nodes = BTreeSet::new();
+    nodes.insert(node_id);
+
+    let _result = state
+        .raft
+        .change_membership(ChangeMembers::RemoveNodes(nodes), true)
+        .await
+        .to_api_result(&uri, &state)
+        .await?;
+    Ok(Json(()))
 }
 
 /// Changes specified learners to members, or remove members.
@@ -248,6 +243,6 @@ async fn demote_voter(
 #[allow(clippy::unused_async)]
 async fn metrics(
     extract::State(state): extract::State<APIRequest>,
-) -> APIResult<Json<RaftMetrics>> {
+) -> APIResult<Json<RaftMetrics<crate::raft::NodeId, crate::raft::node::Addr>>> {
     Ok(Json(state.raft.metrics().borrow().clone()))
 }

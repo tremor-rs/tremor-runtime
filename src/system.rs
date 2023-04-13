@@ -31,7 +31,6 @@ use crate::{
     instance::IntendedState as IntendedInstanceState,
     log_error, raft,
 };
-use openraft::NodeId;
 use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
 use tremor_script::{
     ast,
@@ -330,16 +329,14 @@ impl Runtime {
     ///
     /// # Errors
     ///  * if the world manager can't be started
-    pub async fn start(
-        node_id: NodeId,
-        config: WorldConfig,
-    ) -> Result<(Self, JoinHandle<Result<()>>)> {
-        let (system_h, system, kill_switch) = flow_supervisor::FlowSupervisor::new(node_id).start();
+    pub async fn start(config: WorldConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
+        let cluster_manager = Arc::new(RwLock::new(None));
+        let (system_h, system, kill_switch) = flow_supervisor::FlowSupervisor::new().start();
 
         let world = Self {
             flows: system,
             kill_switch,
-            cluster_manager: Arc::new(RwLock::new(None)),
+            cluster_manager,
         };
 
         connectors::register_builtin_connector_types(&world, config.debug_connectors).await?;

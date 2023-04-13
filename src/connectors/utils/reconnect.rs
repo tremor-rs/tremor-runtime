@@ -461,12 +461,11 @@ mod tests {
         };
         let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
-            node_id: openraft::NodeId::default(),
             alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
-            raft_api_tx: raft::Manager::default(),
+            raft: raft::Manager::default(),
         };
         // failing attempt
         assert_eq!(
@@ -500,12 +499,11 @@ mod tests {
         };
         let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
-            node_id: openraft::NodeId::default(),
             alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
-            raft_api_tx: raft::Manager::default(),
+            raft: raft::Manager::default(),
         };
         // 1st failing attempt
         assert!(matches!(

@@ -205,8 +205,8 @@ lexical = "6.1.1"
 simdutf8 = "0.1"
 
 # Clustering
-tarpc = { version = "0.31", features = ["full"] }
-openraft = { version = "0.7.3" }
+tarpc = { version = "0.33", features = ["full"] }
+openraft = { version = "0.8.4-alpha.1", features = ["serde"] }
 serde_json = "1.0.57"
 rocksdb = { version = "0.19.0", git = "https://github.com/tremor-rs/rust-rocksdb", rev = "a02b00f029fb45d294715748cd2459491594e0e3" }
 tar = "*"

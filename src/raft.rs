@@ -22,17 +22,24 @@ pub mod store;
 #[cfg(test)]
 mod test;
 
+use crate::raft::node::Addr;
+
 pub(crate) use self::manager::Manager;
 use api::client::Error;
 use network::raft_network_impl::Network;
-pub use openraft::NodeId;
-use openraft::{error::InitializeError, Config, ConfigError, Raft};
+use openraft::{
+    error::{Fatal, InitializeError, RaftError},
+    Config, ConfigError, Raft,
+};
 use std::{
     fmt::{Display, Formatter},
     sync::Mutex,
 };
 use store::{TremorRequest, TremorResponse};
 use tokio::task::JoinError;
+
+/// A `NodeId`
+pub type NodeId = u64;
 
 /// load a default raft config
 /// # Errors
@@ -46,7 +53,12 @@ pub fn config() -> ClusterResult<Config> {
     Ok(config.validate()?)
 }
 
-pub type TremorRaftImpl = Raft<TremorRequest, TremorResponse, Network, store::Store>;
+openraft::declare_raft_types!(
+    /// Declare the type configuration for example K/V store.
+    pub TremorRaftConfig: D = TremorRequest, R = TremorResponse, NodeId = NodeId, Node = node::Addr
+);
+
+pub type TremorRaftImpl = Raft<TremorRaftConfig, Network, store::Store>;
 
 #[derive(Debug)]
 pub enum ClusterError {
@@ -54,11 +66,12 @@ pub enum ClusterError {
     Rocks(rocksdb::Error),
     Io(std::io::Error),
     Store(store::Error),
-    Initialize(InitializeError),
+    Initialize(RaftError<NodeId, InitializeError<NodeId, Addr>>),
     Serde(serde_json::Error),
     Config(ConfigError),
     Client(Error),
     JoinError(JoinError),
+    Fatal(Fatal<NodeId>),
     // TODO: this is a horrible hack
     Runtime(Mutex<crate::Error>),
 }
@@ -92,8 +105,8 @@ impl From<String> for ClusterError {
     }
 }
 
-impl From<InitializeError> for ClusterError {
-    fn from(e: InitializeError) -> Self {
+impl From<RaftError<NodeId, InitializeError<NodeId, Addr>>> for ClusterError {
+    fn from(e: RaftError<NodeId, InitializeError<NodeId, Addr>>) -> Self {
         ClusterError::Initialize(e)
     }
 }
@@ -127,6 +140,13 @@ impl From<JoinError> for ClusterError {
         ClusterError::JoinError(e)
     }
 }
+
+impl From<Fatal<NodeId>> for ClusterError {
+    fn from(e: Fatal<NodeId>) -> Self {
+        ClusterError::Fatal(e)
+    }
+}
+
 impl Display for ClusterError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -140,9 +160,11 @@ impl Display for ClusterError {
             ClusterError::Serde(e) => e.fmt(f),
             ClusterError::Client(e) => e.fmt(f),
             ClusterError::JoinError(e) => e.fmt(f),
+            ClusterError::Fatal(e) => e.fmt(f),
         }
     }
 }
+
 impl std::error::Error for ClusterError {}
 
 type ClusterResult<T> = Result<T, ClusterError>;
@@ -151,7 +173,7 @@ type ClusterResult<T> = Result<T, ClusterError>;
 /// # Errors
 /// When the node can't be removed
 pub async fn remove_node<T: ToString + ?Sized>(
-    node_id: openraft::NodeId,
+    node_id: NodeId,
     api_addr: &T,
 ) -> Result<(), crate::errors::Error> {
     let client = api::client::Tremor::new(api_addr)?;

@@ -169,14 +169,13 @@ impl Flow {
     /// fails.
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn deploy(
-        node_id: openraft::NodeId,
         flow_id: AppFlowInstanceId,
         flow: ast::DeployFlow<'static>,
         operator_id_gen: &mut OperatorUIdGen,
         connector_id_gen: &mut ConnectorUIdGen,
         known_connectors: &Known,
         kill_switch: &KillSwitch,
-        raft_api_tx: raft::Manager,
+        raft: raft::Manager,
         // FIXME: add AppContext
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
@@ -199,13 +198,12 @@ impl Flow {
                     connectors.insert(
                         alias.to_string(),
                         connectors::spawn(
-                            node_id,
                             &connector_alias,
                             connector_id_gen,
                             builder.as_ref(),
                             config,
                             kill_switch,
-                            raft_api_tx.clone(),
+                            raft.clone(),
                         )
                         .await?,
                     );
@@ -223,7 +221,7 @@ impl Flow {
                         tremor_script::query::Query::from_query(query),
                     );
                     let addr =
-                        pipeline::spawn(node_id, pipeline_alias, &pipeline, operator_id_gen)?;
+                        pipeline::spawn(raft.id(), pipeline_alias, &pipeline, operator_id_gen)?;
                     pipelines.insert(alias.to_string(), addr);
                 }
             }
@@ -921,11 +919,7 @@ fn spawn_task(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        connectors::ConnectorBuilder,
-        ids::{AppFlowInstanceId, BOOTSTRAP_NODE_ID},
-        instance, qsize,
-    };
+    use crate::{connectors::ConnectorBuilder, ids::AppFlowInstanceId, instance, qsize};
     use tremor_common::uids::{ConnectorUIdGen, OperatorUIdGen};
     use tremor_script::{ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
     use tremor_value::literal;
@@ -1085,7 +1079,6 @@ mod tests {
         let builder = connector::FakeBuilder { tx: connector_tx };
         known_connectors.insert(builder.connector_type(), Box::new(builder));
         let flow = Flow::deploy(
-            BOOTSTRAP_NODE_ID,
             AppFlowInstanceId::new("app", "test"),
             deploy,
             &mut operator_id_gen,

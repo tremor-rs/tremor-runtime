@@ -14,6 +14,7 @@
 use crate::{
     channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
     qsize,
+    raft::NodeId,
 };
 use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
@@ -179,7 +180,7 @@ impl TryFrom<connectors::Addr> for OutputTarget {
 }
 
 pub(crate) fn spawn(
-    node_id: openraft::NodeId,
+    node_id: NodeId,
     pipeline_alias: Alias,
     config: &tremor_pipeline::query::Query,
     operator_id_gen: &mut OperatorUIdGen,
@@ -509,12 +510,12 @@ fn maybe_send(r: Result<()>) {
 ///
 /// currently only used for printing
 struct PipelineContext {
-    node_id: openraft::NodeId,
+    node_id: NodeId,
     alias: Alias,
 }
 
 impl PipelineContext {
-    fn new(node_id: openraft::NodeId, alias: Alias) -> Self {
+    fn new(node_id: NodeId, alias: Alias) -> Self {
         Self { node_id, alias }
     }
 }
@@ -527,7 +528,7 @@ impl std::fmt::Display for PipelineContext {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn pipeline_task(
-    node_id: openraft::NodeId,
+    node_id: NodeId,
     id: Alias,
     mut pipeline: ExecutableGraph,
     rx: Receiver<Box<Msg>>,
@@ -714,6 +715,7 @@ mod tests {
         connectors::{prelude::SinkAddr, source::SourceAddr},
         errors::empty_error,
         pipeline::report::{InputReport, OutputReport},
+        raft::NodeId,
     };
     use std::time::Instant;
     use tremor_common::{
@@ -734,19 +736,19 @@ mod tests {
         let query =
             tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(
-            openraft::NodeId::default(),
+            NodeId::default(),
             Alias::new(AppFlowInstanceId::new("app", "report"), "test-pipe1"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr2 = spawn(
-            openraft::NodeId::default(),
+            NodeId::default(),
             Alias::new(AppFlowInstanceId::new("app", "report"), "test-pipe2"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr3 = spawn(
-            openraft::NodeId::default(),
+            NodeId::default(),
             Alias::new(AppFlowInstanceId::new("app", "report"), "test-pipe3"),
             &query,
             &mut operator_id_gen,
@@ -843,12 +845,7 @@ mod tests {
         let pipeline_id = Alias::new(AppFlowInstanceId::new("app", "flow"), "test-pipe");
         let query =
             tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
-        let addr = spawn(
-            openraft::NodeId::default(),
-            pipeline_id,
-            &query,
-            &mut operator_id_gen,
-        )?;
+        let addr = spawn(NodeId::default(), pipeline_id, &query, &mut operator_id_gen)?;
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;

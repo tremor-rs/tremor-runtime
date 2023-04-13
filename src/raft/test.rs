@@ -144,8 +144,8 @@ async fn cluster_join_test() -> ClusterResult<()> {
     // all are voters in the cluster
     let members = metrics
         .membership_config
-        .membership
-        .get_configs()
+        .membership()
+        .get_joint_config()
         .last()
         .expect("No nodes in membership config");
     assert_eq!(3, members.len());
@@ -171,8 +171,8 @@ async fn kill_and_restart_voter() -> ClusterResult<()> {
     let metrics = client0.metrics().await?;
     let members = metrics
         .membership_config
-        .membership
-        .get_configs()
+        .membership()
+        .get_joint_config()
         .last()
         .expect("No nodes in membership config");
     assert_eq!(3, members.len());

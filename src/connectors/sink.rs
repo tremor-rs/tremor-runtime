@@ -258,7 +258,6 @@ pub(crate) trait SinkRuntime: Send + Sync {
 /// context for the connector sink
 #[derive(Clone)]
 pub(crate) struct SinkContextInner {
-    pub(crate) node_id: openraft::NodeId,
     /// the connector unique identifier
     pub(crate) uid: SinkUId,
     /// the connector alias
@@ -285,29 +284,27 @@ impl SinkContext {
         &self.0.notifier
     }
     pub(crate) fn new(
-        node_id: openraft::NodeId,
         uid: SinkUId,
         alias: Alias,
         connector_type: ConnectorType,
         quiescence_beacon: QuiescenceBeacon,
         notifier: ConnectionLostNotifier,
-        raft_api_tx: raft::Manager,
+        raft: raft::Manager,
     ) -> SinkContext {
         Self(Arc::new(SinkContextInner {
-            node_id,
             uid,
             alias,
             connector_type,
             quiescence_beacon,
             notifier,
-            raft: raft_api_tx,
+            raft,
         }))
     }
 }
 
 impl Display for SinkContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Node::{}][Sink::{}]", self.0.node_id, &self.0.alias)
+        write!(f, "[Node::{}][Sink::{}]", self.0.raft.id(), &self.0.alias)
     }
 }
 

@@ -364,7 +364,6 @@ mod test {
             MockChannelFactory,
         );
         let sink_context = SinkContext::new(
-            openraft::NodeId::default(),
             SinkUId::default(),
             Alias::new("a", "b"),
             ConnectorType::default(),
@@ -462,7 +461,6 @@ mod test {
                 "",
                 Event::signal_tick(),
                 &SinkContext::new(
-                    openraft::NodeId::default(),
                     SinkUId::default(),
                     Alias::new(AppFlowInstanceId::new(AppId::default(), ""), ""),
                     ConnectorType::default(),

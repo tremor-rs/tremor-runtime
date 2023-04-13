@@ -53,7 +53,7 @@ macro_rules! test_cases {
                             let config = WorldConfig{
                                 debug_connectors: true,
                             };
-                            let (runtime, h) = Runtime::start(openraft::NodeId::default(), config).await?;
+                            let (runtime, h) = Runtime::start( config).await?;
                             let app_id = AppId::default();
                             for flow in deployable.iter_flows() {
                                 let flow_alias = AppFlowInstanceId::new(app_id.clone(), flow.instance_alias.clone());

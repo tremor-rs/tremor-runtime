@@ -16,10 +16,14 @@
 //! storing key value stores in rocksdb only
 
 use crate::{
-    raft::store::{
-        self,
-        statemachine::{sm_r_err, sm_w_err, RaftStateMachine},
-        store_r_err, store_w_err, Error as StoreError, KvRequest, StorageResult, TremorResponse,
+    raft::{
+        store::{
+            self,
+            statemachine::{sm_r_err, sm_w_err, RaftStateMachine},
+            store_r_err, store_w_err, Error as StoreError, KvRequest, StorageResult,
+            TremorResponse,
+        },
+        NodeId,
     },
     system::Runtime,
 };
@@ -102,7 +106,7 @@ impl RaftStateMachine<KvSnapshot, KvRequest> for KvStateMachine {
                     String::from_utf8(value.to_vec()).map_err(sm_r_err)?,
                 ))
             })
-            .collect::<Result<BTreeMap<String, String>, StorageError>>()?;
+            .collect::<Result<BTreeMap<String, String>, StorageError<NodeId>>>()?;
         Ok(KvSnapshot(data))
     }
 

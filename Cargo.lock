@@ -181,7 +181,6 @@ version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eef94a982ad4ebc3036bb072f45fcbb63a6b1b91932a6f5d982a166d8d529916"
 dependencies = [
- "anyhow",
  "serde",
 ]
 
@@ -3727,19 +3726,18 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openraft"
-version = "0.7.3"
+version = "0.8.4-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8716b2ad806538a9b4ccc5a5c838a957c3b026c9c4c4929fdb16ad6cd930a53b"
+checksum = "283ec5efe5059d1841724c6793d35c1293692c13da9421ea509f6bed5d0bea3f"
 dependencies = [
  "anyerror",
- "anyhow",
  "async-trait",
  "byte-unit",
- "bytes 1.4.0",
  "clap 3.2.23",
  "derive_more",
  "futures",
  "maplit",
+ "pin-utils",
  "rand 0.8.5",
  "serde",
  "thiserror",
@@ -3794,19 +3792,43 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
-version = "0.17.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6105e89802af13fdf48c49d7646d3b533a70e536d818aae7e78ba0433d01acb8"
+checksum = "69d6c3d7288a106c0a363e4b0e8d308058d56902adefb16f4936f417ffef086e"
+dependencies = [
+ "opentelemetry_api",
+ "opentelemetry_sdk",
+]
+
+[[package]]
+name = "opentelemetry_api"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c24f96e21e7acc813c7a8394ee94978929db2bcc46cf6b5014fc612bf7760c22"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "indexmap",
+ "js-sys",
+ "once_cell",
+ "pin-project-lite",
+ "thiserror",
+]
+
+[[package]]
+name = "opentelemetry_sdk"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ca41c4933371b61c2a2f214bf16931499af4ec90543604ec828f7a625c09113"
 dependencies = [
  "async-trait",
  "crossbeam-channel",
  "futures-channel",
  "futures-executor",
  "futures-util",
- "js-sys",
- "lazy_static",
+ "once_cell",
+ "opentelemetry_api",
  "percent-encoding",
- "pin-project",
  "rand 0.8.5",
  "thiserror",
 ]
@@ -5530,9 +5552,9 @@ dependencies = [
 
 [[package]]
 name = "tarpc"
-version = "0.31.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71a98cc1a0a9013e8df3900d09c597dd65cfc6ea4d42968629b1b9ea949acf8f"
+checksum = "6f41bce44d290df0598ae4b9cd6ea7f58f651fd3aa4af1b26060c4fa32b08af7"
 dependencies = [
  "anyhow",
  "fnv",
@@ -6150,9 +6172,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-opentelemetry"
-version = "0.17.4"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbbe89715c1dbbb790059e2565353978564924ee85017b5fff365c872ff6721f"
+checksum = "21ebb87a95ea13271332df069020513ab70bdb5637ca42d6e492dc3bbbad48de"
 dependencies = [
  "once_cell",
  "opentelemetry",
@@ -6401,7 +6423,7 @@ dependencies = [
  "serde_yaml 0.9.21",
  "serenity",
  "serial_test",
- "sha2 0.9.9",
+ "sha2 0.10.6",
  "signal-hook",
  "signal-hook-tokio",
  "simd-json 0.8.0",

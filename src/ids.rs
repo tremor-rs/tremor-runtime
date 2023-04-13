@@ -139,7 +139,7 @@ impl From<&str> for AppFlowInstanceId {
 }
 
 /// fixed node id used for root cluster nodes that have been bootstrapping the cluster
-pub const BOOTSTRAP_NODE_ID: openraft::NodeId = 0;
+pub const BOOTSTRAP_NODE_ID: crate::raft::NodeId = 0;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub(crate) enum AliasType {

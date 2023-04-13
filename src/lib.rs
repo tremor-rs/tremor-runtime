@@ -137,15 +137,12 @@ macro_rules! log_error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        ids::BOOTSTRAP_NODE_ID,
-        system::{ShutdownMode, WorldConfig},
-    };
+    use crate::system::{ShutdownMode, WorldConfig};
     use std::io::Write;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_load_troy_file() -> Result<()> {
-        let (world, handle) = Runtime::start(BOOTSTRAP_NODE_ID, WorldConfig::default()).await?;
+        let (world, handle) = Runtime::start(WorldConfig::default()).await?;
         let troy_file = tempfile::NamedTempFile::new()?;
         troy_file.as_file().write_all(
             r#"

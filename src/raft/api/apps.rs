@@ -107,6 +107,7 @@ async fn uninstall_app(
         .await
         .to_api_result(&uri, &state)
         .await
+        .map(|d| d.data)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

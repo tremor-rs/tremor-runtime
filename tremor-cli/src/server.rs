@@ -24,7 +24,6 @@ use signal_hook_tokio::Signals;
 use std::io::Write;
 use std::sync::atomic::Ordering;
 use tremor_common::file;
-use tremor_runtime::raft::NodeId;
 use tremor_runtime::system::{Runtime, ShutdownMode};
 use tremor_runtime::{self, version};
 
@@ -98,7 +97,7 @@ impl ServerRun {
             debug_connectors: self.debug_connectors,
         };
 
-        let (world, handle) = Runtime::start(NodeId::default(), config).await?;
+        let (world, handle) = Runtime::start(config).await?;
 
         // signal handling
         let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;
