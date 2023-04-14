@@ -120,9 +120,7 @@ impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
             }
         };
 
-        Ok(TremorResponse {
-            value: Some(node_id.to_string()),
-        })
+        Ok(TremorResponse::NodeId(node_id))
     }
     fn column_families() -> &'static [&'static str] {
         &Self::COLUMN_FAMILIES

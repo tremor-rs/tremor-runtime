@@ -13,6 +13,7 @@
 // limitations under the License.
 
 // #![cfg_attr(coverage, no_coverage)]
+use crate::ids::GenericAlias;
 use crate::{
     channel::{bounded, Receiver, Sender},
     errors::already_created_error,
@@ -37,7 +38,7 @@ enum Command {
     /// ```
     ///
     /// Response: the value behing "the-key" or `null`
-    Get { key: String }, //strict: bool
+    Get { key: String, strict: bool },
     /// Format:
     /// ```json
     /// {"put": "the-key"}
@@ -98,7 +99,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command {
         if let Some(key) = v.get_str("get").map(ToString::to_string) {
             Ok(Command::Get {
                 key,
-                // strict: v.get_bool("strict").unwrap_or(false),
+                strict: v.get_bool("strict").unwrap_or(false),
             })
         } else if let Some(key) = v.get_str("put").map(ToString::to_string) {
             Ok(Command::Put { key })
@@ -231,7 +232,8 @@ impl Connector for Kv {
             path: vec![],
         };
         let sink = KvSink {
-            raft_tx: ctx.raft().clone(),
+            alias: ctx.alias().clone(),
+            raft: ctx.raft().clone(),
             tx: self.tx.clone(),
             codec,
             origin_uri,
@@ -246,7 +248,8 @@ impl Connector for Kv {
 }
 
 struct KvSink {
-    raft_tx: raft::Manager,
+    alias: Alias,
+    raft: raft::Manager,
     tx: Sender<SourceReply>,
     codec: Json<Sorted>,
     origin_uri: EventOriginUri,
@@ -254,10 +257,9 @@ struct KvSink {
 }
 
 impl KvSink {
-    fn decode(&mut self, mut v: Option<String>, ingest_ns: u64) -> Result<Value<'static>> {
+    fn decode(&mut self, mut v: Option<Vec<u8>>, ingest_ns: u64) -> Result<Value<'static>> {
         if let Some(v) = v.as_mut() {
-            // ALLOW: we no longer need the string afterwards
-            let data: &mut [u8] = unsafe { v.as_bytes_mut() };
+            let data: &mut [u8] = v.as_mut_slice();
             // TODO: We could optimize this
             Ok(self
                 .codec
@@ -279,22 +281,36 @@ impl KvSink {
         ingest_ns: u64,
     ) -> Result<Vec<(Value<'static>, Value<'static>)>> {
         match cmd {
-            Command::Get { key, .. } => {
-                let key_parts = vec![key.clone()];
+            Command::Get { key, strict } => {
+                let key_parts = vec![
+                    self.alias.app_id().to_string(),
+                    self.alias.app_instance().to_string(),
+                    self.alias.alias().to_string(),
+                    key.clone(),
+                ];
                 let combined_key = key_parts.join(".");
 
                 self.decode(
-                    dbg!(self.raft_tx.kv_get_local(combined_key).await)?,
+                    if strict {
+                        self.raft.kv_get(combined_key).await?
+                    } else {
+                        self.raft.kv_get_local(combined_key).await?
+                    },
                     ingest_ns,
                 )
                 .map(|v| oks(op_name, key, v))
             }
             Command::Put { key } => {
                 // return the new value
-                let value_str = String::from_utf8(self.encode(value)?)?;
-                let key_parts = vec![key.clone()];
+                let value_vec = self.encode(value)?;
+                let key_parts = vec![
+                    self.alias.app_id().to_string(),
+                    self.alias.app_instance().to_string(),
+                    self.alias.alias().to_string(),
+                    key.clone(),
+                ];
                 let combined_key = key_parts.join(".");
-                self.raft_tx.kv_set(combined_key, value_str).await?;
+                self.raft.kv_set(combined_key, value_vec).await?;
                 Ok(oks(op_name, key, value.clone_static()))
             } // Command::Swap { key } => {
               //     // return the old value

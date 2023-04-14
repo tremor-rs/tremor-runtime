@@ -49,7 +49,7 @@ use super::{node::Addr, NodeId, TremorRaftConfig};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum KvRequest {
     /// Set a key to the provided value in the cluster state
-    Set { key: String, value: String },
+    Set { key: String, value: Vec<u8> },
 }
 
 /// Operations on the nodes known to the cluster
@@ -134,7 +134,7 @@ pub enum TremorInstanceState {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TremorSet {
     pub key: String,
-    pub value: String,
+    pub value: Vec<u8>,
 }
 
 impl From<TremorSet> for TremorRequest {
@@ -151,12 +151,56 @@ impl From<TremorSet> for TremorRequest {
  * In this example it will return a optional value from a given key in
  * the `ExampleRequest.Set`.
  *
- * TODO: `SHould` we explain how to create multiple `AppDataResponse`?
+ * TODO: `Should` we explain how to create multiple `AppDataResponse`?
  *
  */
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct TremorResponse {
-    pub value: Option<String>,
+pub enum TremorResponse {
+    #[default]
+    None,
+    KvValue(Vec<u8>),
+    AppId(AppId),
+    NodeId(NodeId),
+    AppFlowInstanceId(AppFlowInstanceId),
+}
+
+impl TremorResponse {
+    pub(crate) fn into_kv_value(self) -> crate::Result<Vec<u8>> {
+        match self {
+            TremorResponse::KvValue(v) => Ok(v),
+            _ => Err(RuntimeError::from("Not a kv value")),
+        }
+    }
+}
+
+impl TryFrom<TremorResponse> for AppId {
+    type Error = RuntimeError;
+    fn try_from(response: TremorResponse) -> crate::Result<Self> {
+        match response {
+            TremorResponse::AppId(id) => Ok(id),
+            _ => Err(RuntimeError::from("Not an app id")),
+        }
+    }
+}
+
+impl TryFrom<TremorResponse> for NodeId {
+    type Error = RuntimeError;
+    fn try_from(response: TremorResponse) -> crate::Result<Self> {
+        match response {
+            TremorResponse::NodeId(id) => Ok(id),
+            _ => Err(RuntimeError::from("Not a node id")),
+        }
+    }
+}
+
+impl TryFrom<TremorResponse> for AppFlowInstanceId {
+    type Error = RuntimeError;
+    fn try_from(response: TremorResponse) -> crate::Result<Self> {
+        match response {
+            TremorResponse::AppFlowInstanceId(id) => Ok(id),
+            _ => Err(RuntimeError::from("Not an app flow instance id")),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -646,7 +690,7 @@ impl RaftStorage<TremorRaftConfig> for Store {
             sm.set_last_applied_log(entry.log_id)?;
 
             match entry.payload {
-                EntryPayload::Blank => result.push(TremorResponse { value: None }),
+                EntryPayload::Blank => result.push(TremorResponse::None),
                 EntryPayload::Normal(ref request) => {
                     result.push(sm.handle_request(entry.log_id, request).await?);
                 }
@@ -656,7 +700,7 @@ impl RaftStorage<TremorRaftConfig> for Store {
                         Some(entry.log_id),
                         mem.clone(),
                     ))?;
-                    result.push(TremorResponse { value: None });
+                    result.push(TremorResponse::None);
                 }
             };
         }

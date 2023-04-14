@@ -114,8 +114,8 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn write(&self, req: &TremorSet) -> ClientResult<String> {
-        self.api_req::<TremorSet, String>("api/kv/write", Method::POST, Some(req))
+    pub async fn write(&self, req: &TremorSet) -> ClientResult<Vec<u8>> {
+        self.api_req::<TremorSet, Vec<u8>>("api/kv/write", Method::POST, Some(req))
             .await
     }
     /// Read value by key, in an inconsistent mode.
@@ -124,10 +124,10 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn read(&self, req: &str) -> ClientResult<Option<String>> {
+    pub async fn read(&self, req: &str) -> ClientResult<Vec<u8>> {
         let tremor_res: TremorResponse =
             self.api_req("api/kv/read", Method::POST, Some(req)).await?;
-        Ok(tremor_res.value)
+        Ok(tremor_res.into_kv_value()?)
     }
 
     /// Consistent Read value by key.
@@ -136,11 +136,11 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn consistent_read(&self, req: &str) -> ClientResult<Option<String>> {
+    pub async fn consistent_read(&self, req: &str) -> ClientResult<Vec<u8>> {
         let tremor_res: TremorResponse = self
             .api_req("api/kv/consistent_read", Method::POST, Some(req))
             .await?;
-        Ok(tremor_res.value)
+        Ok(tremor_res.into_kv_value()?)
     }
 }
 
@@ -435,8 +435,24 @@ impl From<reqwest::Error> for Error {
         Self::HTTP(e)
     }
 }
+
+impl From<crate::Error> for Error {
+    fn from(e: crate::Error) -> Self {
+        Self::Other(e.to_string())
+    }
+}
 impl<'s> From<&'s str> for Error {
     fn from(e: &'s str) -> Self {
         Self::Other(e.into())
+    }
+}
+
+impl Error {
+    #[must_use]
+    pub fn is_not_found(&self) -> bool {
+        match self {
+            Self::HTTP(e) => e.status() == Some(reqwest::StatusCode::NOT_FOUND),
+            Self::Other(_) => false,
+        }
     }
 }

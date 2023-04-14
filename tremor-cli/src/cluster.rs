@@ -146,7 +146,7 @@ impl Cluster {
                 signal_handle.close();
                 signal_handler_task.abort();
             }
-            // target/debug/tremor cluster start  --db-dir temp/test-db2 --api 127.0.0.1:8002 --rpc 127.0.0.1:9002 --join 127.0.0.1:8001
+            // target/debug/tremor cluster start --db-dir temp/test-db2 --api 127.0.0.1:8002 --rpc 127.0.0.1:9002 --join 127.0.0.1:8001
             // target/debug/tremor cluster start --db-dir temp/test-db3 --api 127.0.0.1:8003 --rpc 127.0.0.1:9003 --join 127.0.0.1:8001
             ClusterCommand::Start {
                 db_dir,

@@ -233,15 +233,11 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
         match cmd {
             AppsRequest::InstallApp { app, file } => {
                 self.load_archive(file)?;
-                Ok(TremorResponse {
-                    value: Some(app.name().to_string()),
-                })
+                Ok(TremorResponse::AppId(app.name().clone()))
             }
             AppsRequest::UninstallApp { app, force } => {
                 self.uninstall_app(app, *force).await?;
-                Ok(TremorResponse {
-                    value: Some(app.to_string()),
-                })
+                Ok(TremorResponse::AppId(app.clone()))
             }
             AppsRequest::Deploy {
                 app,
@@ -252,21 +248,15 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
             } => {
                 self.deploy_flow(app, flow.clone(), instance.clone(), config.clone(), *state)
                     .await?;
-                Ok(TremorResponse {
-                    value: Some(instance.to_string()),
-                })
+                Ok(TremorResponse::AppFlowInstanceId(instance.clone()))
             }
             AppsRequest::Undeploy(instance) => {
                 self.stop_and_remove_flow(instance).await?;
-                Ok(TremorResponse {
-                    value: Some(instance.to_string()),
-                })
+                Ok(TremorResponse::AppFlowInstanceId(instance.clone()))
             }
             AppsRequest::InstanceStateChange { instance, state } => {
                 self.change_flow_state(instance, *state).await?;
-                Ok(TremorResponse {
-                    value: Some(instance.to_string()),
-                })
+                Ok(TremorResponse::AppFlowInstanceId(instance.clone()))
             }
         }
     }

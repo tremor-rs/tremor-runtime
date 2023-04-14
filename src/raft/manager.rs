@@ -132,7 +132,7 @@ impl Manager {
     }
 
     // kv
-    pub async fn kv_set(&self, key: String, value: String) -> Result<Option<String>> {
+    pub async fn kv_set(&self, key: String, value: Vec<u8>) -> Result<Vec<u8>> {
         match self.is_leader().await {
             Ok(_) => self.kv_set_local(key, value).await,
             Err(Error(
@@ -145,17 +145,39 @@ impl Manager {
                 _,
             )) => {
                 let client = crate::raft::api::client::Tremor::new(n.api())?;
-                Ok(Some(client.write(&TremorSet { key, value }).await?))
+                Ok(client.write(&TremorSet { key, value }).await?)
             }
             Err(e) => Err(e),
         }
     }
-    pub async fn kv_set_local(&self, key: String, value: String) -> Result<Option<String>> {
+    pub async fn kv_set_local(&self, key: String, value: Vec<u8>) -> Result<Vec<u8>> {
         let tremor_res = self.client_write(TremorSet { key, value }).await?;
-        Ok(tremor_res.data.value)
+        tremor_res.data.into_kv_value()
     }
-
-    pub async fn kv_get_local(&self, key: String) -> Result<Option<String>> {
+    pub async fn kv_get(&self, key: String) -> Result<Option<Vec<u8>>> {
+        match self.is_leader().await {
+            Ok(_) => self.kv_get_local(key).await,
+            Err(Error(
+                ErrorKind::CheckIsLeaderError(RaftError::APIError(
+                    CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                        leader_node: Some(n),
+                        ..
+                    }),
+                )),
+                _,
+            )) => {
+                let client = crate::raft::api::client::Tremor::new(n.api())?;
+                let res = client.read(&key).await;
+                match res {
+                    Ok(v) => Ok(Some(v)),
+                    Err(e) if e.is_not_found() => Ok(None),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+    pub async fn kv_get_local(&self, key: String) -> Result<Option<Vec<u8>>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::KVGet(key, tx);
         self.send(command).await?;

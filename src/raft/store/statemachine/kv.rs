@@ -49,25 +49,18 @@ impl KvStateMachine {
     }
 
     /// Store `value` at `key` in the distributed KV store
-    fn insert(&self, key: &str, value: &str) -> StorageResult<()> {
+    fn insert(&self, key: &str, value: &[u8]) -> StorageResult<()> {
         self.db
-            .put_cf(Self::cf(&self.db)?, key.as_bytes(), value.as_bytes())
+            .put_cf(Self::cf(&self.db)?, key.as_bytes(), value)
             .map_err(store_w_err)
     }
 
     /// try to obtain the value at the given `key`.
     /// Returns `Ok(None)` if there is no value for that key.
-    pub(crate) fn get(&self, key: &str) -> StorageResult<Option<String>> {
+    pub(crate) fn get(&self, key: &str) -> StorageResult<Option<Vec<u8>>> {
         let key = key.as_bytes();
         self.db
             .get_cf(Self::cf(&self.db)?, key)
-            .map(|value| {
-                if let Some(value) = value {
-                    Some(String::from_utf8(value).ok()?)
-                } else {
-                    None
-                }
-            })
             .map_err(store_r_err)
     }
 }
@@ -114,9 +107,7 @@ impl RaftStateMachine<KvSnapshot, KvRequest> for KvStateMachine {
         match cmd {
             KvRequest::Set { key, value } => {
                 self.insert(key, value)?;
-                Ok(TremorResponse {
-                    value: Some(value.clone()),
-                })
+                Ok(TremorResponse::KvValue(value.clone()))
             }
         }
     }

@@ -58,7 +58,7 @@ pub(crate) type ReplySender<T> = OneShotSender<T>;
 pub(crate) enum APIStoreReq {
     GetApp(AppId, ReplySender<Option<StateApp>>),
     GetApps(ReplySender<HashMap<AppId, AppState>>),
-    KVGet(String, ReplySender<Option<String>>),
+    KVGet(String, ReplySender<Option<Vec<u8>>>),
     GetNode(NodeId, ReplySender<Option<Addr>>),
     GetNodes(ReplySender<HashMap<NodeId, Addr>>),
     GetNodeId(Addr, ReplySender<Option<NodeId>>),
@@ -258,7 +258,6 @@ pub enum APIError {
     /// fallback error type
     Other(String),
 }
-
 impl IntoResponse for APIError {
     fn into_response(self) -> Response {
         let status = match &self {

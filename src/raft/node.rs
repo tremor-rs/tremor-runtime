@@ -21,7 +21,7 @@ use crate::{
         api::{self, ServerState},
         network::{raft, Raft as TarPCRaftService},
         store::{NodesRequest, Store, TremorRequest},
-        ClusterError, ClusterResult, Manager, Network,
+        ClusterError, ClusterResult, Manager, Network, NodeId,
     },
     system::{Runtime, ShutdownMode, WorldConfig},
 };
@@ -424,16 +424,7 @@ impl Node {
             .await
         {
             Ok(r) => {
-                let assigned_node_id = r
-                    .data
-                    .value
-                    .ok_or_else(|| {
-                        ClusterError::Other("Invalid Response from raft for AddNode".to_string())
-                    })?
-                    .parse::<crate::raft::NodeId>()
-                    .map_err(|e| {
-                        ClusterError::Other(format!("Invalid node_id returned from AddNode: {e}"))
-                    })?;
+                let assigned_node_id = NodeId::try_from(r.data)?;
                 debug_assert_eq!(node_id, assigned_node_id, "Adding initial leader resulted in a differing node_id: {assigned_node_id}, expected: {node_id}");
                 let (worker_handle, server_state) =
                     api::initialize(node_id, addr, raft.clone(), store, store_tx, store_rx);

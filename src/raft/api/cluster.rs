@@ -91,11 +91,7 @@ async fn add_node(
             .await
             .to_api_result(&uri, &state)
             .await?;
-        let node_id = response
-            .data
-            .value
-            .ok_or_else(|| APIError::Other("Invalid node_id".to_string()))?
-            .parse::<NodeId>()?;
+        let node_id: NodeId = NodeId::try_from(response.data)?;
         debug!("node {addr} added to the cluster as node {node_id}");
         Ok(Json(node_id))
     }

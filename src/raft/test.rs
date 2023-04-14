@@ -1,3 +1,5 @@
+use matches::assert_matches;
+
 // Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -187,8 +189,9 @@ async fn kill_and_restart_voter() -> ClusterResult<()> {
     // check that the leader is available
     // TODO: solidify to guard against timing issues
     let client1 = node0.client();
-    let k = client1.consistent_read("snot").await?;
-    assert!(k.is_none());
+    let k = client1.consistent_read("snot").await;
+    // Snot was never set so it should be a 404
+    assert_matches!(k, Err(e) if e.is_not_found());
 
     node1.stop().await?;
     node2.stop().await?;
