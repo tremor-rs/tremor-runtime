@@ -60,15 +60,15 @@ async fn read(
 /// read a value from the leader. If this request is received by another node, it will return a redirect
 async fn consistent_read(
     extract::State(state): extract::State<APIRequest>,
-    extract::OriginalUri(_uri): extract::OriginalUri,
+    extract::OriginalUri(uri): extract::OriginalUri,
     extract::Json(key): extract::Json<String>,
 ) -> APIResult<TremorResponse> {
     // this will fail if we are not a leader
-    state.ensure_leader().await?;
+    state.ensure_leader(Some(uri.clone())).await?;
     // here we are safe to read
     let value = timeout(API_WORKER_TIMEOUT, state.raft_manager.kv_get_local(key)).await??;
 
     // Ensure that we are still the leader at the end of the read so we can guarantee freshness
-    state.ensure_leader().await?;
+    state.ensure_leader(Some(uri)).await?;
     Ok(TremorResponse { value })
 }

@@ -29,6 +29,7 @@ use api::client::Error;
 use network::raft_network_impl::Network;
 use openraft::{
     error::{Fatal, InitializeError, RaftError},
+    metrics::WaitError,
     Config, ConfigError, Raft,
 };
 use std::{
@@ -72,6 +73,7 @@ pub enum ClusterError {
     Client(Error),
     JoinError(JoinError),
     Fatal(Fatal<NodeId>),
+    WaitError(WaitError),
     // TODO: this is a horrible hack
     Runtime(Mutex<crate::Error>),
 }
@@ -147,6 +149,12 @@ impl From<Fatal<NodeId>> for ClusterError {
     }
 }
 
+impl From<WaitError> for ClusterError {
+    fn from(e: WaitError) -> Self {
+        ClusterError::WaitError(e)
+    }
+}
+
 impl Display for ClusterError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -161,6 +169,7 @@ impl Display for ClusterError {
             ClusterError::Client(e) => e.fmt(f),
             ClusterError::JoinError(e) => e.fmt(f),
             ClusterError::Fatal(e) => e.fmt(f),
+            ClusterError::WaitError(e) => e.fmt(f),
         }
     }
 }

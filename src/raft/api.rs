@@ -73,18 +73,23 @@ pub(crate) struct ServerState {
 }
 
 impl ServerState {
-    pub(crate) async fn ensure_leader(&self) -> Result<(), APIError> {
+    pub(crate) async fn ensure_leader(&self, uri: Option<Uri>) -> Result<(), APIError> {
         // FIXME do the forwardery thing, or not
         // self.raft
         //     .client_read()
         //     .await
         //     .to_api_result(&uri, &state)
         //     .await?;
+
         self.raft.is_leader().await.map_err(|e| match e {
             RaftError::APIError(e) => match e {
-                openraft::error::CheckIsLeaderError::ForwardToLeader(_e) => {
+                openraft::error::CheckIsLeaderError::ForwardToLeader(e) => {
                     // forward_to_leader(e, uri, state).await
-                    todo!()
+                    e.leader_id
+                        .zip(e.leader_node)
+                        .map_or(APIError::NoLeader, |(node_id, addr)| {
+                            APIError::ForwardToLeader { node_id, addr, uri }
+                        })
                 }
                 openraft::error::CheckIsLeaderError::QuorumNotEnough(e) => APIError::NoQuorum(e),
             },
@@ -220,8 +225,9 @@ pub enum APIError {
     /// We need to send this API request to the leader_url
     ForwardToLeader {
         node_id: NodeId,
-        // full URL, not only addr
-        leader_url: String,
+        addr: Addr,
+        #[serde(skip)]
+        uri: Option<Uri>,
     },
     /// HTTP related error
     HTTP {
@@ -276,9 +282,25 @@ impl IntoResponse for APIError {
             APIError::HTTP { status, .. } => *status,
         };
 
-        if let APIError::ForwardToLeader { leader_url, .. } = &self {
+        if let APIError::ForwardToLeader { addr, uri, .. } = self {
             let mut headers = HeaderMap::new();
-            if let Ok(v) = leader_url.parse() {
+            let uri = if let Some(uri) = uri {
+                let path_and_query = if let Some(query) = uri.query() {
+                    format!("{}?{}", uri.path(), query)
+                } else {
+                    uri.path().to_string()
+                };
+                http::uri::Builder::new()
+                    .scheme(uri.scheme_str().unwrap_or("http"))
+                    .authority(addr.api())
+                    .path_and_query(path_and_query)
+                    .build()
+                    .unwrap_or_default()
+            } else {
+                Uri::default()
+            };
+
+            if let Ok(v) = uri.to_string().parse() {
                 headers.insert(LOCATION, v);
             }
             (status, headers).into_response()
@@ -358,20 +380,13 @@ where
         if let Some(leader_addr) =
             timeout(API_WORKER_TIMEOUT, state.raft_manager.get_node(leader_id)).await??
         {
-            let mut leader_url = url::Url::parse(&format!(
-                "{}://{}",
-                uri.scheme()
-                    .map_or_else(|| "http".to_string(), ToString::to_string),
-                leader_addr.api()
-            ))?;
-            leader_url.set_path(uri.path());
-            leader_url.set_query(uri.query());
-            debug!("Forwarding to leader: {leader_url}");
+            debug!("Forwarding to leader: {uri}");
             // we don't care about fragment
 
             APIError::ForwardToLeader {
                 node_id: leader_id,
-                leader_url: leader_url.to_string(),
+                addr: leader_addr,
+                uri: Some(uri.clone()),
             }
         } else {
             APIError::Other(format!("Leader {leader_id} not known"))
@@ -391,12 +406,14 @@ impl std::fmt::Display for APIError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             APIError::ForwardToLeader {
-                leader_url: leader_addr,
+                addr: leader_addr,
                 node_id,
+                uri,
             } => f
                 .debug_struct("ForwardToLeader")
                 .field("leader_addr", leader_addr)
                 .field("node_id", node_id)
+                .field("uri", uri)
                 .finish(),
             APIError::Other(s) | Self::Store(s) => write!(f, "{s}"),
             APIError::HTTP { message, status } => write!(f, "HTTP {status} {message}"),

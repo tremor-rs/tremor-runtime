@@ -47,9 +47,9 @@ pub(crate) fn endpoints() -> Router<APIRequest> {
 /// Get a list of all currently known nodes (be it learner, leader, voter etc.)
 async fn get_nodes(
     extract::State(state): extract::State<APIRequest>,
-    extract::OriginalUri(_uri): extract::OriginalUri,
+    extract::OriginalUri(uri): extract::OriginalUri,
 ) -> APIResult<Json<HashMap<NodeId, Addr>>> {
-    state.ensure_leader().await?;
+    state.ensure_leader(Some(uri)).await?;
 
     let nodes = timeout(API_WORKER_TIMEOUT, state.raft_manager.get_nodes()).await??;
     Ok(Json(nodes))
@@ -65,7 +65,7 @@ async fn add_node(
 ) -> APIResult<Json<NodeId>> {
     // 1. ensure we are on the leader, as we need to read some state-machine state
     //    in order to give a good answer here
-    state.ensure_leader().await?;
+    state.ensure_leader(Some(uri.clone())).await?;
 
     // 2. ensure we don't add the node twice if it is already there
     // we need to make sure we don't hold on to the state machine lock any further here
@@ -142,7 +142,7 @@ async fn add_learner(
 ) -> APIResult<Json<LogId<crate::raft::NodeId>>> {
     // 1. ensure we are on the leader, as we need to read some state-machine state
     //    in order to give a good answer here
-    state.ensure_leader().await?;
+    state.ensure_leader(Some(uri.clone())).await?;
 
     // 2. check that the node has already been added
     // we need to make sure we don't hold on to the state machine lock any further here

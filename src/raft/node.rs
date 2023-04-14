@@ -28,7 +28,7 @@ use crate::{
 use futures::{future, prelude::*};
 use openraft::{Config, Raft};
 use std::{
-    collections::BTreeSet,
+    collections::BTreeMap,
     net::ToSocketAddrs,
     path::{Path, PathBuf},
     sync::Arc,
@@ -213,8 +213,8 @@ pub struct Addr {
 impl Default for Addr {
     fn default() -> Self {
         Self {
-            api: String::from("127.0.0.1:8001"),
-            rpc: String::from("127.0.0.1:9001"),
+            api: String::from("127.0.0.1:8888"),
+            rpc: String::from("127.0.0.1:9999"),
         }
     }
 }
@@ -405,11 +405,16 @@ impl Node {
             .cluster_manager
             .write()
             .map_err(|_| "Failed to set world manager")?) = Some(manager);
-
-        let mut nodes = BTreeSet::new();
-        nodes.insert(node_id);
+        let mut nodes = BTreeMap::new();
+        nodes.insert(node_id, addr.clone());
         // this is the crucial bootstrapping step
         raft.initialize(nodes).await?;
+        raft.wait(None)
+            .state(
+                openraft::ServerState::Leader,
+                "waiting for bootstrap node to become leader",
+            )
+            .await?;
         // lets make ourselves known to the cluster state as first operation, so new joiners will see us as well
         // this is critical
         match raft
