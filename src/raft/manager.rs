@@ -18,7 +18,10 @@ use crate::{
     errors::{Error, ErrorKind},
     raft::NodeId,
 };
-use openraft::raft::ClientWriteResponse;
+use openraft::{
+    error::{CheckIsLeaderError, ForwardToLeader, RaftError},
+    raft::ClientWriteResponse,
+};
 
 use crate::raft::api::APIStoreReq;
 use crate::Result;
@@ -132,8 +135,17 @@ impl Manager {
     pub async fn kv_set(&self, key: String, value: String) -> Result<Option<String>> {
         match self.is_leader().await {
             Ok(_) => self.kv_set_local(key, value).await,
-            Err(Error(ErrorKind::CheckIsLeaderError(_), _)) => {
-                unimplemented!()
+            Err(Error(
+                ErrorKind::CheckIsLeaderError(RaftError::APIError(
+                    CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                        leader_node: Some(n),
+                        ..
+                    }),
+                )),
+                _,
+            )) => {
+                let client = crate::raft::api::client::Tremor::new(n.api())?;
+                Ok(Some(client.write(&TremorSet { key, value }).await?))
             }
             Err(e) => Err(e),
         }
@@ -142,6 +154,7 @@ impl Manager {
         let tremor_res = self.client_write(TremorSet { key, value }).await?;
         Ok(tremor_res.data.value)
     }
+
     pub async fn kv_get_local(&self, key: String) -> Result<Option<String>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::KVGet(key, tx);
