@@ -60,4 +60,3 @@ intrinsic fn jump_with_keys(k1, k2, key, slot_count) as chash::jump_with_keys;
 ##
 ## Returns an `string`
 intrinsic fn sorted_serialize(any) as chash::sorted_serialize;
-

@@ -154,6 +154,7 @@ fn gen_doc(
     dest_path: Option<&str>,
     path: &Path,
 ) -> Result<()> {
+    eprintln!("Generating docs for {}", path.to_string_lossy());
     let rel_path = rel_path
         .ok_or_else(|| Error::from(format!("Bad relative path: {}", path.to_string_lossy())))?;
     let dest_path = dest_path.ok_or_else(|| Error::from("Bad destination path"))?;

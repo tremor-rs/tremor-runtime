@@ -23,4 +23,4 @@ const CONNECT = "CONNECT";
 const TRACE = "TRACE";
 
 ## The PATCH HTTP method.
-const PATCH = "PATCH";ß
+const PATCH = "PATCH";
