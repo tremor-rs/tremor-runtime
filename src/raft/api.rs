@@ -484,3 +484,9 @@ impl From<tokio::time::error::Elapsed> for APIError {
         Self::Timeout
     }
 }
+
+impl From<simd_json::Error> for APIError {
+    fn from(e: simd_json::Error) -> Self {
+        Self::Other(e.to_string())
+    }
+}
