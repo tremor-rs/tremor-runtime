@@ -1,0 +1,22 @@
+name: Check Docs
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    branches: [main]
+  push:
+    branches: [main]
+jobs:
+  license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install deps
+        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+      - uses: Swatinem/rust-cache@v2
+      - name: make docs
+        run: make docs
