@@ -81,6 +81,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     /// if the event can not be processed
     fn on_event(
         &mut self,
+        node_id: u64,
         uid: OperatorUId,
         port: &Port<'static>,
         state: &mut Value<'static>,
@@ -100,6 +101,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     /// if the singal can not be processed
     fn on_signal(
         &mut self,
+        _node_id: u64,
         _uid: OperatorUId,
         _state: &mut Value<'static>,
         _signal: &mut Event,

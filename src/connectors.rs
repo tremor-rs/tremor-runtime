@@ -263,7 +263,7 @@ pub(crate) trait Context: Display + Clone {
     fn connector_type(&self) -> &ConnectorType;
 
     /// gets the API sender
-    fn raft(&self) -> &raft::Manager;
+    fn raft(&self) -> &raft::Cluster;
 
     /// only log an error and swallow the result
     #[inline]
@@ -329,7 +329,7 @@ pub(crate) struct ConnectorContext {
     /// Notifier
     notifier: reconnect::ConnectionLostNotifier,
     /// sender for raft requests
-    raft: raft::Manager,
+    raft: raft::Cluster,
 }
 
 impl Display for ConnectorContext {
@@ -355,7 +355,7 @@ impl Context for ConnectorContext {
         &self.notifier
     }
 
-    fn raft(&self) -> &raft::Manager {
+    fn raft(&self) -> &raft::Cluster {
         &self.raft
     }
 }
@@ -438,7 +438,7 @@ pub(crate) async fn spawn(
     builder: &dyn ConnectorBuilder,
     config: ConnectorConfig,
     kill_switch: &KillSwitch,
-    raft: raft::Manager,
+    raft: raft::Cluster,
 ) -> Result<Addr> {
     // instantiate connector
     let connector = builder.build(alias, &config, kill_switch).await?;
@@ -461,7 +461,7 @@ async fn connector_task(
     mut connector: Box<dyn Connector>,
     config: ConnectorConfig,
     uid: ConnectorUId,
-    raft: raft::Manager,
+    raft: raft::Cluster,
 ) -> Result<Addr> {
     let qsize = qsize();
     // channel for connector-level control plane communication
@@ -1350,7 +1350,7 @@ pub(crate) mod unit_tests {
         alias: Alias,
         notifier: reconnect::ConnectionLostNotifier,
         beacon: QuiescenceBeacon,
-        raft: raft::Manager,
+        raft: raft::Cluster,
     }
 
     impl FakeContext {
@@ -1360,7 +1360,7 @@ pub(crate) mod unit_tests {
                 alias: Alias::new(AppFlowInstanceId::new("app", "fake"), "fake"),
                 notifier: reconnect::ConnectionLostNotifier::new(tx),
                 beacon: QuiescenceBeacon::default(),
-                raft: raft::Manager::default(),
+                raft: raft::Cluster::default(),
             }
         }
     }
@@ -1387,7 +1387,7 @@ pub(crate) mod unit_tests {
         fn connector_type(&self) -> &ConnectorType {
             &self.t
         }
-        fn raft(&self) -> &raft::Manager {
+        fn raft(&self) -> &raft::Cluster {
             &self.raft
         }
     }

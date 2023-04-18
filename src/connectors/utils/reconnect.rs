@@ -465,7 +465,7 @@ mod tests {
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
-            raft: raft::Manager::default(),
+            raft: raft::Cluster::default(),
         };
         // failing attempt
         assert_eq!(
@@ -503,7 +503,7 @@ mod tests {
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
-            raft: raft::Manager::default(),
+            raft: raft::Cluster::default(),
         };
         // 1st failing attempt
         assert!(matches!(

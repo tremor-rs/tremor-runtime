@@ -96,6 +96,7 @@ if let Some(map) = &node.config {
 impl Operator for RoundRobin {
     fn on_event(
         &mut self,
+        _node_id: u64,
         uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
@@ -126,6 +127,7 @@ impl Operator for RoundRobin {
     }
     fn on_signal(
         &mut self,
+        _node_id: u64,
         _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
@@ -188,7 +190,7 @@ mod test {
 
     #[test]
     fn multi_output_block() {
-        let uid = OperatorUId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: RoundRobin = Config {
             outputs: vec!["out".into(), "out2".into()],
         }
@@ -204,7 +206,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, &Port::In, &mut state, event1)
+            .on_event(0, operator_id, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -219,7 +221,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, &Port::In, &mut state, event2)
+            .on_event(0, operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -228,7 +230,7 @@ mod test {
 
         // Mark output 0 as broken
         let mut op_meta = OpMeta::default();
-        op_meta.insert(uid, 0);
+        op_meta.insert(operator_id, 0);
 
         let mut insight = Event {
             id: (1, 1, 1).into(),
@@ -239,7 +241,7 @@ mod test {
         };
 
         // Verify that we are broken on 0
-        op.on_contraflow(uid, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert!(!op.outputs[0].open);
         assert!(op.outputs[1].open);
 
@@ -250,7 +252,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, &Port::In, &mut state, event2)
+            .on_event(0, operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -264,7 +266,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, &Port::In, &mut state, event3)
+            .on_event(0, operator_id, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -273,7 +275,7 @@ mod test {
 
         // Mark output 1 as restored
         let mut op_meta = OpMeta::default();
-        op_meta.insert(uid, 0);
+        op_meta.insert(operator_id, 0);
 
         let mut insight = Event {
             id: (1, 1, 1).into(),
@@ -284,7 +286,7 @@ mod test {
         };
 
         // Verify that we now on disabled outputs
-        op.on_contraflow(uid, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert!(op.outputs[0].open);
         assert!(op.outputs[1].open);
 
@@ -295,7 +297,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, &Port::In, &mut state, event3)
+            .on_event(0, operator_id, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);

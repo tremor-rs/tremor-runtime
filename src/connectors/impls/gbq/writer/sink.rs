@@ -801,7 +801,7 @@ mod test {
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
-                raft::Manager::default(),
+                raft::Cluster::default(),
             ),
         );
 
@@ -831,7 +831,7 @@ mod test {
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
-                raft::Manager::default(),
+                raft::Cluster::default(),
             ),
         );
 
@@ -870,7 +870,7 @@ mod test {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
-                    raft::Manager::default(),
+                    raft::Cluster::default(),
                 ),
             );
 
@@ -911,7 +911,7 @@ mod test {
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
-                raft::Manager::default(),
+                raft::Cluster::default(),
             ),
         );
 
@@ -1139,7 +1139,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![
@@ -1189,7 +1189,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![
@@ -1235,7 +1235,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![
@@ -1282,7 +1282,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
@@ -1327,7 +1327,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
@@ -1363,7 +1363,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
@@ -1424,7 +1424,7 @@ mod test {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
-                    raft::Manager::default(),
+                    raft::Cluster::default(),
                 ),
                 &mut EventSerializer::new(
                     None,
@@ -1467,7 +1467,7 @@ mod test {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
-                    raft::Manager::default(),
+                    raft::Cluster::default(),
                 ),
                 &mut EventSerializer::new(
                     None,
@@ -1541,7 +1541,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
 
         sink.connect(&ctx, &Attempt::default()).await?;
@@ -1627,7 +1627,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
 
         sink.connect(&ctx, &Attempt::default()).await?;

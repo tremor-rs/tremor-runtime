@@ -39,12 +39,13 @@ impl Operator for Script {
     }
     fn on_event(
         &mut self,
+        node_id: u64,
         _uid: OperatorUId,
         port: &Port<'static>,
         state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
-        let context = EventContext::new(event.ingest_ns, event.origin_uri.as_ref());
+        let context = EventContext::new(event.ingest_ns, event.origin_uri.as_ref(), node_id);
 
         let dst_port = event.data.rent_mut(|data| {
             let (unwind_event, event_meta): (&mut Value, &mut Value) = data.parts_mut();

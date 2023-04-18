@@ -21,7 +21,7 @@ use crate::{
         api::{self, ServerState},
         network::{raft, Raft as TarPCRaftService},
         store::{NodesRequest, Store, TremorRequest},
-        ClusterError, ClusterResult, Manager, Network, NodeId,
+        Cluster, ClusterError, ClusterResult, Network, NodeId,
     },
     system::{Runtime, ShutdownMode, WorldConfig},
 };
@@ -279,7 +279,7 @@ impl Node {
 
         let network = Network::new();
         let raft = Raft::new(node_id, node.raft_config.clone(), network, store.clone()).await?;
-        let manager = Manager::new(node_id, store_tx.clone(), raft.clone());
+        let manager = Cluster::new(node_id, store_tx.clone(), raft.clone());
         *(runtime
             .cluster_manager
             .write()
@@ -350,7 +350,7 @@ impl Node {
         let store = Store::bootstrap(node_id, &addr, &self.db_dir, runtime.clone()).await?;
         let network = Network::new();
         let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone()).await?;
-        let manager = Manager::new(node_id, store_tx.clone(), raft.clone());
+        let manager = Cluster::new(node_id, store_tx.clone(), raft.clone());
         *(runtime
             .cluster_manager
             .write()
@@ -400,7 +400,7 @@ impl Node {
         let network = Network::new();
 
         let raft = Raft::new(node_id, self.raft_config.clone(), network, store.clone()).await?;
-        let manager = Manager::new(node_id, store_tx.clone(), raft.clone());
+        let manager = Cluster::new(node_id, store_tx.clone(), raft.clone());
         *(runtime
             .cluster_manager
             .write()

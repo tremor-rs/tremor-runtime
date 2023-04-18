@@ -69,7 +69,7 @@ pub(crate) struct ServerState {
     id: NodeId,
     addr: Addr,
     raft: TremorRaftImpl,
-    raft_manager: super::Manager,
+    raft_manager: super::Cluster,
 }
 
 impl ServerState {
@@ -117,7 +117,7 @@ pub(crate) fn initialize(
         id,
         addr,
         raft: raft.clone(),
-        raft_manager: super::Manager::new(id, store_tx, raft),
+        raft_manager: super::Cluster::new(id, store_tx, raft),
     });
     (handle, state)
 }

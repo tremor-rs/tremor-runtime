@@ -13,16 +13,17 @@
 // limitations under the License.
 
 use crate::{
-    cli::{AppsCommands, Cluster, ClusterCommand},
+    cli::{AppsCommands, Cluster, ClusterCommand, KvCommands},
     errors::{Error, Result},
 };
 use futures::StreamExt;
-use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
-use signal_hook::low_level::signal_name;
+use signal_hook::{
+    consts::signal::{SIGINT, SIGQUIT, SIGTERM},
+    low_level::signal_name,
+};
 use signal_hook_tokio::Signals;
 use simd_json::OwnedValue;
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 use tokio::{io::AsyncReadExt, task};
 use tremor_common::asy::file;
 use tremor_runtime::{
@@ -32,7 +33,7 @@ use tremor_runtime::{
         archive,
         node::{Addr, ClusterNodeKillSwitch, Node},
         remove_node,
-        store::TremorInstanceState,
+        store::{TremorInstanceState, TremorSet},
         ClusterError, NodeId,
     },
     system::ShutdownMode,
@@ -225,6 +226,9 @@ impl Cluster {
             } => {
                 archive::package(&out, &entrypoint, name.clone()).await?;
             }
+            ClusterCommand::Kv { api, command } => {
+                command.run(get_api(api)?.as_str()).await?;
+            }
         }
         Ok(())
     }
@@ -310,6 +314,39 @@ impl AppsCommands {
     }
 }
 
+impl KvCommands {
+    async fn run(self, api: &str) -> Result<()> {
+        let client = Client::new(api)?;
+        match self {
+            KvCommands::Get {
+                key,
+                consistant: true,
+            } => {
+                let mut r = client.read(&key).await.map_err(|e| format!("error: {e}"))?;
+                let value: OwnedValue = simd_json::from_slice(&mut r)?;
+                println!("{}", simd_json::to_string_pretty(&value)?);
+            }
+            KvCommands::Get { key, .. } => {
+                let mut r = client
+                    .consistent_read(&key)
+                    .await
+                    .map_err(|e| format!("error: {e}"))?;
+                let value: OwnedValue = simd_json::from_slice(&mut r)?;
+                println!("{}", simd_json::to_string_pretty(&value)?);
+            }
+            KvCommands::Set { key, mut value } => {
+                let v = unsafe { value.as_bytes_mut() };
+                let value: OwnedValue = simd_json::from_slice(v)?;
+                let value = simd_json::to_vec(&value)?;
+                let ts = TremorSet { key, value };
+                let mut r = client.write(&ts).await.map_err(|e| format!("error: {e}"))?;
+                let value: OwnedValue = simd_json::from_slice(&mut r)?;
+                println!("{}", simd_json::to_string_pretty(&value)?);
+            }
+        }
+        Ok(())
+    }
+}
 // # Cluster
 //
 // ## Management Commands

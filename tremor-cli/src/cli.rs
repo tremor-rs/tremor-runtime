@@ -142,6 +142,13 @@ pub(crate) enum ClusterCommand {
         #[clap( value_parser = clap::value_parser!(String))]
         entrypoint: String,
     },
+    Kv {
+        /// Raft API IP and endpoint to send to, defaults to `TREMOR_API_ADDRESS`
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        #[clap(subcommand)]
+        command: KvCommands,
+    },
 }
 
 // TODO: do we want to split out start/stop/pause/resume into a own sub command
@@ -213,6 +220,27 @@ pub(crate) enum AppsCommands {
     },
 }
 
+#[derive(Parser, Clone, Debug)]
+pub(crate) enum KvCommands {
+    /// Reads a value from the KV store
+    Get {
+        /// The key to get
+        #[clap(value_parser = clap::value_parser!(String))]
+        key: String,
+        /// Performs the read on the leader to guarnatee a non stale read
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        consistant: bool,
+    },
+    /// Writes a value to the KV store
+    Set {
+        /// The key to set
+        #[clap(value_parser = clap::value_parser!(String))]
+        key: String,
+        /// The value to set (valid json)
+        #[clap(value_parser = clap::value_parser!(String))]
+        value: String,
+    },
+}
 /// Shell type
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub(crate) enum Shell {

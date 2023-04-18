@@ -77,6 +77,7 @@ struct History {
 impl Operator for History {
     fn on_event(
         &mut self,
+        _node_id: u64,
         _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
@@ -119,6 +120,7 @@ impl Operator for History {
     }
     fn on_signal(
         &mut self,
+        _node_id: u64,
         _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
@@ -181,7 +183,7 @@ mod test {
         let mut state = Value::null();
 
         let (out, event) = op
-            .on_event(operator_id, &Port::In, &mut state, event)
+            .on_event(0, operator_id, &Port::In, &mut state, event)
             .expect("Failed to run pipeline")
             .events
             .pop()
@@ -189,7 +191,7 @@ mod test {
         assert_eq!(out, "out");
 
         let (out, _event) = op
-            .on_event(operator_id, &Port::In, &mut state, event)
+            .on_event(0, operator_id, &Port::In, &mut state, event)
             .expect("Failed to run pipeline")
             .events
             .pop()
@@ -204,8 +206,8 @@ mod test {
         };
         let mut state = Value::null();
 
-        op.on_signal(operator_id, &mut state, &mut event)?;
-        op.on_signal(operator_id, &mut state, &mut event)?;
+        op.on_signal(0, operator_id, &mut state, &mut event)?;
+        op.on_signal(0, operator_id, &mut state, &mut event)?;
 
         let history = event.data.suffix().meta().get(op.config.name.as_str());
 

@@ -148,6 +148,7 @@ op!(BackpressureFactory(_uid, node) {
 impl Operator for Backpressure {
     fn on_event(
         &mut self,
+        _node_id: u64,
         uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
@@ -179,6 +180,7 @@ impl Operator for Backpressure {
 
     fn on_signal(
         &mut self,
+        _node_id: u64,
         _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
@@ -256,7 +258,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event1)
+            .on_event(0, operator_id, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -272,7 +274,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2)
+            .on_event(0, operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -301,7 +303,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event1)
+            .on_event(0, operator_id, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -339,7 +341,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2)
+            .on_event(0, operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -354,7 +356,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3)
+            .on_event(0, operator_id, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -370,7 +372,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3)
+            .on_event(0, operator_id, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -398,7 +400,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event1)?
+            .on_event(0, operator_id, &Port::In, &mut state, event1)?
             .events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
@@ -434,7 +436,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2)?
+            .on_event(0, operator_id, &Port::In, &mut state, event2)?
             .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
@@ -449,7 +451,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3)?
+            .on_event(0, operator_id, &Port::In, &mut state, event3)?
             .events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
@@ -464,7 +466,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3)?
+            .on_event(0, operator_id, &Port::In, &mut state, event3)?
             .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
@@ -478,7 +480,7 @@ mod test {
             kind: Some(SignalKind::Tick),
             ..Event::default()
         };
-        let mut r = op.on_signal(operator_id, &mut state, &mut signal)?;
+        let mut r = op.on_signal(0, operator_id, &mut state, &mut signal)?;
         let i = r.insights.pop().expect("No Insight received");
         // We receive a restore signal
         assert_eq!(i.cb, CbAction::Restore);

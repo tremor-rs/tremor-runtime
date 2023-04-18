@@ -111,7 +111,7 @@ mod tests {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(crate::channel::bounded(128).0),
-                    raft::Manager::default(),
+                    raft::Cluster::default(),
                 ),
                 builder(
                     &ConnectorConfig::default(),

@@ -158,6 +158,7 @@ impl Operator for Grouper {
     #[allow(clippy::manual_let_else)] // clippy bug
     fn on_event(
         &mut self,
+        _node_id: u64,
         _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
@@ -252,7 +253,7 @@ mod test {
         let mut state = Value::null();
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event1.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event1.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;
@@ -269,7 +270,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;
@@ -278,7 +279,7 @@ mod test {
         assert_eq!(e, event2);
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;
@@ -287,7 +288,7 @@ mod test {
         assert_eq!(e, event2);
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;
@@ -303,7 +304,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event3.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().ok_or("no data")?;

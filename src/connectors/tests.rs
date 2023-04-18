@@ -113,7 +113,7 @@ impl ConnectorHarness {
             builder,
             raw_config,
             &kill_switch,
-            raft::Manager::default(),
+            raft::Cluster::default(),
         )
         .await?;
         let mut pipes = HashMap::new();

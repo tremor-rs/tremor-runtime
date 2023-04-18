@@ -44,7 +44,7 @@ pub(crate) enum Msg {
         /// result sender
         sender: oneshot::Sender<Result<AppFlowInstanceId>>,
         /// API request sender
-        raft: raft::Manager,
+        raft: raft::Cluster,
     },
     /// change instance state
     ChangeInstanceState {
@@ -103,7 +103,7 @@ impl FlowSupervisor {
         flow: DeployFlow<'static>,
         sender: oneshot::Sender<Result<AppFlowInstanceId>>,
         kill_switch: &KillSwitch,
-        raft_api_tx: raft::Manager,
+        raft_api_tx: raft::Cluster,
     ) {
         let id = AppFlowInstanceId::from_deploy(app_id, &flow);
         let res = match self.flows.entry(id.clone()) {

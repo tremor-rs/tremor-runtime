@@ -369,7 +369,7 @@ mod test {
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
 
         sink.connect(&sink_context, &Attempt::default()).await?;
@@ -466,7 +466,7 @@ mod test {
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
-                    raft::Manager::default(),
+                    raft::Cluster::default(),
                 ),
                 &mut EventSerializer::new(
                     None,

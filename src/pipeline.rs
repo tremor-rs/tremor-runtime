@@ -558,7 +558,7 @@ pub(crate) async fn pipeline_task(
         match msg {
             AnyMsg::Contraflow(msg) => handle_cf_msg(msg, &mut pipeline, &inputs),
             AnyMsg::Flow(Msg::Event { input, event }) => {
-                match pipeline.enqueue(input.clone(), event, &mut eventset) {
+                match pipeline.enqueue(node_id, input.clone(), event, &mut eventset) {
                     Ok(()) => {
                         handle_insights(&mut pipeline, &inputs);
                         maybe_send(send_events(&mut eventset, &mut dests).await);
@@ -577,7 +577,7 @@ pub(crate) async fn pipeline_task(
                 }
             }
             AnyMsg::Flow(Msg::Signal(signal)) => {
-                if let Err(e) = pipeline.enqueue_signal(signal.clone(), &mut eventset) {
+                if let Err(e) = pipeline.enqueue_signal(node_id, signal.clone(), &mut eventset) {
                     let err_str = if let PipelineErrorKind::Script(script_kind) = e.0 {
                         let script_error = tremor_script::errors::Error(script_kind, e.1);
                         Dumb::error_to_string(&script_error)?

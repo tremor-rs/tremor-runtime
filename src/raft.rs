@@ -24,7 +24,7 @@ mod test;
 
 use crate::raft::node::Addr;
 
-pub(crate) use self::manager::Manager;
+pub(crate) use self::manager::Cluster;
 use api::client::Error;
 use network::raft_network_impl::Network;
 use openraft::{

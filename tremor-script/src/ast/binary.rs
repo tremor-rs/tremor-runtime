@@ -240,7 +240,7 @@ pub(crate) fn extend_bytes_from_value<O: Ranged, I: Ranged>(
 
 #[cfg(test)]
 mod test {
-    use crate::prelude::*;
+    use crate::{prelude::*, NO_CONTEXT};
     use crate::{registry, Script};
 
     fn eval_binary(src: &str) -> Vec<u8> {
@@ -252,7 +252,7 @@ mod test {
         let mut state = Value::null();
         let value = script
             .run(
-                &EventContext::new(0, None),
+                &NO_CONTEXT,
                 AggrType::Emit,
                 &mut event,
                 &mut state,

@@ -51,6 +51,7 @@ impl SimpleSelect {
 impl Operator for SimpleSelect {
     fn on_event(
         &mut self,
+        node_id: u64,
         _uid: OperatorUId,
         _port: &Port<'static>,
         state: &mut Value<'static>,
@@ -64,7 +65,7 @@ impl Operator for SimpleSelect {
         // We can't have locals in the where and having clause
         let local_stack = LocalStack::with_size(0);
 
-        let ctx = EventContext::new(event.ingest_ns, event.origin_uri.as_ref());
+        let ctx = EventContext::new(event.ingest_ns, event.origin_uri.as_ref(), node_id);
 
         //
         // Before any select processing, we filter by where clause

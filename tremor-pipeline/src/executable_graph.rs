@@ -125,12 +125,13 @@ impl Operator for OperatorNode {
     }
     fn on_event(
         &mut self,
+        node_id: u64,
         _uid: OperatorUId,
         port: &Port<'static>,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
-        self.op.on_event(self.uid, port, state, event)
+        self.op.on_event(node_id, self.uid, port, state, event)
     }
 
     fn handles_signal(&self) -> bool {
@@ -138,11 +139,12 @@ impl Operator for OperatorNode {
     }
     fn on_signal(
         &mut self,
+        node_id: u64,
         _uid: OperatorUId,
         state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
-        self.op.on_signal(self.uid, state, signal)
+        self.op.on_signal(node_id, self.uid, state, signal)
     }
 
     fn handles_contraflow(&self) -> bool {
@@ -298,6 +300,188 @@ impl ExecutableGraph {
         Some(())
     }
 
+    /// This is a performance critial function!
+    ///
+    /// # Errors
+    /// Errors if the event can not be processed, or an operator fails
+    pub fn enqueue(
+        &mut self,
+        node_id: u64,
+        stream_name: Port<'static>,
+        event: Event,
+        returns: &mut Returns,
+    ) -> Result<()> {
+        // Resolve the input stream or entrypoint for this enqueue operation
+        if self
+            .metric_interval
+            .map(|ival| event.ingest_ns - self.last_metrics > ival)
+            .unwrap_or_default()
+        {
+            let mut tags = HashMap::with_capacity(8);
+            tags.insert("pipeline".into(), common_cow(&self.id).into());
+            self.send_metrics("events", tags, event.ingest_ns);
+            self.last_metrics = event.ingest_ns;
+        }
+        let input = *stry!(self.inputs.get(&stream_name).ok_or_else(|| {
+            Error::from(ErrorKind::InvalidInputStreamName(
+                stream_name.to_string(),
+                self.id.clone(),
+            ))
+        }));
+        self.stack.push((input, stream_name, event));
+        self.run(node_id, returns)
+    }
+
+    /// Enqueue a signal
+    ///
+    /// # Errors
+    /// if the singal fails to be processed in the singal flow or if any forward going
+    /// events spawned by this signal fail to be processed
+    pub fn enqueue_signal(
+        &mut self,
+        node_id: u64,
+        signal: Event,
+        returns: &mut Returns,
+    ) -> Result<()> {
+        if stry!(self.signalflow(node_id, signal)) {
+            stry!(self.run(node_id, returns));
+        }
+        Ok(())
+    }
+
+    fn signalflow(&mut self, node_id: u64, mut signal: Event) -> Result<bool> {
+        let mut has_events = false;
+        // We can't use an iterator over signalfow here
+        // rust refuses to let us use enqueue_events if we do
+        for idx in 0..self.signalflow.len() {
+            // ALLOW: we guarantee that idx exists above
+            let i = unsafe { *self.signalflow.get_unchecked(idx) };
+            let EventAndInsights { events, insights } = {
+                let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
+                let state = unsafe { self.states.ops.get_unchecked_mut(i) }; // we know this has been initialized
+                stry!(op.on_signal(node_id, op.uid, state, &mut signal))
+            };
+            self.insights.extend(insights.into_iter().map(|cf| (i, cf)));
+            has_events = has_events || !events.is_empty();
+            self.enqueue_events(i, events);
+        }
+        Ok(has_events)
+    }
+
+    #[inline]
+    fn run(&mut self, node_id: u64, returns: &mut Returns) -> Result<()> {
+        while match self.next(node_id, returns) {
+            Ok(res) => res,
+            Err(e) => {
+                // if we error handling an event, we need to clear the stack
+                // In the case of branching where the stack has > 1 element
+                // we would keep the old errored event around for the numbers of branches that havent been executed
+                self.stack.clear();
+                return Err(e);
+            }
+        } {}
+        returns.reverse();
+        Ok(())
+    }
+
+    #[inline]
+    fn next(&mut self, node_id: u64, returns: &mut Returns) -> Result<bool> {
+        if let Some((idx, port, event)) = self.stack.pop() {
+            // If we have emitted a signal event we got to handle it as a signal flow
+            // the signal flow will
+            if event.kind.is_some() {
+                stry!(self.signalflow(node_id, event));
+            } else {
+                // count ingres
+                let node = unsafe { self.graph.get_unchecked_mut(idx) };
+                if let NodeKind::Output(port) = &node.kind {
+                    returns.push((port.clone(), event));
+                } else {
+                    // ALLOW: We know the state was initiated
+                    let state = unsafe { self.states.ops.get_unchecked_mut(idx) };
+                    let EventAndInsights { events, insights } =
+                        stry!(node.on_event(node_id, node.uid, &port, state, event));
+
+                    for (out_port, _) in &events {
+                        unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
+                    }
+                    for insight in insights {
+                        self.insights.push((idx, insight));
+                    }
+                    self.enqueue_events(idx, events);
+                };
+            }
+            Ok(!self.stack.is_empty())
+        } else {
+            error!("next was called on an empty graph stack, this should never happen");
+            Ok(false)
+        }
+    }
+
+    fn send_metrics(
+        &mut self,
+        metric_name: &str,
+        mut tags: HashMap<Cow<'static, str>, Value<'static>>,
+        ingest_ns: u64,
+    ) {
+        for (i, m) in self.metrics.iter().enumerate() {
+            tags.insert("node".into(), unsafe {
+                self.graph.get_unchecked(i).id.clone().into()
+            });
+            if let Ok(metrics) = unsafe { self.graph.get_unchecked(i) }.metrics(&tags, ingest_ns) {
+                for value in metrics {
+                    if let Err(e) = self.metrics_channel.send(MetricsMsg {
+                        payload: value.into(),
+                        origin_uri: None,
+                    }) {
+                        error!("Failed to send metrics: {}", e);
+                    };
+                }
+            }
+
+            for value in m.to_value(metric_name, &mut tags, ingest_ns) {
+                if let Err(e) = self.metrics_channel.send(MetricsMsg {
+                    payload: value.into(),
+                    origin_uri: None,
+                }) {
+                    error!("Failed to send metrics: {}", e);
+                };
+            }
+        }
+    }
+    // Takes the output of one operator, identified by `idx` and puts them on the stack
+    // for the connected operators to pick up.
+    // If the output is not connected we register this as a dropped event
+    #[inline]
+    fn enqueue_events(&mut self, idx: usize, events: Vec<(Port<'static>, Event)>) {
+        for (out_port, event) in events {
+            if let Some((last, rest)) = self
+                .port_indexes
+                .get(&(idx, out_port))
+                .and_then(|o| o.split_last())
+            {
+                for (idx, in_port) in rest {
+                    unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
+                    self.stack.push((*idx, in_port.clone(), event.clone()));
+                }
+                let (idx, in_port) = last;
+                unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
+                self.stack.push((*idx, in_port.clone(), event));
+            }
+        }
+    }
+    /// Enque a contraflow insight
+    pub fn contraflow(&mut self, mut skip_to: Option<usize>, mut insight: Event) -> Event {
+        for idx in &self.contraflow {
+            if skip_to.is_none() {
+                let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
+                op.on_contraflow(op.uid, &mut insight);
+            } else if skip_to == Some(*idx) {
+                skip_to = None;
+            }
+        }
+        insight
+    }
     fn optimize_(&mut self) -> Option<bool> {
         let mut did_chage = false;
         // remove skippable nodes from contraflow and signalflow
@@ -433,182 +617,6 @@ impl ExecutableGraph {
         }
         Some(did_chage)
     }
-
-    /// This is a performance critial function!
-    ///
-    /// # Errors
-    /// Errors if the event can not be processed, or an operator fails
-    pub fn enqueue(
-        &mut self,
-        stream_name: Port<'static>,
-        event: Event,
-        returns: &mut Returns,
-    ) -> Result<()> {
-        // Resolve the input stream or entrypoint for this enqueue operation
-        if self
-            .metric_interval
-            .map(|ival| event.ingest_ns - self.last_metrics > ival)
-            .unwrap_or_default()
-        {
-            let mut tags = HashMap::with_capacity(8);
-            tags.insert("pipeline".into(), common_cow(&self.id).into());
-            self.send_metrics("events", tags, event.ingest_ns);
-            self.last_metrics = event.ingest_ns;
-        }
-        let input = *stry!(self.inputs.get(&stream_name).ok_or_else(|| {
-            Error::from(ErrorKind::InvalidInputStreamName(
-                stream_name.to_string(),
-                self.id.clone(),
-            ))
-        }));
-        self.stack.push((input, stream_name, event));
-        self.run(returns)
-    }
-
-    #[inline]
-    fn run(&mut self, returns: &mut Returns) -> Result<()> {
-        while match self.next(returns) {
-            Ok(res) => res,
-            Err(e) => {
-                // if we error handling an event, we need to clear the stack
-                // In the case of branching where the stack has > 1 element
-                // we would keep the old errored event around for the numbers of branches that havent been executed
-                self.stack.clear();
-                return Err(e);
-            }
-        } {}
-        returns.reverse();
-        Ok(())
-    }
-
-    #[inline]
-    fn next(&mut self, returns: &mut Returns) -> Result<bool> {
-        if let Some((idx, port, event)) = self.stack.pop() {
-            // If we have emitted a signal event we got to handle it as a signal flow
-            // the signal flow will
-            if event.kind.is_some() {
-                stry!(self.signalflow(event));
-            } else {
-                // count ingres
-                let node = unsafe { self.graph.get_unchecked_mut(idx) };
-                if let NodeKind::Output(port) = &node.kind {
-                    returns.push((port.clone(), event));
-                } else {
-                    // ALLOW: We know the state was initiated
-                    let state = unsafe { self.states.ops.get_unchecked_mut(idx) };
-                    let EventAndInsights { events, insights } =
-                        stry!(node.on_event(node.uid, &port, state, event));
-
-                    for (out_port, _) in &events {
-                        unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
-                    }
-                    for insight in insights {
-                        self.insights.push((idx, insight));
-                    }
-                    self.enqueue_events(idx, events);
-                };
-            }
-            Ok(!self.stack.is_empty())
-        } else {
-            error!("next was called on an empty graph stack, this should never happen");
-            Ok(false)
-        }
-    }
-
-    fn send_metrics(
-        &mut self,
-        metric_name: &str,
-        mut tags: HashMap<Cow<'static, str>, Value<'static>>,
-        ingest_ns: u64,
-    ) {
-        for (i, m) in self.metrics.iter().enumerate() {
-            tags.insert("node".into(), unsafe {
-                self.graph.get_unchecked(i).id.clone().into()
-            });
-            if let Ok(metrics) = unsafe { self.graph.get_unchecked(i) }.metrics(&tags, ingest_ns) {
-                for value in metrics {
-                    if let Err(e) = self.metrics_channel.send(MetricsMsg {
-                        payload: value.into(),
-                        origin_uri: None,
-                    }) {
-                        error!("Failed to send metrics: {}", e);
-                    };
-                }
-            }
-
-            for value in m.to_value(metric_name, &mut tags, ingest_ns) {
-                if let Err(e) = self.metrics_channel.send(MetricsMsg {
-                    payload: value.into(),
-                    origin_uri: None,
-                }) {
-                    error!("Failed to send metrics: {}", e);
-                };
-            }
-        }
-    }
-    // Takes the output of one operator, identified by `idx` and puts them on the stack
-    // for the connected operators to pick up.
-    // If the output is not connected we register this as a dropped event
-    #[inline]
-    fn enqueue_events(&mut self, idx: usize, events: Vec<(Port<'static>, Event)>) {
-        for (out_port, event) in events {
-            if let Some((last, rest)) = self
-                .port_indexes
-                .get(&(idx, out_port))
-                .and_then(|o| o.split_last())
-            {
-                for (idx, in_port) in rest {
-                    unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
-                    self.stack.push((*idx, in_port.clone(), event.clone()));
-                }
-                let (idx, in_port) = last;
-                unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
-                self.stack.push((*idx, in_port.clone(), event));
-            }
-        }
-    }
-    /// Enque a contraflow insight
-    pub fn contraflow(&mut self, mut skip_to: Option<usize>, mut insight: Event) -> Event {
-        for idx in &self.contraflow {
-            if skip_to.is_none() {
-                let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
-                op.on_contraflow(op.uid, &mut insight);
-            } else if skip_to == Some(*idx) {
-                skip_to = None;
-            }
-        }
-        insight
-    }
-    /// Enqueue a signal
-    ///
-    /// # Errors
-    /// if the singal fails to be processed in the singal flow or if any forward going
-    /// events spawned by this signal fail to be processed
-    pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
-        if stry!(self.signalflow(signal)) {
-            stry!(self.run(returns));
-        }
-        Ok(())
-    }
-
-    fn signalflow(&mut self, mut signal: Event) -> Result<bool> {
-        let mut has_events = false;
-        // We can't use an iterator over signalfow here
-        // rust refuses to let us use enqueue_events if we do
-        for idx in 0..self.signalflow.len() {
-            // ALLOW: we guarantee that idx exists above
-            let i = unsafe { *self.signalflow.get_unchecked(idx) };
-            let EventAndInsights { events, insights } = {
-                let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
-                let state = unsafe { self.states.ops.get_unchecked_mut(i) }; // we know this has been initialized
-                stry!(op.on_signal(op.uid, state, &mut signal))
-            };
-            self.insights.extend(insights.into_iter().map(|cf| (i, cf)));
-            has_events = has_events || !events.is_empty();
-            self.enqueue_events(i, events);
-        }
-        Ok(has_events)
-    }
 }
 
 #[cfg(test)]
@@ -646,7 +654,7 @@ mod test {
         n.on_contraflow(op_id, &mut e);
         assert_eq!(e, Event::default());
         assert_eq!(
-            n.on_signal(op_id, &mut state, &mut e)?,
+            n.on_signal(0, op_id, &mut state, &mut e)?,
             EventAndInsights::default()
         );
         assert_eq!(e, Event::default());
@@ -687,6 +695,7 @@ mod test {
     impl Operator for AllOperator {
         fn on_event(
             &mut self,
+            _node_id: u64,
             _uid: OperatorUId,
             _port: &Port<'static>,
             _state: &mut Value<'static>,
@@ -700,6 +709,7 @@ mod test {
 
         fn on_signal(
             &mut self,
+            _node_id: u64,
             _uid: OperatorUId,
             _state: &mut Value<'static>,
             _signal: &mut Event,
@@ -846,7 +856,7 @@ mod test {
         // Test with one event
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue(IN, e, &mut returns)?;
+        g.enqueue(0, IN, e, &mut returns)?;
         assert_eq!(returns.len(), 1);
         returns.clear();
 
@@ -860,13 +870,13 @@ mod test {
         // Test with two events
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue(IN, e, &mut returns)?;
+        g.enqueue(0, IN, e, &mut returns)?;
         assert_eq!(returns.len(), 1);
         returns.clear();
 
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue(IN, e, &mut returns)?;
+        g.enqueue(0, IN, e, &mut returns)?;
         assert_eq!(returns.len(), 1);
         returns.clear();
 
@@ -948,7 +958,7 @@ mod test {
         // Test with one event
         let e = Event::default();
         let mut returns = vec![];
-        g.enqueue(IN, e, &mut returns)?;
+        g.enqueue(0, IN, e, &mut returns)?;
         assert_eq!(returns.len(), 1);
         returns.clear();
 

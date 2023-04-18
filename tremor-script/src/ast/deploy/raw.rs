@@ -47,7 +47,7 @@ use tremor_value::literal;
 /// If evaluation of the script fails, or a legal value cannot be evaluated by result
 pub fn run_script<'script>(expr: &Script<'script>) -> Result<Value<'script>> {
     // We duplicate these here as it simplifies use of the macro externally
-    let ctx = EventContext::new(nanotime(), None);
+    let ctx = EventContext::new(nanotime(), None, 0);
     let mut event = literal!({}).into_static();
     let mut state = literal!({}).into_static();
     let mut meta = literal!({}).into_static();

@@ -25,7 +25,7 @@
 
 use rustler::error::Error as NifError;
 use rustler::{Encoder, Env, NifResult, Term};
-use tremor_script::{prelude::*, registry, Script};
+use tremor_script::{prelude::*, registry, Script, NO_CONTEXT};
 // =================================================================================================
 // resource
 // =================================================================================================
@@ -49,7 +49,7 @@ fn eval<'e>(env: Env<'e>, src: &str) -> NifResult<Term<'e>> {
     let mut state = Value::null();
     let value = script
         .run(
-            &EventContext::new(0, None),
+            &NO_CONTEXT,
             AggrType::Emit,
             &mut event,
             &mut state,

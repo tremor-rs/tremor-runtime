@@ -575,7 +575,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -761,7 +761,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -935,7 +935,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1030,7 +1030,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
 
         // simulate sink lifecycle
@@ -1084,7 +1084,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1309,7 +1309,7 @@ pub(crate) mod tests {
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Manager::default(),
+            raft::Cluster::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1461,7 +1461,7 @@ pub(crate) mod tests {
             &builder,
             cfg,
             &kill_switch,
-            raft::Manager::default(),
+            raft::Cluster::default(),
         )
         .await?;
         let (tx, mut rx) = bounded(1);
@@ -1497,7 +1497,7 @@ pub(crate) mod tests {
             &builder,
             cfg,
             &kill_switch,
-            raft::Manager::default(),
+            raft::Cluster::default(),
         )
         .await?;
         let (tx, mut rx) = bounded(1);

@@ -272,7 +272,7 @@ pub(crate) struct SinkContextInner {
     pub(crate) notifier: ConnectionLostNotifier,
 
     /// sender for raft requests
-    pub(crate) raft: raft::Manager,
+    pub(crate) raft: raft::Cluster,
 }
 #[derive(Clone)]
 pub(crate) struct SinkContext(Arc<SinkContextInner>);
@@ -289,7 +289,7 @@ impl SinkContext {
         connector_type: ConnectorType,
         quiescence_beacon: QuiescenceBeacon,
         notifier: ConnectionLostNotifier,
-        raft: raft::Manager,
+        raft: raft::Cluster,
     ) -> SinkContext {
         Self(Arc::new(SinkContextInner {
             uid,
@@ -328,7 +328,7 @@ impl Context for SinkContext {
         &self.0.connector_type
     }
 
-    fn raft(&self) -> &raft::Manager {
+    fn raft(&self) -> &raft::Cluster {
         &self.0.raft
     }
 }

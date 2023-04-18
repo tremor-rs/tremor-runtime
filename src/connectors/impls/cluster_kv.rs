@@ -249,7 +249,7 @@ impl Connector for Kv {
 
 struct KvSink {
     alias: Alias,
-    raft: raft::Manager,
+    raft: raft::Cluster,
     tx: Sender<SourceReply>,
     codec: Json<Sorted>,
     origin_uri: EventOriginUri,

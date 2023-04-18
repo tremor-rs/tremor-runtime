@@ -194,8 +194,10 @@ impl GroupWindow {
     /// false - If this window or any of the following tilt frames
     ///         are holding on to data that wasn't mitted yet.
     ///         This group can **not** be removed.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn on_event(
         &mut self,
+        node_id: u64,
         ctx: &mut SelectCtx,
         consts: RunConsts,
         data: &mut ValueAndMeta,
@@ -204,7 +206,10 @@ impl GroupWindow {
         mut can_remove: bool,
     ) -> Result<bool> {
         // determin what to do with the event
-        let window_event = stry!(self.window.on_event(data, ctx.ingest_ns, ctx.origin_uri));
+        let window_event =
+            stry!(self
+                .window
+                .on_event(node_id, data, ctx.ingest_ns, ctx.origin_uri));
 
         // if it should be included in the current window include it
         if window_event.include {
@@ -257,6 +262,7 @@ impl GroupWindow {
             if let Some(next) = &mut self.next {
                 can_remove = can_remove
                     && stry!(next.on_event(
+                        node_id,
                         ctx,
                         consts,
                         data,
@@ -329,6 +335,7 @@ impl Group {
     ///         and this group can **not** be removed.
     pub(crate) fn on_event(
         &mut self,
+        node_id: u64,
         mut ctx: SelectCtx,
         consts: &mut Consts,
         data: &mut ValueAndMeta,
@@ -340,7 +347,7 @@ impl Group {
         if let Some(first) = &mut self.windows {
             // If we have windows trigger `on_event` fo the first of them
             // with the assumption that this can be removed.
-            first.on_event(&mut ctx, run, data, events, None, true)
+            first.on_event(node_id, &mut ctx, run, data, events, None, true)
         } else {
             // If we have no windows just execute the select statement
             // and mark this group as removable
@@ -363,12 +370,13 @@ impl Group {
 pub trait Trait: std::fmt::Debug {
     fn on_event(
         &mut self,
+        node_id: u64,
         data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions>;
     /// handle a tick with the current time in nanoseconds as `ns` argument
-    fn on_tick(&mut self, _ns: u64) -> Result<Actions> {
+    fn on_tick(&mut self, _node_id: u64, _ns: u64) -> Result<Actions> {
         Ok(Actions::all_false())
     }
     /// maximum number of groups to keep around simultaneously
@@ -414,22 +422,23 @@ impl Impl {
 impl Trait for Impl {
     fn on_event(
         &mut self,
+        node_id: u64,
         data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
         match self {
-            Self::Time(w) => w.on_event(data, ingest_ns, origin_uri),
-            Self::Count(w) => w.on_event(data, ingest_ns, origin_uri),
-            Self::State(w) => w.on_event(data, ingest_ns, origin_uri),
+            Self::Time(w) => w.on_event(node_id, data, ingest_ns, origin_uri),
+            Self::Count(w) => w.on_event(node_id, data, ingest_ns, origin_uri),
+            Self::State(w) => w.on_event(node_id, data, ingest_ns, origin_uri),
         }
     }
 
-    fn on_tick(&mut self, ns: u64) -> Result<Actions> {
+    fn on_tick(&mut self, node_id: u64, ns: u64) -> Result<Actions> {
         match self {
-            Self::Time(w) => w.on_tick(ns),
-            Self::Count(w) => w.on_tick(ns),
-            Self::State(w) => w.on_tick(ns),
+            Self::Time(w) => w.on_tick(node_id, ns),
+            Self::Count(w) => w.on_tick(node_id, ns),
+            Self::State(w) => w.on_tick(node_id, ns),
         }
     }
 
@@ -485,6 +494,7 @@ pub struct No {}
 impl Trait for No {
     fn on_event(
         &mut self,
+        _node_id: u64,
         _data: &mut ValueAndMeta,
         _ingest_ns: u64,
         _origin_uri: &Option<EventOriginUri>,
@@ -559,11 +569,13 @@ impl Trait for TumblingOnState {
     }
     fn on_event(
         &mut self,
+        node_id: u64,
+
         data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
-        let context = EventContext::new(ingest_ns, origin_uri.as_ref());
+        let context = EventContext::new(ingest_ns, origin_uri.as_ref(), node_id);
         let (unwind_event, event_meta) = data.parts_mut();
         let value = stry!(self.script.run(
             &context,
@@ -586,8 +598,8 @@ impl Trait for TumblingOnState {
         }
     }
 
-    fn on_tick(&mut self, ns: u64) -> Result<Actions> {
-        let context = EventContext::new(ns, None);
+    fn on_tick(&mut self, node_id: u64, ns: u64) -> Result<Actions> {
+        let context = EventContext::new(ns, None, node_id);
         let mut unwind_event = Value::const_null();
         let mut event_meta = Value::const_null();
         // We protect against altering event by ensuring event and meta
@@ -670,6 +682,7 @@ impl Trait for TumblingOnTime {
     }
     fn on_event(
         &mut self,
+        node_id: u64,
         data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
@@ -679,7 +692,7 @@ impl Trait for TumblingOnTime {
             .as_ref()
             .and_then(|script| script.script.as_ref())
             .map(|script| {
-                let context = EventContext::new(ingest_ns, origin_uri.as_ref());
+                let context = EventContext::new(ingest_ns, origin_uri.as_ref(), node_id);
                 let (unwind_event, event_meta) = data.parts();
                 let value = stry!(script.run_imut(
                     &context,
@@ -699,7 +712,7 @@ impl Trait for TumblingOnTime {
         Ok(self.get_window_event(time))
     }
 
-    fn on_tick(&mut self, ns: u64) -> Result<Actions> {
+    fn on_tick(&mut self, _node_id: u64, ns: u64) -> Result<Actions> {
         if self.script.is_none() {
             Ok(self.get_window_event(ns))
         } else {
@@ -744,6 +757,8 @@ impl Trait for TumblingOnNumber {
     }
     fn on_event(
         &mut self,
+        node_id: u64,
+
         data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
@@ -753,7 +768,7 @@ impl Trait for TumblingOnNumber {
             .as_ref()
             .and_then(|script| script.script.as_ref())
             .map_or(Ok(1), |script| {
-                let context = EventContext::new(ingest_ns, origin_uri.as_ref());
+                let context = EventContext::new(ingest_ns, origin_uri.as_ref(), node_id);
                 let (unwind_event, event_meta) = data.parts();
                 let value = stry!(script.run_imut(
                     &context,

@@ -65,12 +65,13 @@ impl TrickleOperator {
 impl Operator for TrickleOperator {
     fn on_event(
         &mut self,
+        node_id: u64,
         uid: OperatorUId,
         port: &Port<'static>,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
-        self.op.on_event(uid, port, state, event)
+        self.op.on_event(node_id, uid, port, state, event)
     }
 
     fn handles_signal(&self) -> bool {
@@ -78,11 +79,12 @@ impl Operator for TrickleOperator {
     }
     fn on_signal(
         &mut self,
+        node_id: u64,
         uid: OperatorUId,
         state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
-        self.op.on_signal(uid, state, signal)
+        self.op.on_signal(node_id, uid, state, signal)
     }
 
     fn handles_contraflow(&self) -> bool {

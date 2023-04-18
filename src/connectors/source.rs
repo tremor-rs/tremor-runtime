@@ -295,7 +295,7 @@ pub(crate) struct SourceContext {
     pub(crate) notifier: ConnectionLostNotifier,
 
     /// sender for raft requests
-    pub(crate) raft: raft::Manager,
+    pub(crate) raft: raft::Cluster,
 }
 
 impl Display for SourceContext {
@@ -319,7 +319,7 @@ impl Context for SourceContext {
     fn connector_type(&self) -> &ConnectorType {
         &self.connector_type
     }
-    fn raft(&self) -> &raft::Manager {
+    fn raft(&self) -> &raft::Cluster {
         &self.raft
     }
 }

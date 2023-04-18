@@ -37,13 +37,13 @@ use super::{
 };
 
 #[derive(Clone, Default)]
-pub(crate) struct Manager {
+pub(crate) struct Cluster {
     node_id: NodeId,
     raft: Option<TremorRaftImpl>,
     sender: Option<Sender<APIStoreReq>>,
 }
 
-impl std::fmt::Debug for Manager {
+impl std::fmt::Debug for Cluster {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Manager")
             .field("raft", &self.raft.is_some())
@@ -52,7 +52,7 @@ impl std::fmt::Debug for Manager {
     }
 }
 
-impl Manager {
+impl Cluster {
     pub(crate) fn id(&self) -> NodeId {
         self.node_id
     }

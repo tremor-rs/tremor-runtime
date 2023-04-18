@@ -120,7 +120,7 @@ impl KillSwitch {
 pub struct Runtime {
     pub(crate) flows: flow_supervisor::Channel,
     pub(crate) kill_switch: KillSwitch,
-    pub(crate) cluster_manager: Arc<RwLock<Option<raft::Manager>>>,
+    pub(crate) cluster_manager: Arc<RwLock<Option<raft::Cluster>>>,
 }
 
 impl Runtime {
@@ -131,7 +131,7 @@ impl Runtime {
     //         .cloned()
     //         .ok_or_else(|| ErrorKind::RaftNotRunning.into())
     // }
-    pub(crate) fn maybe_get_manager(&self) -> Result<Option<raft::Manager>> {
+    pub(crate) fn maybe_get_manager(&self) -> Result<Option<raft::Cluster>> {
         Ok(self.cluster_manager.read()?.as_ref().cloned())
     }
 

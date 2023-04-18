@@ -251,7 +251,7 @@ impl Run {
                         let mut global_map = Value::object();
                         let mut event = event.clone_static();
                         match runnable.run(
-                            &EventContext::new(at, None),
+                            &EventContext::new(at, None, 0),
                             AggrType::Tick,
                             &mut event,
                             state,
@@ -352,6 +352,7 @@ impl Run {
                 let mut continuation = vec![];
 
                 if let Err(e) = runnable.enqueue(
+                    0,
                     IN,
                     Event {
                         id: EventId::from_id(0, 0, *id),

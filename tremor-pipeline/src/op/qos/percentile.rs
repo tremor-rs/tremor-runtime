@@ -100,6 +100,7 @@ op!(PercentileFactory(_uid, node) {
 impl Operator for Percentile {
     fn on_event(
         &mut self,
+        _node_id: u64,
         uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
@@ -156,7 +157,7 @@ mod test {
 
     #[test]
     fn pass_wo_error() {
-        let uid = OperatorUId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: Percentile = Config {
             timeout: 100_000_000,
             step_up: default_step_up(),
@@ -174,7 +175,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, &Port::In, &mut state, event1)
+            .on_event(0, operator_id, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -190,7 +191,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, &Port::In, &mut state, event2)
+            .on_event(0, operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -207,7 +208,7 @@ mod test {
             step_up: default_step_up(),
         }
         .into();
-        let uid = OperatorUId::new(42);
+        let operator_id = OperatorUId::new(42);
 
         let mut state = Value::null();
 
@@ -219,7 +220,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, &Port::In, &mut state, event1)
+            .on_event(0, operator_id, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -237,7 +238,7 @@ mod test {
         let mut insight = event.insight_ack_with_timing(100_000_001);
 
         // Verify that we increased our percentage
-        op.on_contraflow(uid, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert_eq!(0.95, op.perc);
 
         // now we have a good and fast event
@@ -248,7 +249,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, &Port::In, &mut state, event2)
+            .on_event(0, operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -258,7 +259,7 @@ mod test {
 
         // less than timeout, we reset percentage a little
         let mut insight2 = event.insight_ack_with_timing(99);
-        op.on_contraflow(uid, &mut insight2);
+        op.on_contraflow(operator_id, &mut insight2);
         assert_eq!(0.951, op.perc);
     }
 
@@ -270,13 +271,13 @@ mod test {
             step_up: 0.1,
         }
         .into();
-        let uid = OperatorUId::new(123);
+        let operator_id = OperatorUId::new(123);
         // An contraflow that fails the timeout
         let mut m = Object::new();
         m.insert("time".into(), 200_000_000.into());
 
         let mut op_meta = OpMeta::default();
-        op_meta.insert(uid, OwnedValue::null());
+        op_meta.insert(operator_id, OwnedValue::null());
 
         let mut insight = Event {
             id: (1, 1, 1).into(),
@@ -298,10 +299,10 @@ mod test {
         // Assert initial state
         assert_eq!(1.0, op.perc);
         // move one step down
-        op.on_contraflow(uid, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert_eq!(0.75, op.perc);
         // move one step down
-        op.on_contraflow(uid, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert_eq!(0.5, op.perc);
 
         let event = Event {
@@ -311,7 +312,7 @@ mod test {
         };
         let mut state = Value::null();
         let mut events = op
-            .on_event(uid, &Port::In, &mut state, event)
+            .on_event(0, operator_id, &Port::In, &mut state, event)
             .expect("could not run pipeline")
             .events;
 
@@ -322,7 +323,7 @@ mod test {
         assert_eq!("overflow", out);
 
         // Now we should reset
-        op.on_contraflow(uid, &mut insight_reset);
+        op.on_contraflow(operator_id, &mut insight_reset);
         assert_eq!(0.6, op.perc);
     }
 }

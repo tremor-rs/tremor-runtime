@@ -87,7 +87,7 @@ macro_rules! test_cases {
                     };
                     let mut r = vec![];
                     // run the pipeline, if an error occurs, dont stop but check for equivalence with `error.txt`
-                    match pipeline.enqueue(IN, event, &mut r) {
+                    match pipeline.enqueue(0, IN, event, &mut r) {
                         Err(PipelineError(PipelineErrorKind::Script(e), o)) => {
                             if let Some(err) = err.as_ref() {
                                 let e = tremor_script::errors::Error(e, o);

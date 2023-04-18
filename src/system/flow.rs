@@ -175,7 +175,7 @@ impl Flow {
         connector_id_gen: &mut ConnectorUIdGen,
         known_connectors: &Known,
         kill_switch: &KillSwitch,
-        raft: raft::Manager,
+        raft: raft::Cluster,
         // FIXME: add AppContext
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
@@ -1085,7 +1085,7 @@ mod tests {
             &mut connector_id_gen,
             &known_connectors,
             &kill_switch,
-            raft::Manager::default(),
+            raft::Cluster::default(),
         )
         .await?;
 

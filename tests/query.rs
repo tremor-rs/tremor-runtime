@@ -79,7 +79,7 @@ macro_rules! test_cases {
                         ..Event::default()
                     };
                     let mut r = vec![];
-                    pipeline.enqueue(IN, event, &mut r)?;
+                    pipeline.enqueue(0, IN, event, &mut r)?;
                     results.append(&mut r);
                 }
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");

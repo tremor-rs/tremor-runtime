@@ -234,7 +234,7 @@ pub(crate) fn run_suite(
 
             let script = runnable.script;
 
-            let context = &EventContext::new(nanotime(), None);
+            let context = &EventContext::new(nanotime(), None, 0);
             let env = Env {
                 context,
                 consts: NO_CONSTS.run(),

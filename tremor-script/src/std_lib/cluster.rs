@@ -11,32 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+// #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
-use crate::op::prelude::*;
+use crate::registry::Registry;
+use crate::tremor_fn;
+pub fn load(registry: &mut Registry) {
+    registry.insert(tremor_fn! (cluster|node_id(_context) {
+            Ok(_context.node_id.into())
+    }));
+}
 
-#[derive(Debug, Clone, Hash)]
-struct Passthrough {}
+#[cfg(test)]
+mod test {
+    use crate::registry::fun;
 
-op!(PassthroughFactory (_uid, _node) {
-    Ok(Box::new(Passthrough{}))
-});
+    #[test]
+    fn node_id() {
+        let f = fun("cluster", "node_id");
 
-impl Operator for Passthrough {
-    fn on_event(
-        &mut self,
-        _node_id: u64,
-        _uid: OperatorUId,
-        _port: &Port<'static>,
-        _state: &mut Value<'static>,
-        event: Event,
-    ) -> Result<EventAndInsights> {
-        Ok(event.into())
-    }
-    // this is just returning true
-
-    fn skippable(&self) -> bool {
-        // ALLOW: This is Ok
-        let _ = self;
-        true
+        assert_val!(f(&[]), 0);
     }
 }

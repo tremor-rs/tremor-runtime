@@ -79,7 +79,7 @@ pub use crate::ast::deploy::raw::run_script;
 pub use crate::ast::module;
 pub use crate::ast::query::SelectType;
 pub use crate::ast::NodeMeta;
-pub use crate::ctx::{EventContext, EventOriginUri};
+pub use crate::ctx::{EventContext, EventOriginUri, NO_CONTEXT};
 pub use crate::errors::{Kind as ErrorKind, Result};
 pub use crate::query::Query;
 pub use crate::registry::{
@@ -137,7 +137,7 @@ mod tests {
         let mut state = Value::null();
         let mut global_map = Value::object();
         let value = runnable.run(
-            &EventContext::new(0, None),
+            &NO_CONTEXT,
             AggrType::Emit,
             &mut event,
             &mut state,
@@ -159,7 +159,7 @@ mod tests {
         let mut state = Value::null();
         let mut meta = Value::from(hashmap! {});
         let _value = runnable.run(
-            &EventContext::new(0, None),
+            &NO_CONTEXT,
             AggrType::Emit,
             &mut event,
             &mut state,
@@ -174,7 +174,7 @@ mod tests {
         let mut state = Value::null();
         let mut global_map = Value::from(hashmap! {});
         let _value = runnable.run(
-            &EventContext::new(0, None),
+            &NO_CONTEXT,
             AggrType::Emit,
             &mut event,
             &mut state,
