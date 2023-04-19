@@ -386,8 +386,8 @@ mod tests {
     use super::*;
     use crate::{
         connectors::{utils::quiescence::QuiescenceBeacon, CodecReq},
-        ids::AppFlowInstanceId,
-        qsize, raft,
+        qsize,
+        system::flow::AppContext,
     };
 
     /// does not connect
@@ -447,7 +447,7 @@ mod tests {
     async fn failfast_runtime() -> Result<()> {
         let (tx, _rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = Alias::new(AppFlowInstanceId::new("app", "flow"), "test");
+        let alias = Alias::new("test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -465,7 +465,7 @@ mod tests {
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
-            raft: raft::Cluster::default(),
+            app_ctx: AppContext::default(),
         };
         // failing attempt
         assert_eq!(
@@ -480,7 +480,7 @@ mod tests {
     async fn backoff_runtime() -> Result<()> {
         let (tx, mut rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = Alias::new(AppFlowInstanceId::new("app", "flow"), "test");
+        let alias = Alias::new("test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -503,7 +503,7 @@ mod tests {
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
-            raft: raft::Cluster::default(),
+            app_ctx: AppContext::default(),
         };
         // 1st failing attempt
         assert!(matches!(

@@ -30,10 +30,13 @@ pub(crate) fn endpoints() -> Router<APIRequest> {
         .route("/consistent_read", post(consistent_read))
 }
 
-#[derive(Deserialize)]
-struct KVSet {
-    key: String,
-    value: OwnedValue,
+/// KV Write request
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct KVSet {
+    /// they key
+    pub key: String,
+    /// the value
+    pub value: OwnedValue,
 }
 
 async fn write(

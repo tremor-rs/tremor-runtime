@@ -83,14 +83,12 @@ impl ConnectorBuilder for Builder {
 
 #[cfg(test)]
 mod tests {
-    use tokio::sync::broadcast;
-    use tremor_common::uids::SinkUId;
-
     use super::*;
     use crate::connectors::utils::quiescence::QuiescenceBeacon;
     use crate::connectors::{reconnect::ConnectionLostNotifier, utils::metrics::SinkReporter};
-    use crate::ids::AppFlowInstanceId;
-    use crate::{connectors::sink::builder, raft};
+    use crate::{connectors::sink::builder, system::flow::AppContext};
+    use tokio::sync::broadcast;
+    use tremor_common::uids::SinkUId;
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn can_spawn_sink() -> Result<()> {
@@ -102,26 +100,22 @@ mod tests {
                 request_size_limit: 10 * 1024 * 1024,
             },
         };
-
+        let app_ctx = AppContext::default();
         let sink_address = connector
             .create_sink(
                 SinkContext::new(
                     SinkUId::default(),
-                    Alias::new(AppFlowInstanceId::new("app", "a"), "b"),
+                    Alias::new("b"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(crate::channel::bounded(128).0),
-                    raft::Cluster::default(),
+                    app_ctx.clone(),
                 ),
                 builder(
                     &ConnectorConfig::default(),
                     CodecReq::Structured,
-                    &Alias::new(AppFlowInstanceId::new("app", "a"), "b"),
-                    SinkReporter::new(
-                        Alias::new(AppFlowInstanceId::new("app", "a"), "b"),
-                        broadcast::channel(1).0,
-                        None,
-                    ),
+                    &Alias::new("b"),
+                    SinkReporter::new(app_ctx, Alias::new("b"), broadcast::channel(1).0, None),
                 )?,
             )
             .await?;

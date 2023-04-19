@@ -137,7 +137,7 @@ pub struct EventContext<'run> {
     pub panic_on_assert: bool,
     /// The cardinality of the current window, if any
     pub cardinality: usize,
-    /// Node id FIXME: do we want to make this non tremor script local?
+    /// Cluster Node ID
     pub node_id: u64,
 }
 

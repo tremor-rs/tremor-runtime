@@ -18,7 +18,7 @@
 pub(crate) mod apps;
 pub mod client;
 mod cluster;
-mod kv;
+pub mod kv;
 pub(crate) mod worker;
 
 use self::apps::AppState;
@@ -74,13 +74,6 @@ pub(crate) struct ServerState {
 
 impl ServerState {
     pub(crate) async fn ensure_leader(&self, uri: Option<Uri>) -> Result<(), APIError> {
-        // FIXME do the forwardery thing, or not
-        // self.raft
-        //     .client_read()
-        //     .await
-        //     .to_api_result(&uri, &state)
-        //     .await?;
-
         self.raft.is_leader().await.map_err(|e| match e {
             RaftError::APIError(e) => match e {
                 openraft::error::CheckIsLeaderError::ForwardToLeader(e) => {
@@ -317,35 +310,6 @@ where
     async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<T>;
 }
 
-// #[async_trait::async_trait()]
-// impl<T: serde::Serialize + serde::Deserialize<'static> + Send> ToAPIResult<T>
-//     for Result<T, ClientReadError>
-// {
-//     async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<T> {
-//         match self {
-//             Ok(t) => Ok(t),
-//             Err(ClientReadError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
-//             Err(ClientReadError::Fatal(e)) => Err(APIError::Fatal(e)),
-//             Err(ClientReadError::QuorumNotEnough(e)) => Err(APIError::NoQuorum(e)),
-//         }
-//     }
-// }
-
-// #[async_trait::async_trait]
-// impl ToAPIResult<()> for Result<(), RemoveLearnerError> {
-//     async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<()> {
-//         match self {
-//             Ok(()) | Err(RemoveLearnerError::NotExists(_)) => Ok(()), // if the node is not part of the cluster, the effect is the same, so we say it is fine
-//             Err(RemoveLearnerError::ForwardToLeader(e)) => forward_to_leader(e, uri, req).await,
-//             Err(RemoveLearnerError::Fatal(e)) => Err(APIError::Fatal(e)),
-//             Err(e @ RemoveLearnerError::NotLearner(_)) => Err(APIError::HTTP {
-//                 status: StatusCode::CONFLICT,
-//                 message: e.to_string(),
-//             }),
-//         }
-//     }
-// }
-
 #[async_trait::async_trait()]
 impl<T: serde::Serialize + serde::Deserialize<'static> + Send> ToAPIResult<T>
     for Result<T, RaftError<NodeId, ClientWriteError<NodeId, Addr>>>
@@ -391,6 +355,7 @@ where
             APIError::Other(format!("Leader {leader_id} not known"))
         }
     } else {
+        dbg!();
         APIError::NoLeader
     })
 }
@@ -423,7 +388,7 @@ impl std::fmt::Display for APIError {
             APIError::Runtime(e) => write!(f, "Runtime: {e}"),
             APIError::App(e) => write!(f, "App: {e}"),
             APIError::Timeout => write!(f, "Timeout"),
-            APIError::Recv => write!(f, "Recv"),
+            APIError::Recv => write!(f, "Recv error"),
             APIError::NoLeader => write!(f, "No Leader"),
         }
     }
@@ -474,7 +439,6 @@ impl<T> From<crate::channel::SendError<T>> for APIError {
 
 impl From<tokio::sync::oneshot::error::RecvError> for APIError {
     fn from(_: tokio::sync::oneshot::error::RecvError) -> Self {
-        // FIXME: add error
         Self::Recv
     }
 }

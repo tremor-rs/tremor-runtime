@@ -19,7 +19,10 @@ use crate::{
     ids::{AppFlowInstanceId, AppId},
     instance::IntendedState,
     log_error, qsize, raft,
-    system::{flow::Flow, KillSwitch, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT},
+    system::{
+        flow::{AppContext, Flow},
+        KillSwitch, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
+    },
 };
 use std::collections::{hash_map::Entry, HashMap};
 use tokio::{
@@ -103,25 +106,31 @@ impl FlowSupervisor {
         flow: DeployFlow<'static>,
         sender: oneshot::Sender<Result<AppFlowInstanceId>>,
         kill_switch: &KillSwitch,
-        raft_api_tx: raft::Cluster,
+        raft: raft::Cluster,
     ) {
         let id = AppFlowInstanceId::from_deploy(app_id, &flow);
         let res = match self.flows.entry(id.clone()) {
             Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
-            Entry::Vacant(vacant) => Flow::deploy(
-                id.clone(),
-                flow,
-                &mut self.operator_id_gen,
-                &mut self.connector_id_gen,
-                &self.known_connectors,
-                kill_switch,
-                raft_api_tx,
-            )
-            .await
-            .map(|deploy| {
-                vacant.insert(deploy);
-                id
-            }),
+            Entry::Vacant(vacant) => {
+                let ctx = AppContext {
+                    id: id.clone(),
+                    raft,
+                    ..AppContext::default()
+                };
+                Flow::deploy(
+                    ctx,
+                    flow,
+                    &mut self.operator_id_gen,
+                    &mut self.connector_id_gen,
+                    &self.known_connectors,
+                    kill_switch,
+                )
+                .await
+                .map(|deploy| {
+                    vacant.insert(deploy);
+                    id
+                })
+            }
         };
         log_error!(
             sender.send(res).map_err(|_| "send error"),

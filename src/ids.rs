@@ -16,7 +16,7 @@ use std::fmt::{Display, Formatter};
 
 use tremor_script::ast::DeployFlow;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq, PartialOrd, Default)]
 pub struct InstanceId(pub String);
 impl Display for InstanceId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -93,7 +93,7 @@ impl From<&str> for FlowDefinitionId {
 /// A flow instance is always part of an `App` and thus always needs an `AppId` to be fully qualified.
 /// The `Flow` id needs to be unique within the App, regardless of the flow definition this instance is based upon.
 /// An actual running instance of a flow
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize, Default)]
 pub struct AppFlowInstanceId {
     app_id: AppId,
     instance_id: InstanceId,
@@ -144,19 +144,19 @@ pub const BOOTSTRAP_NODE_ID: crate::raft::NodeId = 0;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub(crate) enum AliasType {
     Connector,
+    Pipeline,
 }
 
 impl std::fmt::Display for AliasType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Connector => write!(f, "connector"),
+            Self::Pipeline => write!(f, "pipeline"),
         }
     }
 }
 
 pub(crate) trait GenericAlias {
-    fn app_id(&self) -> &AppId;
-    fn app_instance(&self) -> &InstanceId;
     fn alias_type(&self) -> AliasType;
     fn alias(&self) -> &str;
 }

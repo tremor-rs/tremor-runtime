@@ -19,9 +19,6 @@ pub(crate) mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
 
-use crate::config::{
-    Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
-};
 use crate::connectors::{utils::metrics::SinkReporter, CodecReq};
 use crate::connectors::{Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
 use crate::errors::Result;
@@ -35,6 +32,12 @@ use crate::{
 use crate::{
     codec::{self, Codec},
     config::NameWithConfig,
+};
+use crate::{
+    config::{
+        Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
+    },
+    system::flow::AppContext,
 };
 use crate::{
     connectors::utils::reconnect::{Attempt, ConnectionLostNotifier},
@@ -272,7 +275,8 @@ pub(crate) struct SinkContextInner {
     pub(crate) notifier: ConnectionLostNotifier,
 
     /// sender for raft requests
-    pub(crate) raft: raft::Cluster,
+    /// Application Context
+    pub(crate) app_ctx: AppContext,
 }
 #[derive(Clone)]
 pub(crate) struct SinkContext(Arc<SinkContextInner>);
@@ -289,7 +293,7 @@ impl SinkContext {
         connector_type: ConnectorType,
         quiescence_beacon: QuiescenceBeacon,
         notifier: ConnectionLostNotifier,
-        raft: raft::Cluster,
+        app_ctx: AppContext,
     ) -> SinkContext {
         Self(Arc::new(SinkContextInner {
             uid,
@@ -297,39 +301,41 @@ impl SinkContext {
             connector_type,
             quiescence_beacon,
             notifier,
-            raft,
+            app_ctx,
         }))
+    }
+}
+
+impl Display for SinkContextInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}[Sink::{}]", self.app_ctx, self.alias)
     }
 }
 
 impl Display for SinkContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Node::{}][Sink::{}]", self.0.raft.id(), &self.0.alias)
+        self.0.fmt(f)
     }
 }
 
 impl Context for SinkContext {
-    // fn uid(&self) -> &SinkId {
-    //     &self.0.uid
-    // }
     fn alias(&self) -> &Alias {
         &self.0.alias
     }
-
     fn quiescence_beacon(&self) -> &QuiescenceBeacon {
         &self.0.quiescence_beacon
     }
-
     fn notifier(&self) -> &ConnectionLostNotifier {
         &self.0.notifier
     }
-
     fn connector_type(&self) -> &ConnectorType {
         &self.0.connector_type
     }
-
     fn raft(&self) -> &raft::Cluster {
-        &self.0.raft
+        &self.0.app_ctx.raft
+    }
+    fn app_ctx(&self) -> &AppContext {
+        &self.0.app_ctx
     }
 }
 

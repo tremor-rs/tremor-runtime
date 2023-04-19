@@ -43,10 +43,10 @@ pub(crate) use crate::config::Connector as ConnectorConfig;
 use crate::{
     channel::{bounded, Sender},
     errors::{connector_send_err, Error, Kind as ErrorKind, Result},
-    ids::{AliasType, AppFlowInstanceId, AppId, GenericAlias, InstanceId},
+    ids::{AliasType, GenericAlias},
     instance::State,
     log_error, pipeline, qsize, raft,
-    system::{KillSwitch, Runtime},
+    system::{flow::AppContext, KillSwitch, Runtime},
 };
 use beef::Cow;
 use futures::Future;
@@ -58,7 +58,6 @@ use tremor_common::{
     ports::{Port, ERR, IN, OUT},
     uids::{ConnectorUId, ConnectorUIdGen, SourceUId},
 };
-use tremor_pipeline::METRICS_CHANNEL;
 use tremor_script::ast::DeployEndpoint;
 use tremor_value::Value;
 
@@ -265,6 +264,9 @@ pub(crate) trait Context: Display + Clone {
     /// gets the API sender
     fn raft(&self) -> &raft::Cluster;
 
+    /// the application context
+    fn app_ctx(&self) -> &AppContext;
+
     /// only log an error and swallow the result
     #[inline]
     fn swallow_err<T, E, M>(&self, expr: std::result::Result<T, E>, msg: &M)
@@ -329,12 +331,12 @@ pub(crate) struct ConnectorContext {
     /// Notifier
     notifier: reconnect::ConnectionLostNotifier,
     /// sender for raft requests
-    raft: raft::Cluster,
+    app_ctx: AppContext,
 }
 
 impl Display for ConnectorContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Node::{}][Connector::{}]", self.raft.id(), &self.alias)
+        write!(f, "{}[Connector::{}]", self.app_ctx, &self.alias)
     }
 }
 
@@ -356,7 +358,11 @@ impl Context for ConnectorContext {
     }
 
     fn raft(&self) -> &raft::Cluster {
-        &self.raft
+        &self.app_ctx.raft
+    }
+
+    fn app_ctx(&self) -> &AppContext {
+        &self.app_ctx
     }
 }
 
@@ -438,7 +444,7 @@ pub(crate) async fn spawn(
     builder: &dyn ConnectorBuilder,
     config: ConnectorConfig,
     kill_switch: &KillSwitch,
-    raft: raft::Cluster,
+    app_ctx: AppContext,
 ) -> Result<Addr> {
     // instantiate connector
     let connector = builder.build(alias, &config, kill_switch).await?;
@@ -447,7 +453,7 @@ pub(crate) async fn spawn(
         connector,
         config,
         connector_id_gen.next_id(),
-        raft,
+        app_ctx,
     )
     .await?;
 
@@ -461,7 +467,7 @@ async fn connector_task(
     mut connector: Box<dyn Connector>,
     config: ConnectorConfig,
     uid: ConnectorUId,
-    raft: raft::Cluster,
+    app_ctx: AppContext,
 ) -> Result<Addr> {
     let qsize = qsize();
     // channel for connector-level control plane communication
@@ -472,8 +478,9 @@ async fn connector_task(
     let notifier = ConnectionLostNotifier::new(msg_tx.clone());
 
     let source_metrics_reporter = SourceReporter::new(
+        app_ctx.clone(),
         alias.clone(),
-        METRICS_CHANNEL.tx(),
+        app_ctx.metrics.tx(),
         config.metrics_interval_s,
     );
 
@@ -496,12 +503,13 @@ async fn connector_task(
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier: notifier.clone(),
-        raft: raft.clone(),
+        app_ctx: app_ctx.clone(),
     };
 
     let sink_metrics_reporter = SinkReporter::new(
+        app_ctx.clone(),
         alias.clone(),
-        METRICS_CHANNEL.tx(),
+        app_ctx.metrics.tx(),
         config.metrics_interval_s,
     );
     let sink_builder = sink::builder(&config, codec_requirement, &alias, sink_metrics_reporter)?;
@@ -511,7 +519,7 @@ async fn connector_task(
         config.connector_type.clone(),
         quiescence_beacon.clone(),
         notifier.clone(),
-        raft.clone(),
+        app_ctx.clone(),
     );
     // create source instance
     let source_addr = connector.create_source(source_ctx, source_builder).await?;
@@ -534,7 +542,7 @@ async fn connector_task(
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier,
-        raft,
+        app_ctx,
     };
 
     let send_addr = connector_addr.clone();
@@ -1150,19 +1158,10 @@ where
 /// unique instance alias/id of a connector within a deployment
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Alias {
-    flow_alias: AppFlowInstanceId,
     connector_alias: String,
 }
 
 impl GenericAlias for Alias {
-    fn app_id(&self) -> &AppId {
-        self.flow_alias.app_id()
-    }
-
-    fn app_instance(&self) -> &InstanceId {
-        self.flow_alias.instance_id()
-    }
-
     fn alias_type(&self) -> AliasType {
         AliasType::Connector
     }
@@ -1174,20 +1173,10 @@ impl GenericAlias for Alias {
 
 impl Alias {
     /// construct a new `ConnectorId` from the id of the containing flow and the connector instance id
-    pub fn new(
-        flow_alias: impl Into<AppFlowInstanceId>,
-        connector_alias: impl Into<String>,
-    ) -> Self {
+    pub fn new(connector_alias: impl Into<String>) -> Self {
         Self {
-            flow_alias: flow_alias.into(),
             connector_alias: connector_alias.into(),
         }
-    }
-
-    /// get a reference to the flow alias
-    #[must_use]
-    pub fn flow_alias(&self) -> &AppFlowInstanceId {
-        &self.flow_alias
     }
 
     /// get a reference to the connector alias
@@ -1199,7 +1188,7 @@ impl Alias {
 
 impl std::fmt::Display for Alias {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.flow_alias, self.connector_alias)
+        self.connector_alias.fmt(f)
     }
 }
 
@@ -1340,7 +1329,6 @@ where
 
 #[cfg(test)]
 pub(crate) mod unit_tests {
-    use crate::ids::AppFlowInstanceId;
 
     use super::*;
 
@@ -1350,17 +1338,17 @@ pub(crate) mod unit_tests {
         alias: Alias,
         notifier: reconnect::ConnectionLostNotifier,
         beacon: QuiescenceBeacon,
-        raft: raft::Cluster,
+        app_ctx: AppContext,
     }
 
     impl FakeContext {
         pub(crate) fn new(tx: Sender<Msg>) -> Self {
             Self {
                 t: ConnectorType::from("snot"),
-                alias: Alias::new(AppFlowInstanceId::new("app", "fake"), "fake"),
+                alias: Alias::new("fake"),
                 notifier: reconnect::ConnectionLostNotifier::new(tx),
                 beacon: QuiescenceBeacon::default(),
-                raft: raft::Cluster::default(),
+                app_ctx: AppContext::default(),
             }
         }
     }
@@ -1375,20 +1363,20 @@ pub(crate) mod unit_tests {
         fn alias(&self) -> &Alias {
             &self.alias
         }
-
         fn quiescence_beacon(&self) -> &QuiescenceBeacon {
             &self.beacon
         }
-
         fn notifier(&self) -> &reconnect::ConnectionLostNotifier {
             &self.notifier
         }
-
         fn connector_type(&self) -> &ConnectorType {
             &self.t
         }
         fn raft(&self) -> &raft::Cluster {
-            &self.raft
+            &self.app_ctx.raft
+        }
+        fn app_ctx(&self) -> &AppContext {
+            &self.app_ctx
         }
     }
 

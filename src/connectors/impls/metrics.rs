@@ -15,7 +15,7 @@
 use crate::connectors::prelude::*;
 use beef::Cow;
 use tokio::sync::broadcast::{error::RecvError, Receiver, Sender};
-use tremor_pipeline::{MetricsMsg, METRICS_CHANNEL};
+use tremor_pipeline::{MetricsChannel, MetricsMsg, MetricsSender};
 use tremor_script::utils::hostname;
 
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
@@ -33,14 +33,13 @@ const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 /// There should be only one instance around all the time, identified by `tremor://localhost/connector/system::metrics/system`
 ///
 pub(crate) struct MetricsConnector {
-    tx: Sender<MetricsMsg>,
+    tx: MetricsSender,
 }
 
 impl MetricsConnector {
     pub(crate) fn new() -> Self {
         Self {
-            // FIXME: scope the metrics channel to the app a flow is deployed in
-            tx: METRICS_CHANNEL.tx(),
+            tx: MetricsChannel::new(128).tx(),
         }
     }
 }
@@ -66,7 +65,8 @@ impl ConnectorBuilder for Builder {
 
 #[async_trait::async_trait()]
 impl Connector for MetricsConnector {
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+        self.tx = ctx.app_ctx.metrics.tx();
         Ok(true)
     }
 

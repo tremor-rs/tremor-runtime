@@ -15,7 +15,6 @@
 //! Tremor runtime
 
 #![deny(warnings)]
-#![allow(missing_docs)] // FIXME: got to go through the raft code and make only pub what is needed to be pub
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,

@@ -401,7 +401,7 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::{channel::bounded, raft};
+    use crate::{channel::bounded, system::flow::AppContext};
     use crate::{
         channel::unbounded,
         config::{Codec as CodecConfig, Reconnect},
@@ -409,7 +409,6 @@ pub(crate) mod tests {
             impls::gcs::streamer::Mode, reconnect::ConnectionLostNotifier,
             utils::quiescence::QuiescenceBeacon,
         },
-        ids::AppFlowInstanceId,
     };
     use halfbrown::HashMap;
     use tremor_common::uids::{ConnectorUIdGen, SinkUId};
@@ -528,7 +527,7 @@ pub(crate) mod tests {
         });
 
         let mut config = Config::new(&raw_config).expect("config should be valid");
-        let alias = Alias::new(AppFlowInstanceId::new("app", "flow"), "conn");
+        let alias = Alias::new("conn");
         config.normalize(&alias);
         assert_eq!(256 * 1024, config.buffer_size);
     }
@@ -568,14 +567,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -754,14 +753,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -928,14 +927,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1023,14 +1022,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
 
         // simulate sink lifecycle
@@ -1077,14 +1076,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1302,14 +1301,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new(AppFlowInstanceId::new("app", "a"), "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
             SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1451,7 +1450,7 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new(AppFlowInstanceId::new("app", "snot"), "badger");
+        let alias = Alias::new("badger");
         let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
@@ -1461,7 +1460,7 @@ pub(crate) mod tests {
             &builder,
             cfg,
             &kill_switch,
-            raft::Cluster::default(),
+            AppContext::default(),
         )
         .await?;
         let (tx, mut rx) = bounded(1);
@@ -1487,7 +1486,7 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new(AppFlowInstanceId::new("app", "snot"), "badger");
+        let alias = Alias::new("badger");
         let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
@@ -1497,7 +1496,7 @@ pub(crate) mod tests {
             &builder,
             cfg,
             &kill_switch,
-            raft::Cluster::default(),
+            AppContext::default(),
         )
         .await?;
         let (tx, mut rx) = bounded(1);

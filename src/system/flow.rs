@@ -15,6 +15,7 @@
 use crate::{
     channel::{bounded, Sender},
     errors::empty_error,
+    ids::{AppId, InstanceId},
     raft,
 };
 use crate::{
@@ -33,6 +34,7 @@ use std::{collections::HashSet, ops::ControlFlow, pin::Pin, time::Duration};
 use tokio::{task, time::timeout};
 use tokio_stream::wrappers::ReceiverStream;
 use tremor_common::uids::{ConnectorUIdGen, OperatorUIdGen};
+use tremor_pipeline::MetricsChannel;
 use tremor_script::{
     ast::{self, ConnectStmt, Helper},
     errors::{error_generic, not_defined_err},
@@ -55,7 +57,11 @@ pub(crate) enum Msg {
     /// The sender expects a Result, which makes it easier to signal errors on the message handling path to the sender
     Report(Sender<Result<StatusReport>>),
     /// Get the addr for a single connector
-    GetConnector(connectors::Alias, Sender<Result<connectors::Addr>>),
+    GetConnector(
+        AppFlowInstanceId,
+        connectors::Alias,
+        Sender<Result<connectors::Addr>>,
+    ),
     /// Get the addresses for all connectors of this flow
     GetConnectors(Sender<Result<Vec<connectors::Addr>>>),
 }
@@ -77,6 +83,28 @@ pub struct StatusReport {
     pub status: State,
     /// the created connectors
     pub connectors: Vec<connectors::Alias>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct AppContext {
+    pub(crate) id: AppFlowInstanceId,
+    pub(crate) raft: raft::Cluster,
+    pub(crate) metrics: MetricsChannel,
+}
+
+impl AppContext {
+    pub fn id(&self) -> &AppId {
+        self.id.app_id()
+    }
+    pub fn instance(&self) -> &InstanceId {
+        self.id.instance_id()
+    }
+}
+
+impl std::fmt::Display for AppContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[Node::{}][{}]", self.raft.id(), self.id)
+    }
 }
 
 impl Flow {
@@ -113,10 +141,10 @@ impl Flow {
     /// # Errors
     /// if the flow is not running anymore and can't be reached or if the connector is not part of the flow
     pub async fn get_connector(&self, connector_alias: String) -> Result<connectors::Addr> {
-        let connector_alias = connectors::Alias::new(self.id().clone(), connector_alias);
+        let connector_alias = connectors::Alias::new(connector_alias);
         let (tx, mut rx) = bounded(1);
         self.addr
-            .send(Msg::GetConnector(connector_alias, tx))
+            .send(Msg::GetConnector(self.id().clone(), connector_alias, tx))
             .await?;
         rx.recv().await.ok_or_else(empty_error)?
     }
@@ -169,14 +197,12 @@ impl Flow {
     /// fails.
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn deploy(
-        flow_id: AppFlowInstanceId,
+        ctx: AppContext,
         flow: ast::DeployFlow<'static>,
         operator_id_gen: &mut OperatorUIdGen,
         connector_id_gen: &mut ConnectorUIdGen,
         known_connectors: &Known,
         kill_switch: &KillSwitch,
-        raft: raft::Cluster,
-        // FIXME: add AppContext
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
         let mut connectors = HashMap::new();
@@ -187,7 +213,7 @@ impl Flow {
                 ast::CreateTargetDefinition::Connector(defn) => {
                     let mut defn = defn.clone();
                     defn.params.ingest_creational_with(&create.with)?;
-                    let connector_alias = connectors::Alias::new(flow_id.clone(), alias);
+                    let connector_alias = connectors::Alias::new(alias);
                     let config = crate::Connector::from_defn(&connector_alias, &defn)?;
                     let builder =
                         known_connectors
@@ -203,7 +229,7 @@ impl Flow {
                             builder.as_ref(),
                             config,
                             kill_switch,
-                            raft.clone(),
+                            ctx.clone(),
                         )
                         .await?,
                     );
@@ -216,12 +242,12 @@ impl Flow {
 
                         defn.to_query(&create.with, &mut helper)?
                     };
-                    let pipeline_alias = pipeline::Alias::new(flow_id.clone(), alias);
+                    let pipeline_alias = pipeline::Alias::new(alias);
                     let pipeline = tremor_pipeline::query::Query(
                         tremor_script::query::Query::from_query(query),
                     );
                     let addr =
-                        pipeline::spawn(raft.id(), pipeline_alias, &pipeline, operator_id_gen)?;
+                        pipeline::spawn(ctx.clone(), pipeline_alias, &pipeline, operator_id_gen)?;
                     pipelines.insert(alias.to_string(), addr);
                 }
             }
@@ -233,14 +259,14 @@ impl Flow {
         }
 
         let addr = spawn_task(
-            flow_id.clone(),
+            ctx.id.clone(),
             pipelines,
             &connectors,
             &flow.defn.connections,
         );
 
         let this = Flow {
-            alias: flow_id.clone(),
+            alias: ctx.id.clone(),
             addr,
         };
 
@@ -632,7 +658,7 @@ impl RunningFlow {
                         "{prefix} Error sending status report: {e}"
                     );
                 }
-                MsgWrapper::Msg(Msg::GetConnector(connector_alias, reply_tx)) => {
+                MsgWrapper::Msg(Msg::GetConnector(flow_id, connector_alias, reply_tx)) => {
                     // TODO: inefficient find, but on the other hand we don't need to store connectors in another way
                     let res = self
                         .connectors_start_to_end()
@@ -640,7 +666,7 @@ impl RunningFlow {
                         .cloned()
                         .ok_or_else(|| {
                             Error::from(ErrorKind::ConnectorNotFound(
-                                connector_alias.flow_alias().to_string(),
+                                flow_id.to_string(),
                                 connector_alias.connector_alias().to_string(),
                             ))
                         });
@@ -1078,14 +1104,17 @@ mod tests {
         let (connector_tx, mut connector_rx) = crate::channel::unbounded();
         let builder = connector::FakeBuilder { tx: connector_tx };
         known_connectors.insert(builder.connector_type(), Box::new(builder));
+        let ctx = AppContext {
+            id: AppFlowInstanceId::new("app", "test"),
+            ..AppContext::default()
+        };
         let flow = Flow::deploy(
-            AppFlowInstanceId::new("app", "test"),
+            ctx,
             deploy,
             &mut operator_id_gen,
             &mut connector_id_gen,
             &known_connectors,
             &kill_switch,
-            raft::Cluster::default(),
         )
         .await?;
 

@@ -17,8 +17,8 @@ use serial_test::serial;
 use std::io::prelude::*;
 use std::path::Path;
 use tremor_common::{file, uids::OperatorUIdGen};
-use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
+use tremor_pipeline::{query::Query, MetricsChannel};
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
 use tremor_script::module::Manager;
@@ -28,7 +28,7 @@ fn to_executable_graph(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorUIdGen::new();
     let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
-    Ok(q.to_executable_graph(&mut idgen)?)
+    Ok(q.to_executable_graph(&mut idgen, &MetricsChannel::default())?)
 }
 macro_rules! test_cases {
 

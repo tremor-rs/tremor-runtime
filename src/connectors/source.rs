@@ -18,10 +18,13 @@
 pub mod channel_source;
 
 use super::{utils::metrics::SourceReporter, CodecReq, Connectivity};
-use crate::channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender};
 use crate::errors::{Error, Result};
 use crate::pipeline;
 use crate::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors};
+use crate::{
+    channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender},
+    system::flow::AppContext,
+};
 use crate::{
     codec::{self, Codec},
     pipeline::InputTarget,
@@ -294,13 +297,13 @@ pub(crate) struct SourceContext {
     /// tool to notify the connector when the connection is lost
     pub(crate) notifier: ConnectionLostNotifier,
 
-    /// sender for raft requests
-    pub(crate) raft: raft::Cluster,
+    /// Application Context
+    pub(crate) app_ctx: AppContext,
 }
 
 impl Display for SourceContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Node::{}][Source::{}]", self.raft.id(), &self.alias)
+        write!(f, "{}[Source::{}]", self.app_ctx, &self.alias)
     }
 }
 
@@ -308,11 +311,9 @@ impl Context for SourceContext {
     fn alias(&self) -> &Alias {
         &self.alias
     }
-
     fn quiescence_beacon(&self) -> &QuiescenceBeacon {
         &self.quiescence_beacon
     }
-
     fn notifier(&self) -> &ConnectionLostNotifier {
         &self.notifier
     }
@@ -320,7 +321,10 @@ impl Context for SourceContext {
         &self.connector_type
     }
     fn raft(&self) -> &raft::Cluster {
-        &self.raft
+        &self.app_ctx.raft
+    }
+    fn app_ctx(&self) -> &AppContext {
+        &self.app_ctx
     }
 }
 

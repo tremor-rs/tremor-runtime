@@ -13,20 +13,22 @@
 // limitations under the License.
 
 //! Tremor Rest API Client
-use crate::errors::Result;
 use crate::ids::{AppFlowInstanceId, AppId, FlowDefinitionId};
 use crate::raft::{
     api::apps::AppState,
     node::Addr,
-    store::{TremorInstanceState, TremorResponse, TremorSet, TremorStart},
+    store::{TremorInstanceState, TremorResponse},
     NodeId,
 };
+use crate::{errors::Result, raft::store::TremorStart};
 use halfbrown::HashMap;
 use openraft::{LogId, RaftMetrics};
 use reqwest::Method;
 use reqwest::{redirect::Policy, Client};
 use serde::{de::DeserializeOwned, Serialize};
 use simd_json::OwnedValue;
+
+use super::kv::KVSet;
 
 type ClientResult<T> = std::result::Result<T, Error>;
 
@@ -114,8 +116,8 @@ impl Tremor {
     ///
     /// # Errors
     /// if the api call fails
-    pub async fn write(&self, req: &TremorSet) -> ClientResult<Vec<u8>> {
-        self.api_req::<TremorSet, Vec<u8>>("api/kv/write", Method::POST, Some(req))
+    pub async fn write(&self, req: &KVSet) -> ClientResult<OwnedValue> {
+        self.api_req::<KVSet, OwnedValue>("api/kv/write", Method::POST, Some(req))
             .await
     }
     /// Read value by key, in an inconsistent mode.

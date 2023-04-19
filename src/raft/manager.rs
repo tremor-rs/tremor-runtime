@@ -79,7 +79,7 @@ impl Cluster {
         Ok(self.raft()?.client_write(command.into()).await?)
     }
 
-    pub async fn is_leader(&self) -> Result<()> {
+    pub(crate) async fn is_leader(&self) -> Result<()> {
         Ok(self.raft()?.is_leader().await?)
     }
 
@@ -92,25 +92,25 @@ impl Cluster {
     }
 
     // cluster
-    pub async fn get_node(&self, node_id: u64) -> Result<Option<Addr>> {
+    pub(crate) async fn get_node(&self, node_id: u64) -> Result<Option<Addr>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::GetNode(node_id, tx);
         self.send(command).await?;
         Ok(rx.await?)
     }
-    pub async fn get_nodes(&self) -> Result<HashMap<u64, Addr>> {
+    pub(crate) async fn get_nodes(&self) -> Result<HashMap<u64, Addr>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::GetNodes(tx);
         self.send(command).await?;
         Ok(rx.await?)
     }
-    pub async fn get_node_id(&self, addr: Addr) -> Result<Option<u64>> {
+    pub(crate) async fn get_node_id(&self, addr: Addr) -> Result<Option<u64>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::GetNodeId(addr, tx);
         self.send(command).await?;
         Ok(rx.await?)
     }
-    pub async fn get_last_membership(&self) -> Result<BTreeSet<u64>> {
+    pub(crate) async fn get_last_membership(&self) -> Result<BTreeSet<u64>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::GetLastMembership(tx);
         self.send(command).await?;
@@ -118,13 +118,15 @@ impl Cluster {
     }
 
     // apps
-    pub async fn get_app_local(&self, app_id: AppId) -> Result<Option<StateApp>> {
+    pub(crate) async fn get_app_local(&self, app_id: AppId) -> Result<Option<StateApp>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::GetApp(app_id, tx);
         self.send(command).await?;
         Ok(rx.await?)
     }
-    pub async fn get_apps_local(&self) -> Result<HashMap<AppId, crate::raft::api::apps::AppState>> {
+    pub(crate) async fn get_apps_local(
+        &self,
+    ) -> Result<HashMap<AppId, crate::raft::api::apps::AppState>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::GetApps(tx);
         self.send(command).await?;
@@ -132,7 +134,7 @@ impl Cluster {
     }
 
     // kv
-    pub async fn kv_set(&self, key: String, value: Vec<u8>) -> Result<Vec<u8>> {
+    pub(crate) async fn kv_set(&self, key: String, mut value: Vec<u8>) -> Result<Vec<u8>> {
         match self.is_leader().await {
             Ok(_) => self.kv_set_local(key, value).await,
             Err(Error(
@@ -145,16 +147,24 @@ impl Cluster {
                 _,
             )) => {
                 let client = crate::raft::api::client::Tremor::new(n.api())?;
-                Ok(client.write(&TremorSet { key, value }).await?)
+                // TODO: there should be a better way to forward then the client
+                Ok(simd_json::to_vec(
+                    &client
+                        .write(&crate::raft::api::kv::KVSet {
+                            key,
+                            value: simd_json::from_slice(&mut value)?,
+                        })
+                        .await?,
+                )?)
             }
             Err(e) => Err(e),
         }
     }
-    pub async fn kv_set_local(&self, key: String, value: Vec<u8>) -> Result<Vec<u8>> {
+    pub(crate) async fn kv_set_local(&self, key: String, value: Vec<u8>) -> Result<Vec<u8>> {
         let tremor_res = self.client_write(TremorSet { key, value }).await?;
         tremor_res.data.into_kv_value()
     }
-    pub async fn kv_get(&self, key: String) -> Result<Option<Vec<u8>>> {
+    pub(crate) async fn kv_get(&self, key: String) -> Result<Option<Vec<u8>>> {
         match self.is_leader().await {
             Ok(_) => self.kv_get_local(key).await,
             Err(Error(
@@ -177,7 +187,7 @@ impl Cluster {
             Err(e) => Err(e),
         }
     }
-    pub async fn kv_get_local(&self, key: String) -> Result<Option<Vec<u8>>> {
+    pub(crate) async fn kv_get_local(&self, key: String) -> Result<Option<Vec<u8>>> {
         let (tx, rx) = oneshot();
         let command = APIStoreReq::KVGet(key, tx);
         self.send(command).await?;

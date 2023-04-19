@@ -13,7 +13,6 @@
 // limitations under the License.
 
 // #![cfg_attr(coverage, no_coverage)]
-use crate::ids::GenericAlias;
 use crate::{
     channel::{bounded, Receiver, Sender},
     errors::already_created_error,
@@ -26,6 +25,7 @@ use crate::{
     },
     connectors::prelude::*,
 };
+use crate::{ids::GenericAlias, system::flow::AppContext};
 use serde::Deserialize;
 use std::sync::Arc;
 use std::{boxed::Box, convert::TryFrom, sync::atomic::AtomicBool};
@@ -233,6 +233,7 @@ impl Connector for Kv {
         };
         let sink = KvSink {
             alias: ctx.alias().clone(),
+            app_ctx: ctx.app_ctx().clone(),
             raft: ctx.raft().clone(),
             tx: self.tx.clone(),
             codec,
@@ -249,6 +250,7 @@ impl Connector for Kv {
 
 struct KvSink {
     alias: Alias,
+    app_ctx: AppContext,
     raft: raft::Cluster,
     tx: Sender<SourceReply>,
     codec: Json<Sorted>,
@@ -283,8 +285,8 @@ impl KvSink {
         match cmd {
             Command::Get { key, strict } => {
                 let key_parts = vec![
-                    self.alias.app_id().to_string(),
-                    self.alias.app_instance().to_string(),
+                    self.app_ctx.id().to_string(),
+                    self.app_ctx.instance().to_string(),
                     self.alias.alias().to_string(),
                     key.clone(),
                 ];
@@ -303,9 +305,10 @@ impl KvSink {
             Command::Put { key } => {
                 // return the new value
                 let value_vec = self.encode(value)?;
+                dbg!(&value_vec, &value);
                 let key_parts = vec![
-                    self.alias.app_id().to_string(),
-                    self.alias.app_instance().to_string(),
+                    self.app_ctx.id().to_string(),
+                    self.app_ctx.instance().to_string(),
                     self.alias.alias().to_string(),
                     key.clone(),
                 ];

@@ -13,15 +13,13 @@
 // limitations under the License.
 use crate::{
     channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
-    qsize,
-    raft::NodeId,
-};
-use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
     errors::{pipe_send_e, Result},
-    ids::AppFlowInstanceId,
+    ids::{AliasType, GenericAlias},
     instance::State,
     primerge::PriorityMerge,
+    qsize,
+    system::flow::AppContext,
 };
 use futures::StreamExt;
 use std::{fmt, time::Duration};
@@ -40,33 +38,30 @@ type EventSet = Vec<(Port<'static>, Event)>;
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
 pub(crate) struct Alias {
-    flow_alias: AppFlowInstanceId,
     pipeline_alias: String,
 }
 
 impl Alias {
-    pub(crate) fn new(
-        flow_alias: impl Into<AppFlowInstanceId>,
-        pipeline_alias: impl Into<String>,
-    ) -> Self {
+    pub(crate) fn new(pipeline_alias: impl Into<String>) -> Self {
         Self {
-            flow_alias: flow_alias.into(),
             pipeline_alias: pipeline_alias.into(),
         }
     }
+}
 
-    pub(crate) fn flow_alias(&self) -> &AppFlowInstanceId {
-        &self.flow_alias
+impl GenericAlias for Alias {
+    fn alias_type(&self) -> AliasType {
+        AliasType::Pipeline
     }
 
-    pub(crate) fn pipeline_alias(&self) -> &str {
-        self.pipeline_alias.as_str()
+    fn alias(&self) -> &str {
+        &self.pipeline_alias
     }
 }
 
 impl std::fmt::Display for Alias {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.flow_alias(), self.pipeline_alias())
+        self.alias().fmt(f)
     }
 }
 
@@ -180,13 +175,13 @@ impl TryFrom<connectors::Addr> for OutputTarget {
 }
 
 pub(crate) fn spawn(
-    node_id: NodeId,
+    app_ctx: AppContext,
     pipeline_alias: Alias,
     config: &tremor_pipeline::query::Query,
     operator_id_gen: &mut OperatorUIdGen,
 ) -> Result<Addr> {
     let qsize = qsize();
-    let mut pipeline = config.to_executable_graph(operator_id_gen)?;
+    let mut pipeline = config.to_executable_graph(operator_id_gen, &app_ctx.metrics)?;
     pipeline.optimize();
 
     let (tx, rx) = bounded::<Box<Msg>>(qsize);
@@ -214,7 +209,7 @@ pub(crate) fn spawn(
     let addr = Addr::new(tx, cf_tx, mgmt_tx, pipeline_alias.clone());
 
     task::spawn(pipeline_task(
-        node_id,
+        app_ctx,
         pipeline_alias,
         pipeline,
         rx,
@@ -427,13 +422,13 @@ async fn send_signal(own_id: &Alias, signal: Event, dests: &mut Dests) -> Result
     let first = destinations.next();
     for (id, dest) in destinations {
         // if we are connected to ourselves we should not forward signals
-        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.pipeline_alias() {
+        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.alias() {
             dest.send_signal(signal.clone()).await?;
         }
     }
     if let Some((id, dest)) = first {
         // if we are connected to ourselves we should not forward signals
-        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.pipeline_alias() {
+        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.alias() {
             dest.send_signal(signal).await?;
         }
     }
@@ -510,25 +505,30 @@ fn maybe_send(r: Result<()>) {
 ///
 /// currently only used for printing
 struct PipelineContext {
-    node_id: NodeId,
+    app_context: AppContext,
     alias: Alias,
 }
 
 impl PipelineContext {
-    fn new(node_id: NodeId, alias: Alias) -> Self {
-        Self { node_id, alias }
+    fn new(app_context: AppContext, alias: Alias) -> Self {
+        Self { app_context, alias }
     }
 }
 
 impl std::fmt::Display for PipelineContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[Node:{}][Pipeline::{}]", self.node_id, &self.alias)
+        write!(
+            f,
+            "[Node:{}][Pipeline::{}]",
+            self.app_context.raft.id(),
+            &self.alias
+        )
     }
 }
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn pipeline_task(
-    node_id: NodeId,
+    app_ctx: AppContext,
     id: Alias,
     mut pipeline: ExecutableGraph,
     rx: Receiver<Box<Msg>>,
@@ -537,8 +537,8 @@ pub(crate) async fn pipeline_task(
     tick_handler: JoinHandle<()>,
 ) -> Result<()> {
     pipeline.id = id.to_string();
-
-    let ctx = PipelineContext::new(node_id, id.clone());
+    let node_id = app_ctx.raft.id();
+    let ctx = PipelineContext::new(app_ctx.clone(), id.clone());
 
     let mut dests: Dests = halfbrown::HashMap::new();
     let mut inputs: Inputs = halfbrown::HashMap::new();
@@ -715,7 +715,6 @@ mod tests {
         connectors::{prelude::SinkAddr, source::SourceAddr},
         errors::empty_error,
         pipeline::report::{InputReport, OutputReport},
-        raft::NodeId,
     };
     use std::time::Instant;
     use tremor_common::{
@@ -736,20 +735,20 @@ mod tests {
         let query =
             tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(
-            NodeId::default(),
-            Alias::new(AppFlowInstanceId::new("app", "report"), "test-pipe1"),
+            AppContext::default(),
+            Alias::new("test-pipe1"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr2 = spawn(
-            NodeId::default(),
-            Alias::new(AppFlowInstanceId::new("app", "report"), "test-pipe2"),
+            AppContext::default(),
+            Alias::new("test-pipe2"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr3 = spawn(
-            NodeId::default(),
-            Alias::new(AppFlowInstanceId::new("app", "report"), "test-pipe3"),
+            AppContext::default(),
+            Alias::new("test-pipe3"),
             &query,
             &mut operator_id_gen,
         )?;
@@ -842,10 +841,15 @@ mod tests {
         let mut operator_id_gen = OperatorUIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
-        let pipeline_id = Alias::new(AppFlowInstanceId::new("app", "flow"), "test-pipe");
+        let pipeline_id = Alias::new("test-pipe");
         let query =
             tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
-        let addr = spawn(NodeId::default(), pipeline_id, &query, &mut operator_id_gen)?;
+        let addr = spawn(
+            AppContext::default(),
+            pipeline_id,
+            &query,
+            &mut operator_id_gen,
+        )?;
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;

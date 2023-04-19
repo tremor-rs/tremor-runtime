@@ -24,7 +24,7 @@ use tremor_common::{
     time::nanotime,
     uids::OperatorUIdGen,
 };
-use tremor_pipeline::{Event, EventId};
+use tremor_pipeline::{Event, EventId, MetricsChannel};
 use tremor_runtime::{
     codec::Codec,
     config,
@@ -339,7 +339,7 @@ impl Run {
 
         let runnable = tremor_pipeline::query::Query(runnable);
         let mut idgen = OperatorUIdGen::new();
-        let mut pipeline = runnable.to_executable_graph(&mut idgen)?;
+        let mut pipeline = runnable.to_executable_graph(&mut idgen, &MetricsChannel::new(128))?;
         let id = 0_u64;
 
         ingress.process(

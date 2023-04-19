@@ -22,7 +22,9 @@ use openraft::{
     },
     AnyError, RaftNetwork, RaftNetworkFactory,
 };
+use std::cmp::min;
 use tarpc::{client::RpcError, context};
+use tokio::time::sleep;
 
 #[derive(Clone, Debug)]
 pub struct Network {}
@@ -44,14 +46,20 @@ impl RaftNetworkFactory<TremorRaftConfig> for Network {
             client: None,
             target,
             addr: node.clone(),
+            error_count: 0,
+            last_reconnect: std::time::Instant::now(),
         }
     }
 }
+
+const RECONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
 pub struct NetworkConnection {
     client: Option<RaftClient>,
     target: NodeId,
     addr: Addr,
+    error_count: u32,
+    last_reconnect: std::time::Instant,
 }
 
 // We need this for the types :sob:
@@ -75,9 +83,11 @@ impl NetworkConnection {
     /// Pick it from the pool first, if that fails, create a new one
     async fn ensure_client<E: std::error::Error>(&mut self) -> Result<RaftClient, RPCError<E>> {
         // TODO: get along without the cloning
+
         match &self.client {
             Some(client) => Ok(client.clone()),
             None => {
+                sleep(RECONNECT_TIMEOUT * min(self.error_count, 10)).await;
                 let client = self.new_client().await?;
                 self.client = Some(client.clone());
                 Ok(client)
@@ -94,8 +104,13 @@ impl NetworkConnection {
             tarpc::tokio_serde::formats::Json::default,
         )
         .await
-        .map_err(|e| RPCError::Network(NetworkError::new(&e)))?;
-        let client = RaftClient::new(tarpc::client::Config::default(), transport).spawn();
+        .map_err(|e| RPCError::Network(NetworkError::new(&e)));
+        if transport.is_err() {
+            self.error_count += 1;
+        }
+        let client = RaftClient::new(tarpc::client::Config::default(), transport?).spawn();
+        self.last_reconnect = std::time::Instant::now();
+        self.error_count = 0;
         Ok(client)
     }
     fn handle_response<T, E: std::error::Error>(
@@ -107,6 +122,7 @@ impl NetworkConnection {
             Ok(res) => res.map_err(|e| RPCError::Network(NetworkError::new(&e))),
             Err(e @ RpcError::Shutdown) => {
                 self.client = None;
+                self.error_count += 1;
                 error!("Client disconnected from node {target}");
                 Err(RPCError::Network(NetworkError::new(&e)))
             }
@@ -118,11 +134,13 @@ impl NetworkConnection {
             }
             Err(RpcError::Server(e)) => {
                 self.client = None; // TODO necessary here?
+                self.error_count += 1;
                 error!("Server error from node {target}: {e}");
                 Err(RPCError::Network(NetworkError::new(&e)))
             }
             Err(RpcError::Send(e)) => {
                 self.client = None; // TODO necessary here?
+                self.error_count += 1;
                 error!("Server error from node {target}: {e}");
                 Err(RPCError::Network(NetworkError::new(&SendError(format!(
                     "{e}"
@@ -130,6 +148,7 @@ impl NetworkConnection {
             }
             Err(RpcError::Receive(e)) => {
                 self.client = None; // TODO necessary here?
+                self.error_count += 1;
                 error!("Server error from node {target}: {e}");
                 Err(RPCError::Network(NetworkError::new(&e)))
             }

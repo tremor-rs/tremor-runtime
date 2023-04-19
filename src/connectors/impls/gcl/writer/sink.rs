@@ -252,8 +252,7 @@ mod test {
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
-    use crate::ids::{AppFlowInstanceId, AppId};
-    use crate::{channel::bounded, raft};
+    use crate::{channel::bounded, system::flow::AppContext};
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
@@ -365,11 +364,11 @@ mod test {
         );
         let sink_context = SinkContext::new(
             SinkUId::default(),
-            Alias::new("a", "b"),
+            Alias::new("b"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
 
         sink.connect(&sink_context, &Attempt::default()).await?;
@@ -395,7 +394,7 @@ mod test {
                 CodecReq::Structured,
                 vec![],
                 &"a".into(),
-                &Alias::new(AppFlowInstanceId::new(AppId::default(), "a"), "b"),
+                &Alias::new("b"),
             )?,
             0,
         )
@@ -462,18 +461,18 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext::new(
                     SinkUId::default(),
-                    Alias::new(AppFlowInstanceId::new(AppId::default(), ""), ""),
+                    Alias::new(""),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
-                    raft::Cluster::default(),
+                    AppContext::default(),
                 ),
                 &mut EventSerializer::new(
                     None,
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new(AppFlowInstanceId::new(AppId::default(), ""), ""),
+                    &Alias::new(""),
                 )?,
                 0,
             )

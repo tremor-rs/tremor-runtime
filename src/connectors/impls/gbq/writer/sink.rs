@@ -670,13 +670,12 @@ where
 #[cfg(feature = "gcp-integration")]
 mod test {
     use super::*;
-    use crate::connectors::reconnect::ConnectionLostNotifier;
+    use crate::connectors::impls::gbq;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
-    use crate::ids::{AppFlowInstanceId, AppId};
-    use crate::{connectors::impls::gbq, raft};
+    use crate::{connectors::reconnect::ConnectionLostNotifier, system::flow::AppContext};
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
@@ -797,11 +796,11 @@ mod test {
             }],
             &SinkContext::new(
                 SinkUId::default(),
-                Alias::new("flow", "connector"),
+                Alias::new("connector"),
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
-                raft::Cluster::default(),
+                AppContext::default(),
             ),
         );
 
@@ -827,11 +826,11 @@ mod test {
             }],
             &SinkContext::new(
                 SinkUId::default(),
-                Alias::new("flow", "connector"),
+                Alias::new("connector"),
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
-                raft::Cluster::default(),
+                AppContext::default(),
             ),
         );
 
@@ -866,11 +865,11 @@ mod test {
                 }],
                 &SinkContext::new(
                     SinkUId::default(),
-                    Alias::new("flow", "connector"),
+                    Alias::new("connector"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
-                    raft::Cluster::default(),
+                    AppContext::default(),
                 ),
             );
 
@@ -907,11 +906,11 @@ mod test {
             }],
             &SinkContext::new(
                 SinkUId::default(),
-                Alias::new("flow", "connector"),
+                Alias::new("connector"),
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
-                raft::Cluster::default(),
+                AppContext::default(),
             ),
         );
 
@@ -1132,14 +1131,11 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkUId::default(),
-            Alias::new(
-                AppFlowInstanceId::new(AppId::default(), "flow"),
-                "connector",
-            ),
+            Alias::new("connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![
@@ -1185,11 +1181,11 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkUId::default(),
-            Alias::new("flow", "connector"),
+            Alias::new("connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![
@@ -1231,11 +1227,11 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkUId::default(),
-            Alias::new("flow", "connector"),
+            Alias::new("connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![
@@ -1278,11 +1274,11 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkUId::default(),
-            Alias::new("flow", "connector"),
+            Alias::new("connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
@@ -1323,11 +1319,11 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkUId::default(),
-            Alias::new("flow", "connector"),
+            Alias::new("connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
@@ -1359,11 +1355,11 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkUId::default(),
-            Alias::new("flow", "connector"),
+            Alias::new("connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
@@ -1420,18 +1416,18 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext::new(
                     SinkUId::default(),
-                    Alias::new("flow", "connector"),
+                    Alias::new("connector"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
-                    raft::Cluster::default(),
+                    AppContext::default(),
                 ),
                 &mut EventSerializer::new(
                     None,
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
+                    &Alias::new("connector"),
                 )?,
                 0,
             )
@@ -1463,18 +1459,18 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext::new(
                     SinkUId::default(),
-                    Alias::new("flow", "connector"),
+                    Alias::new("connector"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
-                    raft::Cluster::default(),
+                    AppContext::default(),
                 ),
                 &mut EventSerializer::new(
                     None,
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
+                    &Alias::new("connector"),
                 )?,
                 0,
             )
@@ -1537,11 +1533,11 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkUId::default(),
-            Alias::new("flow", "connector"),
+            Alias::new("connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
 
         sink.connect(&ctx, &Attempt::default()).await?;
@@ -1556,7 +1552,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
+                    &Alias::new("connector"),
                 )?,
                 0,
             )
@@ -1620,14 +1616,11 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkUId::default(),
-            Alias::new(
-                AppFlowInstanceId::new(AppId::default(), "flow"),
-                "connector",
-            ),
+            Alias::new("connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
-            raft::Cluster::default(),
+            AppContext::default(),
         );
 
         sink.connect(&ctx, &Attempt::default()).await?;
@@ -1663,10 +1656,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new(
-                        AppFlowInstanceId::new(AppId::default(), "flow"),
-                        "connector",
-                    ),
+                    &Alias::new("connector"),
                 )?,
                 0,
             )

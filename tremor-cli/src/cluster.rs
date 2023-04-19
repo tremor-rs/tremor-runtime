@@ -33,7 +33,7 @@ use tremor_runtime::{
         archive,
         node::{Addr, ClusterNodeKillSwitch, Node},
         remove_node,
-        store::{TremorInstanceState, TremorSet},
+        store::TremorInstanceState,
         ClusterError, NodeId,
     },
     system::ShutdownMode,
@@ -337,11 +337,9 @@ impl KvCommands {
             KvCommands::Set { key, mut value } => {
                 let v = unsafe { value.as_bytes_mut() };
                 let value: OwnedValue = simd_json::from_slice(v)?;
-                let value = simd_json::to_vec(&value)?;
-                let ts = TremorSet { key, value };
-                let mut r = client.write(&ts).await.map_err(|e| format!("error: {e}"))?;
-                let value: OwnedValue = simd_json::from_slice(&mut r)?;
-                println!("{}", simd_json::to_string_pretty(&value)?);
+                let ts = tremor_runtime::raft::api::kv::KVSet { key, value };
+                let r = client.write(&ts).await.map_err(|e| format!("error: {e}"))?;
+                println!("{}", simd_json::to_string_pretty(&r)?);
             }
         }
         Ok(())

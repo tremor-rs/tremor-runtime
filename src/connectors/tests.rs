@@ -60,7 +60,7 @@ use super::{prelude::KillSwitch, sink::SinkMsg};
 use crate::{
     channel::{bounded, unbounded, Receiver, UnboundedReceiver},
     errors::empty_error,
-    raft,
+    system::flow::AppContext,
 };
 use crate::{
     config,
@@ -69,7 +69,6 @@ use crate::{
         StatusReport,
     },
     errors::Result,
-    ids::AppFlowInstanceId,
     instance::State,
     pipeline, qsize, Event,
 };
@@ -99,7 +98,7 @@ impl ConnectorHarness {
         input_ports: Vec<Port<'static>>,
         output_ports: Vec<Port<'static>>,
     ) -> Result<Self> {
-        let alias = ConnectorAlias::new(AppFlowInstanceId::new("app", "test"), alias);
+        let alias = ConnectorAlias::new(alias);
         let mut connector_id_gen = ConnectorUIdGen::new();
         let mut known_connectors = HashMap::new();
 
@@ -113,7 +112,7 @@ impl ConnectorHarness {
             builder,
             raw_config,
             &kill_switch,
-            raft::Cluster::default(),
+            AppContext::default(),
         )
         .await?;
         let mut pipes = HashMap::new();
@@ -378,12 +377,11 @@ impl TestPipeline {
         self.addr.send_mgmt(pipeline::MgmtMsg::Stop).await
     }
     pub(crate) fn new(alias: String) -> Self {
-        let flow_id = AppFlowInstanceId::new("TEST", "test");
         let qsize = qsize();
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = unbounded();
         let (tx_mgmt, mut rx_mgmt) = bounded(qsize);
-        let pipeline_id = pipeline::Alias::new(flow_id, alias);
+        let pipeline_id = pipeline::Alias::new(alias);
         let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, pipeline_id);
 
         task::spawn(async move {

@@ -21,8 +21,8 @@ use crate::{
         prelude::{trickle::window::TumblingOnState, IN, OUT},
         trickle::{operator::TrickleOperator, select::Select, simple_select::SimpleSelect, window},
     },
-    ConfigGraph, Connection, ExecPortIndexMap, ExecutableGraph, NodeConfig, NodeKind, NodeMetrics,
-    Operator, OperatorNode, State, METRICS_CHANNEL,
+    ConfigGraph, Connection, ExecPortIndexMap, ExecutableGraph, MetricsChannel, NodeConfig,
+    NodeKind, NodeMetrics, Operator, OperatorNode, State,
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -170,7 +170,11 @@ impl Query {
     /// # Errors
     /// if the graph can not be turned into a pipeline
     #[allow(clippy::too_many_lines)]
-    pub fn to_executable_graph(&self, idgen: &mut OperatorUIdGen) -> Result<ExecutableGraph> {
+    pub fn to_executable_graph(
+        &self,
+        idgen: &mut OperatorUIdGen,
+        metrics_channel: &MetricsChannel,
+    ) -> Result<ExecutableGraph> {
         let aggr_reg = tremor_script::aggr_registry();
         let reg = tremor_script::FN_REGISTRY.read()?;
         let mut helper = Helper::new(&reg, &aggr_reg);
@@ -394,7 +398,7 @@ impl Query {
                             nodes_by_name.insert(name.clone().into(), id);
                         }
 
-                        let mut graph = query.to_executable_graph(idgen)?;
+                        let mut graph = query.to_executable_graph(idgen, metrics_channel)?;
                         graph.optimize();
 
                         if included_graphs
@@ -707,7 +711,7 @@ impl Query {
                 metric_interval,
                 insights: Vec::new(),
                 dot: format!("{dot}"),
-                metrics_channel: METRICS_CHANNEL.tx(),
+                metrics_channel: metrics_channel.tx(),
                 outputs,
             })
         }
@@ -869,7 +873,7 @@ mod test {
 
         let mut idgen = OperatorUIdGen::new();
         let first = idgen.next_id();
-        let g = q.to_executable_graph(&mut idgen)?;
+        let g = q.to_executable_graph(&mut idgen, &MetricsChannel::new(128))?;
         assert!(g.inputs.contains_key("in/test_in"));
         assert_eq!(idgen.next_id().id(), first.id() + g.graph.len() as u64 + 1);
         let out = g.graph.get(4).ok_or("no data")?;

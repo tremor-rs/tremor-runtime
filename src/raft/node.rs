@@ -359,7 +359,7 @@ impl Node {
             api::initialize(node_id, addr, raft.clone(), store, store_tx, store_rx);
         let running = Running::start(
             self.clone(),
-            raft,
+            raft.clone(),
             api_worker_handle,
             server_state,
             runtime,
@@ -380,7 +380,12 @@ impl Node {
         if promote_to_voter {
             info!("Promoting Node {node_id} to Voter...");
             client.promote_voter(&node_id).await?;
-            // FIXME: wait for the node to be a voter
+            raft.wait(None)
+                .state(
+                    openraft::ServerState::Follower,
+                    "waiting for node to be Follower",
+                )
+                .await?;
             info!("Node {node_id} became Voter.");
         }
         Ok(running)

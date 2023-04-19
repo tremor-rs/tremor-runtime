@@ -35,7 +35,6 @@ use crate::errors::{ErrorKind, Result};
 use either::Either;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
-use lazy_static::lazy_static;
 use petgraph::graph;
 use simd_json::OwnedValue;
 use std::collections::{BTreeMap, HashSet};
@@ -93,8 +92,16 @@ pub struct MetricsChannel {
     tx: Sender<MetricsMsg>,
 }
 
+impl Default for MetricsChannel {
+    fn default() -> Self {
+        Self::new(128)
+    }
+}
+
 impl MetricsChannel {
-    pub(crate) fn new(qsize: usize) -> Self {
+    /// Creates a new metrics channel
+    #[must_use]
+    pub fn new(qsize: usize) -> Self {
         let (tx, _) = broadcast::channel(qsize);
         Self { tx }
     }
@@ -132,11 +139,6 @@ impl MetricsMsg {
 
 /// Sender for metrics
 pub type MetricsSender = Sender<MetricsMsg>;
-
-lazy_static! {
-    /// TODO do we want to change this number or can we make it configurable?
-    pub static ref METRICS_CHANNEL: MetricsChannel = MetricsChannel::new(128);
-}
 
 /// Stringified numeric key
 /// from <https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs>

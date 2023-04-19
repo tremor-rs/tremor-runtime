@@ -627,7 +627,7 @@ mod test {
             identity::PassthroughFactory,
             prelude::{IN, OUT},
         },
-        Result, METRICS_CHANNEL,
+        MetricsChannel, Result,
     };
     use tremor_common::uids::UId;
     use tremor_script::prelude::*;
@@ -833,7 +833,8 @@ mod test {
         let states = State {
             ops: vec![Value::null(), Value::null(), Value::null(), Value::null()],
         };
-        let mut rx = METRICS_CHANNEL.rx();
+        let metrics_channel = MetricsChannel::new(128);
+        let mut rx = metrics_channel.rx();
         let mut g = ExecutableGraph {
             id: "flow::pipe".into(),
             graph,
@@ -850,7 +851,7 @@ mod test {
             metric_interval: Some(1),
             insights: vec![],
             dot: String::new(),
-            metrics_channel: METRICS_CHANNEL.tx(),
+            metrics_channel: metrics_channel.tx(),
         };
 
         // Test with one event
@@ -936,6 +937,7 @@ mod test {
                 Value::null(),
             ],
         };
+        let metrics_channel = MetricsChannel::new(128);
         let mut g = ExecutableGraph {
             id: "test".into(),
             graph,
@@ -952,7 +954,7 @@ mod test {
             metric_interval: None,
             insights: vec![],
             dot: String::new(),
-            metrics_channel: METRICS_CHANNEL.tx(),
+            metrics_channel: metrics_channel.tx(),
         };
         assert!(g.optimize().is_some());
         // Test with one event

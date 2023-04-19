@@ -300,7 +300,6 @@ pub(super) fn extract_response_meta<B>(response: &Response<B>) -> Result<Value<'
 
 #[cfg(test)]
 mod test {
-    use crate::ids::AppFlowInstanceId;
 
     use super::*;
     #[tokio::test(flavor = "multi_thread")]
@@ -317,7 +316,7 @@ mod test {
             CodecReq::Optional("json"),
             vec![],
             &ConnectorType("http".into()),
-            &Alias::new(AppFlowInstanceId::new("app", "flow"), "http"),
+            &Alias::new("http"),
         )?;
         let config = client::Config::new(&c)?;
 

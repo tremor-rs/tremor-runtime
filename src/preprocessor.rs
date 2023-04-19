@@ -168,7 +168,6 @@ pub fn finish(preprocessors: &mut [Box<dyn Preprocessor>], alias: &Alias) -> Res
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::ids::AppFlowInstanceId;
     use crate::postprocessor::{self as post, separate::Separate as SeparatePost, Postprocessor};
     use crate::Result;
 
@@ -335,7 +334,7 @@ mod test {
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
         let (start, end) = wire[0].split_at(7);
-        let alias = Alias::new(AppFlowInstanceId::new("app", "test"), "test");
+        let alias = Alias::new("test");
         let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
         let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &alias)?;
         assert!(recv.is_empty());
@@ -599,10 +598,7 @@ mod test {
     #[test]
     fn single_pre_process_head_ok() {
         let pre = Box::new(BadPreprocessor {});
-        let alias = crate::connectors::Alias::new(
-            crate::ids::AppFlowInstanceId::new("app", "chucky"),
-            "chucky".to_string(),
-        );
+        let alias = crate::connectors::Alias::new("chucky".to_string());
         let mut ingest_ns = 0_u64;
         let r = preprocess(&mut [pre], &mut ingest_ns, b"foo".to_vec(), &alias);
         assert!(r.is_err());
@@ -613,10 +609,7 @@ mod test {
         let noop = Box::new(NoOp {});
         assert_eq!("nily", noop.name());
         let pre = Box::new(BadPreprocessor {});
-        let alias = crate::connectors::Alias::new(
-            crate::ids::AppFlowInstanceId::new("app", "chucky"),
-            "chucky".to_string(),
-        );
+        let alias = crate::connectors::Alias::new("chucky".to_string());
         let mut ingest_ns = 0_u64;
         let r = preprocess(&mut [noop, pre], &mut ingest_ns, b"foo".to_vec(), &alias);
         assert!(r.is_err());
@@ -625,10 +618,7 @@ mod test {
     #[test]
     fn single_pre_finish_ok() {
         let pre = Box::new(BadPreprocessor {});
-        let alias = crate::connectors::Alias::new(
-            crate::ids::AppFlowInstanceId::new("app", "chucky"),
-            "chucky".to_string(),
-        );
+        let alias = crate::connectors::Alias::new("chucky".to_string());
         let r = finish(&mut [pre], &alias);
         assert!(r.is_ok());
     }
@@ -642,10 +632,7 @@ mod test {
 
     #[test]
     fn preprocess_finish_head_fail() {
-        let alias = crate::connectors::Alias::new(
-            crate::ids::AppFlowInstanceId::new("app", "chucky"),
-            "chucky".to_string(),
-        );
+        let alias = crate::connectors::Alias::new("chucky".to_string());
         let pre = Box::new(BadFinisher {});
         let r = finish(&mut [pre], &alias);
         assert!(r.is_err());
@@ -653,10 +640,7 @@ mod test {
 
     #[test]
     fn preprocess_finish_tail_fail() {
-        let alias = crate::connectors::Alias::new(
-            crate::ids::AppFlowInstanceId::new("app", "chucky"),
-            "chucky".to_string(),
-        );
+        let alias = crate::connectors::Alias::new("chucky".to_string());
         let noop = Box::new(NoOp {});
         let pre = Box::new(BadFinisher {});
         let r = finish(&mut [noop, pre], &alias);
@@ -665,10 +649,7 @@ mod test {
 
     #[test]
     fn preprocess_finish_multi_ok() {
-        let alias = crate::connectors::Alias::new(
-            crate::ids::AppFlowInstanceId::new("test", "xyz"),
-            "xyz".to_string(),
-        );
+        let alias = crate::connectors::Alias::new("xyz".to_string());
         let noop1 = Box::new(NoOp {});
         let noop2 = Box::new(NoOp {});
         let noop3 = Box::new(NoOp {});
