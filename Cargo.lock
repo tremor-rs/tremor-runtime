@@ -6390,6 +6390,7 @@ dependencies = [
  "hyper-rustls 0.24.0",
  "indexmap",
  "itoa 1.0.6",
+ "jumphash",
  "lazy_static",
  "lexical",
  "libflate",

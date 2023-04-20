@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::{
-    channel::{bounded, Sender},
+    channel::{bounded, OneShotSender, Sender},
     connectors::{self, ConnectorBuilder, ConnectorType},
-    errors::{empty_error, Kind as ErrorKind, Result},
+    errors::{Kind as ErrorKind, Result},
     ids::{AppFlowInstanceId, AppId},
     instance::IntendedState,
     log_error, qsize, raft,
@@ -45,7 +45,7 @@ pub(crate) enum Msg {
         /// the `deploy flow` AST
         flow: Box<DeployFlow<'static>>,
         /// result sender
-        sender: oneshot::Sender<Result<AppFlowInstanceId>>,
+        sender: OneShotSender<Result<AppFlowInstanceId>>,
         /// API request sender
         raft: raft::Cluster,
     },
@@ -56,7 +56,7 @@ pub(crate) enum Msg {
         /// The state the instance should be changed to
         intended_state: IntendedState,
         /// result sender
-        reply_tx: Sender<Result<()>>,
+        reply_tx: OneShotSender<Result<()>>,
     },
     RegisterConnectorType {
         /// the type of connector
@@ -64,10 +64,10 @@ pub(crate) enum Msg {
         /// the builder
         builder: Box<dyn ConnectorBuilder>,
     },
-    GetFlows(oneshot::Sender<Result<Vec<Flow>>>),
+    GetFlows(OneShotSender<Result<Vec<Flow>>>),
     GetFlow(AppFlowInstanceId, oneshot::Sender<Result<Flow>>),
     /// Initiate the Quiescence process
-    Drain(oneshot::Sender<Result<()>>),
+    Drain(OneShotSender<Result<()>>),
     /// stop this manager
     Terminate,
 }
@@ -161,29 +161,24 @@ impl FlowSupervisor {
     async fn handle_terminate(&mut self) -> Result<()> {
         info!("Stopping Manager ...");
         if !self.flows.is_empty() {
-            // send stop to each deployment
-            let (tx, mut rx) = bounded(self.flows.len());
-            let mut expected_stops: usize = 0;
             // drain the flows, we are stopping anyways, this is the last interaction with them
+            let mut rxs = Vec::with_capacity(self.flows.len());
             for (_, flow) in self.flows.drain() {
+                let (tx, rx) = crate::channel::oneshot();
                 if !log_error!(
-                    flow.stop(tx.clone()).await,
+                    flow.stop(tx).await,
                     "Failed to stop Deployment \"{alias}\": {e}",
                     alias = flow.id()
                 ) {
-                    expected_stops += 1;
+                    rxs.push(rx);
                 }
             }
 
             timeout(
                 DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
                 task::spawn(async move {
-                    while expected_stops > 0 {
-                        log_error!(
-                            rx.recv().await.ok_or_else(empty_error)?,
-                            "Error during Stopping: {e}"
-                        );
-                        expected_stops = expected_stops.saturating_sub(1);
+                    for rx in rxs.drain(..) {
+                        log_error!(rx.await?, "Error during Stopping: {e}");
                     }
                     Result::Ok(())
                 }),
@@ -201,26 +196,26 @@ impl FlowSupervisor {
         } else {
             let num_flows = self.flows.len();
             info!("Draining all {num_flows} Flows ...");
-            let mut alive_flows = 0_usize;
-            let (tx, mut rx) = bounded(num_flows);
+            let mut rxs = Vec::with_capacity(self.flows.len());
             for (_, flow) in self.flows.drain() {
+                let (tx, rx) = crate::channel::oneshot();
+
                 if !log_error!(
-                    flow.stop(tx.clone()).await,
+                    flow.stop(tx).await,
                     "Failed to drain Deployment \"{alias}\": {e}",
                     alias = flow.id()
                 ) {
-                    alive_flows += 1;
+                    rxs.push(rx);
                 }
             }
             task::spawn(async move {
-                while alive_flows > 0 {
-                    match rx.recv().await {
-                        Some(Err(e)) => {
+                for rx in rxs.drain(..) {
+                    match rx.await {
+                        Ok(Err(e)) => {
                             error!("Error during Draining: {e}");
                         }
-                        None | Some(_) => {}
+                        Ok(_) | Err(_) => {}
                     };
-                    alive_flows -= 1;
                 }
                 info!("Flows drained.");
                 sender.send(Ok(())).map_err(|_| "Failed to send reply")?;
@@ -233,7 +228,7 @@ impl FlowSupervisor {
         &mut self,
         id: AppFlowInstanceId,
         intended_state: IntendedState,
-        reply_tx: Sender<Result<()>>,
+        reply_tx: OneShotSender<Result<()>>,
     ) -> Result<()> {
         if let IntendedState::Stopped = intended_state {
             // we remove the flow as it won't be reachable anymore, once it is stopped
@@ -242,12 +237,18 @@ impl FlowSupervisor {
                 flow.stop(reply_tx).await?;
                 Ok(())
             } else {
+                reply_tx
+                    .send(Err(ErrorKind::FlowNotFound(id.to_string()).into()))
+                    .map_err(|_| "can't reply")?;
                 Err(ErrorKind::FlowNotFound(id.to_string()).into())
             }
         } else if let Some(flow) = self.flows.get(&id) {
             flow.change_state(intended_state, reply_tx).await?;
             Ok(())
         } else {
+            reply_tx
+                .send(Err(ErrorKind::FlowNotFound(id.to_string()).into()))
+                .map_err(|_| "can't reply")?;
             Err(ErrorKind::FlowNotFound(id.to_string()).into())
         }
     }
@@ -286,16 +287,11 @@ impl FlowSupervisor {
                         intended_state,
                         reply_tx,
                     } => {
-                        if let Err(e) = self
-                            .handle_change_state(id, intended_state, reply_tx.clone())
-                            .await
-                        {
-                            // if an error happened here already, the reply_tx hasn't been sent anywhere so we need to send the error here
-                            log_error!(
-                                reply_tx.send(Err(e)).await,
-                                "Error sending ChangeInstanceState reply: {e}"
-                            );
-                        }
+                        // if an error happened here already, the reply_tx hasn't been sent anywhere so we need to send the error here
+                        log_error!(
+                            self.handle_change_state(id, intended_state, reply_tx).await,
+                            "Error sending ChangeInstanceState reply: {e}"
+                        );
                     }
                 }
             }

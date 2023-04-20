@@ -7,7 +7,6 @@ rm -r temp/test-db*; cargo run -p tremor-cli -- cluster bootstrap --db-dir temp/
 # Join
 ```
 target/debug/tremor cluster start --db-dir temp/test-db2 --api 127.0.0.1:8002 --rpc 127.0.0.1:9002 --join 127.0.0.1:8001
-
 target/debug/tremor cluster start --db-dir temp/test-db3 --api 127.0.0.1:8003 --rpc 127.0.0.1:9003 --join 127.0.0.1:8002
 ```
 
@@ -17,8 +16,27 @@ target/debug/tremor cluster start --db-dir temp/test-db2 --api 127.0.0.1:8002 --
 target/debug/tremor cluster start --db-dir temp/test-db3 --api 127.0.0.1:8003 --rpc 127.0.0.1:9003
 ```
 
-./target/debug/tremor cluster package --out temp/cs.tar temp/clustered_storage/cs.troy && \
+
+# package
+```bash
+./target/debug/tremor cluster package --out temp/tick.tar temp/tick.troy 
+./target/debug/tremor cluster package --out temp/cs.tar temp/clustered_storage/cs.troy 
+```
+# install
+```bash
 ./target/debug/tremor cluster apps install temp/cs.tar && \
 ./target/debug/tremor cluster apps start cs test
+```
 
-curl -v -X POST -H 'Content-Type: application/json' localhost:8001/v1/api/kv/write -d '{"key": "the-key", "value": "\"snot\""}'
+```bash
+./target/debug/tremor cluster apps install temp/tick.tar
+./target/debug/tremor cluster apps start tick test
+```
+
+
+websocat ws://0.0.0.0:8080
+{"get": "the-key"}
+
+{"put": "the-key", "data": "snot"}
+{"put": "the-key", "data": "badger"}
+

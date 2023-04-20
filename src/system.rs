@@ -24,9 +24,9 @@ use std::{
 
 use self::flow::Flow;
 use crate::{
-    channel::{bounded, Sender},
+    channel::{oneshot, Sender},
     connectors,
-    errors::{empty_error, Error, Kind as ErrorKind, Result},
+    errors::{Error, Kind as ErrorKind, Result},
     ids::{AppFlowInstanceId, AppId},
     instance::IntendedState as IntendedInstanceState,
     log_error, raft,
@@ -106,7 +106,7 @@ impl KillSwitch {
 
     #[cfg(test)]
     pub(crate) fn dummy() -> Self {
-        KillSwitch(bounded(1).0)
+        KillSwitch(crate::channel::bounded(1).0)
     }
 
     #[cfg(test)]
@@ -237,7 +237,7 @@ impl Runtime {
         id: AppFlowInstanceId,
         intended_state: IntendedInstanceState,
     ) -> Result<()> {
-        let (reply_tx, mut reply_rx) = bounded(1);
+        let (reply_tx, reply_rx) = oneshot();
         self.flows
             .send(flow_supervisor::Msg::ChangeInstanceState {
                 id,
@@ -245,7 +245,7 @@ impl Runtime {
                 reply_tx,
             })
             .await?;
-        reply_rx.recv().await.ok_or_else(empty_error)?
+        reply_rx.await?
     }
 
     /// start a flow and wait for the result

@@ -50,6 +50,7 @@ chrono = "0.4"
 # we have a dep on chrono-tz 0.8 in tremor-script
 # clickhouse-rs needs an upgrade to its chrono-tz dependency...
 clickhouse-chrono-tz = { version = "0.6", package = "chrono-tz" }
+jumphash = "0.1"
 
 # Once a new version of clickhouse-rs is released, we can stop using a git
 # repository as a dependency. The declaration can then be replaced with the
