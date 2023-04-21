@@ -21,7 +21,7 @@ use crate::{
     ids::{AppFlowInstanceId, AppId, FlowDefinitionId},
     instance::IntendedState,
     raft::{archive::TremorAppDef, ClusterError},
-    system::Runtime,
+    system::{flow::DeploymentType, Runtime},
 };
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use openraft::{
@@ -81,6 +81,7 @@ pub enum AppsRequest {
         instance: AppFlowInstanceId,
         config: std::collections::HashMap<String, OwnedValue>,
         state: IntendedState,
+        deployment_type: DeploymentType,
     },
 
     /// Stopps and Undeploys an instance of a app
@@ -112,6 +113,7 @@ pub(crate) struct TremorStart {
     pub(crate) instance: AppFlowInstanceId,
     pub(crate) config: std::collections::HashMap<String, OwnedValue>,
     pub(crate) running: bool,
+    pub(crate) single_node: bool,
 }
 impl TremorStart {
     pub(crate) fn state(&self) -> IntendedState {

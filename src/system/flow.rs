@@ -211,6 +211,7 @@ impl Flow {
         connector_id_gen: &mut ConnectorUIdGen,
         known_connectors: &Known,
         kill_switch: &KillSwitch,
+        deployment_type: DeploymentType,
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
         let mut connectors = HashMap::new();
@@ -266,7 +267,13 @@ impl Flow {
             link(&connectors, &pipelines, connect).await?;
         }
 
-        let addr = spawn_task(ctx.clone(), pipelines, &connectors, &flow.defn.connections);
+        let addr = spawn_task(
+            ctx.clone(),
+            pipelines,
+            &connectors,
+            &flow.defn.connections,
+            deployment_type,
+        );
 
         let this = Flow {
             alias: ctx.id,
@@ -415,10 +422,13 @@ enum MsgWrapper {
     StopResult(ConnectorResult<()>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-enum DeploymentType {
+/// How the depoloyment is distributed on a cluster
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum DeploymentType {
     #[default]
+    /// Let the pipeline run on all nodes in the cluster
     AllNodes,
+    /// Run the pipeline on a single node on the cluster
     OneNode,
 }
 
@@ -446,6 +456,7 @@ impl RunningFlow {
         app_ctx: AppContext,
         pipelines: HashMap<String, pipeline::Addr>,
         connectors: &HashMap<String, connectors::Addr>,
+        deployment_type: DeploymentType,
         links: &[ConnectStmt],
     ) -> Self {
         let (msg_tx, msg_rx) = bounded(crate::qsize());
@@ -515,7 +526,7 @@ impl RunningFlow {
             drain_tx,
             stop_tx,
             start_tx,
-            deployment_type: DeploymentType::OneNode, // FIXME: make configurab
+            deployment_type,
         }
     }
 
@@ -559,7 +570,7 @@ impl RunningFlow {
         let hash_key = self.app_ctx.id.to_string();
         let node_id = self.app_ctx.node_id();
 
-        let mut current_nodes: Vec<NodeId> = vec![node_id];
+        let mut current_nodes: Vec<NodeId> = vec![];
         let mut slot: usize = 0;
         let mut intended_active_state = IntendedState::Paused;
 
@@ -570,7 +581,6 @@ impl RunningFlow {
         // We only need ticks for a OneNode deployment
         if self.deployment_type == DeploymentType::OneNode {
             let tick_tx = self.msg_tx.clone();
-            tick_tx.send(Msg::Tick).await?;
             task::spawn(async move {
                 time::sleep(Duration::from_secs(20)).await;
                 while tick_tx.send(Msg::Tick).await.is_ok() {
@@ -578,46 +588,57 @@ impl RunningFlow {
                 }
             });
         }
-        dbg!();
 
         while let Some(wrapped) = self.input_channel.next().await {
             match wrapped {
                 MsgWrapper::Msg(Msg::Tick) => {
-                    if let Ok(Ok(members)) = dbg!(
-                        timeout(
-                            Duration::from_millis(100),
-                            self.app_ctx.raft.get_last_membership()
-                        )
-                        .await
-                    ) {
+                    if let Ok(Ok(members)) = timeout(
+                        Duration::from_millis(100),
+                        self.app_ctx.raft.get_last_membership(),
+                    )
+                    .await
+                    {
                         current_nodes = members.into_iter().collect();
                         slot = jh.slot(&hash_key, current_nodes.len() as u32) as usize;
 
-                        if is_active_node(&current_nodes, slot, node_id) {
-                            // FIXME update state
+                        if is_active_node(&current_nodes, slot, node_id)
+                            && intended_active_state == IntendedState::Running
+                        {
+                            // dbg!(
+                            //     "active",
+                            //     &hash_key,
+                            //     slot,
+                            //     node_id,
+                            //     intended_active_state,
+                            //     self.state
+                            // );
 
-                            dbg!(
-                                "active",
-                                &hash_key,
-                                slot,
-                                node_id,
-                                intended_active_state,
-                                self.state
-                            );
-                            if self.state == State::Paused
-                                && intended_active_state == IntendedState::Running
-                            {
-                                self.handle_resume(&prefix).await?;
+                            match self.state {
+                                State::Paused => {
+                                    if let Err(e) = self.handle_resume(&prefix).await {
+                                        error!("{prefix} Error during resuming: {e}");
+                                        self.change_state(State::Failed);
+                                    }
+                                }
+                                State::Initializing => {
+                                    if let Err(e) = self.handle_start(&prefix).await {
+                                        error!("{prefix} Error starting: {e}");
+                                        self.change_state(State::Failed);
+                                    };
+                                }
+                                state => {
+                                    debug!("not changing from state: {state}");
+                                }
                             }
                         } else {
-                            dbg!(
-                                "passive",
-                                &hash_key,
-                                slot,
-                                node_id,
-                                intended_active_state,
-                                self.state
-                            );
+                            // dbg!(
+                            //     "passive",
+                            //     &hash_key,
+                            //     slot,
+                            //     node_id,
+                            //     intended_active_state,
+                            //     self.state
+                            // );
                             if self.state == State::Running {
                                 self.handle_pause(&prefix).await?;
                                 intended_active_state = IntendedState::Running;
@@ -632,7 +653,6 @@ impl RunningFlow {
                     // We are always active on a all node deployment
                     let is_active = self.deployment_type == DeploymentType::AllNodes
                         || is_active_node(&current_nodes, slot, node_id);
-                    dbg!(self.state, intended_state, self.deployment_type, is_active);
 
                     intended_active_state = intended_state;
                     match (self.state, intended_state) {
@@ -1018,8 +1038,9 @@ fn spawn_task(
     pipelines: HashMap<String, pipeline::Addr>,
     connectors: &HashMap<String, connectors::Addr>,
     links: &[ConnectStmt],
+    deployment_type: DeploymentType,
 ) -> Addr {
-    let flow = RunningFlow::new(app_ctx, pipelines, connectors, links);
+    let flow = RunningFlow::new(app_ctx, pipelines, connectors, deployment_type, links);
     let addr = flow.addr();
     task::spawn(flow.run());
     addr
@@ -1027,14 +1048,8 @@ fn spawn_task(
 
 fn is_active_node(current_nodes: &[NodeId], slot: usize, node_id: NodeId) -> bool {
     match current_nodes.get(slot) {
-        Some(selected) if *selected == node_id => {
-            dbg!("active", selected);
-            true
-        }
-        Some(selected) => {
-            dbg!("passive", selected);
-            false
-        }
+        Some(selected) if *selected == node_id => true,
+        Some(_selected) => false,
         None => {
             error!(" Slot {slot} is out of bounds for membership {current_nodes:?}");
             false
@@ -1215,6 +1230,7 @@ mod tests {
             &mut connector_id_gen,
             &known_connectors,
             &kill_switch,
+            DeploymentType::AllNodes,
         )
         .await?;
 

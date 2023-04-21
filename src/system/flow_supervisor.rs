@@ -33,6 +33,8 @@ use tokio::{
 use tremor_common::uids::{ConnectorUIdGen, OperatorUIdGen};
 use tremor_script::ast::DeployFlow;
 
+use super::flow::DeploymentType;
+
 pub(crate) type Channel = Sender<Msg>;
 
 /// This is control plane
@@ -48,6 +50,8 @@ pub(crate) enum Msg {
         sender: OneShotSender<Result<AppFlowInstanceId>>,
         /// API request sender
         raft: raft::Cluster,
+        /// Type of the deployment
+        deployment_type: DeploymentType,
     },
     /// change instance state
     ChangeInstanceState {
@@ -107,6 +111,7 @@ impl FlowSupervisor {
         sender: oneshot::Sender<Result<AppFlowInstanceId>>,
         kill_switch: &KillSwitch,
         raft: raft::Cluster,
+        deployment_type: DeploymentType,
     ) {
         let id = AppFlowInstanceId::from_deploy(app_id, &flow);
         let res = match self.flows.entry(id.clone()) {
@@ -124,6 +129,7 @@ impl FlowSupervisor {
                     &mut self.connector_id_gen,
                     &self.known_connectors,
                     kill_switch,
+                    deployment_type,
                 )
                 .await
                 .map(|deploy| {
@@ -271,9 +277,17 @@ impl FlowSupervisor {
                         flow,
                         sender,
                         raft: raft_api_tx,
+                        deployment_type,
                     } => {
-                        self.handle_deploy(app, *flow, sender, &task_kill_switch, raft_api_tx)
-                            .await;
+                        self.handle_deploy(
+                            app,
+                            *flow,
+                            sender,
+                            &task_kill_switch,
+                            raft_api_tx,
+                            deployment_type,
+                        )
+                        .await;
                     }
                     Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx),
                     Msg::GetFlow(id, reply_tx) => self.handle_get_flow(&id, reply_tx),

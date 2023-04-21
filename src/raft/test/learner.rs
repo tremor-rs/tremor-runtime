@@ -140,7 +140,9 @@ end;
     let flow_id = FlowDefinitionId("main".to_string());
     let instance = AppFlowInstanceId::new(app_id, "01".to_string());
     let config = HashMap::new();
-    let instance_id = client0.start(&flow_id, &instance, config, true).await?;
+    let instance_id = client0
+        .start(&flow_id, &instance, config, true, false)
+        .await?;
 
     // wait for the app to be actually started
     // wait for the file to exist

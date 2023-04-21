@@ -191,11 +191,13 @@ impl Tremor {
         instance: &AppFlowInstanceId,
         config: std::collections::HashMap<String, OwnedValue>,
         running: bool,
+        single_node: bool,
     ) -> ClientResult<AppFlowInstanceId> {
         let req = TremorStart {
             instance: instance.clone(),
             config,
             running,
+            single_node,
         };
         self.api_req::<TremorStart, AppFlowInstanceId>(
             &format!("api/apps/{}/flows/{flow}", instance.app_id()),

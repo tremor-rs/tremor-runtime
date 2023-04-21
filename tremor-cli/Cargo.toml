@@ -46,7 +46,6 @@ surf = { version = "=2.3.2", default-features = false, features = [
   "h1-client-rustls",
   "middleware-logger",
 ] }
-tremor-api = { version = "0.13.0-rc.12", path = "../tremor-api" }
 tremor-common = { version = "0.13.0-rc.12", path = "../tremor-common" }
 tremor-pipeline = { version = "0.13.0-rc.12", path = "../tremor-pipeline" }
 tremor-runtime = { version = "0.13.0-rc.12", path = "../" }

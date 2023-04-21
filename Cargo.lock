@@ -6195,27 +6195,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tremor-api"
-version = "0.13.0-rc.12"
-dependencies = [
- "env_logger",
- "halfbrown",
- "http-types",
- "log",
- "serde",
- "serde_yaml 0.9.21",
- "simd-json 0.8.0",
- "surf",
- "tide",
- "tokio",
- "tremor-common",
- "tremor-pipeline",
- "tremor-runtime",
- "tremor-script",
- "tremor-value",
-]
-
-[[package]]
 name = "tremor-cli"
 version = "0.13.0-rc.12"
 dependencies = [

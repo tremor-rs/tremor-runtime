@@ -23,7 +23,7 @@ use crate::{
             store_w_err, AppsRequest, StorageResult, TremorResponse,
         },
     },
-    system::Runtime,
+    system::{flow::DeploymentType, Runtime},
 };
 use rocksdb::ColumnFamily;
 use std::collections::HashMap;
@@ -48,6 +48,7 @@ pub struct FlowInstance {
     pub definition: FlowDefinitionId,
     pub config: HashMap<String, simd_json::OwnedValue>,
     pub state: IntendedState,
+    pub deployment_type: DeploymentType,
 }
 pub type Instances = HashMap<InstanceId, FlowInstance>;
 
@@ -114,10 +115,11 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                     definition,
                     config,
                     state,
+                    deployment_type,
                 },
             ) in app_instances
             {
-                me.deploy_flow(&app_id, definition, id, config, state)
+                me.deploy_flow(&app_id, definition, id, config, state, deployment_type)
                     .await
                     .map_err(store::Error::Storage)?;
             }
@@ -169,6 +171,7 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                                 s_flow.id.clone(),
                                 s_flow.config.clone(), // important: this is the new config
                                 s_flow.state,
+                                s_flow.deployment_type,
                             )
                             .await?;
                         } else if s_flow.state != flow.state {
@@ -199,6 +202,7 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                             AppFlowInstanceId::new(app_id.clone(), s_instance_id.clone()),
                             s_flow.config.clone(),
                             s_flow.state,
+                            s_flow.deployment_type,
                         )
                         .await?;
                     }
@@ -245,9 +249,17 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                 instance,
                 config,
                 state,
+                deployment_type,
             } => {
-                self.deploy_flow(app, flow.clone(), instance.clone(), config.clone(), *state)
-                    .await?;
+                self.deploy_flow(
+                    app,
+                    flow.clone(),
+                    instance.clone(),
+                    config.clone(),
+                    *state,
+                    *deployment_type,
+                )
+                .await?;
                 Ok(TremorResponse::AppFlowInstanceId(instance.clone()))
             }
             AppsRequest::Undeploy(instance) => {
@@ -316,6 +328,7 @@ impl AppsStateMachine {
         instance: AppFlowInstanceId,
         config: HashMap<String, simd_json::OwnedValue>,
         intended_state: IntendedState,
+        deployment_type: DeploymentType,
     ) -> StorageResult<()> {
         info!("Deploying flow instance {app_id}/{flow}/{instance}");
         let app = self
@@ -386,6 +399,7 @@ impl AppsStateMachine {
                 definition: flow,
                 config,
                 state: intended_state, // we are about to apply this state further below
+                deployment_type,
             },
         );
         let instances = serde_json::to_vec(&app.instances).map_err(sm_w_err)?;
@@ -402,7 +416,7 @@ impl AppsStateMachine {
         // ensure the cluster is running
         self.world.wait_for_cluster().await;
         self.world
-            .deploy_flow(app_id.clone(), &deploy)
+            .deploy_flow(app_id.clone(), &deploy, deployment_type)
             .await
             .map_err(sm_w_err)?;
         // change the flow state to the intended state

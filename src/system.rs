@@ -22,7 +22,7 @@ use std::{
     time::Duration,
 };
 
-use self::flow::Flow;
+use self::flow::{DeploymentType, Flow};
 use crate::{
     channel::{oneshot, Sender},
     connectors,
@@ -172,7 +172,8 @@ impl Runtime {
         let mut count = 0;
         // first deploy them
         for flow in deployable.iter_flows() {
-            self.deploy_flow(AppId::default(), flow).await?;
+            self.deploy_flow(AppId::default(), flow, DeploymentType::AllNodes)
+                .await?;
         }
         // start flows in a second step
         for flow in deployable.iter_flows() {
@@ -195,6 +196,7 @@ impl Runtime {
         &self,
         app_id: AppId,
         flow: &ast::DeployFlow<'static>,
+        deployment_type: DeploymentType,
     ) -> Result<AppFlowInstanceId> {
         let (tx, rx) = oneshot::channel();
         self.flows
@@ -203,6 +205,7 @@ impl Runtime {
                 flow: Box::new(flow.clone()),
                 sender: tx,
                 raft: self.maybe_get_manager()?.unwrap_or_default(),
+                deployment_type,
             })
             .await?;
         match rx.await? {

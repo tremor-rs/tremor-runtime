@@ -22,6 +22,7 @@ use crate::{
             TremorRequest, TremorResponse, TremorStart,
         },
     },
+    system::flow::DeploymentType,
 };
 use axum::{
     extract::{self, Json, State},
@@ -218,6 +219,11 @@ async fn start(
         instance: body.instance.clone(),
         config: body.config.clone(),
         state: body.state(),
+        deployment_type: if body.single_node {
+            DeploymentType::OneNode
+        } else {
+            DeploymentType::AllNodes
+        },
     });
     state
         .raft

@@ -189,6 +189,10 @@ pub(crate) enum AppsCommands {
         /// Deploys the pipeline in paused state
         #[clap(short, long, action = clap::ArgAction::SetTrue)]
         paused: bool,
+        /// Deploys the flow in single node mode, this means the flow will only run
+        /// on one node in the cluster and might be balanced to other nodes on resize
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        single_node: bool,
     },
 
     /// Stops and removes an instance of a flow in an installed app

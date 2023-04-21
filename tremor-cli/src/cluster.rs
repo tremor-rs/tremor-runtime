@@ -270,13 +270,17 @@ impl AppsCommands {
                 instance,
                 config,
                 paused,
+                single_node,
             } => {
                 let config: HashMap<String, OwnedValue> =
                     config.map_or_else(|| Ok(HashMap::new()), |c| serde_json::from_str(&c))?;
                 let flow = flow.map_or_else(|| FlowDefinitionId::from("main"), FlowDefinitionId);
                 let app_id = AppId(app);
                 let instance_id = AppFlowInstanceId::new(app_id, instance);
-                match client.start(&flow, &instance_id, config, !paused).await {
+                match client
+                    .start(&flow, &instance_id, config, !paused, single_node)
+                    .await
+                {
                     Ok(instance_id) => println!("Instance `{instance_id}` successfully started",),
                     Err(e) => eprintln!("Instance `{instance_id}` failed to start: {e}"),
                 }

@@ -18,7 +18,7 @@ use tremor_common::file;
 use tremor_runtime::{
     errors::*,
     ids::{AppFlowInstanceId, AppId},
-    system::{Runtime, ShutdownMode, WorldConfig},
+    system::{flow::DeploymentType, Runtime, ShutdownMode, WorldConfig},
 };
 use tremor_script::{deploy::Deploy, module::Manager};
 
@@ -57,7 +57,7 @@ macro_rules! test_cases {
                             let app_id = AppId::default();
                             for flow in deployable.iter_flows() {
                                 let flow_alias = AppFlowInstanceId::new(app_id.clone(), flow.instance_alias.clone());
-                                runtime.deploy_flow(app_id.clone(), flow).await?;
+                                runtime.deploy_flow(app_id.clone(), flow, DeploymentType::AllNodes).await?;
                                 runtime.start_flow(flow_alias).await?;
                             }
                             runtime.stop(ShutdownMode::Forceful).await?;
