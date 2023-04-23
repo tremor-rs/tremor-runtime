@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+
+* Fix parsing with `std::datetime::formats::RFC3339` to allow for `Z` (zulu) timezones.
+
 ### New features
 
 * Add configuration option `path_style_access` to `s3_streamer` and `s3_reader` connectors.

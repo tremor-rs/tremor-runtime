@@ -815,8 +815,24 @@ test::suite({
       "test": test::assert("datetime::with_timezone", datetime::with_timezone({"timestamp": 0, "tz": datetime::timezones::EUROPE_LONDON}, datetime::timezones::ATLANTIC_JAN_MAYEN), {"timestamp": 0, "tz": datetime::timezones::ATLANTIC_JAN_MAYEN})
     }),
     test::test({
-      "name": "parse",
+      "name": "parse RFC3339",
       "test": test::assert("datetime::parse", datetime::parse("2022-11-09T14:46:11.499274824+01:00", datetime::formats::RFC3339), 1668001571499274824)
+    }),
+    test::test({
+      "name": "parse RFC3339 Z",
+      "test": test::assert("datetime::parse", datetime::parse("2023-04-23T13:11:37.285Z", datetime::formats::RFC3339), 1682255497285000000)
+    }),
+    test::test({
+      "name": "parse RFC2822",
+      "test": test::assert("datetime::parse", datetime::parse("Fri, 21 Nov 1997 09:55:06 -0600", datetime::formats::RFC2822), 880127706000000000)
+    }),
+    test::test({
+      "name": "format RFC2822",
+      "test": test::assert("datetime::format", datetime::format(880127706000000000, datetime::formats::RFC2822), "Fri, 21 Nov 1997 15:55:06 +0000")
+    }),
+    test::test({
+      "name": "format RFC2822 with timezone",
+      "test": test::assert("datetime::format", datetime::format(datetime::with_timezone(880127706000000000, datetime::timezones::US_CENTRAL), datetime::formats::RFC2822), "Fri, 21 Nov 1997 09:55:06 -0600")
     }),
     test::test({
       "name": "year",
