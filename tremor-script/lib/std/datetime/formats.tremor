@@ -5,7 +5,7 @@
 ## Format for [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339#section-5.6)
 ##
 ## This format is also ISO8601 compatible.
-const RFC3339 = "%Y-%m-%dT%H:%M:%S%.f%:z";
+const RFC3339 = "%+";
 
 ## Format for [RFC 2822](https://www.rfc-editor.org/rfc/rfc2822#section-3.3)
 ##
