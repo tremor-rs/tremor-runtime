@@ -332,7 +332,8 @@ impl ConnectorHarness {
         feature = "net-integration",
         feature = "ws-integration",
         feature = "s3-integration",
-        feature = "gcp-integration"
+        feature = "gcp-integration",
+        feature = "kafka-integration",
     ))]
     pub(crate) async fn send_to_sink(&self, event: Event, port: Port<'static>) -> Result<()> {
         self.addr.send_sink(SinkMsg::Event { event, port }).await

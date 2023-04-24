@@ -29,7 +29,7 @@ use rdkafka::{
     config::FromClientConfig,
     consumer::{BaseConsumer, Consumer},
     error::KafkaResult,
-    message::OwnedHeaders,
+    message::{Header, OwnedHeaders},
     producer::{FutureProducer, FutureRecord},
     ClientConfig, Offset,
 };
@@ -101,7 +101,10 @@ async fn transactional_retry() -> Result<()> {
         .key("foo")
         .partition(1)
         .timestamp(42)
-        .headers(OwnedHeaders::new().add("header", "snot"));
+        .headers(OwnedHeaders::new().insert(Header {
+            key: "header",
+            value: Some("snot"),
+        }));
     if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to kafka".into());
     }
@@ -328,7 +331,10 @@ async fn custom_no_retry() -> Result<()> {
         .key("foo")
         .partition(1)
         .timestamp(42)
-        .headers(OwnedHeaders::new().add("header", "snot"));
+        .headers(OwnedHeaders::new().insert(Header {
+            key: "header",
+            value: Some("snot"),
+        }));
     if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to kafka".into());
     }
@@ -530,7 +536,10 @@ async fn performance() -> Result<()> {
         .key("foo")
         .partition(1)
         .timestamp(42)
-        .headers(OwnedHeaders::new().add("header", "snot"));
+        .headers(OwnedHeaders::new().insert(Header {
+            key: "header",
+            value: Some("snot"),
+        }));
     if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to kafka".into());
     }

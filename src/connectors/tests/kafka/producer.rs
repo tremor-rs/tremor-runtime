@@ -174,7 +174,9 @@ async fn connector_kafka_producer() -> Result<()> {
             assert_eq!(Some(123), msg.timestamp().to_millis());
             let headers = msg.headers().expect("No headers found");
             assert_eq!(1, headers.count());
-            assert_eq!(Some(("foo", "baz".as_bytes())), headers.get(0));
+            let h = headers.get(0);
+            assert_eq!("foo", h.key);
+            assert_eq!("baz".as_bytes(), h.value.expect("no value"));
             consumer
                 .commit_message(&msg, CommitMode::Sync)
                 .expect("Commit failed");
