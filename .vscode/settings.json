@@ -128,5 +128,8 @@
     "whrf",
     "whrt",
     "wintel"
+  ],
+  "rust-analyzer.linkedProjects": [
+    "./Cargo.toml"
   ]
 }
