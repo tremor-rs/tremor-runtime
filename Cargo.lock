@@ -5826,7 +5826,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-api"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "env_logger",
  "halfbrown",
@@ -5847,7 +5847,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-cli"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "anyhow",
  "clap 4.2.1",
@@ -5890,7 +5890,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-common"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "base64 0.21.0",
  "beef",
@@ -5904,7 +5904,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-influx"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "criterion",
  "lexical",
@@ -5938,7 +5938,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-pipeline"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "base64 0.21.0",
  "beef",
@@ -5972,7 +5972,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -6081,7 +6081,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-script"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "atty",
  "base64 0.21.0",
@@ -6134,7 +6134,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-value"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 dependencies = [
  "base64 0.21.0",
  "beef",

@@ -7,7 +7,7 @@ license = "Apache-2.0"
 name = "tremor-value"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.11"
+version = "0.13.0-rc.12"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -19,7 +19,7 @@ serde = "1.0"
 simd-json = "0.8"
 simd-json-derive = "0.8"
 value-trait = { version = "0.5", features = ["custom-types"] }
-tremor-common = { version = "0.13.0-rc.11", path = "../tremor-common" }
+tremor-common = { version = "0.13.0-rc.12", path = "../tremor-common" }
 
 [dev-dependencies]
 float-cmp = "0.9"
