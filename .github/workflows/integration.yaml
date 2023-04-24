@@ -70,7 +70,8 @@ jobs:
         uses: Wandalen/wretry.action@master
         with:
           action: codecov/codecov-action@v3
-          # token: ${{ secrets.CODECOV_TOKEN }} # required because codecov is often broken
+          attempt_limit: 6
+          attempt_delay: 10000
           with: |
             files: ./lcov.txt
             flags: unittests
