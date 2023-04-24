@@ -131,18 +131,16 @@ tokio-tungstenite = "0.18"
 # dns
 trust-dns-resolver = { version = "0.22" }
 
-# kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
-# we stick with git until we have a release with https://github.com/fede1024/rust-rdkafka/pull/417
-#rdkafka = { version = "0.28", features = [
-rdkafka = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f03c9aee8d4544e89bc4b0b0b6b96826e0", features = [
+rdkafka = { version = "0.29", features = [
+  "cmake-build",
+  "libz-static",
+  "tokio",
+], default-features = false }
+# tracking the version rdkafka depends on
+rdkafka-sys = { version = "4.3.0", features = [
   "cmake-build",
   "libz-static",
 ], default-features = false }
-# rdkafka-sys = { version = "4.2.0", features = [
-rdkafka-sys = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f03c9aee8d4544e89bc4b0b0b6b96826e0", features = [
-  "cmake-build",
-  "libz-static",
-], default-features = false } # tracking the version rdkafka depends on
 
 # crononome
 cron = "0.12.0"

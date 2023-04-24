@@ -24,8 +24,11 @@ use crate::{
     utils::task_id,
 };
 use halfbrown::HashMap;
-use rdkafka::config::{ClientConfig, FromClientConfigAndContext};
 use rdkafka::producer::{DeliveryFuture, Producer};
+use rdkafka::{
+    config::{ClientConfig, FromClientConfigAndContext},
+    message::Header,
+};
 use rdkafka::{
     message::OwnedHeaders,
     producer::{FutureProducer, FutureRecord},
@@ -68,7 +71,7 @@ impl ConfigImpl for Config {}
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
 
-#[async_trait::async_trait()]
+#[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "kafka_producer".into()
@@ -207,7 +210,10 @@ impl Sink for KafkaProducerSink {
                     for (k, v) in headers_obj.iter() {
                         // supporting string or bytes as headers value
                         if let Some(v_bytes) = v.as_bytes() {
-                            headers = headers.add(k, v_bytes);
+                            headers = headers.insert(Header {
+                                key: k,
+                                value: Some(v_bytes),
+                            });
                         }
                     }
                     record = record.headers(headers);
@@ -296,7 +302,7 @@ impl Sink for KafkaProducerSink {
             let wait_secs = Duration::from_secs(1);
             if producer.in_flight_count() > 0 {
                 info!("{ctx} Flushing messages. Waiting for {wait_secs:?} seconds.");
-                producer.flush(wait_secs);
+                producer.flush(wait_secs)?;
             }
         }
         Ok(())
