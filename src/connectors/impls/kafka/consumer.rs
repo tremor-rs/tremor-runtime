@@ -450,12 +450,12 @@ impl Connector for KafkaConsumerConnector {
 fn kafka_meta(msg: &BorrowedMessage) -> Value<'static> {
     let headers = msg.headers().map(|headers| {
         let mut headers_meta = Value::object_with_capacity(headers.count());
-        for i in 0..headers.count() {
-            if let Some(header) = headers.get(i) {
-                let key = String::from(header.0);
-                let val = Value::Bytes(header.1.to_vec().into());
-                headers_meta.try_insert(key, val);
-            }
+        for header in headers.iter() {
+            let key = header.key.to_string();
+            let val = header
+                .value
+                .map_or(Value::const_null(), |v| Value::Bytes(v.to_vec().into()));
+            headers_meta.try_insert(key, val);
         }
         headers_meta
     });
