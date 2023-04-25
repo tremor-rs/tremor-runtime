@@ -66,3 +66,5 @@ pub(crate) mod udp;
 pub(crate) mod unix_socket;
 /// Write Ahead Log
 pub(crate) mod wal;
+/// PSQL Replication
+pub(crate) mod psql_repl;
