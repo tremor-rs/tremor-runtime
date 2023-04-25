@@ -1,5 +1,3 @@
-use crate::report::StatusKind;
-
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +11,7 @@ use crate::report::StatusKind;
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use super::report::StatusKind;
 
 /// Test statistics
 #[derive(Serialize, Debug, Clone, Default)]

@@ -1,4 +1,4 @@
-// Copyright 2020-2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,24 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![deny(warnings)]
-// This isn't a external crate so we don't worry about docs
-// #![deny(missing_docs)]
-#![allow(missing_docs)]
-#![recursion_limit = "1024"]
-#![deny(
-    clippy::all,
-    clippy::unwrap_used,
-    clippy::unnecessary_unwrap,
-    clippy::pedantic,
-    clippy::mod_module_files
-)]
-#![allow(clippy::missing_errors_doc)]
+use crate::connectors::traits;
 
-#[macro_use]
-extern crate log;
+pub use traits::Command;
+pub use traits::FileIoCommand;
+pub use traits::FileMode;
 
-mod api;
-mod errors;
+pub use crate::errors::Error;
+pub use crate::errors::ErrorKind;
+pub use crate::errors::Result;
 
-pub use api::*;
+pub(crate) use crate::connectors::sink::Sink;

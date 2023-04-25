@@ -17,14 +17,15 @@ use std::time::Duration;
 use tremor_common::file;
 use tremor_runtime::{
     errors::*,
-    system::{World, WorldConfig},
+    ids::{AppFlowInstanceId, AppId},
+    system::{flow::DeploymentType, Runtime, ShutdownMode, WorldConfig},
 };
 use tremor_script::{deploy::Deploy, module::Manager};
 
 fn parse(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::registry::registry();
-    Deploy::parse(deploy, &reg, &aggr_reg)
+    Deploy::parse(&deploy, &reg, &aggr_reg)
 }
 
 macro_rules! test_cases {
@@ -52,15 +53,19 @@ macro_rules! test_cases {
                             let config = WorldConfig{
                                 debug_connectors: true,
                             };
-                            let (world, h) = World::start(config).await?;
+                            let (runtime, h) = Runtime::start( config).await?;
+                            let app_id = AppId::default();
                             for flow in deployable.iter_flows() {
-                                world.start_flow(flow).await?;
+                                let flow_alias = AppFlowInstanceId::new(app_id.clone(), flow.instance_alias.clone());
+                                runtime.deploy_flow(app_id.clone(), flow, DeploymentType::AllNodes).await?;
+                                runtime.start_flow(flow_alias).await?;
                             }
+                            runtime.stop(ShutdownMode::Forceful).await?;
                             // this isn't good
                             tokio::time::timeout(Duration::from_secs(10), h).await???;
                         },
                         otherwise => {
-                            println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
+                            println!("Expected valid deployment file, compile phase, but got an unexpected error: {otherwise:?}");
                             assert!(false);
                         }
                     }

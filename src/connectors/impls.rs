@@ -48,11 +48,14 @@ pub(crate) mod metronome;
 /// Never send any events and swallow all events it receives into the void.
 pub(crate) mod null;
 
+/// Cluster wide shared kv store
+pub(crate) mod cluster_kv;
 /// `WebSockets`
 pub(crate) mod ws;
 
 /// Some common things for object storage connectors like gcs and s3
 pub(crate) mod object_storage;
+
 /// `OpenTelemetry`
 pub(crate) mod otel;
 /// AWS S3 connectors
@@ -68,3 +71,6 @@ pub(crate) mod udp;
 pub(crate) mod unix_socket;
 /// Write Ahead Log
 pub(crate) mod wal;
+
+/// One shot connector
+pub(crate) mod oneshot;

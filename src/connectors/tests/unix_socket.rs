@@ -37,10 +37,12 @@ async fn unix_socket() -> Result<()> {
       "preprocessors": ["separate"],
       "postprocessors": ["separate"],
       "config": {
-          "path": socket_path.display().to_string(),
           "permissions": "=777",
           "buf_size": 4096
-      }
+      },
+      "initial_commands": [
+            {"socket_server": {"listen": {"address": socket_path.display().to_string(), "handle": "a"}}}
+      ]
     });
     let client_defn = literal!({
       "codec": "string",
@@ -78,13 +80,15 @@ async fn unix_socket() -> Result<()> {
     let (_data, meta) = event.data.parts();
 
     let socket1_meta = meta.get("unix_socket_server");
+    dbg!(socket1_meta);
 
     let socket1_id: u64 = socket1_meta.get_u64("peer").unwrap_or_default();
 
     // lets send an event and route it via metadata to socket 1
     let meta = literal!({
         "unix_socket_server": {
-            "peer": socket1_id
+            "peer": socket1_id,
+            "handle": "a"
         }
     });
     let event1 = Event {

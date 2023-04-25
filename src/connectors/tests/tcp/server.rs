@@ -39,9 +39,11 @@ async fn server_event_routing() -> Result<()> {
       "codec": "string",
       "preprocessors": ["separate"],
       "config": {
-        "url": format!("tcp://127.0.0.1:{free_port}"),
         "buf_size": 4096
-      }
+      },
+      "initial_commands": [
+            {"socket_server": {"listen": {"address": format!("tcp://127.0.0.1:{free_port}"), "handle": "a"}}}
+     ]
     });
     let mut harness =
         ConnectorHarness::new(function_name!(), &tcp::server::Builder::default(), &defn).await?;
@@ -63,12 +65,14 @@ async fn server_event_routing() -> Result<()> {
     // lets send an event and route it via metadata to socket 1
     let meta = literal!({
         "tcp_server": {
+            "handle": "a",
             "peer": {
                 "host": peer.get("host").map(Value::clone_static),
                 "port": peer.get("port").map(Value::clone_static)
             }
         }
     });
+
     let event1 = Event {
         id: EventId::default(),
         data: (Value::String("badger".into()), meta).into(),
@@ -119,9 +123,11 @@ async fn client_disconnect() -> Result<()> {
       "codec": "string",
       "preprocessors": ["separate"],
       "config": {
-        "url": format!("tcp://127.0.0.1:{free_port}"),
         "buf_size": 4096
-      }
+      },
+      "initial_commands": [
+        {"socket_server": {"listen": {"address": format!("tcp://127.0.0.1:{free_port}"), "handle": "a"}}}
+      ]
     });
     let mut harness =
         ConnectorHarness::new(function_name!(), &tcp::server::Builder::default(), &defn).await?;

@@ -77,7 +77,8 @@ struct History {
 impl Operator for History {
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _node_id: u64,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -119,7 +120,8 @@ impl Operator for History {
     }
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        _node_id: u64,
+        _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -157,7 +159,7 @@ impl Operator for History {
 
 #[cfg(test)]
 mod test {
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
 
     use super::*;
     use crate::EventId;
@@ -170,7 +172,7 @@ mod test {
                 name: "snot".to_string(),
             },
         };
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let event = Event {
             id: EventId::from_id(0, 0, 1),
             ingest_ns: 1,
@@ -181,7 +183,7 @@ mod test {
         let mut state = Value::null();
 
         let (out, event) = op
-            .on_event(operator_id, &Port::In, &mut state, event)
+            .on_event(0, operator_id, &Port::In, &mut state, event)
             .expect("Failed to run pipeline")
             .events
             .pop()
@@ -189,7 +191,7 @@ mod test {
         assert_eq!(out, "out");
 
         let (out, _event) = op
-            .on_event(operator_id, &Port::In, &mut state, event)
+            .on_event(0, operator_id, &Port::In, &mut state, event)
             .expect("Failed to run pipeline")
             .events
             .pop()
@@ -204,8 +206,8 @@ mod test {
         };
         let mut state = Value::null();
 
-        op.on_signal(operator_id, &mut state, &mut event)?;
-        op.on_signal(operator_id, &mut state, &mut event)?;
+        op.on_signal(0, operator_id, &mut state, &mut event)?;
+        op.on_signal(0, operator_id, &mut state, &mut event)?;
 
         let history = event.data.suffix().meta().get(op.config.name.as_str());
 

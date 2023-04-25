@@ -16,6 +16,7 @@
 
 -define(API_VERSION, "v1").
 -define(ENDPOINT, "flows").
+-define(APP, "default").
 -export([ 
     list/1, 
     get/2, 
@@ -43,7 +44,7 @@ list(Conn) ->
 %%------------------------------------------------------------------------
 -spec get(Alias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
 get(Alias, Conn) ->
-    tremor_http:get([?API_VERSION, $/, ?ENDPOINT, $/, Alias], Conn).
+    tremor_http:get([?API_VERSION, $/, ?ENDPOINT, $/, ?APP, $/, Alias], Conn).
 
 
 %%------------------------------------------------------------------------
@@ -53,7 +54,7 @@ get(Alias, Conn) ->
 %%------------------------------------------------------------------------
 -spec pause(Alias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
 pause(Alias, Conn) ->
-    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, Alias], #{ status => <<"paused">> }, Conn).
+    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, ?APP, $/, Alias], #{ status => <<"paused">> }, Conn).
 
 %%------------------------------------------------------------------------
 %% @doc
@@ -62,7 +63,7 @@ pause(Alias, Conn) ->
 %%------------------------------------------------------------------------
 -spec resume(Alias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
 resume(Alias, Conn) ->
-    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, Alias], #{ status => <<"running">> }, Conn).
+    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, ?APP, $/, Alias], #{ status => <<"running">> }, Conn).
 
 
 %%------------------------------------------------------------------------
@@ -72,7 +73,7 @@ resume(Alias, Conn) ->
 %%------------------------------------------------------------------------
 -spec list_connectors(FlowAlias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
 list_connectors(FlowAlias, Conn) ->
-    tremor_http:get([?API_VERSION, $/, ?ENDPOINT, $/, FlowAlias , $/, <<"connectors">>], Conn).
+    tremor_http:get([?API_VERSION, $/, ?ENDPOINT, $/, ?APP, $/, FlowAlias , $/, <<"connectors">>], Conn).
 
 %%------------------------------------------------------------------------
 %% @doc
@@ -82,7 +83,7 @@ list_connectors(FlowAlias, Conn) ->
 %%------------------------------------------------------------------------
 -spec get_connector(FlowAlias :: binary(), ConnectorAlias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
 get_connector(FlowAlias, ConnectorAlias, Conn) ->
-    tremor_http:get([?API_VERSION, $/, ?ENDPOINT, $/, FlowAlias, $/, <<"connectors">>, $/, ConnectorAlias], Conn).
+    tremor_http:get([?API_VERSION, $/, ?ENDPOINT, $/, ?APP, $/, FlowAlias, $/, <<"connectors">>, $/, ConnectorAlias], Conn).
 
 %%------------------------------------------------------------------------
 %% @doc
@@ -92,7 +93,7 @@ get_connector(FlowAlias, ConnectorAlias, Conn) ->
 %%------------------------------------------------------------------------
 -spec pause_connector(FlowAlias :: binary(), ConnectorAlias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
 pause_connector(FlowAlias, ConnectorAlias, Conn) ->
-    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, FlowAlias, $/, <<"connectors">>, $/, ConnectorAlias], #{status => <<"paused">>}, Conn).
+    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, ?APP, $/, FlowAlias, $/, <<"connectors">>, $/, ConnectorAlias], #{status => <<"paused">>}, Conn).
 
 %%------------------------------------------------------------------------
 %% @doc
@@ -102,4 +103,4 @@ pause_connector(FlowAlias, ConnectorAlias, Conn) ->
 %%------------------------------------------------------------------------
 -spec resume_connector(FlowAlias :: binary(), ConnectorAlias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
 resume_connector(FlowAlias, ConnectorAlias, Conn) ->
-    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, FlowAlias, $/, <<"connectors">>, $/, ConnectorAlias], #{status => <<"running">>}, Conn).
+    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, ?APP, $/, FlowAlias, $/, <<"connectors">>, $/, ConnectorAlias], #{status => <<"running">>}, Conn).

@@ -7,14 +7,14 @@ flow
   with
     codec = "json",
     config = {
-      "url": "wss://localhost:6553",
       "socket_options": {
         "TCP_NODELAY": false
       },
       "tls": {
         "cafile": "./before/localhost.cert",
         "domain": "localhost",
-      }
+      },
+      "default_handle": "a"
     },
     reconnect = {
       "retry": {
@@ -22,19 +22,24 @@ flow
         "growth_rate": 2,
         "max_retries": 3,
       }
-    }
+    },
+    initial_commands = [
+      {"socket_client": {"connect": {"address": "wss://0.0.0.0:65535", "handle": "a"}}}
+    ]
   end;
 
   define connector ws_server from ws_server
   with
     codec = "json",
     config = {
-      "url": "wss://localhost:6553",
       "tls": {
         "cert": "./before/localhost.cert",
         "key": "./before/localhost.key",
       }
-    }
+    },
+    initial_commands = [
+        {"socket_server": {"listen": {"address": "127.0.0.1:65535", "handle": "a"}}}
+    ]
   end;
 
   create connector in from integration::read_file;

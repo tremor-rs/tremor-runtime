@@ -19,31 +19,25 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::TcpReader;
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    errors::already_created_error,
-};
-use crate::{
-    connectors::{
-        prelude::*,
-        utils::{
-            socket::{tcp_client_socket, TcpSocketOptions},
-            tls::TLSClientConfig,
-        },
+use crate::connectors::{
+    prelude::*,
+    utils::{
+        socket::{tcp_client_socket, TcpSocketOptions},
+        tls::TLSClientConfig,
     },
-    errors::err_connector_def,
 };
+use crate::{connectors::impls::tcp::TcpDefaults, errors::already_created_error};
+use dashmap::DashMap;
 use either::Either;
-use std::sync::{atomic::AtomicBool, Arc};
-use tokio::{io::AsyncWriteExt, net::TcpStream};
-use tokio_rustls::TlsConnector;
+use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
 
 const URL_SCHEME: &str = "tremor-tcp-client";
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
-    url: Url<super::TcpDefaults>,
+    default_handle: Option<String>,
     // IP_TTL for ipv4 and hop limit for ipv6
     //ttl: Option<u32>,
     #[serde(default = "default_buf_size")]
@@ -58,8 +52,6 @@ impl ConfigImpl for Config {}
 
 pub(crate) struct TcpClient {
     config: Config,
-    tls_connector: Option<TlsConnector>,
-    tls_domain: Option<String>,
     source_tx: Sender<SourceReply>,
     source_rx: Option<Receiver<SourceReply>>,
 }
@@ -67,10 +59,6 @@ pub(crate) struct TcpClient {
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
-impl Builder {
-    const MISSING_PORT: &'static str = "Missing port for TCP client";
-    const MISSING_HOST: &'static str = "missing host for TCP client";
-}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -78,38 +66,16 @@ impl ConnectorBuilder for Builder {
     }
     async fn build_cfg(
         &self,
-        id: &Alias,
+        _id: &Alias,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
-        if config.url.port().is_none() {
-            return Err(err_connector_def(id, Self::MISSING_PORT));
-        }
-        let host = match config.url.host_str() {
-            Some(host) => host.to_string(),
-            None => return Err(err_connector_def(id, Self::MISSING_HOST)),
-        };
-        let (tls_connector, tls_domain) = match config.tls.as_ref() {
-            Some(Either::Right(true)) => {
-                // default config
-                (
-                    Some(TLSClientConfig::default().to_client_connector()?),
-                    Some(host),
-                )
-            }
-            Some(Either::Left(tls_config)) => (
-                Some(tls_config.to_client_connector()?),
-                tls_config.domain.clone(),
-            ),
-            Some(Either::Right(false)) | None => (None, None),
-        };
-        let (source_tx, source_rx) = bounded(qsize());
+
+        let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
         Ok(Box::new(TcpClient {
             config,
-            tls_connector,
-            tls_domain,
             source_tx,
             source_rx: Some(source_rx),
         }))
@@ -120,21 +86,11 @@ impl ConnectorBuilder for Builder {
 impl Connector for TcpClient {
     async fn create_sink(
         &mut self,
-        ctx: SinkContext,
+        sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        if let Some(tls_connector) = self.tls_connector.as_ref() {
-            let sink = TcpClientSink::tls(
-                tls_connector.clone(),
-                self.tls_domain.clone(),
-                self.config.clone(),
-                self.source_tx.clone(),
-            );
-            Ok(Some(builder.spawn(sink, ctx)))
-        } else {
-            let sink = TcpClientSink::plain(self.config.clone(), self.source_tx.clone());
-            Ok(Some(builder.spawn(sink, ctx)))
-        }
+        let sink = TcpClientSink::new(self.config.clone(), self.source_tx.clone());
+        Ok(Some(builder.spawn(sink, sink_context)))
     }
 
     async fn create_source(
@@ -146,8 +102,7 @@ impl Connector for TcpClient {
         let source = ChannelSource::from_channel(
             self.source_tx.clone(),
             self.source_rx.take().ok_or_else(already_created_error)?,
-            // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
-            Arc::new(AtomicBool::new(false)),
+            Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
         );
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -155,68 +110,69 @@ impl Connector for TcpClient {
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Required
     }
-}
 
-/// TCP/TLS client sink implementation
-struct TcpClientSink {
-    tls_connector: Option<TlsConnector>,
-    tls_domain: Option<String>,
-    config: Config,
-    wrapped_stream: Option<Box<dyn tokio::io::AsyncWrite + Unpin + Send + Sync>>,
-    tcp_stream: Option<TcpStream>,
-    source_runtime: ChannelSourceRuntime,
-}
-
-impl TcpClientSink {
-    fn plain(config: Config, source_tx: Sender<SourceReply>) -> Self {
-        let source_runtime = ChannelSourceRuntime::new(source_tx);
-        Self {
-            tls_connector: None,
-            tls_domain: None,
-            config,
-            wrapped_stream: None,
-            tcp_stream: None,
-            source_runtime,
-        }
-    }
-    fn tls(
-        tls_connector: TlsConnector,
-        tls_domain: Option<String>,
-        config: Config,
-        source_tx: Sender<SourceReply>,
-    ) -> Self {
-        let source_runtime = ChannelSourceRuntime::new(source_tx);
-        Self {
-            tls_connector: Some(tls_connector),
-            tls_domain,
-            config,
-            wrapped_stream: None,
-            tcp_stream: None,
-            source_runtime,
-        }
-    }
-
-    /// writing to the client socket
-    async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
-        let stream = self
-            .wrapped_stream
-            .as_mut()
-            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
-        for chunk in data {
-            let slice: &[u8] = chunk.as_slice();
-            stream.write_all(slice).await?;
+    fn validate(&self, config: &ConnectorConfig) -> Result<()> {
+        for command in &config.initial_commands {
+            match structurize::<Command>(command.clone())? {
+                Command::SocketClient(_) => {}
+                _ => {
+                    return Err(ErrorKind::NotImplemented(
+                        "Only SocketClient commands are supported for the TCP client connector."
+                            .to_string(),
+                    )
+                    .into())
+                }
+            }
         }
         Ok(())
     }
 }
 
-#[async_trait::async_trait()]
-impl Sink for TcpClientSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+/// TCP/TLS client sink implementation
+#[derive(FileIo, SocketServer, QueueSubscriber, DatabaseWriter)]
+struct TcpClientSink {
+    config: Config,
+    source_runtime: ChannelSourceRuntime,
+    connected_clients: Arc<DashMap<String, Box<dyn tokio::io::AsyncWrite + Unpin + Send + Sync>>>,
+}
+
+#[async_trait::async_trait]
+impl SocketClient for TcpClientSink {
+    async fn connect_socket(
+        &mut self,
+        address: &str,
+        handle: &str,
+        ctx: &SinkContext,
+    ) -> Result<()> {
+        let url = Url::<TcpDefaults>::parse(address)?;
         let buf_size = self.config.buf_size;
+        let handle = handle.to_string();
+
+        if url.port().is_none() {
+            return Err(Error::from(format!("Missing port in url {address}")));
+        }
+        let host = match url.host_str() {
+            Some(host) => host.to_string(),
+            None => return Err(Error::from(format!("Missing host in url {address}"))),
+        };
+        let tls_config = match self.config.tls.as_ref() {
+            Some(Either::Right(true)) => {
+                // default config
+                Some((TLSClientConfig::default().to_client_connector()?, host))
+            }
+            Some(Either::Left(tls_config)) => Some((
+                tls_config.to_client_connector()?,
+                tls_config
+                    .domain
+                    .clone()
+                    .unwrap_or_else(|| url.host_or_local().to_string()),
+            )),
+            Some(Either::Right(false)) | None => None,
+        };
 
         // connect TCP stream
-        let stream = tcp_client_socket(&self.config.url, &self.config.socket_options).await?;
+        // TODO: add socket options
+        let stream = tcp_client_socket(&url, &self.config.socket_options).await?;
         let local_addr = stream.local_addr()?;
         let peer_addr = stream.peer_addr()?;
         // this is known to fail on macOS for IPv6.
@@ -227,20 +183,15 @@ impl Sink for TcpClientSink {
 
         let origin_uri = EventOriginUri {
             scheme: URL_SCHEME.to_string(),
-            host: self.config.url.host_or_local().to_string(),
-            port: self.config.url.port(),
+            host: url.host_or_local().to_string(),
+            port: url.port(),
             path: vec![local_addr.port().to_string()], // local port
         };
-        if let Some(tls_connector) = self.tls_connector.as_ref() {
+        if let Some((tls_connector, tls_domain)) = tls_config {
             // TLS
+            // let server_name = ServerName::try_from(tls_domain.as_str())?;
             let tls_stream = tls_connector
-                .connect(
-                    self.tls_domain
-                        .as_ref()
-                        .map_or_else(|| self.config.url.host_or_local(), String::as_str)
-                        .try_into()?,
-                    stream,
-                )
+                .connect(tls_domain.as_str().try_into()?, stream)
                 .await?;
             let (read, write) = tokio::io::split(tls_stream);
             let meta = ctx.meta(literal!({
@@ -251,7 +202,8 @@ impl Sink for TcpClientSink {
                 }
             }));
             // register writer
-            self.wrapped_stream = Some(Box::new(write));
+            self.connected_clients
+                .insert(handle.clone(), Box::new(write));
             // register reader
             let tls_reader = TcpReader::tls_client(
                 read,
@@ -275,9 +227,10 @@ impl Sink for TcpClientSink {
             // self.tcp_stream = Some(stream.clone());
 
             let (read_stream, write_stream) = tokio::io::split(stream);
-            // register writer
-            self.wrapped_stream = Some(Box::new(write_stream));
-            //  register reader for receiving from the connection via the source
+            self.connected_clients
+                .insert(handle.clone(), Box::new(write_stream));
+
+            // register reader for receiving from the connection via the source
             let reader = TcpReader::new(
                 read_stream,
                 vec![0; buf_size],
@@ -289,6 +242,47 @@ impl Sink for TcpClientSink {
             self.source_runtime
                 .register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
         }
+
+        Ok(())
+    }
+
+    async fn close(&mut self, handle: &str, _ctx: &SinkContext) -> Result<()> {
+        if let Some(_connected_client) = self.connected_clients.remove(handle) {
+            // connected_client.shutdown(std::net::Shutdown::Both)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl TcpClientSink {
+    fn new(config: Config, source_tx: Sender<SourceReply>) -> Self {
+        let source_runtime = ChannelSourceRuntime::new(source_tx);
+        Self {
+            config,
+            source_runtime,
+            connected_clients: Arc::new(DashMap::new()),
+        }
+    }
+
+    /// writing to the client socket
+    async fn write(&mut self, data: Vec<Vec<u8>>, handle: &str) -> Result<()> {
+        for data in data {
+            self.connected_clients
+                .get_mut(handle)
+                .ok_or_else(|| Error::from("client not found"))?
+                .as_mut()
+                .write_all(&data)
+                .await?;
+        }
+
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait()]
+impl Sink for TcpClientSink {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)
     }
 
@@ -301,13 +295,20 @@ impl Sink for TcpClientSink {
         _start: u64,
     ) -> Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
-        for value in event.value_iter() {
+        for (value, meta) in event.value_meta_iter() {
+            let handle = ctx
+                .extract_meta(meta)
+                .get_str("handle")
+                .map(ToString::to_string)
+                .or_else(|| self.config.default_handle.clone())
+                .ok_or_else(|| Error::from("no handle found"))?;
+
             let data = serializer.serialize(value, ingest_ns)?;
-            if let Err(e) = self.write(data).await {
+            if let Err(e) = self.write(data, &handle).await {
                 error!("{ctx} Error sending data: {e}. Initiating Reconnect...",);
                 // TODO: figure upon which errors to actually reconnect
-                self.tcp_stream = None;
-                self.wrapped_stream = None;
+                self.connected_clients.remove(&handle);
+
                 ctx.notifier().connection_lost().await?;
                 return Err(e);
             }
@@ -316,12 +317,12 @@ impl Sink for TcpClientSink {
     }
 
     /// when writing is done
-    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
-        if let Some(stream) = self.tcp_stream.as_mut() {
-            if let Err(e) = stream.shutdown().await {
-                error!("{ctx} stopping: {e}...",);
-            }
-        }
+    async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
+        self.connected_clients.clear();
+        //     if let Err(e) = client.tcp_stream.shutdown(std::net::Shutdown::Write) {
+        //         error!("{ctx} stopping: {e}...",);
+        //     }
+        // }
         Ok(())
     }
 

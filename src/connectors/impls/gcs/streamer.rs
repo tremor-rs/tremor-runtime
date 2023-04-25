@@ -401,7 +401,7 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::channel::bounded;
+    use crate::{channel::bounded, system::flow::AppContext};
     use crate::{
         channel::unbounded,
         config::{Codec as CodecConfig, Reconnect},
@@ -411,7 +411,7 @@ pub(crate) mod tests {
         },
     };
     use halfbrown::HashMap;
-    use tremor_common::ids::{ConnectorIdGen, SinkId};
+    use tremor_common::uids::{ConnectorUIdGen, SinkUId};
     use tremor_pipeline::EventId;
     use tremor_value::literal;
 
@@ -527,7 +527,7 @@ pub(crate) mod tests {
         });
 
         let mut config = Config::new(&raw_config).expect("config should be valid");
-        let alias = Alias::new("flow", "conn");
+        let alias = Alias::new("conn");
         config.normalize(&alias);
         assert_eq!(256 * 1024, config.buffer_size);
     }
@@ -567,13 +567,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -585,7 +586,7 @@ pub(crate) mod tests {
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
-        sink.connect(&context, &Attempt::default()).await?;
+        Sink::connect(&mut sink, &context, &Attempt::default()).await?;
 
         let id1 = EventId::from_id(1, 1, 1);
         let event = Event {
@@ -752,13 +753,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -770,7 +772,7 @@ pub(crate) mod tests {
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
-        sink.connect(&context, &Attempt::default()).await?;
+        Sink::connect(&mut sink, &context, &Attempt::default()).await?;
 
         upload_client(&mut sink).inject_failure(true);
 
@@ -925,13 +927,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -943,7 +946,7 @@ pub(crate) mod tests {
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
-        sink.connect(&context, &Attempt::default()).await?;
+        Sink::connect(&mut sink, &context, &Attempt::default()).await?;
 
         let event = Event {
             data: (literal!({}), literal!({})).into(), // no gcs_streamer meta
@@ -1019,13 +1022,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            AppContext::default(),
         );
 
         // simulate sink lifecycle
@@ -1072,13 +1076,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1296,13 +1301,14 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = Alias::new("b");
         let context = SinkContext::new(
-            SinkId::default(),
+            SinkUId::default(),
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
+            AppContext::default(),
         );
         let mut serializer = EventSerializer::new(
             Some(CodecConfig::from("json")),
@@ -1442,15 +1448,22 @@ pub(crate) mod tests {
             postprocessors: None,
             reconnect: Reconnect::None,
             metrics_interval_s: None,
+            initial_commands: vec![],
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new("snot", "badger");
-        let mut connector_id_gen = ConnectorIdGen::default();
+        let alias = Alias::new("badger");
+        let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
-        let addr =
-            crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
-                .await?;
+        let addr = crate::connectors::spawn(
+            &alias,
+            &mut connector_id_gen,
+            &builder,
+            cfg,
+            &kill_switch,
+            AppContext::default(),
+        )
+        .await?;
         let (tx, mut rx) = bounded(1);
         addr.stop(tx).await?;
         assert!(rx.recv().await.expect("rx empty").res.is_ok());
@@ -1472,15 +1485,22 @@ pub(crate) mod tests {
             postprocessors: None,
             reconnect: Reconnect::None,
             metrics_interval_s: None,
+            initial_commands: vec![],
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new("snot", "badger");
-        let mut connector_id_gen = ConnectorIdGen::default();
+        let alias = Alias::new("badger");
+        let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
-        let addr =
-            crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
-                .await?;
+        let addr = crate::connectors::spawn(
+            &alias,
+            &mut connector_id_gen,
+            &builder,
+            cfg,
+            &kill_switch,
+            AppContext::default(),
+        )
+        .await?;
         let (tx, mut rx) = bounded(1);
         addr.stop(tx).await?;
         assert!(rx.recv().await.expect("rx empty").res.is_ok());

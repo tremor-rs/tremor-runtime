@@ -16,6 +16,7 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use crate::ast::optimizer::Optimizer;
@@ -39,14 +40,12 @@ use crate::{
 };
 pub use base_expr::BaseExpr;
 use beef::Cow;
-use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
 
 use super::{
     base_expr::Ranged,
     docs::{FnDoc, ModDoc},
-    module::Manager,
     warning, Const, NodeId, NodeMeta,
 };
 
@@ -85,11 +84,7 @@ impl<'script> ScriptRaw<'script> {
         for e in self.exprs {
             match e {
                 TopLevelExprRaw::Use(UseRaw { modules, .. }) => {
-                    for (module, alias) in modules {
-                        let mid = Manager::load(&module)?;
-                        let alias = alias.unwrap_or_else(|| module.id.clone());
-                        helper.scope().add_module_alias(alias, mid);
-                    }
+                    helper.load_modules(&modules)?;
                 }
                 TopLevelExprRaw::Const(const_raw) => {
                     let c = const_raw.up(helper)?;
@@ -639,7 +634,7 @@ impl<'script> Upable<'script> for FnDefnRaw<'script> {
         // register documentation
         helper.docs.fns.push(self.doc());
 
-        let mut locals: HashMap<_, _> = self
+        let mut locals = self
             .args
             .iter()
             .enumerate()

@@ -2,6 +2,7 @@ define flow my_flow
 flow
   use integration;
   use tremor::connectors;
+  use tremor::pipelines;
   use std::time::nanos;
 
   define pipeline main
@@ -43,15 +44,17 @@ flow
   create pipeline or_exit from integration::out_or_exit with
     delay = nanos::from_seconds(2)
   end;
+
   create pipeline main;
   create connector in from integration::read_file;
-  create connector out from integration::write_file;
   create connector exit from integration::exit;
+  create connector out from integration::write_file;
+
 
   connect /connector/in to /pipeline/or_exit;
-  connect /pipeline/or_exit/out to /pipeline/main;
-  connect /pipeline/or_exit/exit to /connector/exit;
-  connect /pipeline/main to /connector/out;
+    connect /pipeline/or_exit/out to /pipeline/main;
+    connect /pipeline/or_exit/exit to /connector/exit;
+    connect /pipeline/main to /connector/out;
 end;
 
 deploy flow my_flow;

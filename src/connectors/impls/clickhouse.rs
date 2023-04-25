@@ -14,15 +14,13 @@
 
 mod conversion;
 
-use std::fmt::{self, Display, Formatter};
-
 use crate::connectors::prelude::*;
-
 use clickhouse_rs::{
     errors::Error as CError,
     types::{DateTimeType, SqlType},
     Block, ClientHandle, Pool,
 };
+use std::fmt::{self, Display, Formatter};
 
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
@@ -137,6 +135,7 @@ struct Column {
     type_: DummySqlType,
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 pub(crate) struct ClickhouseSink {
     db_url: String,
     handle: Option<ClientHandle>,

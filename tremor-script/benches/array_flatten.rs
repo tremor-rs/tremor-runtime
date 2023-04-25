@@ -84,7 +84,7 @@ fn array_flatten(c: &mut Criterion) {
         ));
 
         let mut script = tremor_script::script::Script::parse(
-            "use std::array; array::flatten(event)",
+            &"use std::array; array::flatten(event)",
             &registry,
         )
         .expect("Invalid script");

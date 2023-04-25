@@ -4,7 +4,6 @@ set -e
 
 TOML_FILES="\
 Cargo.toml \
-tremor-api/Cargo.toml \
 tremor-cli/Cargo.toml \
 tremor-common/Cargo.toml \
 tremor-influx/Cargo.toml \

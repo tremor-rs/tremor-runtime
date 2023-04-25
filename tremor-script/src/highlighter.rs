@@ -199,7 +199,7 @@ pub trait Highlighter {
     /// on io errors
     fn highlight_str(&mut self, source: &str, ident: &str, emit_lines: bool) -> io::Result<()> {
         // TODO: do we really want to input this here?
-        let (aid, source) = Arena::insert(source)?;
+        let (aid, source) = Arena::insert(&source)?;
         let tokens: Vec<_> = crate::lexer::Lexer::new(source, aid)
             .filter_map(Result::ok)
             .collect();

@@ -15,7 +15,7 @@
 #[cfg(test)]
 macro_rules! assert_val {
     ($e:expr, $r:expr) => {
-        assert_eq!($e, Ok(Value::from($r)))
+        assert_eq!($e, Ok(crate::Value::from($r)))
     };
 }
 
@@ -23,6 +23,7 @@ mod array;
 mod base64;
 mod binary;
 mod chash;
+mod cluster;
 mod datetime;
 mod dummy;
 mod float;
@@ -50,6 +51,7 @@ pub fn load(registry: &mut Registry) {
     base64::load(registry);
     binary::load(registry);
     chash::load(registry);
+    cluster::load(registry);
     datetime::load(registry);
     dummy::load(registry);
     float::load(registry);
@@ -57,6 +59,8 @@ pub fn load(registry: &mut Registry) {
     json::load(registry);
     math::load(registry);
     origin::load(registry);
+    path::load(registry);
+    r#type::load(registry);
     random::load(registry);
     range::load(registry);
     re::load(registry);
@@ -64,10 +68,8 @@ pub fn load(registry: &mut Registry) {
     string::load(registry);
     system::load(registry);
     test::load(registry);
-    r#type::load(registry);
     url::load(registry);
     win::load(registry);
-    path::load(registry);
 }
 
 pub fn load_aggr(registry: &mut AggrRegistry) {

@@ -15,13 +15,13 @@ rust-version = "1.62"
 [workspace]
 
 members = [
-  "tremor-api",
   "tremor-cli",
   "tremor-common",
   "tremor-influx",
   "tremor-pipeline",
   "tremor-script",
   "tremor-value",
+  "tremor-connector-derive",
 ]
 default-members = ["tremor-cli"]
 exclude = ["tremor-script-nif"]
@@ -51,6 +51,7 @@ chrono = "0.4"
 # we have a dep on chrono-tz 0.8 in tremor-script
 # clickhouse-rs needs an upgrade to its chrono-tz dependency...
 clickhouse-chrono-tz = { version = "0.6", package = "chrono-tz" }
+jumphash = "0.1"
 
 # Once a new version of clickhouse-rs is released, we can stop using a git
 # repository as a dependency. The declaration can then be replaced with the
@@ -98,11 +99,13 @@ syslog_loose = "0.18"
 tremor-common = { path = "tremor-common" }
 tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
-tremor-script = { path = "tremor-script" }
+tremor-script = { path = "tremor-script", features = ["arena-delete"] }
 tremor-value = { path = "tremor-value" }
+tremor-connector-derive = { path = "tremor-connector-derive" }
 url = "2.3"
 value-trait = "0.5"
-zstd = "0.12"
+zstd = "*"
+axum = "0.6"
 
 # blaster / blackhole
 hdrhistogram = "7"
@@ -149,12 +152,6 @@ cron = "0.12.0"
 
 # logstash grok patterns
 grok = "2"
-
-# sse-onramp
-#surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0", default-features = false }
-
-# nats
-#async-nats = "0.10.1"
 
 # discord
 serenity = { version = "0.11", default-features = false, features = [
@@ -209,6 +206,15 @@ itoa = "1"
 ryu = "1"
 lexical = "6.1.1"
 simdutf8 = "0.1"
+downcast-rs = "1.2"
+
+# Clustering
+tarpc = { version = "0.33", features = ["full"] }
+openraft = { version = "0.8.4-alpha.1", features = ["serde"] }
+serde_json = "1.0.57"
+rocksdb = { version = "0.19.0", git = "https://github.com/tremor-rs/rust-rocksdb", rev = "a02b00f029fb45d294715748cd2459491594e0e3" }
+tar = "*"
+sha2 = "*"
 
 [dev-dependencies]
 serial_test = { version = "2.0", features = ["logging"] }
@@ -229,7 +235,7 @@ num_cpus = "*"
 
 
 [features]
-default = []
+default = ["integration"]
 
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]

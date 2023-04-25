@@ -64,7 +64,7 @@ macro_rules! test_cases {
                         port: Some(23),
                         scheme: "snot".into(),
                     };
-                    let context = EventContext::new(id as u64, Some(&uri));
+                    let context = EventContext::new( id as u64, Some(&uri), 0);
                     let mut meta = Value::from(Object::default());
                     match script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta) {
                         Err(e) => {

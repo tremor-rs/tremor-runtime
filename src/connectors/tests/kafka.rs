@@ -14,7 +14,7 @@
 mod consumer;
 mod producer;
 
-use crate::connectors::tests::free_port::find_free_tcp_port;
+use super::free_port::find_free_tcp_port;
 use crate::errors::Result;
 use std::time::Duration;
 use testcontainers::{

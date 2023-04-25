@@ -148,7 +148,8 @@ op!(BackpressureFactory(_uid, node) {
 impl Operator for Backpressure {
     fn on_event(
         &mut self,
-        uid: OperatorId,
+        _node_id: u64,
+        uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -179,7 +180,8 @@ impl Operator for Backpressure {
 
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        _node_id: u64,
+        _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -199,7 +201,7 @@ impl Operator for Backpressure {
         })
     }
 
-    fn on_contraflow(&mut self, uid: OperatorId, insight: &mut Event) {
+    fn on_contraflow(&mut self, uid: OperatorUId, insight: &mut Event) {
         // If the related event never touched this operator we don't take
         // action
         if !insight.op_meta.contains_key(uid) {
@@ -233,12 +235,12 @@ impl Operator for Backpressure {
 mod test {
     use super::*;
     use crate::SignalKind;
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
     use tremor_value::Object;
 
     #[test]
     fn pass_wo_error() {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100_000_000,
             steps: vec![1, 10, 100],
@@ -256,7 +258,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event1)
+            .on_event(0, operator_id, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -272,7 +274,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2)
+            .on_event(0, operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -283,7 +285,7 @@ mod test {
 
     #[test]
     fn halt_on_error() {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100_000_000,
             steps: vec![1, 10, 100],
@@ -301,7 +303,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event1)
+            .on_event(0, operator_id, &Port::In, &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -339,7 +341,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2)
+            .on_event(0, operator_id, &Port::In, &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -354,7 +356,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3)
+            .on_event(0, operator_id, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -370,7 +372,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3)
+            .on_event(0, operator_id, &Port::In, &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -380,7 +382,7 @@ mod test {
 
     #[test]
     fn halt_on_error_cb() -> Result<()> {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100_000_000,
             steps: vec![1, 10, 100],
@@ -398,7 +400,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event1)?
+            .on_event(0, operator_id, &Port::In, &mut state, event1)?
             .events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
@@ -434,7 +436,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2)?
+            .on_event(0, operator_id, &Port::In, &mut state, event2)?
             .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
@@ -449,7 +451,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3)?
+            .on_event(0, operator_id, &Port::In, &mut state, event3)?
             .events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
@@ -464,7 +466,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3)?
+            .on_event(0, operator_id, &Port::In, &mut state, event3)?
             .events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
@@ -478,7 +480,7 @@ mod test {
             kind: Some(SignalKind::Tick),
             ..Event::default()
         };
-        let mut r = op.on_signal(operator_id, &mut state, &mut signal)?;
+        let mut r = op.on_signal(0, operator_id, &mut state, &mut signal)?;
         let i = r.insights.pop().expect("No Insight received");
         // We receive a restore signal
         assert_eq!(i.cb, CbAction::Restore);
@@ -489,7 +491,7 @@ mod test {
 
     #[test]
     fn walk_backoff() {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100_000_000,
             steps: vec![1, 10, 100],

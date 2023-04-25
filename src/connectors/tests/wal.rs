@@ -15,8 +15,8 @@ use super::ConnectorHarness;
 use crate::{connectors::impls::wal, errors::Result};
 use std::time::Duration;
 use tremor_common::{
-    ids::{Id, SourceId},
     ports::IN,
+    uids::{SourceUId, UId},
 };
 use tremor_pipeline::{CbAction, Event, EventIdGenerator};
 use tremor_value::{literal, prelude::*, Value};
@@ -40,7 +40,7 @@ async fn wal() -> Result<()> {
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
-    let source_id = SourceId::new(1);
+    let source_id = SourceUId::new(1);
     let mut id_gen = EventIdGenerator::new(source_id);
     let value = Value::from(42_u64);
     let meta = Value::object();

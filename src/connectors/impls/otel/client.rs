@@ -14,6 +14,9 @@
 
 use super::{common::OtelDefaults, logs, metrics, trace};
 use crate::connectors::prelude::*;
+use crate::connectors::traits::{
+    DatabaseWriter, FileIo, QueueSubscriber, SocketClient, SocketServer,
+};
 use tonic::transport::Channel as TonicChannel;
 use tonic::transport::Endpoint as TonicEndpoint;
 use tremor_otelapis::opentelemetry::proto::collector::{
@@ -113,6 +116,7 @@ impl Connector for Client {
 }
 
 #[allow(dead_code)]
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct OtelSink {
     origin_uri: EventOriginUri,
     config: Config,
@@ -212,7 +216,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn otel_client_builder() -> Result<()> {
-        let alias = Alias::new("flow", "my_otel_client");
+        let alias = Alias::new("my_otel_client");
         let with_processors = literal!({
             "config": {
                 "url": "localhost:4317",

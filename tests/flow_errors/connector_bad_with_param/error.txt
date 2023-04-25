@@ -3,6 +3,6 @@ Error:
     4 |   with
     5 |     preprocessor = ["snot"],
       |     ^^^^^^^^^^^^ Invalid `with` parameter "preprocessor" in definition of connector "foo".
-      |                  NOTE: Available parameters are: codec, config, metrics_interval_s, postprocessors, preprocessors, reconnect
+      |                  NOTE: Available parameters are: codec, config, metrics_interval_s, postprocessors, preprocessors, reconnect, initial_commands
     6 |     config = {}
     7 |   end;

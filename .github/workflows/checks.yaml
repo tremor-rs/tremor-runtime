@@ -31,8 +31,6 @@ jobs:
       - uses: actions/checkout@v3
       - name: Check for unused dependencies (tremor-runtime)
         run: ./.github/checks/deps.sh .
-      - name: Check for unused dependencies (tremor-api)
-        run: ./.github/checks/deps.sh tremor-api
       - name: Check for unused dependencies (tremor-influx)
         run: ./.github/checks/deps.sh tremor-influx
       - name: Check for unused dependencies (tremor-pipeline)

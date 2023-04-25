@@ -1,0 +1,5 @@
+### The `cluster` module contains functions to interact with the current tremor cluster
+
+## gets the current node id 0 (the default initial node if not executed in a custered context)
+## Returns an `integer`.
+intrinsic fn node_id() as cluster::node_id;

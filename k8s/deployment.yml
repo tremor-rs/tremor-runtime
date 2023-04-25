@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tremor
+spec:
+  selector:
+    matchLabels:
+      run: tremor
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        run: tremor
+    spec:
+      containers:
+      - name: tremor
+        image: tremor-cluster
+        imagePullPolicy: Never
+        ports:
+          - containerPort: 8000
+          - containerPort: 9000
+        resources:
+          limits:
+            cpu: 500m
+          requests:
+            cpu: 200m
+        env:
+          - name: WORKER
+            value: "true"
+          - name: TREMOR_SEED
+            value: "tremor-0.tremor.default.svc.cluster.local"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MY_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace

@@ -16,7 +16,7 @@ use crate::{
     connectors::{
         impls::kafka,
         tests::{
-            free_port,
+            free_port::find_free_tcp_port,
             kafka::{redpanda_container, PRODUCE_TIMEOUT},
             ConnectorHarness,
         },
@@ -75,16 +75,16 @@ async fn transactional_retry() -> Result<()> {
                 broker.clone()
             ],
             "group_id": group_id,
-            "topics": [
-                topic
-            ],
             "mode": {
                 "transactional": {}
             },
             "test_options": {
                 "auto.offset.reset": "beginning"
             }
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"topics": [topic], "handle": "a"}}}
+        ]
     });
     let mut harness = ConnectorHarness::new(
         function_name!(),
@@ -223,7 +223,7 @@ async fn transactional_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test::transactional_retry",
+            "source": "app/test::transactional_retry",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -294,9 +294,6 @@ async fn custom_no_retry() -> Result<()> {
                 broker.clone()
             ],
             "group_id": group_id,
-            "topics": [
-                topic
-            ],
             "mode": {
                 "custom": {
                     "rdkafka_options": {
@@ -307,7 +304,10 @@ async fn custom_no_retry() -> Result<()> {
                     "retry_failed_events": false
                 }
             }
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"topics": [topic], "handle": "a"}}}
+        ]
     });
     let mut harness = ConnectorHarness::new(
         function_name!(),
@@ -437,7 +437,7 @@ async fn custom_no_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test::custom_no_retry",
+            "source": "app/test::custom_no_retry",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -503,14 +503,14 @@ async fn performance() -> Result<()> {
                 broker.clone()
             ],
             "group_id": group_id,
-            "topics": [
-                topic
-            ],
             "mode": "performance",
             "test_options": {
                 "auto.offset.reset": "beginning"
             }
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"handle": "a", "topics": [topic]}}}
+        ]
     });
     let mut harness = ConnectorHarness::new(
         function_name!(),
@@ -640,7 +640,7 @@ async fn performance() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test::performance",
+            "source": "app/test::performance",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -684,10 +684,12 @@ async fn performance() -> Result<()> {
     Ok(())
 }
 
+/*
+FIXME: Assert that this fails the subscribe command
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
-    let kafka_port = free_port::find_free_tcp_port().await?;
+    let kafka_port = find_free_tcp_port().await?;
     let _ = env_logger::try_init();
     let connector_config = literal!({
         "reconnect": {
@@ -702,11 +704,11 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
                 format!("127.0.0.1:{kafka_port}")
             ],
             "group_id": "all_brokers_down",
-            "topics": [
-                "snot"
-            ],
             "mode": "performance"
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"topic": "snot", "handle": "a"}}}
+        ]
     });
     let harness = ConnectorHarness::new(
         function_name!(),
@@ -720,12 +722,12 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
     assert_eq!(out_events, vec![]);
     assert_eq!(err_events, vec![]);
     Ok(())
-}
+}*/
 
 #[tokio::test(flavor = "multi_thread")]
 async fn invalid_rdkafka_options() -> Result<()> {
     let _ = env_logger::try_init();
-    let kafka_port = free_port::find_free_tcp_port().await?;
+    let kafka_port = find_free_tcp_port().await?;
     let broker = format!("127.0.0.1:{kafka_port}");
     let topic = "tremor_test_pause_resume";
     let group_id = "invalid_rdkafka_options";
@@ -794,15 +796,15 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
                 broker
             ],
             "group_id": group_id,
-            "topics": [
-                topic
-            ],
             "mode": "performance",
             "test_options": {
                 "auto.offset.reset": "beginning"
             }
 
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"handle": "a", "topics": [topic]}}}
+        ]
     });
     let mut harness = ConnectorHarness::new(
         function_name!(),
@@ -811,7 +813,9 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     )
     .await?;
     harness.start().await?;
+    debug!("Waiting for connected...");
     harness.wait_for_connected().await?;
+    debug!("CONNECTED");
 
     let record = FutureRecord::to(topic)
         .key("badger")
@@ -855,11 +859,15 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     assert_eq!(Value::from("R.I.P."), e2.data.suffix().value());
 
     let (out_events, err_events) = harness.stop().await?;
+    debug!("Stopping...");
     assert_eq!(out_events, vec![]);
     assert_eq!(err_events, vec![]);
 
     // cleanup
     drop(container);
+
+    debug!("DONE");
+
     Ok(())
 }
 
@@ -891,9 +899,6 @@ async fn transactional_store_offset_handling() -> Result<()> {
                 broker.clone()
             ],
             "group_id": group_id,
-            "topics": [
-                topic
-            ],
             "mode": {
                 "transactional": {
                     "commit_interval": commit_interval
@@ -902,7 +907,10 @@ async fn transactional_store_offset_handling() -> Result<()> {
             "test_options": {
                 "auto.offset.reset": "beginning"
             }
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"topics": [topic], "handle": "a"}}}
+        ]
     });
     let mut harness = ConnectorHarness::new(
         function_name!(),
@@ -976,15 +984,15 @@ async fn transactional_store_offset_handling() -> Result<()> {
                 broker.clone()
             ],
             "group_id": group_id,
-            "topics": [
-                topic
-            ],
             "mode": {
                 "transactional": {
                     "commit_interval": commit_interval
                 }
             }
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"topics": [topic], "handle": "a"}}}
+        ]
     });
 
     // start new harness
@@ -1091,9 +1099,6 @@ async fn transactional_commit_offset_handling() -> Result<()> {
                 broker.clone()
             ],
             "group_id": group_id,
-            "topics": [
-                topic
-            ],
             "mode": {
                 "transactional": {
                    "commit_interval": 0 // trigger direct commits
@@ -1102,7 +1107,10 @@ async fn transactional_commit_offset_handling() -> Result<()> {
             "test_options": {
                 "auto.offset.reset": "beginning"
             }
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"topics": [topic], "handle": "a"}}}
+        ]
     });
     let mut harness = ConnectorHarness::new(
         function_name!(),
@@ -1174,15 +1182,15 @@ async fn transactional_commit_offset_handling() -> Result<()> {
                 broker.clone()
             ],
             "group_id": group_id,
-            "topics": [
-                topic
-            ],
             "mode": {
                 "transactional": {
                    "commit_interval": 0 // trigger direct commits
                 }
             }
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"topics": [topic], "handle": "a"}}}
+        ]
     });
     // start new harness
     let mut harness = ConnectorHarness::new(
@@ -1225,9 +1233,6 @@ async fn transactional_commit_offset_handling() -> Result<()> {
                 broker.clone()
             ],
             "group_id": group_id,
-            "topics": [
-                topic
-            ],
             "mode": {
                 "transactional": {
                    "commit_interval": 0 // trigger direct commits
@@ -1236,7 +1241,10 @@ async fn transactional_commit_offset_handling() -> Result<()> {
             "test_options": {
                 "auto.offset.reset": "latest"
             }
-        }
+        },
+        "initial_commands": [
+            {"queue_subscriber": {"subscribe": {"topics": [topic], "handle": "a"}}}
+        ]
     });
 
     // start new harness

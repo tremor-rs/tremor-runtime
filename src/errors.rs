@@ -174,19 +174,20 @@ error_chain! {
         Hex(hex::FromHexError);
         HttpHeaderError(http::header::InvalidHeaderValue);
         InfluxEncoderError(influx::EncoderError);
+        InvalidHeaderName(reqwest::header::InvalidHeaderName);
         Io(std::io::Error);
         JsonAccessError(value_trait::AccessError);
         JsonError(simd_json::Error);
+        SerdeJsonError(serde_json::Error);
         KafkaError(rdkafka::error::KafkaError);
         ModeParseError(file_mode::ModeParseError);
         MsgPackDecoderError(rmp_serde::decode::Error);
         MsgPackEncoderError(rmp_serde::encode::Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
-        //Postgres(postgres::Error);
+        RaftAPIError(crate::raft::api::client::Error);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
-        InvalidHeaderName(reqwest::header::InvalidHeaderName);
         RustlsError(rustls::Error);
         Sled(sled::Error);
         SnappyError(snap::Error);
@@ -219,9 +220,15 @@ error_chain! {
         HeaderToStringError(http::header::ToStrError);
         MimeParsingError(mime::FromStrError);
         InvalidStatusCode(http::status::InvalidStatusCode);
+        CheckIsLeaderError(openraft::error::RaftError<crate::raft::NodeId, openraft::error::CheckIsLeaderError<crate::raft::NodeId, crate::raft::node::Addr>>);
+        ClientWriteError(openraft::error::RaftError<crate::raft::NodeId, openraft::error::ClientWriteError<crate::raft::NodeId, crate::raft::node::Addr>>);
     }
 
     errors {
+        RaftNotRunning {
+            description("Raft is not running")
+                display("Raft is not running")
+        }
         TypeError(expected: ValueType, found: ValueType) {
             description("Type error")
                 display("Type error: Expected {}, found {}", expected, found)
@@ -337,6 +344,10 @@ error_chain! {
             description("No socket available")
                 display("No socket available. Probably not connected yet.")
         }
+        FlowFailed(flow: String) {
+            description("Flow entered failed state")
+            display("Flow {flow} entered failed state")
+        }
         DeployFlowError(flow: String, err: String) {
             description("Error deploying Flow")
                 display("Error deploying Flow {}: {}", flow, err)
@@ -440,6 +451,10 @@ error_chain! {
         AlreadyCreated {
             description("Connector already created")
                 display("Connector already created")
+        }
+        NotImplemented(s: String) {
+            description("Not implemented")
+                display("Not implemented: {}", s)
         }
     }
 }

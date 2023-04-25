@@ -5,7 +5,6 @@
 
 * Update version in all Cargo.toml files in the repository
   - ./Cargo.toml
-  - ./tremor-api/Cargo.toml
   - ./tremor-cli/Cargo.toml
   - ./tremor-common/Cargo.toml
   - ./tremor-influx/Cargo.toml (if we have changes compared to the previous release)

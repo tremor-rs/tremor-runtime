@@ -23,7 +23,7 @@ use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
 pub(crate) struct Config {
-    pub table_id: String,
+    pub default_handle: String,
     pub connect_timeout: u64,
     pub request_timeout: u64,
     #[serde(default = "default_request_size_limit")]
@@ -61,6 +61,22 @@ impl Connector for Gbq {
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Structured
     }
+
+    fn validate(&self, config: &ConnectorConfig) -> Result<()> {
+        for command in &config.initial_commands {
+            match structurize::<Command>(command.clone())? {
+                Command::DatabaseWriter(_) => {}
+                _ => {
+                    return Err(ErrorKind::NotImplemented(
+                        "Only DatabaseWriter commands are supported for the GBQ writer connector."
+                            .to_string(),
+                    )
+                    .into())
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -83,39 +99,39 @@ impl ConnectorBuilder for Builder {
 
 #[cfg(test)]
 mod tests {
-    use tokio::sync::broadcast;
-    use tremor_common::ids::SinkId;
-
     use super::*;
-    use crate::connectors::reconnect::ConnectionLostNotifier;
-    use crate::connectors::sink::builder;
-    use crate::connectors::{metrics::SinkReporter, utils::quiescence::QuiescenceBeacon};
+    use crate::connectors::utils::quiescence::QuiescenceBeacon;
+    use crate::connectors::{reconnect::ConnectionLostNotifier, utils::metrics::SinkReporter};
+    use crate::{connectors::sink::builder, system::flow::AppContext};
+    use tokio::sync::broadcast;
+    use tremor_common::uids::SinkUId;
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn can_spawn_sink() -> Result<()> {
         let mut connector = Gbq {
             config: Config {
-                table_id: "test".into(),
+                default_handle: "a".into(),
                 connect_timeout: 1,
                 request_timeout: 1,
                 request_size_limit: 10 * 1024 * 1024,
             },
         };
-
+        let app_ctx = AppContext::default();
         let sink_address = connector
             .create_sink(
                 SinkContext::new(
-                    SinkId::default(),
-                    Alias::new("a", "b"),
+                    SinkUId::default(),
+                    Alias::new("b"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(crate::channel::bounded(128).0),
+                    app_ctx.clone(),
                 ),
                 builder(
                     &ConnectorConfig::default(),
                     CodecReq::Structured,
-                    &Alias::new("a", "b"),
-                    SinkReporter::new(Alias::new("a", "b"), broadcast::channel(1).0, None),
+                    &Alias::new("b"),
+                    SinkReporter::new(app_ctx, Alias::new("b"), broadcast::channel(1).0, None),
                 )?,
             )
             .await?;

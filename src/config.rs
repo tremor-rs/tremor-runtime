@@ -184,6 +184,8 @@ pub(crate) struct Connector {
 
     //pub(crate) on_pause: PauseBehaviour,
     pub(crate) metrics_interval_s: Option<u64>,
+
+    pub(crate) initial_commands: Vec<Value<'static>>,
 }
 
 impl Connector {
@@ -224,7 +226,7 @@ impl Connector {
         }
         let config = connector_config.get(ConnectorDefinition::CONFIG).cloned();
 
-        // TODO: can we get hygenic errors here?
+        // TODO: can we get hygienic errors here?
 
         validate_type(
             connector_config,
@@ -278,6 +280,12 @@ impl Connector {
                 connector_alias,
             )
         })?;
+        validate_type(
+            connector_config,
+            ConnectorDefinition::INITIAL_COMMANDS,
+            ValueType::Array,
+            connector_alias,
+        )?;
 
         Ok(Self {
             connector_type,
@@ -301,6 +309,10 @@ impl Connector {
                 .get(ConnectorDefinition::CODEC)
                 .map(Codec::try_from)
                 .transpose()?,
+            initial_commands: connector_config
+                .get_array(ConnectorDefinition::INITIAL_COMMANDS)
+                .map(|o| o.iter().cloned().map(Value::into_static).collect())
+                .unwrap_or_default(),
         })
     }
 }
@@ -322,7 +334,7 @@ mod tests {
     use serde::Deserialize;
 
     use super::*;
-    use crate::{errors::Result, system::flow};
+    use crate::errors::Result;
 
     #[test]
     fn test_reconnect_serde() -> Result<()> {
@@ -351,7 +363,7 @@ mod tests {
     #[test]
     fn test_config_builtin_preproc_with_config() -> Result<()> {
         let c = Connector::from_config(
-            &Alias::new("flow", "my_otel_client"),
+            &Alias::new("my_otel_client"),
             ConnectorType::from("otel_client".to_string()),
             &literal!({
                 "preprocessors": [ {"name": "snot", "config": { "separator": "\n" }}],
@@ -382,10 +394,10 @@ mod tests {
             "reconnect": {},
             "metrics_interval_s": "wrong_type"
         });
-        let id = Alias::new(flow::Alias::new("flow"), "my_id");
+        let id = Alias::new("my_id");
         let res = Connector::from_config(&id, "fancy_schmancy".into(), &config);
         assert!(res.is_err());
-        assert_eq!(String::from("Invalid Definition for connector \"flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
+        assert_eq!(String::from("Invalid Definition for connector \"app/flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
     }
 
     #[test]

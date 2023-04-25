@@ -15,7 +15,7 @@
 use crate::{
     connectors::{
         impls::tcp,
-        tests::{free_port, setup_for_tls, tcp::EchoServer, ConnectorHarness},
+        tests::{free_port::find_free_tcp_port, setup_for_tls, tcp::EchoServer, ConnectorHarness},
     },
     errors::Result,
 };
@@ -40,7 +40,7 @@ async fn tcp_client() -> Result<()> {
 async fn tcp_client_test(use_tls: bool) -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = free_port::find_free_tcp_port().await?;
+    let free_port = find_free_tcp_port().await?;
 
     let server_addr = format!("localhost:{free_port}");
 
@@ -68,13 +68,16 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
         "preprocessors": ["separate"],
         "postprocessors": ["separate"],
         "config": {
-            "url": server_addr,
+            "default_handle": "a",
             "socket_options": {
                 "TCP_NODELAY": true
             },
             "buf_size": 1024,
             "tls": tls_config
-        }
+        },
+        "initial_commands": [
+            {"socket_client": {"connect": {"address": server_addr, "handle": "a"}}}
+        ]
     });
     let mut connector =
         ConnectorHarness::new(function_name!(), &tcp::client::Builder::default(), &config).await?;
@@ -105,7 +108,8 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
                 "peer": {
                     "host": localhost_ip,
                     "port": free_port
-                }
+                },
+                "handle": "a"
             }
         }),
         response.data.suffix().meta()

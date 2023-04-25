@@ -27,37 +27,42 @@ pub(crate) mod utils;
 
 mod google;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
+pub(crate) mod traits;
 
-use self::metrics::{SinkReporter, SourceReporter};
-use self::sink::{SinkAddr, SinkContext, SinkMsg};
-use self::source::{SourceAddr, SourceContext, SourceMsg};
 use self::utils::quiescence::QuiescenceBeacon;
+use self::{prelude::Attempt, utils::reconnect};
+use self::{
+    sink::{SinkAddr, SinkContext, SinkMsg},
+    utils::{metrics::SourceReporter, reconnect::ConnectionLostNotifier},
+};
+use self::{
+    source::{SourceAddr, SourceContext, SourceMsg},
+    utils::{metrics::SinkReporter, reconnect::ReconnectRuntime},
+};
 pub(crate) use crate::config::Connector as ConnectorConfig;
 use crate::{
     channel::{bounded, Sender},
     errors::{connector_send_err, Error, Kind as ErrorKind, Result},
+    ids::{AliasType, GenericAlias},
     instance::State,
-    log_error, pipeline, qsize,
-    system::{flow, KillSwitch, World},
+    log_error, pipeline, qsize, raft,
+    system::{flow::AppContext, KillSwitch, Runtime},
 };
 use beef::Cow;
 use futures::Future;
 use halfbrown::HashMap;
+use simd_json::{Builder, Mutable, ValueAccess};
 use std::{fmt::Display, time::Duration};
 use tokio::task::{self, JoinHandle};
 use tremor_common::{
-    ids::{ConnectorId, ConnectorIdGen, SourceId},
-    ports::{Port, ERR, IN, OUT},
+    ports::{Port, CONTROL, ERR, IN, OUT},
+    uids::{ConnectorUId, ConnectorUIdGen, SourceUId},
 };
-use tremor_pipeline::METRICS_CHANNEL;
+use tremor_pipeline::Event;
 use tremor_script::ast::DeployEndpoint;
+use tremor_script::EventPayload;
 use tremor_value::Value;
-use utils::reconnect::{Attempt, ConnectionLostNotifier, ReconnectRuntime};
-use value_trait::{Builder, Mutable, ValueAccess};
-
-/// quiescence stuff
-pub(crate) use utils::{metrics, reconnect};
 
 /// Accept timeout
 pub(crate) const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);
@@ -259,6 +264,12 @@ pub(crate) trait Context: Display + Clone {
     /// get the connector type
     fn connector_type(&self) -> &ConnectorType;
 
+    /// gets the API sender
+    fn raft(&self) -> &raft::Cluster;
+
+    /// the application context
+    fn app_ctx(&self) -> &AppContext;
+
     /// only log an error and swallow the result
     #[inline]
     fn swallow_err<T, E, M>(&self, expr: std::result::Result<T, E>, msg: &M)
@@ -322,11 +333,13 @@ pub(crate) struct ConnectorContext {
     quiescence_beacon: QuiescenceBeacon,
     /// Notifier
     notifier: reconnect::ConnectionLostNotifier,
+    /// sender for raft requests
+    app_ctx: AppContext,
 }
 
 impl Display for ConnectorContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Connector::{}]", &self.alias)
+        write!(f, "{}[Connector::{}]", self.app_ctx, &self.alias)
     }
 }
 
@@ -345,6 +358,14 @@ impl Context for ConnectorContext {
 
     fn notifier(&self) -> &reconnect::ConnectionLostNotifier {
         &self.notifier
+    }
+
+    fn raft(&self) -> &raft::Cluster {
+        &self.app_ctx.raft
+    }
+
+    fn app_ctx(&self) -> &AppContext {
+        &self.app_ctx
     }
 }
 
@@ -422,14 +443,23 @@ pub(crate) type Known =
 /// if the connector can not be built or the config is invalid
 pub(crate) async fn spawn(
     alias: &Alias,
-    connector_id_gen: &mut ConnectorIdGen,
+    connector_id_gen: &mut ConnectorUIdGen,
     builder: &dyn ConnectorBuilder,
     config: ConnectorConfig,
     kill_switch: &KillSwitch,
+    app_ctx: AppContext,
 ) -> Result<Addr> {
     // instantiate connector
     let connector = builder.build(alias, &config, kill_switch).await?;
-    let r = connector_task(alias.clone(), connector, config, connector_id_gen.next_id()).await?;
+    connector.validate(&config)?;
+    let r = connector_task(
+        alias.clone(),
+        connector,
+        config,
+        connector_id_gen.next_id(),
+        app_ctx,
+    )
+    .await?;
 
     Ok(r)
 }
@@ -440,7 +470,8 @@ async fn connector_task(
     alias: Alias,
     mut connector: Box<dyn Connector>,
     config: ConnectorConfig,
-    uid: ConnectorId,
+    uid: ConnectorUId,
+    app_ctx: AppContext,
 ) -> Result<Addr> {
     let qsize = qsize();
     // channel for connector-level control plane communication
@@ -451,8 +482,9 @@ async fn connector_task(
     let notifier = ConnectionLostNotifier::new(msg_tx.clone());
 
     let source_metrics_reporter = SourceReporter::new(
+        app_ctx.clone(),
         alias.clone(),
-        METRICS_CHANNEL.tx(),
+        app_ctx.metrics.tx(),
         config.metrics_interval_s,
     );
 
@@ -464,7 +496,7 @@ async fn connector_task(
         .into());
     }
     let source_builder = source::builder(
-        SourceId::from(uid),
+        SourceUId::from(uid),
         &config,
         codec_requirement,
         source_metrics_reporter,
@@ -475,11 +507,13 @@ async fn connector_task(
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier: notifier.clone(),
+        app_ctx: app_ctx.clone(),
     };
 
     let sink_metrics_reporter = SinkReporter::new(
+        app_ctx.clone(),
         alias.clone(),
-        METRICS_CHANNEL.tx(),
+        app_ctx.metrics.tx(),
         config.metrics_interval_s,
     );
     let sink_builder = sink::builder(&config, codec_requirement, &alias, sink_metrics_reporter)?;
@@ -489,6 +523,7 @@ async fn connector_task(
         config.connector_type.clone(),
         quiescence_beacon.clone(),
         notifier.clone(),
+        app_ctx.clone(),
     );
     // create source instance
     let source_addr = connector.create_source(source_ctx, source_builder).await?;
@@ -503,8 +538,7 @@ async fn connector_task(
         sink: sink_addr,
     };
 
-    let mut reconnect: ReconnectRuntime =
-        ReconnectRuntime::new(&connector_addr, notifier.clone(), &config.reconnect);
+    let mut reconnect = ReconnectRuntime::new(&connector_addr, notifier.clone(), &config.reconnect);
     let notifier = reconnect.notifier();
 
     let ctx = ConnectorContext {
@@ -512,6 +546,7 @@ async fn connector_task(
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier,
+        app_ctx,
     };
 
     let send_addr = connector_addr.clone();
@@ -720,6 +755,19 @@ async fn connector_task(
 
                     // initiate connect asynchronously
                     connector_addr.sender.send(Msg::Reconnect).await?;
+
+                    // Send any initial commands
+                    for cmd in &config.initial_commands {
+                        connector_addr
+                            .send_sink(SinkMsg::Event {
+                                event: Event {
+                                    data: EventPayload::from(tremor_value::to_value(cmd)?),
+                                    ..Event::default()
+                                },
+                                port: CONTROL,
+                            })
+                            .await?;
+                    }
                 }
                 Msg::Start(sender) => {
                     info!("{ctx} Ignoring Start Msg. Current state: {connector_state}",);
@@ -1074,6 +1122,14 @@ pub(crate) trait Connector: Send {
 
     /// Returns the codec requirements for the connector
     fn codec_requirements(&self) -> CodecReq;
+
+    fn validate(&self, config: &ConnectorConfig) -> Result<()> {
+        if !config.initial_commands.is_empty() {
+            return Err(Error::from("This connector does not support commands"));
+        }
+
+        Ok(())
+    }
 }
 
 /// Specifeis if a connector requires a codec
@@ -1127,23 +1183,25 @@ where
 /// unique instance alias/id of a connector within a deployment
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Alias {
-    flow_alias: flow::Alias,
     connector_alias: String,
+}
+
+impl GenericAlias for Alias {
+    fn alias_type(&self) -> AliasType {
+        AliasType::Connector
+    }
+
+    fn alias(&self) -> &str {
+        &self.connector_alias
+    }
 }
 
 impl Alias {
     /// construct a new `ConnectorId` from the id of the containing flow and the connector instance id
-    pub fn new(flow_alias: impl Into<flow::Alias>, connector_alias: impl Into<String>) -> Self {
+    pub fn new(connector_alias: impl Into<String>) -> Self {
         Self {
-            flow_alias: flow_alias.into(),
             connector_alias: connector_alias.into(),
         }
-    }
-
-    /// get a reference to the flow alias
-    #[must_use]
-    pub fn flow_alias(&self) -> &flow::Alias {
-        &self.flow_alias
     }
 
     /// get a reference to the connector alias
@@ -1155,7 +1213,7 @@ impl Alias {
 
 impl std::fmt::Display for Alias {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.flow_alias, self.connector_alias)
+        self.connector_alias.fmt(f)
     }
 }
 
@@ -1203,41 +1261,43 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
 #[must_use]
 pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
+        Box::<impls::clickhouse::Builder>::default(),
+        Box::<impls::cluster_kv::Builder>::default(),
+        Box::<impls::crononome::Builder>::default(),
+        Box::<impls::discord::Builder>::default(),
+        Box::<impls::dns::client::Builder>::default(),
+        Box::<impls::elastic::Builder>::default(),
         Box::<impls::file::Builder>::default(),
+        Box::<impls::gbq::writer::Builder>::default(),
+        Box::<impls::gcl::writer::Builder>::default(),
+        Box::<impls::gcs::streamer::Builder>::default(),
+        Box::<impls::gpubsub::consumer::Builder>::default(),
+        Box::<impls::gpubsub::producer::Builder>::default(),
+        Box::<impls::http::client::Builder>::default(),
+        Box::<impls::http::server::Builder>::default(),
+        Box::<impls::kafka::consumer::Builder>::default(),
+        Box::<impls::kafka::producer::Builder>::default(),
+        Box::<impls::kv::Builder>::default(),
         Box::<impls::metrics::Builder>::default(),
+        Box::<impls::metronome::Builder>::default(),
+        Box::<impls::null::Builder>::default(),
+        Box::<impls::otel::client::Builder>::default(),
+        Box::<impls::otel::server::Builder>::default(),
+        Box::<impls::s3::reader::Builder>::default(),
+        Box::<impls::s3::streamer::Builder>::default(),
         Box::<impls::stdio::Builder>::default(),
         Box::<impls::tcp::client::Builder>::default(),
         Box::<impls::tcp::server::Builder>::default(),
         Box::<impls::udp::client::Builder>::default(),
         Box::<impls::udp::server::Builder>::default(),
-        Box::<impls::kv::Builder>::default(),
-        Box::<impls::metronome::Builder>::default(),
-        Box::<impls::wal::Builder>::default(),
-        Box::<impls::dns::client::Builder>::default(),
-        Box::<impls::discord::Builder>::default(),
-        Box::<impls::ws::client::Builder>::default(),
-        Box::<impls::ws::server::Builder>::default(),
-        Box::<impls::elastic::Builder>::default(),
-        Box::<impls::crononome::Builder>::default(),
-        Box::<impls::s3::streamer::Builder>::default(),
-        Box::<impls::s3::reader::Builder>::default(),
-        Box::<impls::kafka::consumer::Builder>::default(),
-        Box::<impls::kafka::producer::Builder>::default(),
-        #[cfg(unix)]
-        Box::<impls::unix_socket::server::Builder>::default(),
         #[cfg(unix)]
         Box::<impls::unix_socket::client::Builder>::default(),
-        Box::<impls::http::client::Builder>::default(),
-        Box::<impls::http::server::Builder>::default(),
-        Box::<impls::otel::client::Builder>::default(),
-        Box::<impls::otel::server::Builder>::default(),
-        Box::<impls::gbq::writer::Builder>::default(),
-        Box::<impls::gpubsub::consumer::Builder>::default(),
-        Box::<impls::gpubsub::producer::Builder>::default(),
-        Box::<impls::clickhouse::Builder>::default(),
-        Box::<impls::gcl::writer::Builder>::default(),
-        Box::<impls::gcs::streamer::Builder>::default(),
-        Box::<impls::null::Builder>::default(),
+        #[cfg(unix)]
+        Box::<impls::unix_socket::server::Builder>::default(),
+        Box::<impls::wal::Builder>::default(),
+        Box::<impls::ws::client::Builder>::default(),
+        Box::<impls::ws::server::Builder>::default(),
+        Box::<impls::oneshot::Builder>::default(),
     ]
 }
 
@@ -1257,7 +1317,7 @@ pub(crate) fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>
 /// # Errors
 ///  * If a builtin connector couldn't be registered
 
-pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool) -> Result<()> {
+pub(crate) async fn register_builtin_connector_types(world: &Runtime, debug: bool) -> Result<()> {
     for builder in builtin_connector_types() {
         world.register_builtin_connector_type(builder).await?;
     }
@@ -1294,7 +1354,6 @@ where
 
 #[cfg(test)]
 pub(crate) mod unit_tests {
-    use crate::system::flow;
 
     use super::*;
 
@@ -1304,15 +1363,17 @@ pub(crate) mod unit_tests {
         alias: Alias,
         notifier: reconnect::ConnectionLostNotifier,
         beacon: QuiescenceBeacon,
+        app_ctx: AppContext,
     }
 
     impl FakeContext {
         pub(crate) fn new(tx: Sender<Msg>) -> Self {
             Self {
                 t: ConnectorType::from("snot"),
-                alias: Alias::new(flow::Alias::new("fake"), "fake"),
+                alias: Alias::new("fake"),
                 notifier: reconnect::ConnectionLostNotifier::new(tx),
                 beacon: QuiescenceBeacon::default(),
+                app_ctx: AppContext::default(),
             }
         }
     }
@@ -1327,17 +1388,20 @@ pub(crate) mod unit_tests {
         fn alias(&self) -> &Alias {
             &self.alias
         }
-
         fn quiescence_beacon(&self) -> &QuiescenceBeacon {
             &self.beacon
         }
-
         fn notifier(&self) -> &reconnect::ConnectionLostNotifier {
             &self.notifier
         }
-
         fn connector_type(&self) -> &ConnectorType {
             &self.t
+        }
+        fn raft(&self) -> &raft::Cluster {
+            &self.app_ctx.raft
+        }
+        fn app_ctx(&self) -> &AppContext {
+            &self.app_ctx
         }
     }
 

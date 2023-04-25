@@ -14,16 +14,15 @@
 
 use crate::registry::Registry;
 use crate::{tremor_const_fn, tremor_fn_};
-use base64::Engine;
-use tremor_common::base64::BASE64;
+use tremor_common::base64;
 
 pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_const_fn! (base64|encode(_context, input: Bytes) {
-            Ok(Value::from(BASE64.encode(input)))
+            Ok(Value::from(base64::encode(input)))
         }))
         .insert(tremor_const_fn! (base64|decode(_context, _input: String) {
-            BASE64.decode(_input.as_bytes()).map(|v| Value::Bytes(v.into())).map_err(to_runtime_error)
+            base64::decode(_input.as_bytes()).map(|v| Value::Bytes(v.into())).map_err(to_runtime_error)
         }));
 }
 

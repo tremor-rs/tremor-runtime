@@ -78,6 +78,7 @@ impl Source for NullSource {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct NullSink {}
 #[async_trait::async_trait]
 impl Sink for NullSink {

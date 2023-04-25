@@ -9,9 +9,8 @@ flow
   with
     codec = "json",
     preprocessors = ["separate"],
+    initial_commands = [{"file_io": {"open": {"path": "in.json", "handle": "input", "mode": "read"}}}],
     config = {
-        "path": "in.json",
-        "mode": "read"
     }
   end;
 
@@ -20,9 +19,12 @@ flow
     codec = "yaml",
     postprocessors = ["base64"],
     config = {
-      "url": "localhost:4243",
+      "default_handle": "udp-out",
       "bind": "localhost:4244"
-    }
+    },
+    initial_commands = [
+        {"socket_client": {"connect": {"address": "localhost:4243", "handle": "udp-out"}}}
+    ]
   end;
   
   create pipeline main from integration::out_or_exit;

@@ -13,7 +13,7 @@ RUN apt-get update \
 
 # Switch back to dialog for any ad-hoc use of apt-get
 ENV DEBIAN_FRONTEND=dialog
-ENV RUSTFLAGS="-C target-feature=+avx,+avx2,+sse4.2 --cfg tokio_unstable"
+ENV RUSTFLAGS="-C target-feature=+avx,+avx2,+sse4.2"
 
 WORKDIR /app
 
@@ -27,7 +27,6 @@ COPY .cargo /app/.cargo
 COPY tremor-pipeline /app/tremor-pipeline
 COPY tremor-script /app/tremor-script
 COPY tremor-script-nif /app/tremor-script-nif
-COPY tremor-api /app/tremor-api
 COPY tremor-influx /app/tremor-influx
 COPY tremor-value /app/tremor-value
 # Binaries

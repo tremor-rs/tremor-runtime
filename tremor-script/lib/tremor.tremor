@@ -1,6 +1,7 @@
 ### Tremor runtime related libraries. This provides the following modules:
 ###
 ### * [chash](chash.md) - functions dealing with consistent hasing
+### * [cluster](cluster.md) - functions dealing with the tremor cluster
 ### * [connectors](connectors.md) - default connectors
 ### * [mime](mime.md) - mappings for mimetimes to codecs
 ### * [origin](origin.md) - functions providing access to onramp origin data
@@ -9,6 +10,7 @@
 ### * [windows](windows.md) - functions related to state based windows
 
 use tremor::chash;
+use tremor::cluster;
 use tremor::connectors;
 use tremor::mime;
 use tremor::origin;

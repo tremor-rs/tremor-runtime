@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::{
-    impls::kafka::{TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR},
-    prelude::*,
-};
 use crate::errors::empty_error;
+use crate::{
+    connectors::{
+        impls::kafka::{TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR},
+        prelude::*,
+    },
+    errors::already_created_error,
+};
+use dashmap::DashMap;
 use futures::StreamExt;
 use halfbrown::HashMap;
 use indexmap::IndexMap;
@@ -36,7 +40,7 @@ use tokio::{
     time::timeout,
 };
 use tremor_common::time::nanotime;
-use tremor_value::value::StaticValue;
+use tremor_value::{structurize, value::StaticValue};
 
 const KAFKA_CONSUMER_META_KEY: &str = "kafka_consumer";
 
@@ -206,8 +210,6 @@ impl Mode {
 pub(crate) struct Config {
     /// consumer group id to register with
     group_id: String,
-    /// List of topics to subscribe to
-    topics: Vec<String>,
     /// List of bootstrap brokers
     brokers: Vec<String>,
     /// Mode of operation for this consumer
@@ -279,6 +281,7 @@ impl ConnectorBuilder for Builder {
         };
 
         let client_id = format!("tremor-{}-{alias}", hostname());
+        let mode = config.mode.clone();
         let mut client_config = config.mode.to_config().map_err(|e| {
             Error::from(ErrorKind::InvalidConfiguration(
                 alias.to_string(),
@@ -316,9 +319,15 @@ impl ConnectorBuilder for Builder {
 
         info!("[Connector::{alias}] Kafka Consumer Config: {client_config:?}",);
 
+        let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+
         Ok(Box::new(KafkaConsumerConnector {
             config,
             client_config,
+            source_tx,
+            source_rx: Some(source_rx),
+            mode,
+            consumers: Arc::new(DashMap::new()),
             origin_uri,
         }))
     }
@@ -336,7 +345,7 @@ fn set_client_config<V: Into<String>>(
     Ok(())
 }
 
-impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
+impl ConsumerContext for TremorRDKafkaContext {
     fn post_rebalance(&self, rebalance: &rdkafka::consumer::Rebalance) {
         // store the last timestamp
         self.last_rebalance_ts.store(nanotime(), Ordering::Release);
@@ -418,12 +427,134 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
         };
     }
 }
-type TremorConsumerContext = TremorRDKafkaContext<SourceContext>;
-type TremorConsumer = StreamConsumer<TremorConsumerContext>;
+type TremorConsumer = StreamConsumer<TremorRDKafkaContext>;
+
+#[derive(FileIo, SocketClient, SocketServer, DatabaseWriter)]
+struct KafkaConsumerSink {
+    client_config: ClientConfig,
+    source_tx: Sender<(SourceReply, Option<u64>)>,
+    mode: Mode,
+    consumers: Arc<DashMap<String, ConsumerState>>,
+    origin_uri: EventOriginUri,
+}
+
+#[async_trait::async_trait]
+impl Sink for KafkaConsumerSink {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        _event: Event,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> Result<SinkReply> {
+        Err("Kafka Consumer Sink does not accept events, only commands".into())
+    }
+
+    fn auto_ack(&self) -> bool {
+        true
+    }
+}
+
+#[async_trait::async_trait]
+impl QueueSubscriber for KafkaConsumerSink {
+    async fn subscribe(
+        &mut self,
+        topics: Vec<String>,
+        handle: &str,
+        ctx: &SinkContext,
+    ) -> Result<()> {
+        let (connect_result_tx, mut connect_result_rx) = bounded(1);
+
+        let last_rebalance_ts = Arc::new(AtomicU64::new(0));
+        // we only ever want to report on the latest metrics and discard old ones
+        // if no messages arrive, no metrics will be reported, so be it.
+        let (metrics_tx, metrics_rx) = broadcast(1);
+
+        let consumer_context = TremorRDKafkaContext::consumer(
+            ctx.clone(),
+            connect_result_tx.clone(),
+            metrics_tx,
+            last_rebalance_ts.clone(),
+        );
+        let consumer: TremorConsumer = self.client_config.create_with_context(consumer_context)?;
+
+        info!("{} Subscribing to: {:?}", &ctx, topics);
+
+        match consumer.subscribe(&topics.iter().map(String::as_str).collect::<Vec<&str>>()[..]) {
+            Ok(()) => info!("{} Subscription initiated...", &ctx),
+            Err(e) => {
+                error!("{} Error subscribing: {}", ctx, e);
+                return Err(e.into());
+            }
+        };
+        let arc_consumer = Arc::new(consumer);
+        let task_consumer = arc_consumer.clone();
+        let topic_resolver = TopicResolver::new(topics.iter().map(ToString::to_string).collect());
+
+        let task = task::spawn(consumer_task(
+            task_consumer,
+            topic_resolver.clone(),
+            self.origin_uri.clone(),
+            connect_result_tx,
+            self.source_tx.clone(),
+            ctx.clone(),
+        ));
+
+        let offsets = if self.mode.is_transactional() {
+            Some(HashMap::new())
+        } else {
+            None
+        };
+
+        self.consumers.insert(
+            handle.to_string(),
+            ConsumerState {
+                consumer: arc_consumer,
+                task,
+                last_rebalance_ts,
+                cached_assignment: None,
+                topic_resolver,
+                offsets,
+                metrics_rx,
+            },
+        );
+
+        let res = timeout(KAFKA_CONNECT_TIMEOUT, connect_result_rx.recv()).await;
+        match res {
+            Err(_timeout) => {
+                // all good, we didn't receive an error, so let's assume we are fine
+                debug!("{ctx} Waiting for initial assignment timed out...");
+                Ok(())
+            }
+            Ok(None) => {
+                // receive error - bail out
+                Err(empty_error())
+            }
+            Ok(Some(KafkaError::Global(RDKafkaErrorCode::NoError))) => {
+                debug!("{ctx} Consumer connected.");
+                Ok(()) // connected
+            }
+            Ok(Some(err)) => Err(err.into()), // any other error
+        }
+    }
+
+    async fn unsubscribe(&mut self, handle: &str, _ctx: &SinkContext) -> Result<()> {
+        if let Some((_, consumer)) = self.consumers.remove(handle) {
+            consumer.stop();
+        }
+
+        Ok(())
+    }
+}
 
 struct KafkaConsumerConnector {
     config: Config,
     client_config: ClientConfig,
+    source_tx: Sender<(SourceReply, Option<u64>)>,
+    source_rx: Option<Receiver<(SourceReply, Option<u64>)>>,
+    mode: Mode,
+    consumers: Arc<DashMap<String, ConsumerState>>,
     origin_uri: EventOriginUri,
 }
 
@@ -436,14 +567,43 @@ impl Connector for KafkaConsumerConnector {
     ) -> Result<Option<SourceAddr>> {
         let source = KafkaConsumerSource::new(
             self.config.clone(),
-            self.client_config.clone(),
-            self.origin_uri.clone(),
+            &self.client_config,
+            self.source_rx.take().ok_or_else(already_created_error)?,
+            self.consumers.clone(),
         );
         Ok(Some(builder.spawn(source, ctx)))
     }
 
+    async fn create_sink(
+        &mut self,
+        ctx: SinkContext,
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
+        let sink = KafkaConsumerSink {
+            client_config: self.client_config.clone(),
+            source_tx: self.source_tx.clone(),
+            mode: self.mode.clone(),
+            consumers: self.consumers.clone(),
+            origin_uri: self.origin_uri.clone(),
+        };
+
+        Ok(Some(builder.spawn(sink, ctx)))
+    }
+
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Required
+    }
+
+    fn validate(&self, config: &ConnectorConfig) -> Result<()> {
+        for command in &config.initial_commands {
+            match structurize::<Command>(command.clone())? {
+                Command::QueueSubscriber(_) => {}
+                _ => {
+                    return Err("Only queue_subscriber commands are supported".into());
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -471,31 +631,53 @@ fn kafka_meta(msg: &BorrowedMessage) -> Value<'static> {
     })
 }
 
-struct KafkaConsumerSource {
-    client_config: ClientConfig,
-    origin_uri: EventOriginUri,
-    topics: Vec<String>,
+struct ConsumerState {
+    consumer: Arc<TremorConsumer>,
+    task: JoinHandle<()>,
+    last_rebalance_ts: Arc<AtomicU64>,
+    cached_assignment: Option<(TopicPartitionList, u64)>,
     topic_resolver: TopicResolver,
     // map from stream_id to offset
     offsets: Option<HashMap<u64, i64>>,
-    stores_offsets: bool,
-    retry_failed_events: bool,
+    metrics_rx: BroadcastReceiver<EventPayload>,
+}
+
+impl ConsumerState {
+    fn stop(self) {
+        let ConsumerState {
+            consumer,
+            task,
+            cached_assignment,
+            ..
+        } = self;
+
+        drop(consumer);
+
+        if let Some(cached_assignment) = cached_assignment {
+            drop(cached_assignment);
+        }
+
+        task.abort();
+    }
+}
+
+struct KafkaConsumerSource {
+    mode: Mode,
     seek_timeout: Duration,
-    source_tx: Sender<(SourceReply, Option<u64>)>,
     source_rx: Receiver<(SourceReply, Option<u64>)>,
-    consumer: Option<Arc<TremorConsumer>>,
-    consumer_task: Option<JoinHandle<()>>,
-    metrics_rx: Option<BroadcastReceiver<EventPayload>>,
-    last_rebalance_ts: Arc<AtomicU64>,
-    cached_assignment: Option<(TopicPartitionList, u64)>,
+    consumers: Arc<DashMap<String, ConsumerState>>,
 }
 
 impl KafkaConsumerSource {
     const DEFAULT_SEEK_TIMEOUT: Duration = Duration::from_millis(500);
 
-    fn new(config: Config, client_config: ClientConfig, origin_uri: EventOriginUri) -> Self {
-        let Config { topics, mode, .. } = config;
-        let topic_resolver = TopicResolver::new(topics.clone());
+    fn new(
+        config: Config,
+        client_config: &ClientConfig,
+        source_rx: Receiver<(SourceReply, Option<u64>)>,
+        consumers: Arc<DashMap<String, ConsumerState>>,
+    ) -> Self {
+        let Config { mode, .. } = config;
         let seek_timeout = client_config
             // this will put the default from kafka if not present
             .create_native_config()
@@ -504,28 +686,11 @@ impl KafkaConsumerSource {
             .map(Duration::from_millis)
             .unwrap_or(Self::DEFAULT_SEEK_TIMEOUT);
 
-        let (source_tx, source_rx) = bounded(qsize());
-        let offsets = if mode.is_transactional() {
-            Some(HashMap::new())
-        } else {
-            None
-        };
         Self {
-            client_config,
-            origin_uri,
-            topics,
-            topic_resolver,
-            offsets,
-            stores_offsets: mode.stores_offsets(),
-            retry_failed_events: mode.retries_failed_events(),
+            mode,
             seek_timeout,
-            source_tx,
             source_rx,
-            consumer: None,
-            consumer_task: None,
-            metrics_rx: None,
-            last_rebalance_ts: Arc::new(AtomicU64::new(0)),
-            cached_assignment: None,
+            consumers,
         }
     }
 
@@ -533,22 +698,19 @@ impl KafkaConsumerSource {
     /// if we witnessed a rebalance in between
     ///
     /// This tries to avoid excess assignment calls to the group coordinator
-    fn get_assignment(&mut self) -> KafkaResult<TopicPartitionList> {
-        let KafkaConsumerSource {
-            cached_assignment,
-            consumer,
-            ..
-        } = self;
-        if let Some(consumer) = consumer {
-            let last_rebalance_ts = self.last_rebalance_ts.load(Ordering::Acquire);
-            match cached_assignment {
-                Some((tpl, created)) if last_rebalance_ts <= *created => {
+    fn get_assignment(&mut self, handle: &str) -> KafkaResult<TopicPartitionList> {
+        let KafkaConsumerSource { consumers, .. } = self;
+        if let Some(mut consumer) = consumers.get_mut(handle) {
+            let last_rebalance_ts = consumer.last_rebalance_ts.load(Ordering::Acquire);
+            match &consumer.cached_assignment {
+                Some(entry) if last_rebalance_ts <= entry.1 => {
+                    let (tpl, _) = entry;
                     KafkaResult::Ok(tpl.clone())
                 }
-                ca => {
+                _ => {
                     // if we witnessed a new rebalance, we gotta fetch the new assignment
-                    let new_assignment = consumer.assignment()?;
-                    *ca = Some((new_assignment.clone(), last_rebalance_ts));
+                    let new_assignment = consumer.consumer.assignment()?;
+                    consumer.cached_assignment = Some((new_assignment.clone(), last_rebalance_ts));
                     KafkaResult::Ok(new_assignment)
                 }
             }
@@ -564,14 +726,11 @@ impl KafkaConsumerSource {
 #[async_trait::async_trait()]
 impl Source for KafkaConsumerSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        if let Some(consumer_task) = self.consumer_task.take() {
-            self.cached_assignment.take(); // clear out references to the consumer
-                                           // drop the consumer
-            if let Some(consumer) = self.consumer.take() {
-                drop(consumer);
+        for x in self.consumers.iter() {
+            let consumer_state = self.consumers.remove(x.key());
+            if let Some(consumer_state) = consumer_state {
+                consumer_state.1.stop();
             }
-            // terminate the consumer task
-            consumer_task.abort();
         }
 
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
@@ -579,65 +738,8 @@ impl Source for KafkaConsumerSource {
             "{} Connecting using rdkafka 0x{:08x}, {}",
             &ctx, version_n, version_s
         );
-        let (connect_result_tx, mut connect_result_rx) = bounded(1);
 
-        // we only ever want to report on the latest metrics and discard old ones
-        // if no messages arrive, no metrics will be reported, so be it.
-        let (metrics_tx, metrics_rx) = broadcast(1);
-        self.metrics_rx = Some(metrics_rx);
-        let consumer_context = TremorConsumerContext::consumer(
-            ctx.clone(),
-            connect_result_tx.clone(),
-            metrics_tx,
-            self.last_rebalance_ts.clone(),
-        );
-        let consumer: TremorConsumer = self.client_config.create_with_context(consumer_context)?;
-
-        let topics: Vec<&str> = self
-            .topics
-            .iter()
-            .map(std::string::String::as_str)
-            .collect();
-        info!("{} Subscribing to: {:?}", &ctx, topics);
-
-        match consumer.subscribe(&topics) {
-            Ok(()) => info!("{} Subscription initiated...", &ctx),
-            Err(e) => {
-                error!("{} Error subscribing: {}", ctx, e);
-                return Err(e.into());
-            }
-        };
-        let arc_consumer = Arc::new(consumer);
-        let task_consumer = arc_consumer.clone();
-        self.consumer = Some(arc_consumer);
-
-        let handle = task::spawn(consumer_task(
-            task_consumer,
-            self.topic_resolver.clone(),
-            self.origin_uri.clone(),
-            connect_result_tx,
-            self.source_tx.clone(),
-            ctx.clone(),
-        ));
-        self.consumer_task = Some(handle);
-
-        let res = timeout(KAFKA_CONNECT_TIMEOUT, connect_result_rx.recv()).await;
-        match res {
-            Err(_timeout) => {
-                // all good, we didn't receive an error, so let's assume we are fine
-                debug!("{ctx} Waiting for initial assignment timed out...");
-                Ok(true)
-            }
-            Ok(None) => {
-                // receive error - bail out
-                Err(empty_error())
-            }
-            Ok(Some(KafkaError::Global(RDKafkaErrorCode::NoError))) => {
-                debug!("{ctx} Consumer connected.");
-                Ok(true) // connected
-            }
-            Ok(Some(err)) => Err(err.into()), // any other error
-        }
+        Ok(true)
     }
 
     async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
@@ -650,10 +752,16 @@ impl Source for KafkaConsumerSource {
 
     async fn ack(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
         debug!("{ctx} ACK {stream_id} {pull_id}");
-        if let Some(offsets) = self.offsets.as_mut() {
-            if let Some(consumer) = self.consumer.as_ref() {
+        for mut consumer in self.consumers.iter_mut() {
+            if let ConsumerState {
+                offsets: Some(offsets),
+                topic_resolver,
+                consumer,
+                ..
+            } = consumer.value_mut()
+            {
                 if let Some((topic, partition, offset)) =
-                    self.topic_resolver.resolve_topic(stream_id, pull_id)
+                    topic_resolver.resolve_topic(stream_id, pull_id)
                 {
                     // we need to keep track of the maximum offset per partition
                     // in order to not commit earlier offsets
@@ -665,7 +773,7 @@ impl Source for KafkaConsumerSource {
                             .filter(|stored_offset| *stored_offset > &raw_offset)
                             .is_none()
                         {
-                            if self.stores_offsets {
+                            if self.mode.stores_offsets() {
                                 offsets.insert(stream_id, raw_offset); // keep track of the maximum offset
                                                                        // we deliberately do not send a commit to the group-coordinator by calling `consumer.commit`
                                                                        // but instead use the client-local memory store of committed offsets
@@ -701,41 +809,44 @@ impl Source for KafkaConsumerSource {
     async fn fail(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
         debug!("{ctx} FAIL {stream_id} {pull_id}");
         // how can we make sure we do not conflict with the store_offset handling in `ack`?
-        if let KafkaConsumerSource {
-            retry_failed_events: true,
-            offsets: Some(offsets),
-            ..
-        } = self
-        {
-            if let Some(consumer) = self.consumer.as_ref() {
-                if let Some((topic, partition, offset)) =
-                    self.topic_resolver.resolve_topic(stream_id, pull_id)
+        if self.mode.retries_failed_events() {
+            for mut consumer in self.consumers.iter_mut() {
+                if let ConsumerState {
+                    offsets: Some(offsets),
+                    topic_resolver,
+                    consumer,
+                    ..
+                } = consumer.value_mut()
                 {
-                    debug!(
-                        "{} Failing: [topic={}, partition={} offset={:?}]",
-                        &ctx, topic, partition, offset
-                    );
+                    if let Some((topic, partition, offset)) =
+                        topic_resolver.resolve_topic(stream_id, pull_id)
+                    {
+                        debug!(
+                            "{} Failing: [topic={}, partition={} offset={:?}]",
+                            &ctx, topic, partition, offset
+                        );
 
-                    // reset the committed offset to the broker/group-coordinator, so we can pick up there upon the next restart/reconnect
-                    // this operation is expensive but necessary to ensure transactional mode
-                    let mut tpl = TopicPartitionList::with_capacity(1);
-                    tpl.add_partition_offset(topic, partition, offset)?;
-                    consumer.commit(&tpl, CommitMode::Async)?;
+                        // reset the committed offset to the broker/group-coordinator, so we can pick up there upon the next restart/reconnect
+                        // this operation is expensive but necessary to ensure transactional mode
+                        let mut tpl = TopicPartitionList::with_capacity(1);
+                        tpl.add_partition_offset(topic, partition, offset)?;
+                        consumer.commit(&tpl, CommitMode::Async)?;
 
-                    // reset the local in-memory pointer to the message we want to consume next
-                    // this will flush all the pre-fetched data from the partition, thus is quite expensive
-                    consumer.seek(topic, partition, offset, self.seek_timeout)?;
+                        // reset the local in-memory pointer to the message we want to consume next
+                        // this will flush all the pre-fetched data from the partition, thus is quite expensive
+                        consumer.seek(topic, partition, offset, self.seek_timeout)?;
 
-                    // update the tracked offsets if necessary
-                    // this has the effect that newer acks on that partition will actually store the newer offsets
-                    if let Some(raw_offset) = offset.to_raw() {
-                        offsets
-                            .entry(stream_id)
-                            .and_modify(|stored_offset| *stored_offset = raw_offset) // avoid off by one when storing commits
-                            .or_insert(raw_offset);
+                        // update the tracked offsets if necessary
+                        // this has the effect that newer acks on that partition will actually store the newer offsets
+                        if let Some(raw_offset) = offset.to_raw() {
+                            offsets
+                                .entry(stream_id)
+                                .and_modify(|stored_offset| *stored_offset = raw_offset) // avoid off by one when storing commits
+                                .or_insert(raw_offset);
+                        }
+                    } else {
+                        error!("{} Could not seek back to failed event with stream={}, pull_id={}. Unable to detect topic from internal state.", &ctx, stream_id, pull_id);
                     }
-                } else {
-                    error!("{} Could not seek back to failed event with stream={}, pull_id={}. Unable to detect topic from internal state.", &ctx, stream_id, pull_id);
                 }
             }
         }
@@ -743,58 +854,81 @@ impl Source for KafkaConsumerSource {
     }
 
     async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> Result<()> {
-        let assignment = self.get_assignment()?;
-        if let Some(consumer) = self.consumer.as_ref() {
+        let mut consumers: Vec<(String, Arc<TremorConsumer>)> = vec![];
+        for x in self.consumers.iter() {
+            consumers.push((x.key().to_string(), x.consumer.clone()));
+        }
+
+        for (handle, consumer) in consumers {
+            let assignment = self.get_assignment(&handle)?;
             consumer.pause(&assignment)?;
         }
+
         Ok(())
     }
     async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
-        let assignment = self.get_assignment()?;
-        if let Some(consumer) = self.consumer.as_mut() {
+        let mut consumers: Vec<(String, Arc<TremorConsumer>)> = vec![];
+        for x in self.consumers.iter() {
+            consumers.push((x.key().to_string(), x.consumer.clone()));
+        }
+
+        for (handle, consumer) in consumers {
+            let assignment = self.get_assignment(&handle)?;
             consumer.resume(&assignment)?;
         }
+
         Ok(())
     }
 
     async fn on_pause(&mut self, _ctx: &SourceContext) -> Result<()> {
-        let assignment = self.get_assignment()?;
-        if let Some(consumer) = self.consumer.as_mut() {
+        let mut consumers: Vec<(String, Arc<TremorConsumer>)> = vec![];
+        for x in self.consumers.iter() {
+            consumers.push((x.key().to_string(), x.consumer.clone()));
+        }
+
+        for (handle, consumer) in consumers {
+            let assignment = self.get_assignment(&handle)?;
             consumer.pause(&assignment)?;
         }
         Ok(())
     }
 
     async fn on_resume(&mut self, _ctx: &SourceContext) -> Result<()> {
-        let assignment = self.get_assignment()?;
-        if let Some(consumer) = self.consumer.as_mut() {
+        let mut consumers: Vec<(String, Arc<TremorConsumer>)> = vec![];
+        for x in self.consumers.iter() {
+            consumers.push((x.key().to_string(), x.consumer.clone()));
+        }
+
+        for (handle, consumer) in consumers {
+            let assignment = self.get_assignment(&handle)?;
             consumer.resume(&assignment)?;
         }
+
         Ok(())
     }
 
     async fn on_stop(&mut self, ctx: &SourceContext) -> Result<()> {
         // free references, see: https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md#high-level-kafkaconsumer
-        self.cached_assignment.take();
 
-        // clear out the consumer
-        if let Some(consumer) = self.consumer.take() {
-            drop(consumer);
+        let keys = self
+            .consumers
+            .iter()
+            .map(|x| x.key().to_string())
+            .collect::<Vec<_>>();
+
+        for x in keys {
+            let consumer_state = self.consumers.remove(&x);
+            if let Some(consumer_state) = consumer_state {
+                consumer_state.1.stop();
+            }
         }
-
-        debug!("{ctx} Consumer dropped");
-
-        // stop the consumer task
-        if let Some(consumer_task) = self.consumer_task.take() {
-            consumer_task.abort();
-        }
-
         info!("{ctx} Consumer stopped.");
+
         Ok(())
     }
 
     fn is_transactional(&self) -> bool {
-        self.offsets.is_some()
+        self.mode.is_transactional()
     }
 
     fn asynchronous(&self) -> bool {
@@ -802,30 +936,30 @@ impl Source for KafkaConsumerSource {
     }
 
     fn metrics(&mut self, _timestamp: u64, _ctx: &SourceContext) -> Vec<EventPayload> {
-        if let Some(metrics_rx) = self.metrics_rx.as_mut() {
-            let mut vec = Vec::with_capacity(metrics_rx.len());
+        let mut metrics = Vec::with_capacity(self.consumers.len());
+
+        for mut kv in self.consumers.iter_mut() {
             loop {
-                match metrics_rx.try_recv() {
-                    Ok(payload) => vec.push(payload),
+                match kv.value_mut().metrics_rx.try_recv() {
+                    Ok(payload) => metrics.push(payload),
                     Err(TryRecvError::Lagged(_)) => continue, // try again, this is expected
                     Err(_) => break,                          // on all other errors, stop
                 }
             }
-            vec
-        } else {
-            vec![]
         }
+
+        metrics
     }
 }
 
 /// Kafka consumer main loop - consuming from a kafka stream
 async fn consumer_task(
-    task_consumer: Arc<StreamConsumer<TremorConsumerContext>>,
+    task_consumer: Arc<StreamConsumer<TremorRDKafkaContext>>,
     topic_resolver: TopicResolver,
     consumer_origin_uri: EventOriginUri,
     connect_result_tx: Sender<KafkaError>,
     source_tx: Sender<(SourceReply, Option<u64>)>,
-    source_ctx: SourceContext,
+    source_ctx: SinkContext,
 ) {
     info!("{source_ctx} Consumer started.");
     let mut stream = task_consumer.stream();
@@ -999,6 +1133,7 @@ mod test {
     use super::{Config, Offset, TopicResolver};
     use crate::errors::Result;
     use proptest::prelude::*;
+    use tremor_value::structurize;
 
     #[allow(clippy::unwrap_used)] // yay proptest
     fn topics_and_index() -> BoxedStrategy<(Vec<String>, usize)> {
@@ -1033,7 +1168,6 @@ mod test {
     fn mode_to_config() -> Result<()> {
         let mut config = r#"
         {
-            "topics": ["topic"],
             "brokers": ["broker1"],
             "group_id": "snot",
             "mode": {
@@ -1053,7 +1187,7 @@ mod test {
         .as_bytes()
         .to_vec();
         let value = tremor_value::parse_to_value(config.as_mut_slice())?;
-        let config: Config = tremor_value::structurize(value)?;
+        let config: Config = structurize(value)?;
         let mode = config.mode;
         let client_config = mode.to_config()?;
         assert_eq!(client_config.get("snot"), Some("true"));
@@ -1068,7 +1202,6 @@ mod test {
     fn custom_mode() -> Result<()> {
         let mut config = r#"
         {
-            "topics": ["topic"],
             "brokers": ["broker1"],
             "group_id": "snot",
             "mode": {

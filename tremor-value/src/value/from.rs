@@ -251,6 +251,7 @@ impl<'port> From<Port<'port>> for Value<'port> {
             Port::Err => Value::from("err"),
             Port::Metrics => Value::from("metrics"),
             Port::Overflow => Value::from("overflow"),
+            Port::Control => Value::from("control"),
             Port::Custom(c) => Value::from(c),
         }
     }

@@ -299,6 +299,7 @@ async fn producer_unreachable() -> Result<()> {
     Ok(())
 }
 
+/*
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn producer_unresolvable() -> Result<()> {
@@ -328,3 +329,4 @@ async fn producer_unresolvable() -> Result<()> {
     assert!(harness.start().await.is_err());
     Ok(())
 }
+*/

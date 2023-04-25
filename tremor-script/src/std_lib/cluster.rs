@@ -11,27 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+// #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
-use crate::api::prelude::*;
-use tremor_runtime::version::{DEBUG, VERSION};
-
-#[derive(Serialize, Deserialize)]
-pub struct Version {
-    version: &'static str,
-    debug: bool,
+use crate::registry::Registry;
+use crate::tremor_fn;
+pub fn load(registry: &mut Registry) {
+    registry.insert(tremor_fn! (cluster|node_id(_context) {
+            Ok(_context.node_id.into())
+    }));
 }
 
-impl Default for Version {
-    fn default() -> Self {
-        Self {
-            version: VERSION,
-            debug: DEBUG,
-        }
+#[cfg(test)]
+mod test {
+    use crate::registry::fun;
+
+    #[test]
+    fn node_id() {
+        let f = fun("cluster", "node_id");
+
+        assert_val!(f(&[]), 0);
     }
-}
-
-// ALLOW: We allow this since it's required for generalizing accept fuinctions
-#[allow(clippy::unused_async)]
-pub(crate) async fn get(req: Request) -> Result<Response> {
-    reply(&req, Version::default(), StatusCode::Ok)
 }

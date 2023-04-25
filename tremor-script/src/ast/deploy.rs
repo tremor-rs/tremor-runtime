@@ -18,11 +18,13 @@
 use tremor_common::ports::Port;
 
 use super::{
-    docs::Docs, helper::Scope, node_id::BaseRef, raw::BaseExpr, CreationalWith, DefinitionalArgs,
-    DefinitionalArgsWith, NodeMeta,
+    docs::Docs,
+    helper::Scope,
+    node_id::{BaseRef, NodeId},
+    raw::BaseExpr,
+    CreationalWith, DefinitionalArgs, DefinitionalArgsWith, HashMap, NodeMeta, PipelineDefinition,
+    Value,
 };
-use super::{node_id::NodeId, PipelineDefinition};
-use super::{HashMap, Value};
 use crate::{impl_expr, impl_expr_no_lt};
 pub(crate) mod raw;
 
@@ -39,6 +41,14 @@ pub struct Deploy<'script> {
     #[serde(skip)]
     /// Documentation comments
     pub docs: Docs,
+    #[serde(skip)]
+    mid: Box<NodeMeta>,
+}
+
+impl<'script> BaseExpr for Deploy<'script> {
+    fn meta(&self) -> &crate::NodeMeta {
+        self.mid.meta()
+    }
 }
 
 impl<'script> Deploy<'script> {
@@ -118,16 +128,19 @@ impl<'script> ConnectorDefinition<'script> {
     pub const POSTPROCESSORS: &'static str = "postprocessors";
     /// param name for `metrics_interval_s`
     pub const METRICS_INTERVAL_S: &'static str = "metrics_interval_s";
-    /// param name for reconnct configuration
+    /// param name for reconnect configuration
     pub const RECONNECT: &'static str = "reconnect";
+    /// param name for initial command
+    pub const INITIAL_COMMANDS: &'static str = "initial_commands";
 
-    const AVAILABLE_PARAMS: [&'static str; 6] = [
+    const AVAILABLE_PARAMS: [&'static str; 7] = [
         Self::CODEC,
         Self::CONFIG,
         Self::METRICS_INTERVAL_S,
         Self::POSTPROCESSORS,
         Self::PREPROCESSORS,
         Self::RECONNECT,
+        Self::INITIAL_COMMANDS,
     ];
 }
 
@@ -285,7 +298,8 @@ impl crate::ast::node_id::BaseRef for CreateStmt<'_> {
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeployFlow<'script> {
-    pub(crate) mid: Box<NodeMeta>,
+    /// metadata id
+    pub mid: Box<NodeMeta>,
     /// Target of the artefact definition being deployed
     pub from_target: NodeId,
     /// Target for creation

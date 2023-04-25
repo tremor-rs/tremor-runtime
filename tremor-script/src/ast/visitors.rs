@@ -93,7 +93,7 @@ mod tests {
     fn test_walk(input: &str, expected_42s: usize) -> Result<()> {
         let mut registry = registry();
         crate::std_lib::load(&mut registry);
-        let script_script: crate::script::Script = crate::script::Script::parse(input, &registry)?;
+        let script_script: crate::script::Script = crate::script::Script::parse(&input, &registry)?;
         let script: &crate::ast::Script = &script_script.script;
         let mut visitor = Find42Visitor::default();
         for expr in &script.exprs {

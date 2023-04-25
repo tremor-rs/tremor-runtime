@@ -10,10 +10,12 @@ flow
     postprocessors = ["separate"],
     codec = "json",
     config = {
-      "path": "/tmp/unix-socket.sock",
       "permissions": "=600",
       "buf_size": 1024,
-    }
+    },
+    initial_commands = [
+        {"socket_server": {"listen": {"address": "/tmp/unix-socket.sock", "handle": "a"}}}
+    ]
   end;
 
   create connector server_out from integration::write_file

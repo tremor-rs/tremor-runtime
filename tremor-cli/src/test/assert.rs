@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::{report, status};
 use crate::errors::{self, Result};
+use crate::open_file;
 use crate::test::stats;
 use crate::util::slurp_string;
-use crate::{open_file, report, status};
 use difference::Changeset;
 use errors::Error;
 use serde::{Deserialize, Deserializer};

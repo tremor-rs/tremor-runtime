@@ -9,9 +9,11 @@ flow
   with 
     codec = {"name": "json", "config": {"mode": "sorted"}},
     postprocessors = ["separate"],
+    initial_commands = [
+        {"file_io": {"open": {"path": "out.log", "mode": "overwrite", "handle": "output"}}}
+    ],
     config = {
-      "path": "out.log",
-      "mode": "overwrite"
+      "default_handle": "output"
     },
   end;
 

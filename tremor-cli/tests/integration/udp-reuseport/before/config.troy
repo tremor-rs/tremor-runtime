@@ -7,11 +7,13 @@ flow
   with
     codec = {"name": "json", "config": {"mode": "sorted"}},
     config = {
-      "url": "127.0.0.1:22222",
       "socket_options": {
         "SO_REUSEPORT": true
       }
-    }
+    },
+    initial_commands = [
+        {"socket_server": {"listen": {"address": "127.0.0.1:22222", "handle": "a"}}}
+    ]
   end;
   create connector server;
   create connector output from integration::write_file;

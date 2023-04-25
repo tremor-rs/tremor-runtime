@@ -37,6 +37,12 @@ pub(crate) struct ConnectionMeta {
     pub(crate) port: u16,
 }
 
+#[derive(PartialEq, Eq, Debug, Hash, Clone)]
+pub(crate) struct ConnectionMetaWithHandle {
+    pub(crate) handle: String,
+    pub(crate) meta: ConnectionMeta,
+}
+
 impl From<SocketAddr> for ConnectionMeta {
     fn from(sa: SocketAddr) -> Self {
         Self {

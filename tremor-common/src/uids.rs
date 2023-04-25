@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// common id handling
+//! Collection of common unique numeric identifiers for internal use.
+//! Those are more efficient than stupid strings.
 
 use std::{marker::PhantomData, ops::Deref};
 
-/// operator id
+/// operator uid
 #[derive(
     Debug,
     PartialEq,
@@ -30,9 +31,9 @@ use std::{marker::PhantomData, ops::Deref};
     simd_json_derive::Serialize,
     simd_json_derive::Deserialize,
 )]
-pub struct OperatorId(u64);
+pub struct OperatorUId(u64);
 
-impl Id for OperatorId {
+impl UId for OperatorUId {
     fn new(id: u64) -> Self {
         Self(id)
     }
@@ -42,13 +43,13 @@ impl Id for OperatorId {
     }
 }
 
-impl std::fmt::Display for OperatorId {
+impl std::fmt::Display for OperatorUId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl std::str::FromStr for OperatorId {
+impl std::str::FromStr for OperatorUId {
     type Err = std::num::ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -57,7 +58,7 @@ impl std::str::FromStr for OperatorId {
     }
 }
 
-/// connector id
+/// connector uid
 #[derive(
     Debug,
     PartialEq,
@@ -71,8 +72,8 @@ impl std::str::FromStr for OperatorId {
     simd_json_derive::Serialize,
     simd_json_derive::Deserialize,
 )]
-pub struct ConnectorId(u64);
-impl Id for ConnectorId {
+pub struct ConnectorUId(u64);
+impl UId for ConnectorUId {
     fn new(id: u64) -> Self {
         Self(id)
     }
@@ -82,13 +83,13 @@ impl Id for ConnectorId {
     }
 }
 
-impl std::fmt::Display for ConnectorId {
+impl std::fmt::Display for ConnectorUId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl Deref for ConnectorId {
+impl Deref for ConnectorUId {
     type Target = u64;
 
     fn deref(&self) -> &Self::Target {
@@ -96,7 +97,7 @@ impl Deref for ConnectorId {
     }
 }
 
-impl AsRef<u64> for ConnectorId {
+impl AsRef<u64> for ConnectorUId {
     fn as_ref(&self) -> &u64 {
         &self.0
     }
@@ -116,16 +117,16 @@ impl AsRef<u64> for ConnectorId {
     simd_json_derive::Serialize,
     simd_json_derive::Deserialize,
 )]
-pub struct SinkId(ConnectorId);
-impl From<ConnectorId> for SinkId {
-    fn from(cid: ConnectorId) -> Self {
+pub struct SinkUId(ConnectorUId);
+impl From<ConnectorUId> for SinkUId {
+    fn from(cid: ConnectorUId) -> Self {
         Self(cid)
     }
 }
 
-impl Id for SinkId {
+impl UId for SinkUId {
     fn new(id: u64) -> Self {
-        Self(ConnectorId::new(id))
+        Self(ConnectorUId::new(id))
     }
 
     fn id(&self) -> u64 {
@@ -133,7 +134,7 @@ impl Id for SinkId {
     }
 }
 
-impl std::fmt::Display for SinkId {
+impl std::fmt::Display for SinkUId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Sink({})", self.0)
     }
@@ -153,11 +154,11 @@ impl std::fmt::Display for SinkId {
     simd_json_derive::Serialize,
     simd_json_derive::Deserialize,
 )]
-pub struct SourceId(ConnectorId);
+pub struct SourceUId(ConnectorUId);
 
-impl Id for SourceId {
+impl UId for SourceUId {
     fn new(id: u64) -> Self {
-        Self(ConnectorId::new(id))
+        Self(ConnectorUId::new(id))
     }
 
     fn id(&self) -> u64 {
@@ -165,19 +166,19 @@ impl Id for SourceId {
     }
 }
 
-impl From<ConnectorId> for SourceId {
-    fn from(cid: ConnectorId) -> Self {
+impl From<ConnectorUId> for SourceUId {
+    fn from(cid: ConnectorUId) -> Self {
         Self(cid)
     }
 }
-impl std::fmt::Display for SourceId {
+impl std::fmt::Display for SourceUId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Source({})", self.0)
     }
 }
 
-/// Identifier trait used everywhere within tremor
-pub trait Id {
+/// Unique numeric Identifier trait used everywhere within tremor
+pub trait UId {
     /// constructor from a unique integer
     fn new(id: u64) -> Self;
 
@@ -187,12 +188,12 @@ pub trait Id {
 
 #[derive(Debug)]
 /// id generator
-pub struct IdGen<T: Id> {
+pub struct UIdGen<T: UId> {
     current: u64,
     _marker: PhantomData<T>,
 }
 
-impl<T: Id> IdGen<T> {
+impl<T: UId> UIdGen<T> {
     #[must_use]
     /// constructor
     pub fn new() -> Self {
@@ -208,7 +209,7 @@ impl<T: Id> IdGen<T> {
     }
 }
 
-impl<T: Id> Default for IdGen<T> {
+impl<T: UId> Default for UIdGen<T> {
     fn default() -> Self {
         Self::new()
     }
@@ -216,9 +217,9 @@ impl<T: Id> Default for IdGen<T> {
 
 /// operator id generator - generates consecutive u64 values
 /// this one will be shared by all pipelines - so we ensure unique operator ids
-pub type OperatorIdGen = IdGen<OperatorId>;
+pub type OperatorUIdGen = UIdGen<OperatorUId>;
 /// connector id generator - generates consecutive u64 values
-pub type ConnectorIdGen = IdGen<ConnectorId>;
+pub type ConnectorUIdGen = UIdGen<ConnectorUId>;
 
 #[cfg(test)]
 mod tests {
@@ -227,8 +228,8 @@ mod tests {
 
     #[test]
     fn id_gen() {
-        let mut idgen = IdGen::<ConnectorId>::default();
-        let ids: Vec<ConnectorId> = std::iter::repeat_with(|| idgen.next_id())
+        let mut idgen = UIdGen::<ConnectorUId>::default();
+        let ids: Vec<ConnectorUId> = std::iter::repeat_with(|| idgen.next_id())
             .take(100)
             .collect();
 
@@ -244,8 +245,8 @@ mod tests {
 
     #[test]
     fn id_can_be_created_from_string() {
-        let id = OperatorId::from_str("1024");
+        let id = OperatorUId::from_str("1024");
 
-        assert_eq!(Ok(OperatorId(1024)), id);
+        assert_eq!(Ok(OperatorUId(1024)), id);
     }
 }

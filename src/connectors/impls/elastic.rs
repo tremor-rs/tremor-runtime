@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::http::auth::Auth;
+use crate::connectors::traits::FileIo;
 use crate::system::KillSwitch;
 use crate::{
     connectors::{
@@ -290,6 +291,7 @@ impl ElasticClients {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct ElasticSink {
     clients: ElasticClients,
     response_tx: Sender<SourceReply>,
@@ -968,14 +970,14 @@ mod tests {
                 "nodes": []
             }
         });
-        let alias = Alias::new("flow", "my_elastic");
+        let alias = Alias::new("my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
         let kill_switch = KillSwitch::dummy();
         assert_eq!(
             String::from(
-                "Invalid Definition for connector \"flow::my_elastic\": empty nodes provided"
+                "Invalid Definition for connector \"app/flow::my_elastic\": empty nodes provided"
             ),
             builder
                 .build(&alias, &connector_config, &kill_switch)
@@ -997,7 +999,7 @@ mod tests {
                 ]
             }
         });
-        let alias = Alias::new("snot", "my_elastic");
+        let alias = Alias::new("my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;

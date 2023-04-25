@@ -9,17 +9,19 @@ flow
   with
     codec = "string",
     config = { 
-      "url": "localhost:4243",
-    }
+    },
+    initial_commands = [
+        {"socket_server": {"listen": {"address": "localhost:4243", "handle": "a"}}}
+    ]
   end;
 
   define connector out from file
   with
     codec = "string",
     postprocessors = ["separate"],
+    initial_commands = [{"file_io": {"open": {"mode": "write_truncate", "path": "../gen.log", "handle": "output"}}}],
     config = {
-      "path": "../gen.log",
-      "mode": "truncate"
+      "default_handle": "output"
     }
   end;
 

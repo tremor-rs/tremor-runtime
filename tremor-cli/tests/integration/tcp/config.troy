@@ -9,10 +9,12 @@ flow
     postprocessors = ["separate"],
     codec = "json",
     config = {
-      "url": "0.0.0.0:65535",
       "buf_size": 1024,
       "socket_options": {} # forcing the defaults
-    }
+    },
+    initial_commands = [
+      {"socket_server": {"listen": {"address": "tcp://0.0.0.0:65535", "handle": "output"}}}
+    ]
   end;
 
   create connector server_out from integration::write_file
@@ -22,7 +24,21 @@ flow
   create connector stdio from connectors::console;
   create connector tcp_server;
 
-  create pipeline server_side from pipelines::passthrough;
+  define pipeline server_side
+  pipeline
+    define script scr
+    script
+        let $tcp_server.handle = "output";
+
+        event
+    end;
+    create script scr;
+
+    select event from in into scr;
+    select event from scr into out;
+  end;
+
+  create pipeline server_side from server_side;
   create pipeline debug from pipelines::passthrough;
 
   # flow from tcp_server to file
@@ -48,7 +64,7 @@ flow
     postprocessors = ["separate"],
     codec = "json",
     config = {
-      "url": "127.0.0.1:65535",
+      "default_handle": "a",
       "socket_options": {
         "TCP_NODELAY": false
       },
@@ -60,7 +76,10 @@ flow
         "growth_rate": 2,
         "max_retries": 3,
       }
-    }
+    },
+    initial_commands = [
+        {"socket_client": {"connect": {"address": "127.0.0.1:65535", "handle": "a"}}}
+    ]
   end;
 
   create connector in from integration::read_file;

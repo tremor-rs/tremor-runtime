@@ -25,7 +25,7 @@ use std::collections::BTreeMap;
 fn test_ast_eq(script: &str, check_equality: bool) -> Result<()> {
     let mut registry = registry();
     crate::std_lib::load(&mut registry);
-    let script_script: crate::script::Script = crate::script::Script::parse(script, &registry)?;
+    let script_script: crate::script::Script = crate::script::Script::parse(&script, &registry)?;
     let script: &crate::ast::Script = &script_script.script;
     let imut_exprs: Vec<&ImutExpr> = script
         .exprs

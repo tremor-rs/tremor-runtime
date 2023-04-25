@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::status;
 use crate::errors::{Error, Result};
-use crate::status;
 use crate::target_process;
 use crate::test::after;
 use crate::test::assert;

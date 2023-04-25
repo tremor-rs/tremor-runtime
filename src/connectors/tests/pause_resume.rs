@@ -43,9 +43,11 @@ async fn udp_pause_resume() -> Result<()> {
       "codec": "string",
       "preprocessors": ["separate"],
       "config": {
-          "url": format!("udp://127.0.0.1:{free_port}"),
           "buf_size": 4096
-      }
+      },
+      "initial_commands": [
+        {"socket_server": {"listen": {"address": format!("udp://127.0.0.1:{free_port}"), "handle": "a"}}}
+      ]
     });
 
     let mut harness =
@@ -134,9 +136,11 @@ async fn tcp_server_pause_resume() -> Result<()> {
       "codec": "string",
       "preprocessors": ["separate"],
       "config": {
-          "url": format!("tcp://127.0.0.1:{free_port}"),
           "buf_size": 4096
-      }
+      },
+      "initial_commands": [
+            {"socket_server": {"listen": {"address": format!("tcp://127.0.0.1:{free_port}"), "handle": "a"}}}
+     ]
     });
     let mut harness =
         ConnectorHarness::new(function_name!(), &tcp::server::Builder::default(), &defn).await?;

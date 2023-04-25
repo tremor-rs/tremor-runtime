@@ -37,14 +37,14 @@ Assertion for {desc} failed:
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
-    use crate::registry::FResult;
+    use crate::{registry::FResult, NO_CONTEXT};
 
     #[test]
     fn test() -> FResult<()> {
         let mut reg = Registry::default();
         load(&mut reg);
         let fun = reg.find("test", "assert")?;
-        let mut ctx = EventContext::new(0, None);
+        let mut ctx = NO_CONTEXT;
         let one = Value::from(1_u64);
         let two = Value::from(2_i64);
         assert_eq!(

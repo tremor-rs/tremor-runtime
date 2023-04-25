@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: tremor
+  name: tremor
+spec:
+  clusterIP: None
+  ports:
+  - port: 8000
+  selector:
+    app: tremor

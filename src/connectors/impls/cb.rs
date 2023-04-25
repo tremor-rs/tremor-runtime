@@ -117,6 +117,7 @@ impl Connector for Cb {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct CbSink {}
 
 #[async_trait::async_trait()]

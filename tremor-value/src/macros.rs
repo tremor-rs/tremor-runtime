@@ -358,4 +358,22 @@ mod tests {
         let v: Value = literal!([]);
         assert_eq!(Value::Array(vec![]), v);
     }
+
+    #[test]
+    fn static_nodes() {
+        let v: Value = literal!(1);
+        assert_eq!(Value::from(1), v);
+
+        let v: Value = literal!(1.1);
+        assert_eq!(Value::from(1.1), v);
+
+        let v: Value = literal!(null);
+        assert_eq!(Value::const_null(), v);
+
+        let v: Value = literal!(false);
+        assert_eq!(Value::from(false), v);
+
+        let v: Value = literal!("snot");
+        assert_eq!(Value::from("snot"), v);
+    }
 }

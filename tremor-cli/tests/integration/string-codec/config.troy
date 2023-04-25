@@ -6,7 +6,9 @@ flow
   with
     codec = "string",
     preprocessors = ["separate"],
-    config = {"path": "in.json", "mode": "read"}
+    initial_commands = [{"file_io": {"open": {"mode": "read", "path": "in.json", "handle": "a"}}}],
+    config = {
+    }
   end;
 
   define pipeline main

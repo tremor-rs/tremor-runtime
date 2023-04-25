@@ -47,7 +47,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{sync::oneshot, task::JoinHandle};
-use tremor_common::ids::Id;
+use tremor_common::uids::UId;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -345,6 +345,7 @@ impl Source for HttpServerSource {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct HttpServerSink {
     inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<Body>>>>,
     codec_map: MimeCodecMap,

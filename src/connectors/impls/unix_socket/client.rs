@@ -99,6 +99,7 @@ impl Connector for Client {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct UnixSocketSink {
     config: Config,
     source_runtime: ChannelSourceRuntime,

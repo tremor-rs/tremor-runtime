@@ -30,6 +30,8 @@ pub enum Port<'port> {
     Metrics,
     /// The `overflow` port
     Overflow,
+    /// The `control` port
+    Control,
     /// All other ports
     #[serde(bound(deserialize = "'de: 'port"))]
     Custom(Cow<'port, str>),
@@ -51,6 +53,7 @@ impl<'port> From<Cow<'port, str>> for Port<'port> {
             "err" => Port::Err,
             "metrics" => Port::Metrics,
             "overflow" => Port::Overflow,
+            "control" => Port::Control,
             _ if value == value.to_lowercase() => Port::Custom(value),
             _ => Port::from(Cow::from(value.to_lowercase())),
         }
@@ -68,7 +71,7 @@ where
             "err" => Port::Err,
             "metrics" => Port::Metrics,
             "overflow" => Port::Overflow,
-
+            "control" => Port::Control,
             _ => Port::from(Cow::from(value)),
         }
     }
@@ -81,6 +84,7 @@ impl From<String> for Port<'static> {
             "err" => Port::Err,
             "metrics" => Port::Metrics,
             "overflow" => Port::Overflow,
+            "control" => Port::Control,
             _ => Port::from(Cow::from(value)),
         }
     }
@@ -94,6 +98,7 @@ impl<'port> Borrow<str> for Port<'port> {
             Port::Err => "err",
             Port::Metrics => "metrics",
             Port::Overflow => "overflow",
+            Port::Control => "control",
             Port::Custom(c) => c,
         }
     }
@@ -133,3 +138,5 @@ pub const ERR: Port<'static> = Port::Err;
 pub const METRICS: Port<'static> = Port::Metrics;
 /// Overflow
 pub const OVERFLOW: Port<'static> = Port::Overflow;
+/// standard control port
+pub const CONTROL: Port<'static> = Port::Control;

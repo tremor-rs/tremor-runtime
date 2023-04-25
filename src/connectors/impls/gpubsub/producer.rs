@@ -13,10 +13,7 @@
 // limitations under the License.
 
 use crate::connectors::google::{AuthInterceptor, TokenProvider};
-use crate::connectors::prelude::{
-    Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
-    SinkManagerBuilder, SinkReply, Url,
-};
+use crate::connectors::prelude::*;
 use crate::connectors::sink::Sink;
 use crate::connectors::utils::url::HttpsDefaults;
 use crate::connectors::{
@@ -89,7 +86,7 @@ struct GpubConnector<T> {
 }
 
 #[async_trait::async_trait()]
-impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
+impl<T: TokenProvider + Sync + 'static> Connector for GpubConnector<T> {
     async fn create_sink(
         &mut self,
         ctx: SinkContext,
@@ -122,7 +119,8 @@ impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
     }
 }
 
-struct GpubSink<T: TokenProvider> {
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
+struct GpubSink<T: TokenProvider + Sync> {
     config: Config,
     hostname: String,
 
@@ -130,7 +128,7 @@ struct GpubSink<T: TokenProvider> {
 }
 
 #[async_trait::async_trait()]
-impl<T: TokenProvider> Sink for GpubSink<T> {
+impl<T: TokenProvider + Sync + 'static> Sink for GpubSink<T> {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));

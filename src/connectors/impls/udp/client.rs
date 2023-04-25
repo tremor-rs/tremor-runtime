@@ -15,17 +15,19 @@
 
 //! UDP Client
 
+use crate::connectors::impls::udp::UdpDefaults;
 use crate::connectors::{
     prelude::*,
     utils::socket::{udp_socket, UdpSocketOptions},
 };
+use std::{collections::HashMap, net::ToSocketAddrs};
 use tokio::net::UdpSocket;
+use tremor_value::structurize;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
-    /// Host to connect to
-    url: Url<super::UdpDefaults>,
+    default_handle: Option<String>,
     /// Optional ip/port to bind to
     bind: Option<Url<super::UdpDefaults>>,
     #[serde(default)]
@@ -54,9 +56,6 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
-        if config.url.port().is_none() {
-            return Err("Missing port for UDP client".into());
-        }
 
         Ok(Box::new(UdpClient { config }))
     }
@@ -83,15 +82,80 @@ impl Connector for UdpClient {
     ) -> Result<Option<SinkAddr>> {
         let sink = UdpClientSink {
             config: self.config.clone(),
-            socket: None,
+            sockets: HashMap::new(),
         };
         Ok(Some(builder.spawn(sink, ctx)))
     }
+
+    fn validate(&self, config: &ConnectorConfig) -> Result<()> {
+        for command in &config.initial_commands {
+            match structurize::<Command>(command.clone())? {
+                Command::SocketClient(_) => {}
+                _ => {
+                    return Err(ErrorKind::NotImplemented(
+                        "Only SocketClient commands are supported for the UDP client connector."
+                            .to_string(),
+                    )
+                    .into())
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
+#[derive(FileIo, SocketServer, QueueSubscriber, DatabaseWriter)]
 struct UdpClientSink {
     config: Config,
-    socket: Option<UdpSocket>,
+    sockets: HashMap<String, UdpSocket>,
+}
+
+#[async_trait::async_trait]
+impl SocketClient for UdpClientSink {
+    async fn connect_socket(
+        &mut self,
+        address: &str,
+        handle: &str,
+        ctx: &SinkContext,
+    ) -> Result<()> {
+        let url = Url::<UdpDefaults>::parse(address)?;
+        if url.port().is_none() {
+            return Err("Missing port for UDP client".into());
+        }
+        let connect_addrs = (url.host_or_local(), url.port_or_dflt())
+            .to_socket_addrs()?
+            .collect::<Vec<_>>();
+        let bind = if let Some(bind) = self.config.bind.clone() {
+            bind
+        } else {
+            // chose default bind if unspecified by checking the first resolved connect addr
+            let is_ipv4 = connect_addrs
+                .first()
+                .ok_or_else(|| format!("unable to resolve {url}"))?
+                .is_ipv4();
+            if is_ipv4 {
+                Url::parse(super::UDP_IPV4_UNSPECIFIED)?
+            } else {
+                Url::parse(super::UDP_IPV6_UNSPECIFIED)?
+            }
+        };
+        debug!("{ctx} Binding to {}...", &bind);
+        let socket = udp_socket(&bind, &self.config.socket_options).await?;
+        debug!("{ctx} Bound to {}", socket.local_addr()?);
+        debug!("{ctx} Connecting to {}...", &url);
+        socket.connect(connect_addrs.as_slice()).await?;
+        debug!("{ctx} Connected to {}", socket.peer_addr()?);
+
+        self.sockets.insert(handle.to_string(), socket);
+
+        Ok(())
+    }
+
+    async fn close(&mut self, handle: &str, _ctx: &SinkContext) -> Result<()> {
+        self.sockets.remove(handle);
+
+        Ok(())
+    }
 }
 
 impl UdpClientSink {
@@ -105,34 +169,7 @@ impl UdpClientSink {
 
 #[async_trait::async_trait()]
 impl Sink for UdpClientSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let connect_addrs = tokio::net::lookup_host((
-            self.config.url.host_or_local(),
-            self.config.url.port_or_dflt(),
-        ))
-        .await?
-        .collect::<Vec<_>>();
-        let bind = if let Some(bind) = self.config.bind.clone() {
-            bind
-        } else {
-            // chose default bind if unspecified by checking the first resolved connect addr
-            let is_ipv4 = connect_addrs
-                .first()
-                .ok_or_else(|| format!("unable to resolve {}", self.config.url))?
-                .is_ipv4();
-            if is_ipv4 {
-                Url::parse(super::UDP_IPV4_UNSPECIFIED)?
-            } else {
-                Url::parse(super::UDP_IPV6_UNSPECIFIED)?
-            }
-        };
-        debug!("{ctx} Binding to {}...", &bind);
-        let socket = udp_socket(&bind, &self.config.socket_options).await?;
-        debug!("{ctx} Bound to {}", socket.local_addr()?);
-        debug!("{ctx} Connecting to {}...", &self.config.url);
-        socket.connect(connect_addrs.as_slice()).await?;
-        debug!("{ctx} Connected to {}", socket.peer_addr()?);
-        self.socket = Some(socket);
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)
     }
 
@@ -144,16 +181,24 @@ impl Sink for UdpClientSink {
         serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let socket = self
-            .socket
-            .as_ref()
-            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
-        for value in event.value_iter() {
+        for (value, meta) in event.value_meta_iter() {
+            let handle = ctx
+                .extract_meta(meta)
+                .get("handle")
+                .as_str()
+                .map(ToString::to_string)
+                .or_else(|| self.config.default_handle.clone())
+                .ok_or("Missing handle")?;
+
+            let socket = self
+                .sockets
+                .get(&handle)
+                .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
             let data = serializer.serialize(value, event.ingest_ns)?;
             if let Err(e) = Self::send_event(socket, data).await {
                 error!("{} UDP Error: {}. Initiating Reconnect...", &ctx, &e);
                 // TODO: upon which errors to actually trigger a reconnect?
-                self.socket = None;
+                self.sockets.remove(&handle);
                 ctx.notifier().connection_lost().await?;
                 return Err(e);
             }

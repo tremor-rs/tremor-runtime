@@ -240,19 +240,19 @@ pub(crate) fn extend_bytes_from_value<O: Ranged, I: Ranged>(
 
 #[cfg(test)]
 mod test {
-    use crate::prelude::*;
+    use crate::{prelude::*, NO_CONTEXT};
     use crate::{registry, Script};
 
     fn eval_binary(src: &str) -> Vec<u8> {
         let reg: Registry = registry::registry();
-        let script = Script::parse(src, &reg).expect("failed to compile test script");
+        let script = Script::parse(&src, &reg).expect("failed to compile test script");
 
         let mut event = Value::object();
         let mut meta = Value::object();
         let mut state = Value::null();
         let value = script
             .run(
-                &EventContext::new(0, None),
+                &NO_CONTEXT,
                 AggrType::Emit,
                 &mut event,
                 &mut state,

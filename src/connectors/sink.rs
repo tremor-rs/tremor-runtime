@@ -18,17 +18,23 @@
 pub(crate) mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
+pub(crate) mod prelude;
 
-use super::{utils::metrics::SinkReporter, CodecReq};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
 };
+use crate::connectors::traits::{
+    Command, DatabaseWriter, FileIo, QueueSubscriber, SocketClient, SocketServer,
+};
 use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
+use crate::connectors::{utils::metrics::SinkReporter, CodecReq};
 use crate::connectors::{Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
 use crate::errors::Result;
 use crate::pipeline;
 use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocessors};
 use crate::primerge::PriorityMerge;
+use crate::raft;
+use crate::system::flow::AppContext;
 use crate::{
     channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
     qsize,
@@ -43,14 +49,15 @@ use std::fmt::Display;
 use std::{borrow::Borrow, sync::Arc};
 use tokio::task;
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
+use tremor_common::ports::CONTROL;
 use tremor_common::time::nanotime;
 use tremor_common::{
-    ids::{SinkId, SourceId},
     ports::Port,
+    uids::{SinkUId, SourceUId},
 };
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
-use tremor_value::Value;
+use tremor_value::{structurize, Value};
 
 pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
 
@@ -139,7 +146,18 @@ pub(crate) enum AsyncSinkReply {
 
 /// connector sink - receiving events
 #[async_trait::async_trait]
-pub(crate) trait Sink: Send {
+pub(crate) trait Sink:
+    Send + Sync + FileIo + SocketServer + SocketClient + QueueSubscriber + DatabaseWriter + 'static
+{
+    async fn on_control(&mut self, command: Event, ctx: &SinkContext) -> Result<SinkReply> {
+        for v in command.value_iter() {
+            let command = structurize::<Command>(v.clone())?;
+            command.execute(self, ctx).await?;
+        }
+
+        Ok(SinkReply::default())
+    }
+
     /// called when receiving an event
     async fn on_event(
         &mut self,
@@ -256,7 +274,7 @@ pub(crate) trait SinkRuntime: Send + Sync {
 #[derive(Clone)]
 pub(crate) struct SinkContextInner {
     /// the connector unique identifier
-    pub(crate) uid: SinkId,
+    pub(crate) uid: SinkUId,
     /// the connector alias
     pub(crate) alias: Alias,
     /// the connector type
@@ -267,22 +285,27 @@ pub(crate) struct SinkContextInner {
 
     /// notifier the connector runtime if we lost a connection
     pub(crate) notifier: ConnectionLostNotifier,
+
+    /// sender for raft requests
+    /// Application Context
+    pub(crate) app_ctx: AppContext,
 }
 #[derive(Clone)]
 pub(crate) struct SinkContext(Arc<SinkContextInner>);
 impl SinkContext {
-    pub(crate) fn uid(&self) -> SinkId {
+    pub(crate) fn uid(&self) -> SinkUId {
         self.0.uid
     }
     pub(crate) fn notifier(&self) -> &ConnectionLostNotifier {
         &self.0.notifier
     }
     pub(crate) fn new(
-        uid: SinkId,
+        uid: SinkUId,
         alias: Alias,
         connector_type: ConnectorType,
         quiescence_beacon: QuiescenceBeacon,
         notifier: ConnectionLostNotifier,
+        app_ctx: AppContext,
     ) -> SinkContext {
         Self(Arc::new(SinkContextInner {
             uid,
@@ -290,34 +313,41 @@ impl SinkContext {
             connector_type,
             quiescence_beacon,
             notifier,
+            app_ctx,
         }))
+    }
+}
+
+impl Display for SinkContextInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}[Sink::{}]", self.app_ctx, self.alias)
     }
 }
 
 impl Display for SinkContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Sink::{}]", &self.0.alias)
+        self.0.fmt(f)
     }
 }
 
 impl Context for SinkContext {
-    // fn uid(&self) -> &SinkId {
-    //     &self.0.uid
-    // }
     fn alias(&self) -> &Alias {
         &self.0.alias
     }
-
     fn quiescence_beacon(&self) -> &QuiescenceBeacon {
         &self.0.quiescence_beacon
     }
-
     fn notifier(&self) -> &ConnectionLostNotifier {
         &self.0.notifier
     }
-
     fn connector_type(&self) -> &ConnectorType {
         &self.0.connector_type
+    }
+    fn raft(&self) -> &raft::Cluster {
+        &self.0.app_ctx.raft
+    }
+    fn app_ctx(&self) -> &AppContext {
+        &self.0.app_ctx
     }
 }
 
@@ -605,9 +635,9 @@ where
     // pipelines connected to IN port
     pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     // set of source ids we received start signals from
-    starts_received: HashSet<SourceId>,
+    starts_received: HashSet<SourceUId>,
     // set of connector ids we received drain signals from
-    drains_received: HashSet<SourceId>, // TODO: use a bitset for both?
+    drains_received: HashSet<SourceUId>, // TODO: use a bitset for both?
     drain_channel: Option<Sender<Msg>>,
     state: SinkState,
 }
@@ -667,7 +697,8 @@ where
                         }
                         SinkMsg::Connect(sender, attempt) => {
                             info!("{} Connecting...", &self.ctx);
-                            let connect_result = self.sink.connect(&self.ctx, &attempt).await;
+                            let connect_result =
+                                Sink::connect(&mut self.sink, &self.ctx, &attempt).await;
                             if let Ok(true) = connect_result {
                                 info!("{} Sink connected.", &self.ctx);
                             }
@@ -777,18 +808,19 @@ where
                             self.merged_operator_meta.merge(event.op_meta.clone());
                             let transactional = event.transactional;
                             let start = nanotime();
-
-                            let res = self
-                                .sink
-                                .on_event(
-                                    port.borrow(),
-                                    event,
-                                    &self.ctx,
-                                    &mut self.serializer,
-                                    start,
-                                )
-                                .await;
-
+                            let res = if port == CONTROL {
+                                self.sink.on_control(event, &self.ctx).await
+                            } else {
+                                self.sink
+                                    .on_event(
+                                        port.borrow(),
+                                        event,
+                                        &self.ctx,
+                                        &mut self.serializer,
+                                        start,
+                                    )
+                                    .await
+                            };
                             let duration = nanotime() - start;
                             match res {
                                 Ok(replies) => {

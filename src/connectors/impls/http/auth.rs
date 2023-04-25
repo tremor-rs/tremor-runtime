@@ -13,9 +13,8 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use base64::Engine;
 use std::io::Write;
-use tremor_common::base64::BASE64;
+use tremor_common::base64::{self, BASE64};
 
 /// Authorization methods
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -45,14 +44,14 @@ impl Auth {
                 ref username,
                 ref password,
             } => {
-                let encoded = BASE64.encode(format!("{username}:{password}"));
+                let encoded = base64::encode(format!("{username}:{password}"));
                 Ok(Some(format!("Basic {}", &encoded)))
             }
             Auth::Bearer(token) => Ok(Some(format!("Bearer {}", &token))),
             Auth::ElasticsearchApiKey { id, api_key } => {
                 let mut header_value = "ApiKey ".to_string();
                 let mut writer =
-                    base64::write::EncoderStringWriter::from_consumer(&mut header_value, &BASE64);
+                    ::base64::write::EncoderStringWriter::from_consumer(&mut header_value, &BASE64);
                 write!(writer, "{id}:")?;
                 write!(writer, "{api_key}")?;
                 writer.into_inner(); // release the reference, so header-value is accessible again

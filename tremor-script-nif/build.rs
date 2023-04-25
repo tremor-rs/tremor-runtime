@@ -38,7 +38,7 @@ fn main() {
     if host_triple != target_triple {
         libpath = libpath.join(&target_triple);
     }
-    libpath = libpath.join(&profile).join(file_name);
+    libpath = libpath.join(profile).join(file_name);
 
     // Create file in `here` and write the path to the directory of
     // where to find libtremor

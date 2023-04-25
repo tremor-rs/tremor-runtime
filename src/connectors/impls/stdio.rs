@@ -138,6 +138,7 @@ impl Source for StdStreamSource {
 }
 
 /// stdstream sink
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 pub(crate) struct StdStreamSink {
     stderr: Stderr,
     stdout: Stdout,
