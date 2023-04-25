@@ -1238,6 +1238,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::<impls::gcl::writer::Builder>::default(),
         Box::<impls::gcs::streamer::Builder>::default(),
         Box::<impls::null::Builder>::default(),
+        Box::<impls::psql_repl::Builder>::default(),
     ]
 }
 

@@ -32,6 +32,16 @@ lto = "thin"
 opt-level = 3
 
 [dependencies]
+###### My changes #####
+tokio-postgres = { git = "https://github.com/MaterializeInc/rust-postgres", features = [
+  "serde",
+] }
+postgres-protocol = { git = "https://github.com/MaterializeInc/rust-postgres" }
+mz-postgres-util = { git = "https://github.com/MaterializeInc/materialize" }
+mz-repr = { git = "https://github.com/MaterializeInc/materialize" }
+mz-expr = { git = "https://github.com/MaterializeInc/materialize" }
+mz-pgcopy = { git = "https://github.com/MaterializeInc/materialize" }
+######
 tokio = { version = "1.27", features = ["full"] }
 tokio-stream = "0.1"
 anyhow = "1"
@@ -210,7 +220,7 @@ simdutf8 = "0.1"
 
 [dev-dependencies]
 serial_test = { version = "2.0", features = ["logging"] }
-# path = "../serial_test/serial_test" 
+# path = "../serial_test/serial_test"
 env_logger = "0.10.0"
 matches = "0.1"
 pretty_assertions = "1.3.0"
@@ -351,3 +361,9 @@ tremor = { path = "/usr/bin/tremor" }
 "../tremor-script/lib/" = { path = "/usr/share/tremor/lib/" }
 # copying systemd service to standard location for rpm packages
 "../packaging/distribution/etc/systemd/system/tremor.service" = { path = "/usr/lib/systemd/system/tremor.service" }
+
+[patch."https://github.com/MaterializeInc/rust-rdkafka.git"]
+rdkafka-sys = { version = "4.3", features = [
+  "cmake-build",
+  "libz-static",
+], default-features = false }
