@@ -165,9 +165,9 @@ checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
 
 [[package]]
 name = "anstream"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e579a7752471abc2a8268df8b20005e3eadd975f585398f17efcfd8d4927371"
+checksum = "6342bd4f5a1205d7f41e94a41a901f5647c938cdfa96036338e8533c9d6c2450"
 dependencies = [
  "anstyle",
  "anstyle-parse",
@@ -204,9 +204,9 @@ dependencies = [
 
 [[package]]
 name = "anstyle-wincon"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bcd8291a340dd8ac70e18878bc4501dd7b4ff970cfa21c207d36ece51ea88fd"
+checksum = "180abfa45703aebe0093f79badacc01b8fd4ea2e35118747e5811127f926e188"
 dependencies = [
  "anstyle",
  "windows-sys 0.48.0",
@@ -268,7 +268,6 @@ dependencies = [
  "futures",
  "getrandom 0.2.9",
  "hash_hasher",
- "multiversion",
  "num-traits",
  "parquet2",
  "rustc_version 0.4.0",
@@ -1008,27 +1007,6 @@ name = "aws-smithy-http"
 version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29dcab29afbea7726f5c10c7be0c38666d7eb07db551580b3b26ed7cfb5d1935"
-dependencies = [
- "aws-smithy-types 0.53.1",
- "bytes 1.4.0",
- "bytes-utils",
- "futures-core",
- "http",
- "http-body",
- "hyper",
- "once_cell",
- "percent-encoding",
- "pin-project-lite 0.2.9",
- "pin-utils",
- "tokio",
- "tokio-util 0.7.7",
- "tracing",
-]
-
-[[package]]
-name = "aws-smithy-http"
-version = "0.53.2"
-source = "git+https://github.com/parker-timmerman/smithy-rs.git?branch=v0.53.2#2865b0455f363646976cdcd419baa4701b24e3e8"
 dependencies = [
  "aws-smithy-eventstream 0.53.1",
  "aws-smithy-types 0.53.1",
@@ -1883,7 +1861,7 @@ checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 [[package]]
 name = "columnation"
 version = "0.1.0"
-source = "git+https://github.com/frankmcsherry/columnation#eb8e20c10e748dcbfe6266be8e24e14422d3de0f"
+source = "git+https://github.com/Licenser/columnation?rev=bfd9e2a953768887138e56f10f9be13e27ef175a#bfd9e2a953768887138e56f10f9be13e27ef175a"
 dependencies = [
  "paste",
 ]
@@ -2716,18 +2694,6 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e40a16955681d469ab3da85aaa6b42ff656b3c67b52e1d8d3dd36afe97fd462"
 dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "enum_dispatch"
-version = "0.3.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11f36e95862220b211a6e2aa5eca09b4fa391b13cd52ceb8035a24bf65a79de2"
-dependencies = [
- "once_cell",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -3928,9 +3894,9 @@ dependencies = [
 
 [[package]]
 name = "lalrpop"
-version = "0.19.9"
+version = "0.19.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f34313ec00c2eb5c3c87ca6732ea02dcf3af99c3ff7a8fb622ffb99c9d860a87"
+checksum = "06ada7ece1f5bc6d36eec2a4dc204135f14888209b3773df8fefcfe990fd4cbc"
 dependencies = [
  "ascii-canvas",
  "bit-set",
@@ -3951,9 +3917,9 @@ dependencies = [
 
 [[package]]
 name = "lalrpop-util"
-version = "0.19.9"
+version = "0.19.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5c1f7869c94d214466c5fd432dfed12c379fd87786768d36455892d46b18edd"
+checksum = "3d3b45d694c8074f77bc24fc26e47633c862a9cd3b48dd51209c02ba4c434d68"
 dependencies = [
  "regex",
 ]
@@ -4360,29 +4326,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
-name = "multiversion"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "025c962a3dd3cc5e0e520aa9c612201d127dcdf28616974961a649dca64f5373"
-dependencies = [
- "multiversion-macros",
-]
-
-[[package]]
-name = "multiversion-macros"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8a3e2bde382ebf960c1f3e79689fa5941625fe9bf694a1cb64af3e85faff3af"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "mz-cloud-resources"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4399,7 +4345,7 @@ dependencies = [
 [[package]]
 name = "mz-expr"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "aho-corasick 0.7.20",
  "anyhow",
@@ -4447,7 +4393,7 @@ dependencies = [
 [[package]]
 name = "mz-lowertest"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "mz-lowertest-derive",
  "mz-ore",
@@ -4460,7 +4406,7 @@ dependencies = [
 [[package]]
 name = "mz-lowertest-derive"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4471,7 +4417,7 @@ dependencies = [
 [[package]]
 name = "mz-ore"
 version = "0.1.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4496,24 +4442,19 @@ dependencies = [
 [[package]]
 name = "mz-persist-types"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "anyhow",
  "arrow2",
  "bytes 1.4.0",
- "mz-proto",
  "parquet2",
- "prost 0.11.9",
- "prost-build 0.11.9",
- "protobuf-src",
- "serde",
  "workspace-hack",
 ]
 
 [[package]]
 name = "mz-pgcopy"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "bytes 1.4.0",
  "csv",
@@ -4525,30 +4466,24 @@ dependencies = [
 [[package]]
 name = "mz-pgrepr"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "byteorder",
  "bytes 1.4.0",
  "chrono 0.4.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "dec",
  "mz-ore",
- "mz-pgrepr-consts",
  "mz-repr",
  "once_cell",
- "postgres-types",
+ "postgres-types 0.2.5 (git+https://github.com/MaterializeInc/rust-postgres)",
  "uuid 1.3.1",
  "workspace-hack",
 ]
 
 [[package]]
-name = "mz-pgrepr-consts"
-version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
-
-[[package]]
 name = "mz-postgres-util"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "anyhow",
  "mz-cloud-resources",
@@ -4566,7 +4501,7 @@ dependencies = [
  "serde",
  "thiserror",
  "tokio",
- "tokio-postgres",
+ "tokio-postgres 0.7.8 (git+https://github.com/MaterializeInc/rust-postgres)",
  "tonic-build 0.8.4",
  "tracing",
  "workspace-hack",
@@ -4575,7 +4510,7 @@ dependencies = [
 [[package]]
 name = "mz-proto"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "anyhow",
  "globset",
@@ -4595,7 +4530,7 @@ dependencies = [
 [[package]]
 name = "mz-repr"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -4606,7 +4541,6 @@ dependencies = [
  "dec",
  "differential-dataflow",
  "enum-kinds",
- "enum_dispatch",
  "fast-float",
  "hex",
  "itertools",
@@ -4618,7 +4552,7 @@ dependencies = [
  "num_enum",
  "once_cell",
  "ordered-float 3.7.0",
- "postgres-protocol",
+ "postgres-protocol 0.6.5 (git+https://github.com/MaterializeInc/rust-postgres)",
  "proptest 1.0.0",
  "proptest-derive",
  "prost 0.11.9",
@@ -4632,7 +4566,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "timely",
- "tokio-postgres",
+ "tokio-postgres 0.7.8 (git+https://github.com/MaterializeInc/rust-postgres)",
  "url",
  "uuid 1.3.1",
  "workspace-hack",
@@ -4641,20 +4575,16 @@ dependencies = [
 [[package]]
 name = "mz-ssh-util"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "anyhow",
- "mz-ore",
  "openssh",
- "openssh-mux-client",
  "openssl",
  "rand 0.8.5",
- "scopeguard",
  "serde",
  "serde_json",
  "ssh-key",
  "tempfile",
- "tokio",
  "tracing",
  "workspace-hack",
  "zeroize",
@@ -4951,9 +4881,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.51"
+version = "0.10.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97ea2d98598bf9ada7ea6ee8a30fb74f9156b63bbe495d64ec2b87c269d2dda3"
+checksum = "01b8574602df80f7b85fdfc5392fa884a4e3b3f4f35402c070ab34c3d3f78d56"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -4992,9 +4922,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.86"
+version = "0.9.87"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "992bac49bdbab4423199c654a5515bd2a6c6a23bf03f2dd3bdb7e5ae6259bc69"
+checksum = "8e17f59264b2809d77ae94f0e1ebabc434773f370d6ca667bd223ea10e06cc7e"
 dependencies = [
  "cc",
  "libc",
@@ -5266,9 +5196,9 @@ dependencies = [
 
 [[package]]
 name = "pico-args"
-version = "0.4.2"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db8bcd96cb740d03149cbad5518db9fd87126a10ab519c011893b1754134c468"
+checksum = "5be167a7af36ee22fe3115051bc51f6e6c7054c9348e28deb4f49bd6f705a315"
 
 [[package]]
 name = "pin-project"
@@ -5394,7 +5324,7 @@ dependencies = [
  "futures-util",
  "log",
  "tokio",
- "tokio-postgres",
+ "tokio-postgres 0.7.8 (git+https://github.com/MaterializeInc/rust-postgres)",
 ]
 
 [[package]]
@@ -5405,7 +5335,24 @@ dependencies = [
  "openssl",
  "tokio",
  "tokio-openssl",
- "tokio-postgres",
+ "tokio-postgres 0.7.8 (git+https://github.com/MaterializeInc/rust-postgres)",
+]
+
+[[package]]
+name = "postgres-protocol"
+version = "0.6.5"
+source = "git+https://github.com/MaterializeInc/rust-postgres?rev=dd70a8b9caec1bb056ff66782a8e8b72d446ffa5#dd70a8b9caec1bb056ff66782a8e8b72d446ffa5"
+dependencies = [
+ "base64 0.21.0",
+ "byteorder",
+ "bytes 1.4.0",
+ "fallible-iterator",
+ "hmac 0.12.1",
+ "md-5",
+ "memchr",
+ "rand 0.8.5",
+ "sha2 0.10.6",
+ "stringprep",
 ]
 
 [[package]]
@@ -5428,12 +5375,22 @@ dependencies = [
 [[package]]
 name = "postgres-types"
 version = "0.2.5"
+source = "git+https://github.com/MaterializeInc/rust-postgres?rev=dd70a8b9caec1bb056ff66782a8e8b72d446ffa5#dd70a8b9caec1bb056ff66782a8e8b72d446ffa5"
+dependencies = [
+ "bytes 1.4.0",
+ "fallible-iterator",
+ "postgres-protocol 0.6.5 (git+https://github.com/MaterializeInc/rust-postgres?rev=dd70a8b9caec1bb056ff66782a8e8b72d446ffa5)",
+]
+
+[[package]]
+name = "postgres-types"
+version = "0.2.5"
 source = "git+https://github.com/MaterializeInc/rust-postgres#dd70a8b9caec1bb056ff66782a8e8b72d446ffa5"
 dependencies = [
  "bytes 1.4.0",
  "chrono 0.4.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "fallible-iterator",
- "postgres-protocol",
+ "postgres-protocol 0.6.5 (git+https://github.com/MaterializeInc/rust-postgres)",
  "serde",
  "serde_json",
  "uuid 1.3.1",
@@ -7509,7 +7466,7 @@ dependencies = [
 [[package]]
 name = "timely"
 version = "0.12.0"
-source = "git+https://github.com/TimelyDataflow/timely-dataflow#432ef57fae761f1e4773833b0474b41f1efe7e7c"
+source = "git+https://github.com/Licenser/timely-dataflow?rev=134842aa6e1cce36a1d68bec3d79c1c3781cd11e#134842aa6e1cce36a1d68bec3d79c1c3781cd11e"
 dependencies = [
  "abomonation",
  "abomonation_derive",
@@ -7527,12 +7484,12 @@ dependencies = [
 [[package]]
 name = "timely_bytes"
 version = "0.12.0"
-source = "git+https://github.com/TimelyDataflow/timely-dataflow#432ef57fae761f1e4773833b0474b41f1efe7e7c"
+source = "git+https://github.com/Licenser/timely-dataflow?rev=134842aa6e1cce36a1d68bec3d79c1c3781cd11e#134842aa6e1cce36a1d68bec3d79c1c3781cd11e"
 
 [[package]]
 name = "timely_communication"
 version = "0.12.0"
-source = "git+https://github.com/TimelyDataflow/timely-dataflow#432ef57fae761f1e4773833b0474b41f1efe7e7c"
+source = "git+https://github.com/Licenser/timely-dataflow?rev=134842aa6e1cce36a1d68bec3d79c1c3781cd11e#134842aa6e1cce36a1d68bec3d79c1c3781cd11e"
 dependencies = [
  "abomonation",
  "abomonation_derive",
@@ -7548,7 +7505,7 @@ dependencies = [
 [[package]]
 name = "timely_container"
 version = "0.12.0"
-source = "git+https://github.com/TimelyDataflow/timely-dataflow#432ef57fae761f1e4773833b0474b41f1efe7e7c"
+source = "git+https://github.com/Licenser/timely-dataflow?rev=134842aa6e1cce36a1d68bec3d79c1c3781cd11e#134842aa6e1cce36a1d68bec3d79c1c3781cd11e"
 dependencies = [
  "columnation",
  "serde",
@@ -7557,7 +7514,7 @@ dependencies = [
 [[package]]
 name = "timely_logging"
 version = "0.12.0"
-source = "git+https://github.com/TimelyDataflow/timely-dataflow#432ef57fae761f1e4773833b0474b41f1efe7e7c"
+source = "git+https://github.com/Licenser/timely-dataflow?rev=134842aa6e1cce36a1d68bec3d79c1c3781cd11e#134842aa6e1cce36a1d68bec3d79c1c3781cd11e"
 
 [[package]]
 name = "tiny-keccak"
@@ -7678,6 +7635,30 @@ dependencies = [
 [[package]]
 name = "tokio-postgres"
 version = "0.7.8"
+source = "git+https://github.com/MaterializeInc/rust-postgres?rev=dd70a8b9caec1bb056ff66782a8e8b72d446ffa5#dd70a8b9caec1bb056ff66782a8e8b72d446ffa5"
+dependencies = [
+ "async-trait",
+ "byteorder",
+ "bytes 1.4.0",
+ "fallible-iterator",
+ "futures-channel",
+ "futures-util",
+ "log",
+ "parking_lot 0.12.1",
+ "percent-encoding",
+ "phf",
+ "pin-project-lite 0.2.9",
+ "postgres-protocol 0.6.5 (git+https://github.com/MaterializeInc/rust-postgres?rev=dd70a8b9caec1bb056ff66782a8e8b72d446ffa5)",
+ "postgres-types 0.2.5 (git+https://github.com/MaterializeInc/rust-postgres?rev=dd70a8b9caec1bb056ff66782a8e8b72d446ffa5)",
+ "serde",
+ "socket2 0.5.2",
+ "tokio",
+ "tokio-util 0.7.7",
+]
+
+[[package]]
+name = "tokio-postgres"
+version = "0.7.8"
 source = "git+https://github.com/MaterializeInc/rust-postgres#dd70a8b9caec1bb056ff66782a8e8b72d446ffa5"
 dependencies = [
  "async-trait",
@@ -7691,8 +7672,8 @@ dependencies = [
  "percent-encoding",
  "phf",
  "pin-project-lite 0.2.9",
- "postgres-protocol",
- "postgres-types",
+ "postgres-protocol 0.6.5 (git+https://github.com/MaterializeInc/rust-postgres)",
+ "postgres-types 0.2.5 (git+https://github.com/MaterializeInc/rust-postgres)",
  "serde",
  "socket2 0.5.2",
  "tokio",
@@ -7972,13 +7953,13 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.23"
+version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4017f8f45139870ca7e672686113917c71c7a6e02d4924eda67186083c03081a"
+checksum = "0f57e3ca2a01450b1a921183a9c9cbfda207fd822cef4ccb00a65402cbba7a74"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.15",
 ]
 
 [[package]]
@@ -8261,7 +8242,7 @@ dependencies = [
  "num_cpus",
  "pin-project-lite 0.2.9",
  "port_scanner",
- "postgres-protocol",
+ "postgres-protocol 0.6.5 (git+https://github.com/MaterializeInc/rust-postgres?rev=dd70a8b9caec1bb056ff66782a8e8b72d446ffa5)",
  "pretty_assertions",
  "proptest 1.1.0",
  "prost 0.9.0",
@@ -8294,7 +8275,7 @@ dependencies = [
  "test-case",
  "testcontainers",
  "tokio",
- "tokio-postgres",
+ "tokio-postgres 0.7.8 (git+https://github.com/MaterializeInc/rust-postgres?rev=dd70a8b9caec1bb056ff66782a8e8b72d446ffa5)",
  "tokio-rustls 0.24.0",
  "tokio-stream",
  "tokio-tungstenite",
@@ -9176,14 +9157,14 @@ dependencies = [
 [[package]]
 name = "workspace-hack"
 version = "0.0.0"
-source = "git+https://github.com/MaterializeInc/materialize#896f6b09127d27218b2e5994eda27e1f52273391"
+source = "git+https://github.com/MaterializeInc/materialize?rev=ba21055fdee530cdc9270ffe8b37bcc62ff0789d#ba21055fdee530cdc9270ffe8b37bcc62ff0789d"
 dependencies = [
  "anyhow",
  "aws-credential-types 0.53.0",
  "aws-sdk-sts 0.23.0",
  "aws-sig-auth 0.53.0",
  "aws-sigv4 0.53.2",
- "aws-smithy-http 0.53.2",
+ "aws-smithy-http 0.53.1",
  "axum",
  "base64 0.13.1",
  "bstr 0.2.17",
@@ -9211,6 +9192,7 @@ dependencies = [
  "futures-sink",
  "futures-task",
  "futures-util",
+ "getrandom 0.2.9",
  "globset",
  "hashbrown 0.12.3 (git+https://github.com/MaterializeInc/hashbrown.git)",
  "hyper",
@@ -9237,7 +9219,7 @@ dependencies = [
  "phf",
  "phf_shared 0.11.1",
  "postgres",
- "postgres-types",
+ "postgres-types 0.2.5 (git+https://github.com/MaterializeInc/rust-postgres)",
  "proc-macro2",
  "prometheus",
  "prost 0.11.9",
@@ -9259,13 +9241,14 @@ dependencies = [
  "serde_json",
  "sha2 0.10.6",
  "smallvec",
+ "socket2 0.4.9",
  "syn 1.0.109",
  "textwrap 0.15.2",
  "tikv-jemalloc-sys",
  "time 0.3.20",
  "time-macros 0.2.8",
  "tokio",
- "tokio-postgres",
+ "tokio-postgres 0.7.8 (git+https://github.com/MaterializeInc/rust-postgres)",
  "tokio-stream",
  "tokio-util 0.7.7",
  "tower",

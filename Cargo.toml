@@ -35,12 +35,12 @@ opt-level = 3
 ###### My changes #####
 tokio-postgres = { git = "https://github.com/MaterializeInc/rust-postgres", features = [
   "serde",
-] }
-postgres-protocol = { git = "https://github.com/MaterializeInc/rust-postgres" }
-mz-postgres-util = { git = "https://github.com/MaterializeInc/materialize" }
-mz-repr = { git = "https://github.com/MaterializeInc/materialize" }
-mz-expr = { git = "https://github.com/MaterializeInc/materialize" }
-mz-pgcopy = { git = "https://github.com/MaterializeInc/materialize" }
+], rev = "dd70a8b9caec1bb056ff66782a8e8b72d446ffa5" }
+postgres-protocol = { git = "https://github.com/MaterializeInc/rust-postgres", rev = "dd70a8b9caec1bb056ff66782a8e8b72d446ffa5" }
+mz-postgres-util = { git = "https://github.com/MaterializeInc/materialize", rev = "ba21055fdee530cdc9270ffe8b37bcc62ff0789d" }
+mz-repr = { git = "https://github.com/MaterializeInc/materialize", rev = "ba21055fdee530cdc9270ffe8b37bcc62ff0789d" }
+mz-expr = { git = "https://github.com/MaterializeInc/materialize", rev = "ba21055fdee530cdc9270ffe8b37bcc62ff0789d" }
+mz-pgcopy = { git = "https://github.com/MaterializeInc/materialize", rev = "ba21055fdee530cdc9270ffe8b37bcc62ff0789d" }
 ######
 tokio = { version = "1.27", features = ["full"] }
 tokio-stream = "0.1"
@@ -367,3 +367,9 @@ rdkafka-sys = { version = "4.3", features = [
   "cmake-build",
   "libz-static",
 ], default-features = false }
+
+[patch."https://github.com/frankmcsherry/columnation"]
+columnation = { git = "https://github.com/Licenser/columnation", version = "0.1", rev = "bfd9e2a953768887138e56f10f9be13e27ef175a" }
+
+[patch."https://github.com/TimelyDataflow/timely-dataflow"]
+timely = { git = "https://github.com/Licenser/timely-dataflow", rev = "134842aa6e1cce36a1d68bec3d79c1c3781cd11e" }
