@@ -142,7 +142,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
 }
 
 /// Logs but ignores an error
-#[macro_export(log_error)]
+#[macro_export]
 #[doc(hidden)]
 macro_rules! log_error {
     ($maybe_error:expr,  $($args:tt)+) => (
