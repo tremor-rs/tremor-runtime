@@ -29,7 +29,7 @@ use value_trait::Builder;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn server_event_routing() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let free_port = free_port::find_free_tcp_port().await?;
 
@@ -109,7 +109,7 @@ async fn server_event_routing() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_disconnect() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let free_port = free_port::find_free_tcp_port().await?;
 

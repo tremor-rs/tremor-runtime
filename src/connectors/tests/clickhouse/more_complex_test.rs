@@ -83,7 +83,7 @@ macro_rules! assert_row_equals {
 #[allow(clippy::too_many_lines)]
 #[tokio::test(flavor = "multi_thread")]
 async fn test() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = clients::Cli::docker();
 

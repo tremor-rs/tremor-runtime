@@ -33,7 +33,7 @@ use tremor_value::{literal, Value};
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn no_connection() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
@@ -52,7 +52,7 @@ async fn no_connection() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn no_hostname() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
@@ -73,7 +73,7 @@ async fn no_hostname() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn simple_publish() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let runner = Cli::docker();
 
@@ -178,7 +178,7 @@ async fn simple_publish() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn simple_publish_with_timeout() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let runner = Cli::docker();
 

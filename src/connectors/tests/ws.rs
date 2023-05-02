@@ -280,7 +280,7 @@ async fn ws_client_bad_config() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn ws_server_text_routing() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let free_port = find_free_tcp_port().await?;
     let url = format!("ws://localhost:{free_port}");
@@ -362,7 +362,7 @@ async fn ws_server_text_routing() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn ws_client_binary_routing() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let free_port = find_free_tcp_port().await?;
     let mut ts = TestServer::new("127.0.0.1", free_port);
@@ -411,7 +411,7 @@ async fn ws_client_binary_routing() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn ws_client_text_routing() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let free_port = find_free_tcp_port().await?;
     let mut ts = TestServer::new("127.0.0.1", free_port);
@@ -457,7 +457,7 @@ async fn ws_client_text_routing() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn wss_server_text_routing() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     setup_for_tls();
 
@@ -547,7 +547,7 @@ async fn wss_server_text_routing() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn wss_server_binary_routing() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     setup_for_tls();
 
@@ -638,7 +638,7 @@ async fn wss_server_binary_routing() -> Result<()> {
 #[cfg(feature = "flaky-test")]
 #[tokio::test(flavor = "multi_thread")]
 async fn server_control_frames() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let free_port = find_free_tcp_port().await?;
     let url = format!("ws://0.0.0.0:{free_port}");

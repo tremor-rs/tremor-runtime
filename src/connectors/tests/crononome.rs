@@ -18,7 +18,7 @@ use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn connector_crononome_routing() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let defn = literal!({
     "config": {

@@ -24,7 +24,7 @@ use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn stop_after_events() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let mut file = NamedTempFile::new()?;
     file.write_all(b"{}\n")?;
@@ -73,7 +73,7 @@ async fn stop_after_events() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn stop_after_secs() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let mut file = NamedTempFile::new()?;
     file.write_all(b"{}\n")?;

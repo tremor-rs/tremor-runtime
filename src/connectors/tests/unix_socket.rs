@@ -25,7 +25,7 @@ use value_trait::Builder;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn unix_socket() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let temp_file = tempfile::Builder::new().tempfile()?;
     let temp_path = temp_file.into_temp_path();

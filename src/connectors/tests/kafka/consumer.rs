@@ -45,7 +45,7 @@ use value_trait::Builder;
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn transactional_retry() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
@@ -272,7 +272,7 @@ async fn transactional_retry() -> Result<()> {
 #[serial(kafka)]
 
 async fn custom_no_retry() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
@@ -484,7 +484,7 @@ async fn custom_no_retry() -> Result<()> {
 #[serial(kafka)]
 
 async fn performance() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
@@ -697,7 +697,7 @@ async fn performance() -> Result<()> {
 #[serial(kafka)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
     let kafka_port = free_port::find_free_tcp_port().await?;
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let connector_config = literal!({
         "reconnect": {
             "retry": {
@@ -733,7 +733,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn invalid_rdkafka_options() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let kafka_port = free_port::find_free_tcp_port().await?;
     let broker = format!("127.0.0.1:{kafka_port}");
     let topic = "tremor_test_pause_resume";
@@ -779,7 +779,7 @@ async fn invalid_rdkafka_options() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_consumer_pause_resume() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
@@ -875,7 +875,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn transactional_store_offset_handling() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
@@ -1076,7 +1076,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn transactional_commit_offset_handling() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;

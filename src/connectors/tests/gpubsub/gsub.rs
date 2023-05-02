@@ -32,7 +32,7 @@ use value_trait::ValueAccess;
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn no_connection() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
@@ -95,7 +95,7 @@ async fn create_subscription(endpoint: String, topic: &str, subscription: &str) 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn simple_subscribe() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let runner = Cli::docker();
 
     let (pubsub, pubsub_args) =

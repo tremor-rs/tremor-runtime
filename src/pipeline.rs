@@ -727,7 +727,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn report() -> Result<()> {
-        let _ = env_logger::try_init();
+        let _: std::result::Result<_, _> = env_logger::try_init();
         let mut operator_id_gen = OperatorIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
@@ -833,7 +833,7 @@ mod tests {
     #[allow(clippy::too_many_lines)] // this is a test
     #[tokio::test(flavor = "multi_thread")]
     async fn pipeline_spawn() -> Result<()> {
-        let _ = env_logger::try_init();
+        let _: std::result::Result<_, _> = env_logger::try_init();
         let mut operator_id_gen = OperatorIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();

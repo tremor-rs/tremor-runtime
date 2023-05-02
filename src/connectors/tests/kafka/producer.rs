@@ -35,7 +35,7 @@ use tremor_value::literal;
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_producer() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
@@ -274,7 +274,7 @@ async fn connector_kafka_producer() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn producer_unreachable() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let port = find_free_tcp_port().await?;
     let broker = format!("127.0.0.1:{port}");
     let topic = "unreachable";
@@ -304,7 +304,7 @@ async fn producer_unreachable() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn producer_unresolvable() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let port = find_free_tcp_port().await?;
     let broker = format!("i_do_not_resolve:{port}");
     let topic = "unresolvable";
