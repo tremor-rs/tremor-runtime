@@ -574,9 +574,9 @@ macro_rules! tremor_fn_ {
             }
             impl TremorFn for $name::Func {
                 #[allow(unused_variables)]
-                fn invoke<'event, 'c>(
+                fn invoke<'event>(
                     & self,
-                    $context: &'c EventContext,
+                    $context: &EventContext,
                     args: &[&Value<'event>],
                 ) -> FResult<Value<'event>> {
                     fn this_mfa() -> Mfa {
@@ -639,9 +639,9 @@ macro_rules! tremor_fn_ {
             }
             impl TremorFn for $name::Func {
                 #[allow(unused_variables)]
-                fn invoke<'event, 'c>(
+                fn invoke<'event>(
                     & self,
-                    $context: &'c EventContext,
+                    $context: &EventContext,
                     args: &[&Value<'event>],
                 ) -> FResult<Value<'event>> {
                     fn this_mfa() -> Mfa {
@@ -704,9 +704,9 @@ macro_rules! tremor_fn_ {
             }
             impl TremorFn for $name::Func {
                 #[allow(unused_variables)]
-                fn invoke<'event, 'c>(
+                fn invoke<'event>(
                     &self,
-                    $context: &'c EventContext,
+                    $context: &EventContext,
                     args: &[&Value<'event>],
                 ) -> FResult<Value<'event>> {
 

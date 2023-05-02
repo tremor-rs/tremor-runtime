@@ -99,7 +99,7 @@ async fn harness_dflt(scheme: &str) -> Result<(ConnectorHarness, String, u16)> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn http_server_test_basic() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     // retry until the http server is actually up
     let start = Instant::now();
     let timeout = Duration::from_secs(30);
@@ -330,7 +330,7 @@ async fn http_server_test_chunked() -> Result<()> {
 #[allow(clippy::too_many_lines)]
 #[tokio::test(flavor = "multi_thread")]
 async fn https_server_test() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     setup_for_tls();
     let cert_file = "./tests/localhost.cert";
     let key_file = "./tests/localhost.key";

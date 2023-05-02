@@ -35,7 +35,7 @@ impl Operator for Passthrough {
 
     fn skippable(&self) -> bool {
         // ALLOW: This is Ok
-        let _ = self;
+        let _: &Passthrough = self;
         true
     }
 }

@@ -266,7 +266,7 @@ impl Drop for TargetProcess {
             handle.abort();
         }
         // this errors if the process is already killed, but this is fine for us
-        let _ = futures::executor::block_on(self.process.kill()).is_err();
+        let _: bool = futures::executor::block_on(self.process.kill()).is_err();
         if let Err(e) = futures::executor::block_on(self.process.wait()) {
             eprintln!("target process drop error: {e:?}");
         }

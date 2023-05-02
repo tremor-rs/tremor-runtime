@@ -20,7 +20,7 @@ use tremor_value::prelude::*;
 #[allow(clippy::cast_possible_truncation)]
 #[tokio::test(flavor = "multi_thread")]
 async fn connector_metronome_routing() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let defn = literal!({
       "config": {

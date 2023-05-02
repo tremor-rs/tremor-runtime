@@ -33,7 +33,7 @@ use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn udp_pause_resume() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let free_port = super::free_port::find_free_udp_port().await?;
 
@@ -124,7 +124,7 @@ async fn udp_pause_resume() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn tcp_server_pause_resume() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let free_port = super::free_port::find_free_tcp_port().await?;
 

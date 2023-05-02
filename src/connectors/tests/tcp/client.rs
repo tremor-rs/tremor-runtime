@@ -38,7 +38,7 @@ async fn tcp_client() -> Result<()> {
 }
 
 async fn tcp_client_test(use_tls: bool) -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let free_port = free_port::find_free_tcp_port().await?;
 

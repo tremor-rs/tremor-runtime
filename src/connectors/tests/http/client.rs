@@ -136,7 +136,7 @@ async fn rtt(
     auth: Option<Value<'static>>,
     event: Event,
 ) -> Result<ValueAndMeta<'static>> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let url = format!("{scheme}://{target}");
     let mut config = literal!({
         "url": url.clone(),

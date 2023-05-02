@@ -229,7 +229,7 @@ mod tests {
     #[allow(clippy::too_many_lines)] // this is a test
     #[tokio::test(flavor = "multi_thread")]
     async fn test_api() -> RuntimeResult<()> {
-        let _ = env_logger::try_init();
+        let _: std::result::Result<_, _> = env_logger::try_init();
         let config = WorldConfig {
             debug_connectors: true,
         };

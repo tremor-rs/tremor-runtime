@@ -37,7 +37,7 @@ use tremor_value::literal;
 // ensure that all the data was actually written.
 #[tokio::test(flavor = "multi_thread")]
 async fn simple_insertion() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = clients::Cli::docker();
 

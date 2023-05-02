@@ -20,7 +20,7 @@ use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn udp_no_bind() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let server_defn = literal!({
       "codec": "string",
@@ -66,7 +66,7 @@ async fn udp_no_bind() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn udp_bind() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let server_defn = literal!({
       "codec": "string",
@@ -114,7 +114,7 @@ async fn udp_bind() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn bind_connect_ipv4_ipv6() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let config = literal!({
         "codec": "string",
@@ -132,7 +132,7 @@ async fn bind_connect_ipv4_ipv6() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn connect_ipv4() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let config = literal!({
         "codec": "string",
@@ -151,7 +151,7 @@ async fn connect_ipv4() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn connect_ipv6() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
 
     let config = literal!({
         "codec": "string",

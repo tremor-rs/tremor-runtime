@@ -30,7 +30,7 @@ use value_trait::ValueAccess;
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_no_connection() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let bucket_name = random_bucket_name("no-connection");
     let mut env = EnvHelper::new();
     env.set_var("AWS_ACCESS_KEY_ID", MINIO_ROOT_USER);
@@ -58,7 +58,7 @@ async fn connector_s3_no_connection() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_no_credentials() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let bucket_name = random_bucket_name("no-credentials");
 
     let docker = clients::Cli::default();
@@ -99,7 +99,7 @@ async fn connector_s3_no_credentials() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_no_region() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let bucket_name = random_bucket_name("no-region");
 
     let docker = clients::Cli::default();
@@ -138,7 +138,7 @@ async fn connector_s3_no_region() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_no_bucket() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let bucket_name = random_bucket_name("no-bucket");
 
     let docker = clients::Cli::default();
@@ -175,7 +175,7 @@ async fn connector_s3_no_bucket() -> Result<()> {
 async fn connector_s3_reader() -> Result<()> {
     static SMALL_FILE: [u8; 256] = [b'A'; 256];
     static HUGE_FILE: [u8; 4096] = [b'Z'; 4096];
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let bucket_name = random_bucket_name("tremor");
 
     let docker = clients::Cli::default();

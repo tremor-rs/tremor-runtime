@@ -23,7 +23,7 @@ use tremor_value::{literal, prelude::*, Value};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn wal() -> Result<()> {
-    let _ = env_logger::try_init();
+    let _: std::result::Result<_, _> = env_logger::try_init();
     let temp_dir = tempfile::Builder::new().tempdir()?;
     let temp_path = temp_dir.into_path();
 
