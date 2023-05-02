@@ -36,6 +36,10 @@ pub(crate) struct Config {
     pub password: String,
     /// Database name
     pub dbname: String,
+    /// Publication name
+    pub publication: String,
+    /// Replication slot name
+    pub replication_slot: String,
 }
 
 impl ConfigImpl for Config {}
@@ -63,13 +67,16 @@ impl ConnectorBuilder for Builder {
             port: Option::from(config.port.clone()),
             path: vec![config.host.to_string()],
         };
-
+        let publication = config.publication;
+        let replication_slot = config.replication_slot;
         let pg_config= TokioPgConfig::from_str(&format!("host={} port={} user={} password={} dbname={}", config.host, config.port, config.username, config.password, config.dbname))?;
         let connection_config = MzConfig::new(pg_config, mz_postgres_util::TunnelConfig::Direct)?;
         let (tx,rx) = bounded(qsize());
 
         Ok(Box::new(PostgresReplication {
             connection_config,
+            publication,
+            replication_slot,
             origin_uri,
             rx: Some(rx),
             tx,
@@ -80,6 +87,8 @@ impl ConnectorBuilder for Builder {
 #[derive(Debug)]
 pub(crate) struct PostgresReplication {
     connection_config : MzConfig,
+    publication: String,
+    replication_slot: String,
     origin_uri: EventOriginUri,
     rx : Option<Receiver<Value<'static>>>,
     tx: Sender<Value<'static>>,
@@ -94,6 +103,8 @@ impl Connector for PostgresReplication {
     ) -> Result<Option<SourceAddr>> {
         let source = PostgresReplicationSource::new(
             self.connection_config.clone(),
+            self.publication.clone(),
+            self.replication_slot.clone(),
             self.rx.take().ok_or_else(already_created_error)?,
             self.tx.clone(),
             self.origin_uri.clone());
@@ -107,15 +118,19 @@ impl Connector for PostgresReplication {
 
 struct PostgresReplicationSource {
     connection_config : MzConfig,
+    publication: String,
+    replication_slot: String,
     rx: Receiver<Value<'static>>,
     tx: Sender<Value<'static>>,
     origin_uri: EventOriginUri,
 }
 
 impl PostgresReplicationSource {
-    fn new(connection_config: MzConfig, rx: Receiver<Value<'static>>, tx: Sender<Value<'static>>, origin_uri: EventOriginUri) -> Self {
+    fn new(connection_config: MzConfig, publication: String,replication_slot: String,rx: Receiver<Value<'static>>, tx: Sender<Value<'static>>, origin_uri: EventOriginUri) -> Self {
         Self {
             connection_config,
+            publication,
+            replication_slot,
             rx,
             tx,
             origin_uri,
@@ -127,8 +142,10 @@ impl PostgresReplicationSource {
 impl Source for PostgresReplicationSource {
     async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         let conn_config = self.connection_config.clone();
+        let publication = self.publication.clone();
+        let replication_slot = self.replication_slot.clone();
         let tx = self.tx.clone();
-        task::spawn(async move {postgres_replication::replication(conn_config,tx).await.unwrap();});
+        task::spawn(async move {postgres_replication::replication(conn_config, &publication, &replication_slot,tx).await.unwrap();});
         Ok(true)
     }
 

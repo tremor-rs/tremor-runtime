@@ -93,62 +93,36 @@ async fn produce_replication<'a>(
                     Some(Ok(postgres_protocol::message::backend::ReplicationMessage::XLogData(xlog_data))) => {
                         last_data_message = Instant::now();
                         match xlog_data.data() {
-                            LogicalReplicationMessage::Origin(origin) => {
-                                // metrics.transactions.inc();
-                                last_commit_lsn = PgLsn::from(origin.commit_lsn());
-
-                                // println!("======== ORIGIN  ==========");
-                                // let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
-                                // println!("{}", serialized_xlog);
-                                // println!("======== END OF the ORIGIN MESSAGE JSON  ==========");
-
-                                // for (output, row) in deletes.drain(..) {
-                                //     yield Event::Message(last_commit_lsn, (output, row, -1));
-                                // }
-                                // for (output, row) in inserts.drain(..) {
-                                //     yield Event::Message(last_commit_lsn, (output, row, 1));
-                                // }
-                                // yield Event::Progress([PgLsn::from(u64::from(last_commit_lsn) + 1)]);
-                                // metrics.lsn.set(last_commit_lsn.into());
+                            LogicalReplicationMessage::Origin(_origin) => {
                             }
 
                             LogicalReplicationMessage::Commit(commit) => {
                                 last_commit_lsn = PgLsn::from(commit.end_lsn());
-                                // println!("======== COMMIT ==========");
-                                // let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
-                                // println!("{}", serialized_xlog);
-                                // println!("======== END OF the COMMIT MESSAGE JSON  ==========");
                             }
                             LogicalReplicationMessage::Begin(_begin) => {
-                            //     last_commit_lsn = PgLsn::from(begin.final_lsn());
-                            //     println!("======== BEGIN ==========");
-                            //     let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
-                            //     println!("{}", serialized_xlog);
-                            //     println!("======== END OF the BEGIN MESSAGE JSON  ==========");
-                            //
                             }
-                            //
+
                             // LogicalReplicationMessage::Insert(_insert) => {
                             //     println!("======== INSERT ==========");
                             //     let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
                             //     println!("{}", serialized_xlog);
                             //     println!("======== END OF the INSERT MESSAGE JSON  ==========");
                             // }
-                            //
+
                             // LogicalReplicationMessage::Update(_update) => {
                             //     println!("======== UPDATE  ==========");
                             //     let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
                             //     println!("{}", serialized_xlog);
                             //     println!("======== END OF the UPDATE MESSAGE JSON  ==========");
                             // }
-                            //
+
                             // LogicalReplicationMessage::Delete(_delete) => {
                             //     println!("======== DELETE ==========");
                             //     let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
                             //     println!("{}", serialized_xlog);
                             //     println!("======== END OF the DELETE MESSAGE JSON  ==========");
                             // }
-                            //
+
                             // LogicalReplicationMessage::Relation(_relation) => {
                             //     println!("======== RELATION ==========");
                             //     let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
@@ -366,15 +340,13 @@ struct PublicationTables {
     publication_tables: Vec<PostgresTableDesc>,
 }
 
-pub(crate) async fn replication(connection_config:MzConfig, tx:Sender<tremor_value::Value<'static>>) -> Result<(), anyhow::Error> {
-    let publication = "gamespub";
+pub(crate) async fn replication(connection_config:MzConfig, publication : &str, slot: &str, tx:Sender<tremor_value::Value<'static>>) -> Result<(), anyhow::Error> {
     let publication_tables =
         mz_postgres_util::publication_info(&connection_config, publication, None).await?;
-    let slot = "gamess";
     let source_id = "source_id";
     let mut _replication_lsn = PgLsn::from(0);
 
-    // println!("======== BEGIN SNAPSHOT ==========");
+    // println!("======== BEGIN SNA≠PSHOT ==========");
 
     // Validate publication tables against the state snapshot
     // dbg!(&publication_tables);
