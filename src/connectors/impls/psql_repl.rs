@@ -1,4 +1,3 @@
-// use std::time::Duration;
 use std::str::FromStr;
 // Copyright 2021, The Tremor Team
 //
@@ -13,12 +12,12 @@ use std::str::FromStr;
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use crate::connectors::prelude::*;
 use crate::{
     channel::{bounded, Receiver, Sender},
     errors::already_created_error,
 };
-use crate::connectors::prelude::*;
-use mz_postgres_util::{Config as MzConfig};
+use mz_postgres_util::Config as MzConfig;
 use tokio::task;
 use tokio_postgres::config::Config as TokioPgConfig;
 mod postgres_replication;
@@ -64,14 +63,17 @@ impl ConnectorBuilder for Builder {
         let origin_uri = EventOriginUri {
             scheme: "tremor-psql-repl".to_string(),
             host: config.host.clone(),
-            port: Option::from(config.port.clone()),
+            port: Option::from(config.port),
             path: vec![config.host.to_string()],
         };
         let publication = config.publication;
         let replication_slot = config.replication_slot;
-        let pg_config= TokioPgConfig::from_str(&format!("host={} port={} user={} password={} dbname={}", config.host, config.port, config.username, config.password, config.dbname))?;
+        let pg_config = TokioPgConfig::from_str(&format!(
+            "host={} port={} user={} password={} dbname={}",
+            config.host, config.port, config.username, config.password, config.dbname
+        ))?;
         let connection_config = MzConfig::new(pg_config, mz_postgres_util::TunnelConfig::Direct)?;
-        let (tx,rx) = bounded(qsize());
+        let (tx, rx) = bounded(qsize());
 
         Ok(Box::new(PostgresReplication {
             connection_config,
@@ -86,11 +88,11 @@ impl ConnectorBuilder for Builder {
 
 #[derive(Debug)]
 pub(crate) struct PostgresReplication {
-    connection_config : MzConfig,
+    connection_config: MzConfig,
     publication: String,
     replication_slot: String,
     origin_uri: EventOriginUri,
-    rx : Option<Receiver<Value<'static>>>,
+    rx: Option<Receiver<Value<'static>>>,
     tx: Sender<Value<'static>>,
 }
 
@@ -107,7 +109,8 @@ impl Connector for PostgresReplication {
             self.replication_slot.clone(),
             self.rx.take().ok_or_else(already_created_error)?,
             self.tx.clone(),
-            self.origin_uri.clone());
+            self.origin_uri.clone(),
+        );
         Ok(Some(builder.spawn(source, ctx)))
     }
 
@@ -117,7 +120,7 @@ impl Connector for PostgresReplication {
 }
 
 struct PostgresReplicationSource {
-    connection_config : MzConfig,
+    connection_config: MzConfig,
     publication: String,
     replication_slot: String,
     rx: Receiver<Value<'static>>,
@@ -126,7 +129,14 @@ struct PostgresReplicationSource {
 }
 
 impl PostgresReplicationSource {
-    fn new(connection_config: MzConfig, publication: String,replication_slot: String,rx: Receiver<Value<'static>>, tx: Sender<Value<'static>>, origin_uri: EventOriginUri) -> Self {
+    fn new(
+        connection_config: MzConfig,
+        publication: String,
+        replication_slot: String,
+        rx: Receiver<Value<'static>>,
+        tx: Sender<Value<'static>>,
+        origin_uri: EventOriginUri,
+    ) -> Self {
         Self {
             connection_config,
             publication,
@@ -145,7 +155,15 @@ impl Source for PostgresReplicationSource {
         let publication = self.publication.clone();
         let replication_slot = self.replication_slot.clone();
         let tx = self.tx.clone();
-        task::spawn(async move {postgres_replication::replication(conn_config, &publication, &replication_slot,tx).await.unwrap();});
+        task::spawn(async move {
+            if let Err(e) =
+                postgres_replication::replication(conn_config, &publication, &replication_slot, tx)
+                    .await
+            {
+                // more error handling , just trying to
+                eprintln!("Error in replication task: {e}");
+            }
+        });
         Ok(true)
     }
 

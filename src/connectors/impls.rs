@@ -53,6 +53,8 @@ pub(crate) mod ws;
 
 /// `OpenTelemetry`
 pub(crate) mod otel;
+/// PSQL Replication
+pub(crate) mod psql_repl;
 /// AWS S3 connectors
 pub(crate) mod s3;
 /// std streams connector (stdout, stderr, stdin)
@@ -66,5 +68,3 @@ pub(crate) mod udp;
 pub(crate) mod unix_socket;
 /// Write Ahead Log
 pub(crate) mod wal;
-/// PSQL Replication
-pub(crate) mod psql_repl;

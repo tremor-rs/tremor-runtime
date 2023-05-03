@@ -31,6 +31,7 @@ use googapis::google::cloud::bigquery::storage::v1::{
 use prost::encoding::WireType;
 use prost::Message;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
+use simd_json_derive::Serialize;
 use std::collections::hash_map::Entry;
 use std::marker::PhantomData;
 use std::{collections::HashMap, time::Duration};
@@ -268,7 +269,11 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
             );
         }
         TableType::Json => {
-            warn!("Found a field of type JSON, this is not supported, ignoring.");
+            prost::encoding::string::encode(
+                tag,
+                &val.json_string()?,
+                result,
+            );
         }
         TableType::Interval => {
             warn!("Found a field of type Interval, this is not supported, ignoring.");

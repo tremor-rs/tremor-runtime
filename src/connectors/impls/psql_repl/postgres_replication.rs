@@ -1,6 +1,20 @@
+// Copyright 2021, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use crate::channel::Sender;
 use anyhow::anyhow;
 use futures::{Stream, StreamExt};
-use crate::channel::Sender;
 use mz_expr::MirScalarExpr;
 use mz_postgres_util::{desc::PostgresTableDesc, Config as MzConfig};
 use mz_repr::{Datum, DatumVec, Row};
@@ -19,7 +33,9 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use tokio_postgres::{replication::LogicalReplicationStream, types::PgLsn, Client, SimpleQueryMessage};
+use tokio_postgres::{
+    replication::LogicalReplicationStream, types::PgLsn, Client, SimpleQueryMessage,
+};
 mod serializer;
 use serializer::SerializedXLogDataBody;
 
@@ -42,26 +58,8 @@ async fn produce_replication<'a>(
     committed_lsn: Arc<AtomicU64>,
 ) -> impl Stream<Item = Result<XLogDataBody<LogicalReplicationMessage>, ReplicationError>> + 'a {
     async_stream::try_stream!({
-        // //let mut last_data_message = Instant::now();
-        // let mut inserts = vec![];
-        // let mut deletes = vec![];
-
         let mut last_feedback = Instant::now();
-
-        // Scratch space to use while evaluating casts
-        // let mut datum_vec = DatumVec::new();
-
         let mut last_commit_lsn = as_of;
-        // let mut observed_wal_end = as_of;
-        // The outer loop alternates the client between streaming the replication slot and using
-        // normal SQL queries with pg admin functions to fast-foward our cursor in the event of WAL
-        // lag.
-        //
-        // TODO(petrosagg): we need to do the above because a replication slot can be active only
-        // one place which is why we need to do this dance of entering and exiting replication mode
-        // in order to be able to use the administrative functions below. Perhaps it's worth
-        // creating two independent slots so that we can use the secondary to check without
-        // interrupting the stream on the first one
         loop {
             let client = client_config.clone().connect_replication().await?;
             let query = format!(
@@ -90,51 +88,24 @@ async fn produce_replication<'a>(
                 let mut needs_status_update = last_feedback.elapsed() > FEEDBACK_INTERVAL;
 
                 match stream.as_mut().next().await {
-                    Some(Ok(postgres_protocol::message::backend::ReplicationMessage::XLogData(xlog_data))) => {
+                    Some(Ok(
+                        postgres_protocol::message::backend::ReplicationMessage::XLogData(
+                            xlog_data,
+                        ),
+                    )) => {
                         last_data_message = Instant::now();
                         match xlog_data.data() {
-                            LogicalReplicationMessage::Origin(_origin) => {
-                            }
+                            LogicalReplicationMessage::Origin(_origin) => {}
 
                             LogicalReplicationMessage::Commit(commit) => {
                                 last_commit_lsn = PgLsn::from(commit.end_lsn());
                             }
-                            LogicalReplicationMessage::Begin(_begin) => {
-                            }
-
-                            // LogicalReplicationMessage::Insert(_insert) => {
-                            //     println!("======== INSERT ==========");
-                            //     let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
-                            //     println!("{}", serialized_xlog);
-                            //     println!("======== END OF the INSERT MESSAGE JSON  ==========");
-                            // }
-
-                            // LogicalReplicationMessage::Update(_update) => {
-                            //     println!("======== UPDATE  ==========");
-                            //     let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
-                            //     println!("{}", serialized_xlog);
-                            //     println!("======== END OF the UPDATE MESSAGE JSON  ==========");
-                            // }
-
-                            // LogicalReplicationMessage::Delete(_delete) => {
-                            //     println!("======== DELETE ==========");
-                            //     let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
-                            //     println!("{}", serialized_xlog);
-                            //     println!("======== END OF the DELETE MESSAGE JSON  ==========");
-                            // }
-
-                            // LogicalReplicationMessage::Relation(_relation) => {
-                            //     println!("======== RELATION ==========");
-                            //     let serialized_xlog = serde_json::to_string_pretty(&SerializedXLogDataBody(xlog_data)).unwrap();
-                            //     println!("{}", serialized_xlog);
-                            //     println!("======== END OF the RELATION MESSAGE JSON  ==========");
-                            // }
+                            LogicalReplicationMessage::Begin(_begin) => {}
                             _ => yield xlog_data,
                         }
                     }
                     Some(Ok(ReplicationMessage::PrimaryKeepAlive(keepalive))) => {
                         needs_status_update = needs_status_update || keepalive.reply() == 1;
-                        // observed_wal_end = PgLsn::from(keepalive.wal_end());
 
                         if last_data_message.elapsed() > WAL_LAG_GRACE_PERIOD {
                             break;
@@ -144,7 +115,6 @@ async fn produce_replication<'a>(
                         return Err(ReplicationError::from(err))?;
                     }
                     None => {
-                        dbg!("eof");
                         break;
                     }
                     // The enum is marked non_exhaustive, better be conservative
@@ -193,11 +163,9 @@ async fn produce_replication<'a>(
                 publication = publication
             );
 
-            // let peek_binary_start_time = Instant::now();
             let rows = client.simple_query(&query).await?;
 
-            let changes = rows
-                .into_iter()
+            rows.into_iter()
                 .filter(|row| match row {
                     SimpleQueryMessage::Row(row) => {
                         let change_lsn: PgLsn = row
@@ -213,20 +181,9 @@ async fn produce_replication<'a>(
                     _ => panic!("unexpected enum variant"),
                 })
                 .count();
-
-            dbg!(changes);
-
-            // If there are no changes until the end of the WAL it's safe to fast forward
-            // if changes == 0 {
-            //     last_commit_lsn = observed_wal_end;
-            //     // `Progress` events are _frontiers_, so we add 1, just like when we
-            //     // handle data in `Commit` above.
-            //     yield Event::Progress([PgLsn::from(u64::from(last_commit_lsn) + 1)]);
-            // }
         }
     })
 }
-
 
 // https://github.com/MaterializeInc/materialize/blob/main/src/storage/src/source/postgres.rs#L941
 /// Casts a text row into the target types
@@ -240,7 +197,6 @@ fn cast_row(table_cast: &[MirScalarExpr], datums: &[Datum<'_>]) -> Result<Row, a
     }
     Ok(row)
 }
-
 
 type ReplicationError = anyhow::Error;
 /// Parses SQL results that are expected to be a single row into a Rust type
@@ -290,8 +246,6 @@ fn produce_snapshot<'a>(
 
             tokio::pin!(reader);
             let mut text_row = Row::default();
-            // TODO: once tokio-stream is released with https://github.com/tokio-rs/tokio/pull/4502
-            //    we can convert this into a single `timeout(...)` call on the reader CopyOutStream
             while let Some(b) = tokio::time::timeout(Duration::from_secs(30), reader.next())
                 .await?
                 .transpose()?
@@ -305,7 +259,7 @@ fn produce_snapshot<'a>(
                 while let Some(raw_value) = raw_values.next() {
                     match raw_value? {
                         Some(value) => {
-                            packer.push(Datum::String(std::str::from_utf8(value)?))
+                            packer.push(Datum::String(std::str::from_utf8(value)?));
                         }
                         None => packer.push(Datum::Null),
                     }
@@ -340,22 +294,20 @@ struct PublicationTables {
     publication_tables: Vec<PostgresTableDesc>,
 }
 
-pub(crate) async fn replication(connection_config:MzConfig, publication : &str, slot: &str, tx:Sender<tremor_value::Value<'static>>) -> Result<(), anyhow::Error> {
+pub(crate) async fn replication(
+    connection_config: MzConfig,
+    publication: &str,
+    slot: &str,
+    tx: Sender<tremor_value::Value<'static>>,
+) -> Result<(), anyhow::Error> {
     let publication_tables =
         mz_postgres_util::publication_info(&connection_config, publication, None).await?;
     let source_id = "source_id";
     let mut _replication_lsn = PgLsn::from(0);
-
-    // println!("======== BEGIN SNA≠PSHOT ==========");
-
-    // Validate publication tables against the state snapshot
-    // dbg!(&publication_tables);
-    let mut postgres_tables = Vec::new();
-    for postgres_table_desc in &publication_tables {
-        postgres_tables.push(postgres_table_desc.clone());
-    }
-    let publication_tables_json = serde_json::to_string(&PublicationTables{publication_tables: postgres_tables}).unwrap();
-    let json_obj : tremor_value::Value = serde_json::from_str(&publication_tables_json)?;
+    let publication_tables_json = serde_json::to_string(&PublicationTables {
+        publication_tables: publication_tables.clone(),
+    })?;
+    let json_obj = serde_json::from_str::<tremor_value::Value>(&publication_tables_json)?;
     tx.send(json_obj.into_static()).await?;
 
     let source_tables: BTreeMap<u32, SourceTable> = publication_tables
@@ -373,25 +325,18 @@ pub(crate) async fn replication(connection_config:MzConfig, publication : &str, 
         .collect();
     let client = connection_config.clone().connect_replication().await?;
 
-    // Technically there is TOCTOU problem here but it makes the code easier and if we end
-    // up attempting to create a slot and it already exists we will simply retry
-    // Also, we must check if the slot exists before we start a transaction because creating a
-    // slot must be the first statement in a transaction
     let res = client
         .simple_query(&format!(
-            r#"SELECT confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = '{}'"#,
-            slot
+            r#"SELECT confirmed_flush_lsn FROM pg_replication_slots WHERE slot_name = '{slot}'"#
         ))
         .await?;
 
-    // dbg!(&res);
     let slot_lsn = parse_single_row(&res, "confirmed_flush_lsn");
     client
         .simple_query("BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ;")
         .await?;
     let (slot_lsn, snapshot_lsn, temp_slot): (PgLsn, PgLsn, _) = match slot_lsn {
         Ok(slot_lsn) => {
-            // dbg!(&slot_lsn);
             // The main slot already exists which means we can't use it for the snapshot. So
             // we'll create a temporary replication slot in order to both set the transaction's
             // snapshot to be a consistent point and also to find out the LSN that the snapshot
@@ -400,55 +345,35 @@ pub(crate) async fn replication(connection_config:MzConfig, publication : &str, 
             // When this happens we'll most likely be snapshotting at a later LSN than the slot
             // which we will take care below by rewinding.
             let temp_slot = uuid::Uuid::new_v4().to_string().replace('-', "");
-            // dbg!(&temp_slot);
             let res = client
                 .simple_query(&format!(
-                    r#"CREATE_REPLICATION_SLOT {:?} TEMPORARY LOGICAL "pgoutput" USE_SNAPSHOT"#,
-                    temp_slot
+                    r#"CREATE_REPLICATION_SLOT {temp_slot} TEMPORARY LOGICAL "pgoutput" USE_SNAPSHOT"#
                 ))
                 .await?;
-            // dbg!(&res);
             let snapshot_lsn = parse_single_row(&res, "consistent_point")?;
             (slot_lsn, snapshot_lsn, Some(temp_slot))
         }
         Err(_e) => {
-            // dbg!(e);
             let res = client
                 .simple_query(&format!(
-                    r#"CREATE_REPLICATION_SLOT {:?} LOGICAL "pgoutput" USE_SNAPSHOT"#,
-                    slot
+                    r#"CREATE_REPLICATION_SLOT {slot} LOGICAL "pgoutput" USE_SNAPSHOT"#
                 ))
                 .await?;
-            // dbg!(&res);
             let slot_lsn: PgLsn = parse_single_row(&res, "consistent_point")?;
             (slot_lsn, slot_lsn, None)
         }
     };
 
-    // dbg!(&slot_lsn, &snapshot_lsn, &temp_slot);
-
     let mut stream = Box::pin(produce_snapshot(&client, &source_tables).enumerate());
 
     while let Some((_i, event)) = stream.as_mut().next().await {
-        // if i > 0 {
-        //     // Failure scenario after we have produced at least one row, but before a
-        //     // successful `COMMIT`
-        //     // fail::fail_point!("pg_snapshot_failure", |_| {
-        //     return Err(anyhow::anyhow!(
-        //         "recoverable errors should crash the process"
-        //     ));
-        //     // });
-        // }
         let (_output, _row) = event?;
-
-        // dbg!(output, row, slot_lsn, 1);
     }
-    // println!("======== END SNAPSHOT ==========");
 
     if let Some(temp_slot) = temp_slot {
-        let _ = client
+        client
             .simple_query(&format!("DROP_REPLICATION_SLOT {temp_slot:?}"))
-            .await;
+            .await?;
     }
     client.simple_query("COMMIT;").await?;
 
@@ -461,7 +386,9 @@ pub(crate) async fn replication(connection_config:MzConfig, publication : &str, 
     drop(client);
     assert!(slot_lsn <= snapshot_lsn);
     if slot_lsn < snapshot_lsn {
-        println!("postgres snapshot was at {snapshot_lsn:?} but we need it at {slot_lsn:?}. Rewinding");
+        println!(
+            "postgres snapshot was at {snapshot_lsn:?} but we need it at {slot_lsn:?}. Rewinding"
+        );
         // Our snapshot was too far ahead so we must rewind it by reading the replication
         // stream until the snapshot lsn and emitting any rows that we find with negated diffs
         let replication_stream = produce_replication(
@@ -471,22 +398,23 @@ pub(crate) async fn replication(connection_config:MzConfig, publication : &str, 
             slot_lsn,
             Arc::new(0.into()),
         )
-            .await;
+        .await;
         tokio::pin!(replication_stream);
-        // println!("======== STARTING WHILE LOOP ==========");
+
         while let Some(event) = replication_stream.next().await {
-            // let event = event?;
-            let serialized_event = serde_json::to_string_pretty(&SerializedXLogDataBody(event?)).unwrap();
-            // let serialized_event = tremor_value::Value::deserialize(&SerializedXLogDataBody(event?)).unwrap();
-            let json_obj : tremor_value::Value = serde_json::from_str(&serialized_event)?;
-            // Value::desierialize(&SerializedXLogDataBody(event?)))
-            // println!("{:#?}", json_obj);
-            tx.send(json_obj.into_static()).await?;
-            // sender.send(event).unwrap(); // broadcast the event to the channel
-            // dbg!(event);
+            let serialized_event = serde_json::to_string_pretty(&SerializedXLogDataBody(event?))?;
+            let json_obj: Result<tremor_value::Value, _> = serde_json::from_str(&serialized_event);
+            match json_obj {
+                Ok(value) => {
+                    tx.send(value.into_static()).await?;
+                }
+                Err(e) => {
+                    eprintln!("Error deserializing JSON object: {e}");
+                    break;
+                }
+            }
         }
     }
-
     println!("replication snapshot for source {} succeeded", &source_id);
     _replication_lsn = slot_lsn;
     Ok(())
