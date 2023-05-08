@@ -33,7 +33,7 @@ impl<'a> Serialize for SerializedTuple<'a> {
             .0
             .tuple_data()
             .iter()
-            .map(|d| SerializedTupleData::from_tuple_data(d))
+            .map(SerializedTupleData::from_tuple_data)
             .collect::<Vec<_>>();
         let mut state = serializer.serialize_struct("Tuple", 1)?;
         state.serialize_field("data", &data)?;
@@ -131,13 +131,23 @@ pub struct SerializedColumn<'a> {
     type_modifier: i32,
 }
 
-impl<'a> From<&'a Column> for SerializedColumn<'a> {
-    fn from(column: &'a Column) -> Self {
-        SerializedColumn {
-            flags: column.flags(),
-            name: column.name().unwrap(), // this will panic if there's an error reading the name
-            type_id: column.type_id(),
-            type_modifier: column.type_modifier(),
+pub enum SerializedColumnResult<'a> {
+    Success(SerializedColumn<'a>),
+    Failure(CustomError),
+}
+
+impl<'a> From<&'a Column> for SerializedColumnResult<'a> {
+    fn from(column: &'a Column) -> SerializedColumnResult<'a> {
+        match column.name() {
+            Ok(name) => SerializedColumnResult::Success(SerializedColumn {
+                flags: column.flags(),
+                name,
+                type_id: column.type_id(),
+                type_modifier: column.type_modifier(),
+            }),
+            Err(error) => SerializedColumnResult::Failure(CustomError {
+                message: error.to_string(),
+            }),
         }
     }
 }
@@ -147,14 +157,30 @@ impl<'a> From<&'a Column> for SerializedColumn<'a> {
 /// an array of columns into JSON format.
 #[derive(Debug, Serialize)]
 pub struct SerializedColumns<'a> {
-    columns: Vec<SerializedColumn<'a>>,
+    pub columns: Result<Vec<SerializedColumn<'a>>, CustomError>,
 }
 
 impl<'a> From<&'a [Column]> for SerializedColumns<'a> {
     fn from(columns: &'a [Column]) -> Self {
-        SerializedColumns {
-            columns: columns.iter().map(SerializedColumn::from).collect(),
+        let mut serialized_columns = SerializedColumns {
+            columns: Ok(Vec::new()),
+        };
+
+        for column in columns {
+            match SerializedColumnResult::from(column) {
+                SerializedColumnResult::Success(serialized_column) => {
+                    if let Ok(columns) = &mut serialized_columns.columns {
+                        columns.push(serialized_column);
+                    }
+                }
+                SerializedColumnResult::Failure(err) => {
+                    serialized_columns.columns = Err(err);
+                    break;
+                }
+            }
         }
+
+        serialized_columns
     }
 }
 
@@ -255,7 +281,15 @@ impl<'a> Serialize for SerializedLogicalReplicationMessage<'a> {
                     "replica_identity",
                     &SerializedReplicaIdentity::from_replica_identity(msg.replica_identity()),
                 )?;
-                state.serialize_field("columns", &SerializedColumns::from(msg.columns()))?;
+                let serialized_columns = SerializedColumns::from(msg.columns());
+                match serialized_columns.columns {
+                    Ok(columns) => {
+                        state.serialize_field("columns", &columns)?;
+                    }
+                    Err(err) => {
+                        return Err(S::Error::custom(err));
+                    }
+                }
             }
             LogicalReplicationMessage::Type(ref msg) => {
                 state.serialize_field("id", &msg.id())?;

@@ -1090,8 +1090,7 @@ mod test {
         let mut result = Vec::new();
         assert!(encode_field(&value, &field, &mut result).is_ok());
 
-        // json is currently not supported, so we expect the field to be skipped
-        assert_eq!([] as [u8; 0], result[..]);
+        assert_eq!([10, 2, 123, 125] as [u8; 4], result[..]);
     }
 
     #[test]

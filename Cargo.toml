@@ -41,8 +41,7 @@ mz-postgres-util = { git = "https://github.com/MaterializeInc/materialize", rev 
 mz-repr = { git = "https://github.com/MaterializeInc/materialize", rev = "ba21055fdee530cdc9270ffe8b37bcc62ff0789d" }
 mz-expr = { git = "https://github.com/MaterializeInc/materialize", rev = "ba21055fdee530cdc9270ffe8b37bcc62ff0789d" }
 mz-pgcopy = { git = "https://github.com/MaterializeInc/materialize", rev = "ba21055fdee530cdc9270ffe8b37bcc62ff0789d" }
-once_cell = "*"
-serde_json = "*"
+serde_json = "1.0.96"
 ######
 tokio = { version = "1.27", features = ["full"] }
 tokio-stream = "0.1"
@@ -365,10 +364,7 @@ tremor = { path = "/usr/bin/tremor" }
 "../packaging/distribution/etc/systemd/system/tremor.service" = { path = "/usr/lib/systemd/system/tremor.service" }
 
 [patch."https://github.com/MaterializeInc/rust-rdkafka.git"]
-rdkafka-sys = { version = "4.3", features = [
-  "cmake-build",
-  "libz-static",
-], default-features = false }
+rdkafka-sys = { version = "4.3" }
 
 [patch."https://github.com/frankmcsherry/columnation"]
 columnation = { git = "https://github.com/Licenser/columnation", version = "0.1", rev = "bfd9e2a953768887138e56f10f9be13e27ef175a" }

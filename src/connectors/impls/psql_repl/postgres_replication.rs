@@ -18,7 +18,6 @@ use futures::{Stream, StreamExt};
 use mz_expr::MirScalarExpr;
 use mz_postgres_util::{desc::PostgresTableDesc, Config as MzConfig};
 use mz_repr::{Datum, DatumVec, Row};
-use once_cell::sync::Lazy;
 use postgres_protocol::message::backend::{
     LogicalReplicationMessage, ReplicationMessage, XLogDataBody,
 };
@@ -40,8 +39,11 @@ mod serializer;
 use serializer::SerializedXLogDataBody;
 
 // https://github.com/MaterializeInc/materialize/blob/main/src/storage/src/source/postgres.rs#L60
-/// Postgres epoch is 2000-01-01T00:00:00Z
-static PG_EPOCH: Lazy<SystemTime> = Lazy::new(|| UNIX_EPOCH + Duration::from_secs(946_684_800));
+// Postgres epoch is 2000-01-01T00:00:00Z
+
+lazy_static! {
+    static ref PG_EPOCH: SystemTime = UNIX_EPOCH + Duration::from_secs(946_684_800);
+}
 
 /// How often a status update message should be sent to the server
 static FEEDBACK_INTERVAL: Duration = Duration::from_secs(30);
@@ -125,10 +127,10 @@ async fn produce_replication<'a>(
                 if needs_status_update {
                     let ts: i64 = PG_EPOCH
                         .elapsed()
-                        .expect("system clock set earlier than year 2000!")
+                        .map_err(ReplicationError::from)?
                         .as_micros()
                         .try_into()
-                        .expect("software more than 200k years old, consider updating");
+                        .map_err(ReplicationError::from)?;
 
                     let committed_lsn = PgLsn::from(committed_lsn.load(Ordering::SeqCst));
                     stream
@@ -168,17 +170,13 @@ async fn produce_replication<'a>(
             rows.into_iter()
                 .filter(|row| match row {
                     SimpleQueryMessage::Row(row) => {
-                        let change_lsn: PgLsn = row
-                            .get("lsn")
-                            .expect("missing expected column: `lsn`")
-                            .parse()
-                            .expect("invalid lsn");
-                        // Keep all the changes that may exist after our last observed transaction
-                        // commit
-                        change_lsn > last_commit_lsn
+                        let change_lsn = row
+                            .try_get("lsn")
+                            .ok()
+                            .and_then(|val| val?.parse::<PgLsn>().ok());
+                        change_lsn > Some(last_commit_lsn)
                     }
-                    SimpleQueryMessage::CommandComplete(_) => false,
-                    _ => panic!("unexpected enum variant"),
+                    &_ => false,
                 })
                 .count();
         }
@@ -346,10 +344,10 @@ pub(crate) async fn replication(
             // which we will take care below by rewinding.
             let temp_slot = uuid::Uuid::new_v4().to_string().replace('-', "");
             let res = client
-                .simple_query(&format!(
-                    r#"CREATE_REPLICATION_SLOT {temp_slot} TEMPORARY LOGICAL "pgoutput" USE_SNAPSHOT"#
-                ))
-                .await?;
+                    .simple_query(&format!(
+                        r#"CREATE_REPLICATION_SLOT "{temp_slot}" TEMPORARY LOGICAL "pgoutput" USE_SNAPSHOT"#
+                    ))
+                    .await?;
             let snapshot_lsn = parse_single_row(&res, "consistent_point")?;
             (slot_lsn, snapshot_lsn, Some(temp_slot))
         }
