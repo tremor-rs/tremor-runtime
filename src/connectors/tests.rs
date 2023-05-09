@@ -38,6 +38,8 @@ mod kafka;
 #[cfg(feature = "metronome-integration")]
 mod metronome;
 mod pause_resume;
+#[cfg(feature = "pg-integration")]
+mod psql_repl;
 #[cfg(feature = "s3-integration")]
 mod s3;
 #[cfg(feature = "net-integration")]
