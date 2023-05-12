@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::channel::{bounded, Receiver, Sender};
 use crate::connectors::google::{AuthInterceptor, TokenProvider};
 use crate::connectors::prelude::*;
+use crate::{
+    channel::{bounded, Receiver, Sender},
+    connectors::google::TokenSrc,
+};
 use beef::generic::Cow;
 use futures::StreamExt;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
@@ -48,6 +51,7 @@ struct Config {
     #[serde(default = "default_ack_deadline")]
     pub ack_deadline: u64,
     pub subscription_id: String,
+    pub token: TokenSrc,
     #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
     pub url: Url<HttpsDefaults>,
 }
@@ -294,7 +298,7 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
         let mut client = SubscriberClient::with_interceptor(
             channel.clone(),
             AuthInterceptor {
-                token_provider: T::default(),
+                token_provider: T::from(self.config.token.clone()),
             },
         );
         // check that the subscription exists

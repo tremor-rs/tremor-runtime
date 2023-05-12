@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::{AuthInterceptor, TokenProvider};
+use crate::connectors::google::{AuthInterceptor, TokenProvider, TokenSrc};
 use crate::connectors::prelude::{
     Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
     SinkManagerBuilder, SinkReply, Url,
@@ -44,6 +44,7 @@ pub(crate) struct Config {
     pub connect_timeout: u64,
     #[serde(default = "crate::connectors::impls::gpubsub::default_request_timeout")]
     pub request_timeout: u64,
+    pub token: TokenSrc,
     #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
     pub url: Url<HttpsDefaults>,
     pub topic: String,
@@ -147,7 +148,7 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
         self.client = Some(PublisherClient::with_interceptor(
             channel,
             AuthInterceptor {
-                token_provider: T::default(),
+                token_provider: T::from(self.config.token.clone()),
             },
         ));
 

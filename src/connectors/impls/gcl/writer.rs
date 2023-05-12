@@ -15,7 +15,7 @@
 pub(crate) mod meta;
 mod sink;
 
-use crate::connectors::google::GouthTokenProvider;
+use crate::connectors::google::{GouthTokenProvider, TokenSrc};
 use crate::connectors::impls::gcl::writer::sink::{GclSink, TonicChannelFactory};
 use crate::connectors::prelude::*;
 use crate::connectors::{Alias, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
@@ -108,6 +108,9 @@ pub(crate) struct Config {
     /// that can be in progress simultaneously
     #[serde(default = "default_concurrency")]
     pub concurrency: usize,
+
+    /// Token to use for authentication
+    pub token: TokenSrc,
 }
 
 fn default_partial_success() -> bool {
