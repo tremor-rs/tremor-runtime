@@ -14,7 +14,7 @@
 
 mod sink;
 
-use crate::connectors::google::GouthTokenProvider;
+use crate::connectors::google::{GouthTokenProvider, TokenSrc};
 use crate::connectors::impls::gbq::writer::sink::{GbqSink, TonicChannelFactory};
 use crate::connectors::prelude::*;
 use crate::connectors::{Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
@@ -26,6 +26,8 @@ pub(crate) struct Config {
     pub table_id: String,
     pub connect_timeout: u64,
     pub request_timeout: u64,
+    /// Token to use for authentication
+    pub token: TokenSrc,
     #[serde(default = "default_request_size_limit")]
     pub request_size_limit: usize,
 }
@@ -99,6 +101,7 @@ mod tests {
                 connect_timeout: 1,
                 request_timeout: 1,
                 request_size_limit: 10 * 1024 * 1024,
+                token: TokenSrc::File(file!().to_string()),
             },
         };
 

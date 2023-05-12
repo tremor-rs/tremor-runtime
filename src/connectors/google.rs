@@ -14,6 +14,8 @@
 
 use crate::errors::Result;
 use gouth::Token;
+use simd_json::OwnedValue;
+use simd_json_derive::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
 use tonic::metadata::MetadataValue;
@@ -31,29 +33,60 @@ pub(crate) trait ChannelFactory<
     async fn make_channel(&self, connect_timeout: Duration) -> Result<TChannel>;
 }
 
-pub trait TokenProvider: Clone + Default + Send {
+/// Token Source
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all(serialize = "lowercase", deserialize = "lowercase"))]
+pub enum TokenSrc {
+    /// Enmbedded JSON
+    Json(OwnedValue),
+    /// File for json
+    File(String),
+}
+
+impl TokenSrc {
+    pub(crate) fn to_token(&self) -> Result<Token> {
+        let b = gouth::Builder::new();
+        Ok(match self {
+            TokenSrc::Json(json) => {
+                let json = json.json_string()?;
+                b.json(json)
+            }
+            TokenSrc::File(file) => b.file(file),
+        }
+        .build()?)
+    }
+}
+
+pub trait TokenProvider: Clone + Send + From<TokenSrc> {
     fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status>;
 }
 
 pub struct GouthTokenProvider {
     pub(crate) gouth_token: Option<Token>,
+    pub(crate) src: TokenSrc,
 }
 
 impl Clone for GouthTokenProvider {
     fn clone(&self) -> Self {
-        Self { gouth_token: None }
+        Self {
+            gouth_token: None,
+            src: self.src.clone(),
+        }
     }
 }
 
-impl Default for GouthTokenProvider {
-    fn default() -> Self {
-        Self::new()
+impl From<TokenSrc> for GouthTokenProvider {
+    fn from(src: TokenSrc) -> Self {
+        Self::new(src)
     }
 }
 
 impl GouthTokenProvider {
-    pub fn new() -> Self {
-        GouthTokenProvider { gouth_token: None }
+    pub fn new(src: TokenSrc) -> Self {
+        GouthTokenProvider {
+            gouth_token: None,
+            src,
+        }
     }
 }
 
@@ -62,8 +95,10 @@ impl TokenProvider for GouthTokenProvider {
         let token = if let Some(ref token) = self.gouth_token {
             token
         } else {
-            let new_token =
-                Token::new().map_err(|_| Status::unavailable("Failed to read Google Token"))?;
+            let new_token = self
+                .src
+                .to_token()
+                .map_err(|_| Status::unavailable("Failed to read Google Token"))?;
 
             self.gouth_token.get_or_insert(new_token)
         };

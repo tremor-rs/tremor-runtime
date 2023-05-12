@@ -14,6 +14,7 @@
 
 use crate::{
     connectors::{
+        google::TokenSrc,
         impls::object_storage::{BufferPart, ObjectId},
         prelude::{Result, Url},
         utils::url::HttpsDefaults,
@@ -338,11 +339,15 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
 impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy>
     DefaultClient<TClient, TBackoffStrategy>
 {
-    #[allow(clippy::unnecessary_wraps)] // test requerst a result
-    pub fn new(client: TClient, backoff_strategy: TBackoffStrategy) -> Result<Self> {
+    #[allow(clippy::unnecessary_wraps, unused_variables)] // test requerst a result
+    pub fn new(
+        client: TClient,
+        backoff_strategy: TBackoffStrategy,
+        token: &TokenSrc,
+    ) -> Result<Self> {
         Ok(Self {
             #[cfg(not(test))]
-            token: Token::new()?,
+            token: token.to_token()?,
             client,
             backoff_strategy,
         })
@@ -541,6 +546,7 @@ mod tests {
                 max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
+            &TokenSrc::File("/dev/null".into()),
         )?;
         api_client
             .delete_upload(

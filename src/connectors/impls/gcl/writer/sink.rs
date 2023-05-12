@@ -223,7 +223,7 @@ where
         let client = LoggingServiceV2Client::with_interceptor(
             channel,
             AuthInterceptor {
-                token_provider: T::default(),
+                token_provider: T::from(self.config.token.clone()),
             },
         );
 

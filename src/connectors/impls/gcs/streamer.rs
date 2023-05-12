@@ -14,6 +14,7 @@
 
 use crate::{
     connectors::{
+        google::TokenSrc,
         impls::{
             gcs::{
                 chunked_buffer::ChunkedBuffer,
@@ -50,6 +51,7 @@ pub(super) struct Config {
     /// Mode of operation for this sink
     #[serde(default)]
     pub(super) mode: Mode,
+    pub(super) token: TokenSrc,
     #[serde(default = "default_connect_timeout")]
     pub(super) connect_timeout: u64,
     #[serde(default = "default_buffer_size")]
@@ -140,13 +142,14 @@ impl Connector for GCSStreamerConnector {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let client_factory = Box::new(|config: &Config| {
+        let token = self.config.token.clone();
+        let client_factory = Box::new(move |config: &Config| {
             let http_client = create_client(Duration::from_nanos(config.connect_timeout));
             let backoff_strategy = ExponentialBackoffRetryStrategy::new(
                 config.max_retries,
                 Duration::from_nanos(config.backoff_base_time),
             );
-            DefaultClient::new(http_client, backoff_strategy)
+            DefaultClient::new(http_client, backoff_strategy, &token)
         });
 
         info!(
@@ -555,6 +558,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
+            token: TokenSrc::File("/dev/null".into()),
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -741,6 +745,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
+            token: TokenSrc::File("/dev/null".into()),
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -914,6 +919,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
+            token: TokenSrc::File("/dev/null".into()),
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -1008,6 +1014,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
+            token: TokenSrc::File("/dev/null".into()),
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -1060,6 +1067,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
+            token: TokenSrc::File("/dev/null".into()),
         };
 
         let sink_impl =
@@ -1284,6 +1292,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
+            token: TokenSrc::File("/dev/null".into()),
         };
 
         let sink_impl =
