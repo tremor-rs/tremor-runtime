@@ -670,12 +670,12 @@ where
 #[cfg(feature = "gcp-integration")]
 mod test {
     use super::*;
-    use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
+    use crate::connectors::{google::TokenSrc, impls::gbq};
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
@@ -1392,6 +1392,7 @@ mod test {
     async fn on_event_fails_if_client_is_not_conected() -> Result<()> {
         let (rx, _tx) = bounded(1024);
         let config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
             "table_id": "doesnotmatter",
             "connect_timeout": 1_000_000,
             "request_timeout": 1_000_000
@@ -1430,6 +1431,7 @@ mod test {
     async fn on_event_fails_if_write_stream_is_not_conected() -> Result<()> {
         let (rx, _tx) = bounded(1024);
         let config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
             "table_id": "doesnotmatter",
             "connect_timeout": 1_000_000,
             "request_timeout": 1_000_000
@@ -1506,6 +1508,7 @@ mod test {
 
         let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
+                token: TokenSrc::dummy(),
                 table_id: String::new(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
@@ -1591,6 +1594,7 @@ mod test {
         ])));
         let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
+                token: TokenSrc::dummy(),
                 table_id: String::new(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
@@ -1661,6 +1665,7 @@ mod test {
     pub async fn does_not_auto_ack() {
         let sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
+                token: TokenSrc::dummy(),
                 table_id: String::new(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,

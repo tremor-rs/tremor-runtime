@@ -525,6 +525,7 @@ pub(crate) mod tests {
     #[test]
     pub fn config_adapts_when_buffer_size_is_not_divisible_by_256ki() {
         let raw_config = literal!({
+            "token": {"file": file!().to_string()},
             "mode": "yolo",
             "buffer_size": 256 * 1000
         });
@@ -558,7 +559,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
-            token: TokenSrc::File("/dev/null".into()),
+            token: TokenSrc::dummy(),
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -745,7 +746,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
-            token: TokenSrc::File("/dev/null".into()),
+            token: TokenSrc::dummy(),
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -919,7 +920,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
-            token: TokenSrc::File("/dev/null".into()),
+            token: TokenSrc::dummy(),
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -1014,7 +1015,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
-            token: TokenSrc::File("/dev/null".into()),
+            token: TokenSrc::dummy(),
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -1067,7 +1068,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
-            token: TokenSrc::File("/dev/null".into()),
+            token: TokenSrc::dummy(),
         };
 
         let sink_impl =
@@ -1292,7 +1293,7 @@ pub(crate) mod tests {
             buffer_size: 10,
             max_retries: 3,
             backoff_base_time: 1,
-            token: TokenSrc::File("/dev/null".into()),
+            token: TokenSrc::dummy(),
         };
 
         let sink_impl =
@@ -1440,6 +1441,7 @@ pub(crate) mod tests {
     async fn connector_yolo_mode() -> Result<()> {
         _ = env_logger::try_init();
         let config = literal!({
+            "token": {"file": file!().to_string()},
             "mode": "yolo"
         });
         let builder = super::Builder::default();
@@ -1470,6 +1472,7 @@ pub(crate) mod tests {
     async fn connector_consistent_mode() -> Result<()> {
         _ = env_logger::try_init();
         let config = literal!({
+            "token": {"file": file!().to_string()},
             "mode": "consistent"
         });
         let builder = super::Builder::default();

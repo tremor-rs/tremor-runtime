@@ -339,7 +339,8 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
 impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy>
     DefaultClient<TClient, TBackoffStrategy>
 {
-    #[allow(clippy::unnecessary_wraps, unused_variables)] // test requerst a result
+    // allow is required to not produce warnings in test mode
+    #[allow(clippy::unnecessary_wraps, unused_variables)]
     pub fn new(
         client: TClient,
         backoff_strategy: TBackoffStrategy,
@@ -546,7 +547,7 @@ mod tests {
                 max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
-            &TokenSrc::File("/dev/null".into()),
+            &TokenSrc::dummy(),
         )?;
         api_client
             .delete_upload(

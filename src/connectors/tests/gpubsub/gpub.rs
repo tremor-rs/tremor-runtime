@@ -37,6 +37,7 @@ async fn no_connection() -> Result<()> {
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
+            "token": {"file": file!().to_string()},
             "url": "https://localhost:9090",
             "connect_timeout": 100_000_000,
             "topic": "projects/xxx/topics/test-a",
@@ -56,6 +57,7 @@ async fn no_hostname() -> Result<()> {
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
+            "token": {"file": file!().to_string()},
             "url": "file:///etc/passwd",
             "connect_timeout": 100_000_000,
             "topic": "projects/xxx/topics/test-a",
@@ -90,6 +92,7 @@ async fn simple_publish() -> Result<()> {
     let connector_yaml: Value = literal!({
         "codec": "binary",
         "config":{
+            "token": {"file": file!().to_string()},
             "url": endpoint,
             "connect_timeout": 30_000_000_000_u64,
             "topic": "projects/test/topics/test",
@@ -195,6 +198,7 @@ async fn simple_publish_with_timeout() -> Result<()> {
     let connector_yaml: Value = literal!({
         "codec": "binary",
         "config":{
+            "token": {"file": file!().to_string()},
             "url": endpoint,
             "connect_timeout": 30_000_000_000u64,
             "topic": "projects/test/topics/test",

@@ -44,6 +44,10 @@ pub enum TokenSrc {
 }
 
 impl TokenSrc {
+    #[cfg(test)]
+    pub(crate) fn dummy() -> Self {
+        TokenSrc::File(file!().into())
+    }
     pub(crate) fn to_token(&self) -> Result<Token> {
         let b = gouth::Builder::new();
         Ok(match self {
@@ -64,6 +68,15 @@ pub trait TokenProvider: Clone + Send + From<TokenSrc> {
 pub struct GouthTokenProvider {
     pub(crate) gouth_token: Option<Token>,
     pub(crate) src: TokenSrc,
+}
+
+impl std::fmt::Debug for GouthTokenProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GouthTokenProvider")
+            .field("gouth_token", &self.gouth_token.is_some())
+            .field("src", &self.src)
+            .finish()
+    }
 }
 
 impl Clone for GouthTokenProvider {
@@ -98,7 +111,7 @@ impl TokenProvider for GouthTokenProvider {
             let new_token = self
                 .src
                 .to_token()
-                .map_err(|_| Status::unavailable("Failed to read Google Token"))?;
+                .map_err(|e| Status::unavailable(format!("Failed to read Google Token: {e}")))?;
 
             self.gouth_token.get_or_insert(new_token)
         };
@@ -150,10 +163,7 @@ pub(crate) mod tests {
     };
 
     use super::*;
-    use crate::{
-        connectors::utils::EnvHelper,
-        errors::{Error, Result},
-    };
+    use crate::errors::{Error, Result};
     use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
 
     #[derive(Clone)]
@@ -182,6 +192,11 @@ pub(crate) mod tests {
     impl TokenProvider for TestTokenProvider {
         fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
             Ok(self.token.clone())
+        }
+    }
+    impl From<TokenSrc> for TestTokenProvider {
+        fn from(_src: TokenSrc) -> Self {
+            Self::new()
         }
     }
 
@@ -245,10 +260,9 @@ PX8efvDMhv16QqDFF0k80d0=
         file.as_file_mut().write_all(sa_str.as_bytes())?;
         let path = file.into_temp_path();
         let path_str = path.to_string_lossy().to_string();
-        let mut env = EnvHelper::new();
-        env.set_var("GOOGLE_APPLICATION_CREDENTIALS", &path_str);
 
-        let mut provider = GouthTokenProvider::default();
+        let mut provider = GouthTokenProvider::from(TokenSrc::File(path_str));
+        dbg!(&provider);
         assert!(provider.get_token().is_err());
 
         let service_fn = make_service_fn(|_| async {
@@ -295,7 +309,7 @@ PX8efvDMhv16QqDFF0k80d0=
 
     #[test]
     fn appease_the_coverage_gods() {
-        let provider = GouthTokenProvider::default();
+        let provider = GouthTokenProvider::from(TokenSrc::dummy());
         let mut provider = provider;
         assert!(provider.get_token().is_err());
 
@@ -327,6 +341,11 @@ PX8efvDMhv16QqDFF0k80d0=
     impl TokenProvider for FailingTokenProvider {
         fn get_token(&mut self) -> std::result::Result<Arc<String>, Status> {
             Err(Status::unavailable("boo"))
+        }
+    }
+    impl From<TokenSrc> for FailingTokenProvider {
+        fn from(_src: TokenSrc) -> Self {
+            Self::default()
         }
     }
 
