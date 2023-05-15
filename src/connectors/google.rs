@@ -41,23 +41,24 @@ pub enum TokenSrc {
     Json(OwnedValue),
     /// File for json
     File(String),
+    /// Environment variable driven
+    Env,
 }
 
 impl TokenSrc {
     #[cfg(test)]
     pub(crate) fn dummy() -> Self {
-        TokenSrc::File(file!().into())
+        TokenSrc::Env
     }
     pub(crate) fn to_token(&self) -> Result<Token> {
-        let b = gouth::Builder::new();
         Ok(match self {
             TokenSrc::Json(json) => {
                 let json = json.json_string()?;
-                b.json(json)
+                gouth::Builder::new().json(json).build()?
             }
-            TokenSrc::File(file) => b.file(file),
-        }
-        .build()?)
+            TokenSrc::File(file) => gouth::Builder::new().file(file).build()?,
+            TokenSrc::Env => gouth::Token::new()?,
+        })
     }
 }
 
