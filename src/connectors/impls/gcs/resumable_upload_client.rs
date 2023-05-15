@@ -15,9 +15,11 @@
 use crate::{
     connectors::{
         google::TokenSrc,
-        impls::object_storage::{BufferPart, ObjectId},
         prelude::{Result, Url},
-        utils::url::HttpsDefaults,
+        utils::{
+            object_storage::{BufferPart, ObjectId},
+            url::HttpsDefaults,
+        },
     },
     errors::err_gcs,
 };

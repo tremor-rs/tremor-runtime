@@ -12,7 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #![cfg_attr(coverage, no_coverage)]
+//! The `wal` connector provides a write-ahead log implementation for use with transactional streams
+//! to deliver guaranteed delivery between a source and a downstream connected target system.
+//!
+//! The connector detects and responds to circuit breaker and event acknowledgements to provide the
+//! guarantee of delivery through a persistent write ahead log it maintains and updates for each
+//! user event it sees.
+//!
+//! ## Configuration
+//!
+//! ```tremor
+//! define connector my_wal from wal
+//! with
+//!   "config": {
+//!     # required - directory where WAL storage is configured
+//!     "path" = "state",
+//!
+//!     # Maximum chunk size in bytes
+//!     "chunk_size" = 1024,
+//!
+//!     # Retention based on maximum number of chunks
+//!     "max_chunks" = 100,
+//!   }
+//! end;
+//! ```
+
 use std::{sync::Arc, time::Duration};
 
 use crate::connectors::prelude::*;

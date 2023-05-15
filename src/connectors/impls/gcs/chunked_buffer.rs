@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::impls::object_storage::{BufferPart, ObjectStorageBuffer};
+use crate::connectors::utils::object_storage::{BufferPart, ObjectStorageBuffer};
 use crate::errors::{err_gcs, Result};
 
 /// This structure is similar to a Vec<u8>, but with some special methods.

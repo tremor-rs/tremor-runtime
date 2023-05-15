@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Common abstractions for object storage connectors
-//!
-//! Currently home of two kinds of sinks implementing different modes: `yolo` and `consistent` See docs on `Mode`.
-
 use crate::connectors::prelude::*;
 use crate::errors::{err_object_storage, Result};
 use tremor_pipeline::Event;
@@ -60,18 +56,18 @@ pub(crate) struct ObjectId {
 }
 
 impl ObjectId {
-    pub(super) fn new(bucket: impl Into<String>, name: impl Into<String>) -> Self {
+    pub(crate) fn new(bucket: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             bucket: bucket.into(),
         }
     }
 
-    pub(super) fn bucket(&self) -> &str {
+    pub(crate) fn bucket(&self) -> &str {
         self.bucket.as_str()
     }
 
-    pub(super) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         self.name.as_str()
     }
 }

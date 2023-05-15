@@ -1,4 +1,4 @@
-all: operator-docs preprocessor-docs postprocessor-docs codec-docs extractor-docs
+all: operator-docs preprocessor-docs postprocessor-docs codec-docs extractor-docs connector-docs
 
 operator-docs: 
 	scripts/operators.sh
@@ -14,3 +14,6 @@ codec-docs:
 
 extractor-docs: 
 	scripts/gen.sh tremor-script/src/extractor extractors
+
+connector-docs: 
+	scripts/gen.sh src/connectors/impls connectors

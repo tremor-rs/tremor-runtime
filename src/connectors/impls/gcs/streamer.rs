@@ -23,12 +23,12 @@ use crate::{
                     ResumableUploadClient,
                 },
             },
-            object_storage::{
-                BufferPart, ConsistentSink, Mode, ObjectId, ObjectStorageCommon,
-                ObjectStorageSinkImpl, ObjectStorageUpload, YoloSink,
-            },
         },
         prelude::*,
+        utils::object_storage::{
+            BufferPart, ConsistentSink, Mode, ObjectId, ObjectStorageCommon, ObjectStorageSinkImpl,
+            ObjectStorageUpload, YoloSink,
+        },
     },
     errors::err_gcs,
     system::KillSwitch,
@@ -404,24 +404,24 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::channel::bounded;
     use crate::{
-        channel::unbounded,
+        channel::{bounded, unbounded},
         config::{Codec as CodecConfig, Reconnect},
         connectors::{
-            impls::gcs::streamer::Mode, reconnect::ConnectionLostNotifier,
-            utils::quiescence::QuiescenceBeacon,
+            impls::gcs::{resumable_upload_client::ResumableUploadClient, streamer::Mode},
+            reconnect::ConnectionLostNotifier,
+            utils::{
+                object_storage::{BufferPart, ObjectId},
+                quiescence::QuiescenceBeacon,
+            },
         },
+        errors::err_gcs,
     };
     use halfbrown::HashMap;
+    use std::sync::atomic::AtomicUsize;
     use tremor_common::ids::{ConnectorIdGen, SinkId};
     use tremor_pipeline::EventId;
     use tremor_value::literal;
-
-    use crate::connectors::impls::gcs::resumable_upload_client::ResumableUploadClient;
-    use crate::connectors::impls::object_storage::{BufferPart, ObjectId};
-    use crate::errors::err_gcs;
-    use std::sync::atomic::AtomicUsize;
 
     #[derive(Debug, Default)]
     pub(crate) struct TestUploadClient {

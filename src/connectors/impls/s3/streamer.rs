@@ -13,14 +13,12 @@
 // limitations under the License.
 
 use crate::connectors::{
-    impls::{
-        object_storage::{
-            BufferPart, ConsistentSink, Mode, ObjectId, ObjectStorageBuffer, ObjectStorageCommon,
-            ObjectStorageSinkImpl, ObjectStorageUpload, YoloSink,
-        },
-        s3::auth,
-    },
+    impls::s3::auth,
     prelude::*,
+    utils::object_storage::{
+        BufferPart, ConsistentSink, Mode, ObjectId, ObjectStorageBuffer, ObjectStorageCommon,
+        ObjectStorageSinkImpl, ObjectStorageUpload, YoloSink,
+    },
 };
 use aws_sdk_s3::{
     types::{CompletedMultipartUpload, CompletedPart},
