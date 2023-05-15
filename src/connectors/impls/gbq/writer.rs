@@ -101,7 +101,7 @@ mod tests {
                 connect_timeout: 1,
                 request_timeout: 1,
                 request_size_limit: 10 * 1024 * 1024,
-                token: TokenSrc::File(file!().to_string()),
+                token: TokenSrc::dummy(),
             },
         };
 

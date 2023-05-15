@@ -248,6 +248,7 @@ mod tests {
     pub fn is_not_auto_ack() {
         let sink = GpubSink::<TestTokenProvider> {
             config: Config {
+                token: TokenSrc::dummy(),
                 connect_timeout: 0,
                 request_timeout: 0,
                 url: Url::default(),
@@ -264,6 +265,7 @@ mod tests {
     pub fn is_async() {
         let sink = GpubSink::<TestTokenProvider> {
             config: Config {
+                token: TokenSrc::dummy(),
                 connect_timeout: 0,
                 request_timeout: 0,
                 url: Url::default(),

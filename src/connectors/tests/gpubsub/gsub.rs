@@ -36,6 +36,7 @@ async fn no_connection() -> Result<()> {
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
+            "token": {"file": file!().to_string()},
             "url": "https://localhost:9090",
             "ack_deadline": 30_000_000_000u64,
             "connect_timeout": 100_000_000,
@@ -111,6 +112,7 @@ async fn simple_subscribe() -> Result<()> {
         "metrics_interval_s": 1,
         "codec": "binary",
         "config":{
+            "token": {"file": file!().to_string()},
             "url": endpoint.clone(),
             "ack_deadline": 30_000_000_000_u64,
             "connect_timeout": 30_000_000_000_u64,

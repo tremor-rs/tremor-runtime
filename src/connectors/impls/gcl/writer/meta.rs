@@ -152,7 +152,9 @@ mod test {
 
     #[test]
     fn config_with_defaults_no_overrides() -> Result<()> {
-        let config: Config = Config::new(&literal!({}))?;
+        let config: Config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
+        }))?;
 
         assert_eq!(None, config.log_name);
         assert_eq!(None, config.resource);
@@ -168,7 +170,9 @@ mod test {
 
     #[test]
     fn config_with_defaults_and_overrides() -> Result<()> {
-        let config: Config = Config::new(&literal!({}))?;
+        let config: Config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
+        }))?;
         let meta = literal!({}); // no overrides
         assert_eq!("default".to_string(), config.log_name(Some(&meta)));
         assert_eq!(
@@ -189,10 +193,15 @@ mod test {
 
     #[test]
     fn default_log_name_test() -> Result<()> {
-        let empty_config: Config = Config::new(&literal!({}))?;
+        let empty_config: Config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
+        }))?;
         assert_eq!("default", &empty_config.log_name(None));
 
-        let ok_config: Config = Config::new(&literal!({"log_name": "snot"}))?;
+        let ok_config: Config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
+            "log_name": "snot",
+        }))?;
         assert_eq!("snot", &ok_config.log_name(None));
 
         let ko_config: std::result::Result<Config, tremor_value::Error> =
@@ -204,8 +213,11 @@ mod test {
 
     #[test]
     fn log_name_overrides() -> Result<()> {
-        let empty_config: Config = Config::new(&literal!({}))?;
+        let empty_config: Config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
+        }))?;
         let meta = literal!({
+            "token": {"file": file!().to_string()},
             "log_name": "snot",
         });
         assert_eq!("snot".to_string(), empty_config.log_name(Some(&meta)));
@@ -214,7 +226,9 @@ mod test {
 
     #[test]
     fn log_severity_overrides() -> Result<()> {
-        let mut empty_config: Config = Config::new(&literal!({}))?;
+        let mut empty_config: Config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
+        }))?;
         let meta = literal!({
             "log_severity": LogSeverity::Debug as i32,
         });
@@ -321,11 +335,17 @@ mod test {
         //      So, although odd, this test is as intended
         assert_eq!(StdHashMap::new(), Config::labels(None));
 
-        let ok_config = Config::new(&literal!({ "labels": { "snot": "badger" } }))?;
+        let ok_config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
+            "labels": { "snot": "badger" } }
+        ))?;
         assert_eq!(1, ok_config.labels.len());
 
         let ko_config: std::result::Result<Config, tremor_pipeline::errors::Error> =
-            Config::new(&literal!({ "labels": "snot" }));
+            Config::new(&literal!({
+                "token": {"file": file!().to_string()},
+                "labels": "snot"
+            }));
         assert!(ko_config.is_err());
 
         Ok(())

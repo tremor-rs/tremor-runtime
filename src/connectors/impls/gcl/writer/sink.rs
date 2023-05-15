@@ -246,13 +246,13 @@ where
 mod test {
     #![allow(clippy::cast_possible_wrap)]
     use super::*;
-    use crate::channel::bounded;
     use crate::connectors::impls::gcl;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
+    use crate::{channel::bounded, connectors::google::TokenSrc};
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
@@ -349,6 +349,7 @@ mod test {
 
         let mut sink = GclSink::<TestTokenProvider, _>::new(
             Config {
+                token: TokenSrc::dummy(),
                 log_name: None,
                 resource: None,
                 partial_success: false,
@@ -416,7 +417,9 @@ mod test {
         };
         timestamp.normalize();
         let data = &literal!("snot");
-        let config = Config::new(&literal!({}))?;
+        let config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
+        }))?;
         let meta = literal!({});
         let meta = meta.get("gcl_writer").or(None);
 
@@ -430,9 +433,11 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn sink_succeeds_if_config_is_empty() -> Result<()> {
+    async fn sink_succeeds_if_config_is_nearly_empty() -> Result<()> {
         let config = literal!({
-            "config": {}
+            "config": {
+                "token": {"file": file!().to_string()},
+            }
         });
 
         let result =
@@ -449,6 +454,7 @@ mod test {
         let (rx, _tx) = bounded(1024);
         let (reply_tx, _reply_rx) = crate::channel::unbounded();
         let config = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
             "connect_timeout": 1_000_000
         }))?;
 
@@ -488,7 +494,10 @@ mod test {
             nanos: (now % 1_000_000_000) as i32,
         };
         timestamp.normalize();
-        let config: Config = structurize(literal!({ "log_name": "snot" }))?;
+        let config: Config = structurize(literal!({
+            "token": {"file": file!().to_string()},
+            "log_name": "snot"
+        }))?;
         let data = literal!({"snot": "badger"});
         let meta = literal!({"log_name": "override"});
         let le = value_to_log_entry(timestamp, &config, &data, Some(&meta))?;
@@ -505,7 +514,9 @@ mod test {
             nanos: (now % 1_000_000_000) as i32,
         };
         timestamp.normalize();
-        let config: Config = structurize(literal!({}))?;
+        let config: Config = structurize(literal!({
+            "token": {"file": file!().to_string()},
+        }))?;
         let data = literal!({"snot": "badger"});
         let meta = literal!({"log_name": "override", "log_severity": LogSeverity::Debug as i32});
         let le = value_to_log_entry(timestamp, &config, &data, Some(&meta))?;
