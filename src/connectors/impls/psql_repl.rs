@@ -1,4 +1,6 @@
 use std::str::FromStr;
+use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 // Copyright 2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,17 +24,17 @@ use tokio::task;
 use tokio_postgres::config::Config as TokioPgConfig;
 mod postgres_replication;
 
+pub(crate) struct PgSqlDefaults;
+impl Defaults for PgSqlDefaults {
+    const SCHEME: &'static str = "postgres";
+    const HOST: &'static str = "localhost";
+    const PORT: u16 = 5432;
+}
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
-    /// Host name
-    pub host: String,
-    /// Port number
-    pub port: u16,
-    /// Username
-    pub username: String,
-    /// Password string
-    pub password: String,
+    url: Url<PgSqlDefaults>,
     /// Database name
     pub dbname: String,
     /// Publication name
@@ -62,15 +64,19 @@ impl ConnectorBuilder for Builder {
         let config = Config::new(raw)?;
         let origin_uri = EventOriginUri {
             scheme: "tremor-psql-repl".to_string(),
-            host: config.host.clone(),
-            port: Option::from(config.port),
-            path: vec![config.host.to_string()],
+            host: config.url.host_or_local().to_string(),
+            port: Some(config.url.port_or_dflt()),
+            path: vec![config.url.host_or_local().to_string()],
         };
         let publication = config.publication;
         let replication_slot = config.replication_slot;
         let pg_config = TokioPgConfig::from_str(&format!(
             "host={} port={} user={} password={} dbname={}",
-            config.host, config.port, config.username, config.password, config.dbname
+            config.url.host_or_local(),
+            config.url.port_or_dflt(),
+            config.url.username(),
+            config.url.password().unwrap_or_default(),
+            config.dbname
         ))?;
         let connection_config = MzConfig::new(pg_config, mz_postgres_util::TunnelConfig::Direct)?;
         let (tx, rx) = bounded(qsize());
@@ -150,19 +156,29 @@ impl PostgresReplicationSource {
 
 #[async_trait::async_trait()]
 impl Source for PostgresReplicationSource {
-    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         let conn_config = self.connection_config.clone();
         let publication = self.publication.clone();
         let replication_slot = self.replication_slot.clone();
         let tx = self.tx.clone();
+        let cloned_ctx = ctx.clone();
+        let committed_lsn = Arc::new(AtomicU64::new(0));
         task::spawn(async move {
-            if let Err(e) =
-                postgres_replication::replication(conn_config, &publication, &replication_slot, tx)
-                    .await
+            if let Err(e) = postgres_replication::replication(
+                conn_config,
+                &publication,
+                &replication_slot,
+                tx,
+                committed_lsn,
+            )
+            .await
             {
-                // more error handling , just trying to
-                eprintln!("Error in replication task: {e}");
+                if (cloned_ctx.notifier().connection_lost().await).is_ok() {
+                    error!("{cloned_ctx} Error in replication task: {e}. Initiating Reconnect...",);
+                }
+                return Err(e);
             }
+            Ok(())
         });
         Ok(true)
     }

@@ -154,11 +154,9 @@ async fn connector_pg_repl() -> Result<()> {
                         "name": "test_pg_table_pkey",
                         "cols": [1_u64],
                         "is_primary": true,
-                        "nulls_not_distinct": false,
-                        "oid": 16393_u64
+                        "nulls_not_distinct": false
                     }
                 ],
-                "oid": 16386_u64
             }
         ]
     });
@@ -166,27 +164,38 @@ async fn connector_pg_repl() -> Result<()> {
     let actual_publication_event = publication_event.data.suffix().value();
     // For publication message Assert each field individually, ignoring the oid field(s)
     assert_eq!(
-        (
-            expected_publication_event["publication_tables"][0]["columns"].clone(),
-            expected_publication_event["publication_tables"][0]["namespace"].clone(),
-            expected_publication_event["publication_tables"][0]["name"].clone(),
-            expected_publication_event["publication_tables"][0]["keys"][0]["name"].clone(),
-            expected_publication_event["publication_tables"][0]["keys"][0]["cols"].clone(),
-            expected_publication_event["publication_tables"][0]["keys"][0]["is_primary"].clone(),
-            expected_publication_event["publication_tables"][0]["keys"][0]["nulls_not_distinct"]
-                .clone()
-        ),
-        (
-            actual_publication_event["publication_tables"][0]["columns"].clone(),
-            actual_publication_event["publication_tables"][0]["namespace"].clone(),
-            actual_publication_event["publication_tables"][0]["name"].clone(),
-            actual_publication_event["publication_tables"][0]["keys"][0]["name"].clone(),
-            actual_publication_event["publication_tables"][0]["keys"][0]["cols"].clone(),
-            actual_publication_event["publication_tables"][0]["keys"][0]["is_primary"].clone(),
-            actual_publication_event["publication_tables"][0]["keys"][0]["nulls_not_distinct"]
-                .clone()
-        ),
-        "Publication event fields mismatch"
+        expected_publication_event["publication_tables"][0]["columns"],
+        actual_publication_event["publication_tables"][0]["columns"]
+    );
+
+    assert_eq!(
+        expected_publication_event["publication_tables"][0]["namespace"],
+        actual_publication_event["publication_tables"][0]["namespace"]
+    );
+
+    assert_eq!(
+        expected_publication_event["publication_tables"][0]["name"],
+        actual_publication_event["publication_tables"][0]["name"]
+    );
+
+    assert_eq!(
+        expected_publication_event["publication_tables"][0]["keys"][0]["name"],
+        actual_publication_event["publication_tables"][0]["keys"][0]["name"]
+    );
+
+    assert_eq!(
+        expected_publication_event["publication_tables"][0]["keys"][0]["cols"],
+        actual_publication_event["publication_tables"][0]["keys"][0]["cols"]
+    );
+
+    assert_eq!(
+        expected_publication_event["publication_tables"][0]["keys"][0]["is_primary"],
+        actual_publication_event["publication_tables"][0]["keys"][0]["is_primary"]
+    );
+
+    assert_eq!(
+        expected_publication_event["publication_tables"][0]["keys"][0]["nulls_not_distinct"],
+        actual_publication_event["publication_tables"][0]["keys"][0]["nulls_not_distinct"]
     );
 
     client
@@ -197,9 +206,7 @@ async fn connector_pg_repl() -> Result<()> {
         .await?;
     let relation_event = harness.out()?.get_event().await?;
     let expected_relation_event = literal!({
-        "timestamp": 737456254721140_u64,
         "data": {
-            "rel_id": 16386_u64,
             "namespace": "public",
             "replica_identity": "Default",
             "name": "test_pg_table",
@@ -219,36 +226,39 @@ async fn connector_pg_repl() -> Result<()> {
             ],
             "type": "RELATION"
         },
-        "wal_start": 0_u64,
-        "wal_end": 0_u64
     });
 
     let actual_relation_event = relation_event.data.suffix().value();
 
     // For Relation message Assert each field individually, ignoring the timestamp, wal_start and wal_end fields
     assert_eq!(
-        (
-            expected_relation_event["data"]["namespace"].clone(),
-            expected_relation_event["data"]["replica_identity"].clone(),
-            expected_relation_event["data"]["name"].clone(),
-            expected_relation_event["data"]["columns"].clone(),
-            expected_relation_event["data"]["type"].clone(),
-        ),
-        (
-            actual_relation_event["data"]["namespace"].clone(),
-            actual_relation_event["data"]["replica_identity"].clone(),
-            actual_relation_event["data"]["name"].clone(),
-            actual_relation_event["data"]["columns"].clone(),
-            actual_relation_event["data"]["type"].clone(),
-        ),
-        "Relation event fields mismatch"
+        expected_relation_event["data"]["namespace"],
+        actual_relation_event["data"]["namespace"]
+    );
+
+    assert_eq!(
+        expected_relation_event["data"]["replica_identity"],
+        actual_relation_event["data"]["replica_identity"]
+    );
+
+    assert_eq!(
+        expected_relation_event["data"]["name"],
+        actual_relation_event["data"]["name"]
+    );
+
+    assert_eq!(
+        expected_relation_event["data"]["columns"],
+        actual_relation_event["data"]["columns"]
+    );
+
+    assert_eq!(
+        expected_relation_event["data"]["type"],
+        actual_relation_event["data"]["type"]
     );
 
     let insert_event = harness.out()?.get_event().await?;
     let expected_insert_event = literal!({
-        "timestamp": 737456254721267_u64,
         "data": {
-            "rel_id": 16386_u64,
             "tuple": {
                 "data": [
                     "1",
@@ -257,21 +267,17 @@ async fn connector_pg_repl() -> Result<()> {
             },
             "type": "INSERT"
         },
-        "wal_start": 24303816_u64,
-        "wal_end": 24303816_u64
     });
     let actual_insert_event = insert_event.data.suffix().value();
     // For Insert message Assert each field individually, ignoring the timestamp field and rel_id , wal_start and wal_end
     assert_eq!(
-        (
-            expected_insert_event["data"]["tuple"].clone(),
-            expected_insert_event["data"]["type"].clone(),
-        ),
-        (
-            actual_insert_event["data"]["tuple"].clone(),
-            actual_insert_event["data"]["type"].clone(),
-        ),
-        "Insert event fields mismatch"
+        expected_insert_event["data"]["tuple"],
+        actual_insert_event["data"]["tuple"]
+    );
+
+    assert_eq!(
+        expected_insert_event["data"]["type"],
+        actual_insert_event["data"]["type"]
     );
 
     client
@@ -283,9 +289,7 @@ async fn connector_pg_repl() -> Result<()> {
     let update_event = harness.out()?.get_event().await?;
 
     let expected_update_event = literal!({
-        "timestamp": 737456254728888_u64,
         "data": {
-            "rel_id": 16386_u64,
             "new_tuple": {
                 "data": [
                     "1",
@@ -293,32 +297,27 @@ async fn connector_pg_repl() -> Result<()> {
                 ]
             },
             "type": "UPDATE"
-        },
-        "wal_start": 24304152_u64,
-        "wal_end": 24304152_u64
+        }
     });
     let actual_update_event = update_event.data.suffix().value();
     // For Update message Assert each field individually, ignoring the timestamp field and rel_id , wal_start and wal_end
     assert_eq!(
-        (
-            expected_update_event["data"]["new_tuple"].clone(),
-            expected_update_event["data"]["type"].clone(),
-        ),
-        (
-            actual_update_event["data"]["new_tuple"].clone(),
-            actual_update_event["data"]["type"].clone(),
-        ),
-        "Update event fields mismatch"
+        expected_update_event["data"]["new_tuple"],
+        actual_update_event["data"]["new_tuple"]
     );
+
+    assert_eq!(
+        expected_update_event["data"]["type"],
+        actual_update_event["data"]["type"]
+    );
+
     client
         .execute("DELETE FROM public.test_pg_table WHERE id = 1", &[])
         .await?;
 
     let delete_event = harness.out()?.get_event().await?;
     let expected_delete_event = literal!({
-        "timestamp": 737456254734844_u64,
         "data": {
-            "rel_id": 16386_u64,
             "key_tuple": {
                 "data": [
                     "1",
@@ -326,22 +325,18 @@ async fn connector_pg_repl() -> Result<()> {
                 ]
             },
             "type": "DELETE"
-        },
-        "wal_start": 24304288_u64,
-        "wal_end": 24304288_u64
+        }
     });
     let actual_delete_event = delete_event.data.suffix().value();
     // For Delete message Assert each field individually, ignoring the timestamp field
     assert_eq!(
-        (
-            expected_delete_event["data"]["key_tuple"].clone(),
-            expected_delete_event["data"]["type"].clone(),
-        ),
-        (
-            actual_delete_event["data"]["key_tuple"].clone(),
-            actual_delete_event["data"]["type"].clone(),
-        ),
-        "Delete event fields mismatch"
+        expected_delete_event["data"]["key_tuple"],
+        actual_delete_event["data"]["key_tuple"]
+    );
+
+    assert_eq!(
+        expected_delete_event["data"]["type"],
+        actual_delete_event["data"]["type"]
     );
     container.stop();
     Ok(())

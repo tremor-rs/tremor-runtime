@@ -101,6 +101,7 @@ async fn produce_replication<'a>(
 
                             LogicalReplicationMessage::Commit(commit) => {
                                 last_commit_lsn = PgLsn::from(commit.end_lsn());
+                                committed_lsn.store(u64::from(last_commit_lsn), Ordering::SeqCst);
                             }
                             LogicalReplicationMessage::Begin(_begin) => {}
                             _ => yield xlog_data,
@@ -297,6 +298,7 @@ pub(crate) async fn replication(
     publication: &str,
     slot: &str,
     tx: Sender<tremor_value::Value<'static>>,
+    committed_lsn: Arc<AtomicU64>,
 ) -> Result<(), anyhow::Error> {
     let publication_tables =
         mz_postgres_util::publication_info(&connection_config, publication, None).await?;
@@ -394,7 +396,7 @@ pub(crate) async fn replication(
             slot,
             publication,
             slot_lsn,
-            Arc::new(0.into()),
+            committed_lsn,
         )
         .await;
         tokio::pin!(replication_stream);

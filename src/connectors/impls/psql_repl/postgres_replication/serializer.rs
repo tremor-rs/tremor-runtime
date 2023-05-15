@@ -33,7 +33,7 @@ impl<'a> Serialize for SerializedTuple<'a> {
             .0
             .tuple_data()
             .iter()
-            .map(SerializedTupleData::from_tuple_data)
+            .map(SerializedTupleData::from)
             .collect::<Vec<_>>();
         let mut state = serializer.serialize_struct("Tuple", 1)?;
         state.serialize_field("data", &data)?;
@@ -56,7 +56,7 @@ impl<'a> Serialize for SerializedOptionTuple<'a> {
                 let data = tuple
                     .tuple_data()
                     .iter()
-                    .map(SerializedTupleData::from_tuple_data)
+                    .map(SerializedTupleData::from)
                     .collect::<Vec<_>>();
                 let mut state = serializer.serialize_struct("Tuple", 1)?;
                 state.serialize_field("data", &data)?;
@@ -87,8 +87,8 @@ enum SerializedTupleData {
     Text(String),
 }
 
-impl SerializedTupleData {
-    fn from_tuple_data(data: &TupleData) -> SerializedTupleData {
+impl From<&TupleData> for SerializedTupleData {
+    fn from(data: &TupleData) -> Self {
         match data {
             TupleData::Null => SerializedTupleData::Null,
             TupleData::UnchangedToast => SerializedTupleData::UnchangedToast,
@@ -109,8 +109,9 @@ enum SerializedReplicaIdentity {
     Full,
     Index,
 }
-impl SerializedReplicaIdentity {
-    fn from_replica_identity(replica_identity: &ReplicaIdentity) -> SerializedReplicaIdentity {
+
+impl From<&ReplicaIdentity> for SerializedReplicaIdentity {
+    fn from(replica_identity: &ReplicaIdentity) -> Self {
         match replica_identity {
             ReplicaIdentity::Default => SerializedReplicaIdentity::Default,
             ReplicaIdentity::Nothing => SerializedReplicaIdentity::Nothing,
@@ -279,7 +280,7 @@ impl<'a> Serialize for SerializedLogicalReplicationMessage<'a> {
                 state.serialize_field("name", &name)?;
                 state.serialize_field(
                     "replica_identity",
-                    &SerializedReplicaIdentity::from_replica_identity(msg.replica_identity()),
+                    &SerializedReplicaIdentity::from(msg.replica_identity()),
                 )?;
                 let serialized_columns = SerializedColumns::from(msg.columns());
                 match serialized_columns.columns {
