@@ -19,6 +19,8 @@ use std::net::SocketAddr;
 pub(crate) mod metrics;
 /// MIME encoding utilities
 pub(crate) mod mime;
+/// Some common things for object storage connectors like gcs and s3
+pub(crate) mod object_storage;
 /// Protocol Buffer utilities
 pub(crate) mod pb;
 /// Quiescence support facilities
