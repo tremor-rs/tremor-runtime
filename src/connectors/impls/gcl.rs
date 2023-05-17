@@ -12,28 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! //! ::: note
+//!    Authentication happens over the [GCP autentication](./index.md#GCP)
+//! :::
+//!
 //! # `gcl_writer`
+//!
 //! The GCL Writer connector integrates [Google Cloud Logging](https://cloud.google.com/logging) from
 //! the Google Cloud Platform [Operations Suite](https://cloud.google.com/products/operations). This connector
 //! allows json logs to be published to Cloud Logging.
 //!
 //!
 //! ## Configuration
-//!
-//! ```tremor
-//! use std::time::nanos;
-//! define connector gcl_writer from gcl_writer
-//! with
-//!     config = {
-//!         "connect_timeout": nanos::from_seconds(1), # defaults to 1 second
-//!         "request_timeout: nanos::from_seconds(10),# defaults to 10 seconds
-//!         # Concurrency - number of simultaneous in-flight requests ( defaults to 4 )
-//!         # "concurrency" = 4,
-//!     }
-//! end
-//! ```
-//!
-//! The timeouts are in nanoseconds.
 //!
 //! | option             | description                                                                                                                                                                                                                                                                                                                                        |
 //! |--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -45,7 +35,24 @@
 //! | `labels`           | This setting sets a default set of labels that can be overriden on a per event basis through metadata                                                                                                                                                                                                                                              |
 //! | `connect_timeout`  | The timeout in nanoseconds for connecting to the Google API                                                                                                                                                                                                                                                                                        |
 //! | `request_timeout`  | The timeout in nanoseconds for each request to the Google API                                                                                                                                                                                                                                                                                      |
-//! | `concurrency`      | The number of simultaneous in-flight requests ( defaults to 4 ) |
+//! | `concurrency`      | The number of simultaneous in-flight requests ( defaults to 4 )                                                                                                                                                                                                                                                                                    |
+//! | `token`              | The authentication token see [GCP autentication](./index.md#GCP)      
+//!                                                                                                                                                                                                                                                                            |
+//! The timeouts are in nanoseconds.
+//!
+//! ```tremor
+//! use std::time::nanos;
+//! define connector gcl_writer from gcl_writer
+//! with
+//!     config = {
+//!         "connect_timeout": nanos::from_seconds(1), # defaults to 1 second
+//!         "request_timeout: nanos::from_seconds(10),# defaults to 10 seconds
+//!         "token": "env", # required  - The GCP token to use for authentication, see [GCP authentication](./index.md#GCP)
+//!         # Concurrency - number of simultaneous in-flight requests ( defaults to 4 )
+//!         # "concurrency" = 4,
+//!     }
+//! end
+//! ```
 //!
 //! ## Metadata
 //!

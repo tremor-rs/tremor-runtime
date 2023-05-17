@@ -12,12 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! //! ::: note
+//!    Authentication happens over the [GCP autentication](./index.md#GCP)
+//! :::
+//!
 //! # `gbq_writer`
 //!
 //! The `gbq_writer` makes it possible to write events to [Google BigQuery](https://cloud.google.com/bigquery) by using its [gRPC] based [storage API v1].
 //!
 //!
 //! ## Configuration
+//!
+//! | option               | description                                                                                                      |
+//! |----------------------|------------------------------------------------------------------------------------------------------------------|
+//! | `table_id`           | The identifier of the table in the format: `projects/{project-name}/datasets/{dataset-name}/tables/{table-name}` |
+//! | `connect_timeout`    | The timeout in **nanoseconds** for connecting to the Google API                                                  |
+//! | `request_timeout`    | The timeout in **nanoseconds** for each request to the Google API. A timeout hit will fail the event.            |
+//! | `request_size_limit` | Size limit (in bytes) for a single `AppendRowsRequest`. Defaults to the quota documented by Google (10MB)        |
+//! | `token`              | The authentication token see [GCP autentication](./index.md#GCP)                                                 |
+//!
+//! The timeouts are in nanoseconds.
 //!
 //! ```tremor
 //! use std::time::nanos;
@@ -28,18 +42,10 @@
 //!         "table_id": "projects/tremor/datasets/test/tables/streaming_test",
 //!         "connect_timeout": nanos::from_seconds(10),
 //!         "request_timeout: nanos::from_seconds(10)
+//!         "token": "env", # required  - The GCP token to use for authentication, see [GCP authentication](./index.md#GCP)
 //!     }
 //! end;
 //! ```
-//!
-//! The timeouts are in nanoseconds.
-//!
-//! | option               | description                                                                                                      |
-//! |----------------------|------------------------------------------------------------------------------------------------------------------|
-//! | `table_id`           | The identifier of the table in the format: `projects/{project-name}/datasets/{dataset-name}/tables/{table-name}` |
-//! | `connect_timeout`    | The timeout in **nanoseconds** for connecting to the Google API                                                  |
-//! | `request_timeout`    | The timeout in **nanoseconds** for each request to the Google API. A timeout hit will fail the event.            |
-//! | `request_size_limit` | Size limit (in bytes) for a single `AppendRowsRequest`. Defaults to the quota documented by Google (10MB)        |
 //!
 //! ## Metadata
 //! The `$gbq_writer.table_id` field can be set, to send an event to a table other than the one globally configured. A new writestream will be opened per distinct `table_id`.
