@@ -45,9 +45,9 @@
 //! | Option           | Description                                                                                                 | Type             | Required | Default value                                                                |
 //! |------------------|-------------------------------------------------------------------------------------------------------------|------------------|----------|------------------------------------------------------------------------------|
 //! | `url`            | The host and port as url to listen on.                                                                      | string           | yes      |                                                                              |
-//! | `tls`            | Optional Transport Level Security configuration. See [TLS configuration](./common_configuration.md#server). | record           | no       | No TLS configured.                                                           |
+//! | `tls`            | Optional Transport Level Security configuration. See [TLS configuration](./index.md#server). | record           | no       | No TLS configured.                                                           |
 //! | `backlog`        | The maximum size of the queue of pending connections not yet `accept`ed.                                    | positive integer | no       | 128                                                                          |
-//! | `socket_options` | See [TCP socket options](./common_configuration.md#tcp-socket-options).                                     | record           | no       | See [TCP socket options defaults](./common_configuration#tcp-socket-options) |
+//! | `socket_options` | See [TCP socket options](./index.md#tcp-socket-options).                                     | record           | no       | See [TCP socket options defaults](./index#tcp-socket-options) |
 //!
 //! ### Examples
 //!
@@ -117,8 +117,8 @@
 //! | Option           | Description                                                                                                 | Type              | Required | Default value                                                                |
 //! |------------------|-------------------------------------------------------------------------------------------------------------|-------------------|----------|------------------------------------------------------------------------------|
 //! | `url`            | The URL to connect to in order to initiate the websocket connection.                                        | string            | yes      |                                                                              |
-//! | `tls`            | Optional Transport Level Security configuration. See [TLS configuration](./common_configuration.md#client). | record or boolean | no       | No TLS configured.                                                           |
-//! | `socket_options` | See [TCP socket options](./common_configuration.md#tcp-socket-options).                                     | record            | no       | See [TCP socket options defaults](./common_configuration#tcp-socket-options) |
+//! | `tls`            | Optional Transport Level Security configuration. See [TLS configuration](./index.md#client). | record or boolean | no       | No TLS configured.                                                           |
+//! | `socket_options` | See [TCP socket options](./index.md#tcp-socket-options).                                     | record            | no       | See [TCP socket options defaults](./index#tcp-socket-options) |
 //!
 //! ## Examples
 //!

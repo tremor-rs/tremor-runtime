@@ -75,8 +75,8 @@
 //! | `concurrency`                 | The maximum number of in-flight requests                                                                                      | unsigned integer                                           | no       | 4                                   |
 //! | `include_payload_in_response` | Whether or not to include the whole event payload in ES success and error responses emitted via `out` and `err` ports         | boolean                                                    | no       | false                               |
 //! | `headers`                     | HTTP headers to add to each request to elasticsearch                                                                          | record with string values                                  | no       |                                     |
-//! | `auth`                        | Authorization method to use for each HTTP request. See [`auth` config](./common_configuration.md#auth).                       | See [`auth` config](./common_configuration.md#auth).       | no       |                                     |
-//! | `tls`                         | Enable TLS encrypted traffic to elasticsearch. Specify a custom CA certificate chain or make use of client-side certificates. | See[`tls` client config](./common_configuration.md#client) | no       |                                     |
+//! | `auth`                        | Authorization method to use for each HTTP request. See [`auth` config](./index.md#auth).                       | See [`auth` config](./index.md#auth).       | no       |                                     |
+//! | `tls`                         | Enable TLS encrypted traffic to elasticsearch. Specify a custom CA certificate chain or make use of client-side certificates. | See[`tls` client config](./index.md#client) | no       |                                     |
 //! | `timeout`                     | HTTP request timeout in nanoseconds                                                                                           | unsigned integer                                           | no       | By default no timeout is specified. |
 //!
 //!

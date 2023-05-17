@@ -29,7 +29,7 @@
 //! |------------------|----------------------------------------------------------------------------------------------------|------------------|----------|------------------------------------------------------------------------------|
 //! | `url`            | The host and port to bind to and listen on for incoming packets.                                   | string           | yes      |                                                                              |
 //! | `buf_size`       | UDP receive buffer size. This should be greater than or equal to the expected maximum packet size. | positive integer | no       | 8192                                                                         |
-//! | `socket_options` | See [UDP socket options](./common_configuration.md#udp-socket-options).                            | record           | no       | See [UDP socket options defaults](./common_configuration#udp-socket-options) |
+//! | `socket_options` | See [UDP socket options](./index.md#udp-socket-options).                            | record           | no       | See [UDP socket options defaults](./index#udp-socket-options) |
 //!
 //! Example:
 //!
@@ -60,7 +60,7 @@
 //! |------------------|-------------------------------------------------------------------------|--------|----------|----------------------------------------------------------------------------------------------|
 //! | `url`            | The host and port to connect to.                                        | string | yes      |                                                                                              |
 //! | `bind`           | The host and port to bind to prior to connecting                        | string | no       | "0.0.0.0:0" if the connect url resolves to an IPv4 address, "[::]:0" if it resolves to IPv6. |
-//! | `socket_options` | See [UDP socket options](./common_configuration.md#udp-socket-options). | record | no       | See [UDP socket options defaults](./common_configuration#udp-socket-options)                 |
+//! | `socket_options` | See [UDP socket options](./index.md#udp-socket-options). | record | no       | See [UDP socket options defaults](./index#udp-socket-options)                 |
 //!
 //! The `udp` client, by default binds to `0.0.0.0:0` allowing to send to all interfaces of the system running tremor and picking a random port. This can be overwritten adding `"bind": "<ip>:<port>"` to the `config`.
 //!
