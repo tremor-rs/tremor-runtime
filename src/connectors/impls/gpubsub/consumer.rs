@@ -51,6 +51,10 @@ struct Config {
     #[serde(default = "default_ack_deadline")]
     pub ack_deadline: u64,
     pub subscription_id: String,
+    #[serde(default = "default_max_outstanding_messages")]
+    pub max_outstanding_messages: i64,
+    #[serde(default = "default_max_outstanding_bytes")]
+    pub max_outstanding_bytes: i64,
     pub token: TokenSrc,
     #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
     pub url: Url<HttpsDefaults>,
@@ -59,6 +63,15 @@ impl ConfigImpl for Config {}
 
 fn default_ack_deadline() -> u64 {
     10_000_000_000u64 // 10 seconds
+}
+
+/// qsize or 128
+fn default_max_outstanding_messages() -> i64 {
+    i64::try_from(qsize()).unwrap_or(128)
+}
+/// 10 MB
+fn default_max_outstanding_bytes() -> i64 {
+    1024 * 1024 * 10
 }
 
 #[derive(Debug, Default)]
@@ -139,12 +152,14 @@ async fn consumer_task<T: TokenProvider>(
     ctx: SourceContext,
     client_id: String,
     sender: Sender<AsyncTaskMessage>,
-    subscription_id: String,
-    ack_deadline: Duration,
+    config: Config,
     ack_receiver: async_std::channel::Receiver<u64>,
 ) -> Result<()> {
     let mut ack_counter = 0;
-
+    let ack_deadline = Duration::from_nanos(config.ack_deadline);
+    let max_outstanding_messages = config.max_outstanding_messages;
+    let max_outstanding_bytes = config.max_outstanding_bytes;
+    let subscription_id = config.subscription_id;
     let ack_ids = Arc::new(RwLock::new(BlueGreenHashMap::new(
         ack_deadline,
         SystemTime::now(),
@@ -156,8 +171,8 @@ async fn consumer_task<T: TokenProvider>(
         modify_deadline_ack_ids: vec![],
         stream_ack_deadline_seconds: i32::try_from(ack_deadline.as_secs()).unwrap_or(10),
         client_id: client_id.clone(),
-        max_outstanding_messages: i64::try_from(qsize()).unwrap_or(128),
-        max_outstanding_bytes: 0,
+        max_outstanding_messages,
+        max_outstanding_bytes,
     };
 
     let ack_ids_c = ack_ids.clone();
@@ -186,8 +201,8 @@ async fn consumer_task<T: TokenProvider>(
                         modify_deadline_ack_ids: vec![],
                         stream_ack_deadline_seconds: 0,
                         client_id: client_id_c.clone(),
-                        max_outstanding_messages: 0,
-                        max_outstanding_bytes: 0
+                        max_outstanding_messages,
+                        max_outstanding_bytes
                     };
                 } else {
                     warn!("Did not find an ACK ID for pull_id: {pull_id}");
@@ -327,8 +342,7 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
                 ctx.clone(),
                 self.client_id.clone(),
                 tx,
-                self.config.subscription_id.clone(),
-                Duration::from_nanos(self.config.ack_deadline),
+                self.config.clone(),
                 ack_rx,
             ),
         );
