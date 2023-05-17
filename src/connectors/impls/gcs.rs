@@ -16,10 +16,9 @@
 //!
 //! This connector provides the ability to stream events into Google Cloud Storage.
 //!
-//! ## Authentication
-//!
-//! This connector will use credentials stored in a JSON file pointed to by the `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
-//! Alternatively, if tremor is running inside Google Cloud, the authentication will automatically use the credentials of the machine it is running on.
+//! //! ::: note
+//!    Authentication happens over the [GCP autentication](./index.md#GCP)
+//! :::
 //!
 //! ## Streamer
 //!
@@ -47,7 +46,8 @@
 //! Two metadata fields are required for the connector to work - `$gcs_streamer.name` (will be used as the object name) and `$gcs_streamer.bucket` (the name of the bucket where the object will be placed).
 //!
 //! ### Configuration
-//! All of the configuration options are optional.
+//!
+//! All of the configuration options,, aside of token, are optional.
 //!
 //! | name                | description                                                                                            | default                                               |
 //! |---------------------|--------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
@@ -58,6 +58,7 @@
 //! | `buffer_size`       | The size of a single request body, in bytes (must be divisible by 256kiB, as required by Google)       | `8388608` (8MiB, the minimum recommended by Google)   |
 //! | `max_retries`       | The number of retries to perform for a failed request to GCS.                                          | `3`                                                   |
 //! | `backoff_base_time` | Base waiting time in nanoseconds for exponential backoff when doing retries of failed requests to GCS. | `25_000_000` (25 ms)                                  |
+//! | `token`             | The authentication token see [GCP autentication](./index.md#GCP)                                       |                                                       |
 //!
 //! ### Example
 //!

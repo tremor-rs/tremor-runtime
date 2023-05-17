@@ -15,13 +15,11 @@
 use crate::{
     connectors::{
         google::TokenSrc,
-        impls::{
-            gcs::{
-                chunked_buffer::ChunkedBuffer,
-                resumable_upload_client::{
-                    create_client, DefaultClient, ExponentialBackoffRetryStrategy, GcsHttpClient,
-                    ResumableUploadClient,
-                },
+        impls::gcs::{
+            chunked_buffer::ChunkedBuffer,
+            resumable_upload_client::{
+                create_client, DefaultClient, ExponentialBackoffRetryStrategy, GcsHttpClient,
+                ResumableUploadClient,
             },
         },
         prelude::*,

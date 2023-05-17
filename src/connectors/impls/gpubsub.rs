@@ -12,28 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//!
+//! ::: note
+//!    Authentication happens over the [GCP autentication](./index.md#GCP)
+//! :::
+//!
 //! # `gpubsub_consumer`
 //!
 //! This connector allows consuming a Google `PubSub` queue.
 //!
 //! ## Configuration
 //!
-//! The credentials must be provided in a JSON file. The path to the JSON file should be set as an environment variable called `GOOGLE_APPLICATION_CREDENTIALS`
+//! | option                 | required? | description                                                                                                                  |
+//! |----------------------------|-----------|--------------------------------------------------------------------------------------------------------------------------|
+//! | `subscription_id`          | yes       | ID of the subscription to use in the form `projects/my_project/subscriptions/test-subscription-a`                        |
+//! | `connect_timeout`          | no        | Connection timeout in nanoseconds, defaults to 1 second                                                                  |
+//! | `ack_deadline`             | no        | ACK deadline in nanoseconds, defaults to 10 seconds. `PubSub` will resend the message if it's not acked within this time |
+//! | `max_outstanding_messages` | no        | The maximum number of messages to keep outstanding at any given time, defaults to 128                                    |
+//! | `max_outstanding_bytes`    | no        | The maximum number of bytes to keep outstanding at any given time, defaults to 10MB                                      |
+//! | `token`                    | yes       | The authentication token see [GCP autentication](./index.md#GCP)                                                         |
+//! | `url`                      | no        | The endpoint for the `PubSub` API                                                                                        |
 //!
 //! ```tremor title="config.troy"
 //! define connector gsub from gpubsub_consumer
 //! with
 //!     codec = "string",
 //!     config = {
-//!         "connect_timeout": 100000000, # optional - Connection timeout in nanoseconds, defaults to 1 second
-//!         "ack_deadline": 100000000, # optional - ACK deadline in nanoseconds, defaults to 10 seconds. PubSub will resend the message if it's not ACKed within this time
-//!         "subscription_id": "projects/my_project/subscriptions/test-subscription-a", # required - ID of the subscription to use
-//!         "url": "https://us-east1-pubsub.googleapis.com" # optional - the endpoint for the PubSub API, defaults to https://pubsub.googleapis.com
+//!         "subscription_id": "projects/my_project/subscriptions/test-subscription-a",
+//!         "token": "env", # required  - The GCP token to use for authentication, see [GCP authentication](./index.md#GCP)
 //!     }
 //! end;
 //! ```
 //!
 //! ## Metadata
+//!
 //! The connector will set the `$pubsub_connector` metadata variable, which is a dictionary of the messages metadata.
 //!
 //! | field          | type                      | description                                                                                 |
@@ -53,7 +65,13 @@
 //!
 //! ## Configuration
 //!
-//! The credentials must be provided in a JSON file. The path to the JSON file should be set as an environment variable called `GOOGLE_APPLICATION_CREDENTIALS`. If the application is running on Google Cloud, the token will be loaded from the environment.
+//! | option            | required? | description                                                                             |
+//! |-------------------|-----------|-----------------------------------------------------------------------------------------|
+//! | `topic`           | yes       | The identifier of the topic, in the format of `projects/PROJECT_NAME/topics/TOPIC_NAME` |
+//! | `connect_timeout` | no        | Connection timeout in nanoseconds                                                       |
+//! | `request_timeout` | no        | Request timeout in nanoseconds                                                          |
+//! | `url`             | no        | The endpoint for the `PubSub` API                                                       |
+//! | `token`           | yes       | The authentication token see [GCP autentication](./index.md#GCP)                        |
 //!
 //! ```tremor title="config.troy"
 //! define flow gbqtest
@@ -77,6 +95,7 @@
 //!             "topic": "projects/xxx/topics/test-topic-a", # required - the identifier of the topic
 //!             "connect_timeout": nanos::from_seconds(1), # optional - connection timeout (nanoseconds) - defaults to 10s
 //!             "request_timeout": nanos::from_seconds(10), # optional - timeout for each request (nanoseconds) - defaults to 1s
+//!             "token": "env", # required  - The GCP token to use for authentication, see [GCP authentication](./index.md#GCP)
 //!             "url":  "https://us-east1-pubsub.googleapis.com" # optional - the endpoint for the PubSub API, defaults to https://pubsub.googleapis.com
 //!         }
 //!     end;
@@ -92,13 +111,6 @@
 //!
 //! deploy flow gbqtest;
 //! ```
-//!
-//! | option            | required? | description                                                                             |
-//! |-------------------|-----------|-----------------------------------------------------------------------------------------|
-//! | `topic`           | yes       | The identifier of the topic, in the format of `projects/PROJECT_NAME/topics/TOPIC_NAME` |
-//! | `connect_timeout` | no        | Connection timeout in nanoseconds                                                       |
-//! | `request_timeout` | no        | Request timeout in nanoseconds                                                          |
-//! | `url`             | no        | The endpoint for the `PubSub` API                                                       |
 //!
 //! ## Metadata
 //! The connector will use the `$gpubsub_producer` metadata variable, which can be used to set the `ordering_key`.
