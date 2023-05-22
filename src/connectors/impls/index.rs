@@ -121,7 +121,7 @@
 //!
 //! ### Client & Server
 //!
-//! This are connectors that handle the kind of connections that usually are used for implementing, as the category suggests, clients and servers. [TCP](tcp), [HTTP](http), but also [WebSockets](ws) or [UNIX Sockets](unix_socket) fall into this categort.
+//! This are connectors that handle the kind of connections that usually are used for implementing, as the category suggests, clients and servers. [TCP](tcp), [HTTP](http), but also [WebSockets](ws) or [UNIX Sockets](unix-socket) fall into this categort.
 //!
 //! They all provide matching pairs of `_client` and `_server` implementations where the `_client` is the side that initiates a contact, while the `_server` is the side that awaits to be contacted.
 //!
@@ -408,17 +408,17 @@
 //! #### none
 //!
 //! No `Authorization` is used.
-//! 
+//!
 //! ### GCP
-//! 
+//!
 //! All gcp connectors, such as [gpubsub](./gpubsub.md), [gcs](./gcs.md), [gbq](./gbq.md) and [gcl](./gcl.md), share the same authentication configuration.
-//! 
+//!
 //! As part of their config they have a `token` field, which can be used to configure the authentication. The `token` field can be configured in three ways:
-//! 
+//!
 //! #### service account file
-//! 
+//!
 //! A service account file can be used to authenticate with GCP. The file can be specified using `file` as a token option like this:
-//! 
+//!
 //! ```tremor
 //! define connector gbq from gbq_writer
 //! with
@@ -428,13 +428,13 @@
 //!     }
 //! end;
 //! ```
-//! 
+//!
 //! This mehtod is most useful when you have control over the file system of the machine running tremor.
-//! 
+//!
 //! #### enbedded service account json
-//! 
+//!
 //! A service account json can be embedded directly into the configuration. The json can be specified using `json` as a token option like this:
-//! 
+//!
 //! ```tremor
 //! define connector gbq from gbq_writer
 //! with
@@ -448,14 +448,14 @@
 //!     }
 //! end;
 //! ```
-//! 
+//!
 //! This method is most useful when deploying a pipeline in a tremor cluster where the pipeline may be spun up on different machines.
-//! 
+//!
 //! #### environment variable
-//! 
+//!
 //! The authentication can be read from the environment variable `GOOGLE_APPLICATION_CREDENTIALS`. The environment variable should point to a service account file.
 //! Alternatively, if tremor is running inside Google Cloud, the authentication will automatically use the credentials of the machine it is running on.
-//! 
+//!
 //! ```tremor
 //! define connector gbq from gbq_writer
 //! with
@@ -465,9 +465,9 @@
 //!     }
 //! end;
 //! ```
-//! 
+//!
 //! This method is most when running tremor on a single machine or container, ideally incide the google cloud without the need for multi or more then one service account to run the pipelines.
-//! 
+//!
 //! ### Socket Options
 //!
 //! Socket options to set before binding or connecting a socket.
