@@ -69,7 +69,9 @@ impl ConnectorBuilder for Builder {
             port: Some(config.url.port_or_dflt()),
             path: vec![config.url.host_or_local().to_string()],
         };
-        let password = percent_decode_str(config.url.password().unwrap_or_default()).decode_utf8_lossy().into_owned();
+        let password = percent_decode_str(config.url.password().unwrap_or_default())
+            .decode_utf8_lossy()
+            .into_owned();
         let publication = config.publication;
         let replication_slot = config.replication_slot;
         let pg_config = TokioPgConfig::from_str(&format!(

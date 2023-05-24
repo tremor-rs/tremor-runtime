@@ -106,10 +106,7 @@ async fn connector_pg_repl() -> Result<()> {
             }
         },
         "config": {
-            "host":"127.0.0.1",
-            "port": port,
-            "username": "postgres",
-            "password": "password",
+            "url":format!("postgres://postgres:password@127.0.0.1:{}",port),
             "dbname":"postgres",
             "publication":"pg_conn_test_publication",
             "replication_slot":"pg_conn_test_resplication_slot"
