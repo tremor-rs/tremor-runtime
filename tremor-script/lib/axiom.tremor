@@ -1,0 +1,61 @@
+### # Tremor language Axiom integration.
+###
+### Integration with [Axiom](https://axiom.co).
+###
+
+use std::time::nanos;
+
+## Axiom HTTP client to send logs to the axiom http endpoint.
+##
+## arguments:
+## - `dataset`: The dataset to send the logs to.
+## - `token`: The token to use to authenticate with the Axiom API.
+## - `timeout`: The timeout to use for the HTTP request. (optional, defaults to 10 seconds)
+define connector http from http_client
+args
+  dataset,
+  token,
+  timeout = nanos::from_seconds(10)
+with
+  config = {
+    "url": "https://api.axiom.co/v1/datasets/#{args.dataset}/ingest",
+    "tls": true,
+    "method": "POST",
+    "headers": {
+      "Authorization": "Bearer #{args.token}"
+    },
+    "timeout": args.timeout,
+    "mime_mapping": {
+      "*/*": {"name": "json"}, 
+    } 
+  }
+end;
+
+
+## Client to send syslog formated data to axiom.
+##
+## See the [syslog codec](..../codecs/syslog) for the expected format.
+##
+## arguments:
+## - `endpoint_hostport`: The host and port of the [Axiom endpoint](https://axiom.co/docs/endpoints/introduction).
+define connector syslog from tcp_client
+args
+  endpoint_hostport,
+with
+    codec = "syslog",
+    config = {
+      "tls": true,
+      "url": "#{args.endpoint_hostport}",
+      "socket_options": {
+        "TCP_NODELAY": false
+      },
+      "buf_size": 1024,
+    },
+    reconnect = {
+      "retry": {
+        "interval_ms": 100,
+        "growth_rate": 2,
+        "max_retries": 3,
+      }
+    }
+ end;
