@@ -1,5 +1,6 @@
+use std::collections::BTreeMap;
 use std::str::FromStr;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 // Copyright 2021, The Tremor Team
 //
@@ -24,6 +25,10 @@ use tokio::task;
 use tokio_postgres::config::Config as TokioPgConfig;
 mod postgres_replication;
 use percent_encoding::percent_decode_str;
+use postgres_replication::PgMessage;
+use postgres_replication::PublicationTables;
+
+use self::postgres_replication::serializer::SerializedXLogDataBody;
 
 pub(crate) struct PgSqlDefaults;
 impl Defaults for PgSqlDefaults {
@@ -92,8 +97,15 @@ impl ConnectorBuilder for Builder {
             origin_uri,
             rx: Some(rx),
             tx,
+            committed_lsn: Arc::new(AtomicU64::new(0)),
         }))
     }
+}
+#[derive(Debug)]
+enum PullIdMapping {
+    Begin(u64),
+    Commit(u64),
+    BeginAndCommit(u64),
 }
 
 #[derive(Debug)]
@@ -102,8 +114,9 @@ pub(crate) struct PostgresReplication {
     publication: String,
     replication_slot: String,
     origin_uri: EventOriginUri,
-    rx: Option<Receiver<Value<'static>>>,
-    tx: Sender<Value<'static>>,
+    rx: Option<Receiver<PgMessage>>,
+    tx: Sender<PgMessage>,
+    committed_lsn: Arc<AtomicU64>,
 }
 
 #[async_trait::async_trait()]
@@ -120,6 +133,7 @@ impl Connector for PostgresReplication {
             self.rx.take().ok_or_else(already_created_error)?,
             self.tx.clone(),
             self.origin_uri.clone(),
+            self.committed_lsn.clone(),
         );
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -133,9 +147,15 @@ struct PostgresReplicationSource {
     connection_config: MzConfig,
     publication: String,
     replication_slot: String,
-    rx: Receiver<Value<'static>>,
-    tx: Sender<Value<'static>>,
+    rx: Receiver<PgMessage>,
+    tx: Sender<PgMessage>,
     origin_uri: EventOriginUri,
+    pull_lsn_mapping: BTreeMap<u64, PullIdMapping>,
+    as_of: Arc<AtomicU64>,
+    replay: Arc<AtomicBool>,
+    committed_lsn: Arc<AtomicU64>,
+    first_lsn: Option<u64>,
+    last_pull_id: Option<u64>,
 }
 
 impl PostgresReplicationSource {
@@ -143,9 +163,10 @@ impl PostgresReplicationSource {
         connection_config: MzConfig,
         publication: String,
         replication_slot: String,
-        rx: Receiver<Value<'static>>,
-        tx: Sender<Value<'static>>,
+        rx: Receiver<PgMessage>,
+        tx: Sender<PgMessage>,
         origin_uri: EventOriginUri,
+        committed_lsn: Arc<AtomicU64>,
     ) -> Self {
         Self {
             connection_config,
@@ -154,6 +175,12 @@ impl PostgresReplicationSource {
             rx,
             tx,
             origin_uri,
+            pull_lsn_mapping: BTreeMap::new(),
+            committed_lsn,
+            as_of: Arc::new(AtomicU64::new(0)),
+            replay: Arc::new(AtomicBool::new(false)),
+            first_lsn: None,
+            last_pull_id: None,
         }
     }
 }
@@ -166,14 +193,18 @@ impl Source for PostgresReplicationSource {
         let replication_slot = self.replication_slot.clone();
         let tx = self.tx.clone();
         let cloned_ctx = ctx.clone();
-        let committed_lsn = Arc::new(AtomicU64::new(0));
+        let committed_lsn = self.committed_lsn.clone();
+        let as_of = self.as_of.clone();
+        let replay = self.replay.clone();
         task::spawn(async move {
             if let Err(e) = postgres_replication::replication(
                 conn_config,
                 &publication,
                 &replication_slot,
                 tx,
+                as_of,
                 committed_lsn,
+                replay,
             )
             .await
             {
@@ -187,20 +218,118 @@ impl Source for PostgresReplicationSource {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        self.rx
-            .recv()
-            .await
-            .map(|data| SourceReply::Structured {
-                origin_uri: self.origin_uri.clone(),
-                payload: (data, Value::object()).into(),
-                stream: DEFAULT_STREAM_ID,
-                port: None,
-            })
-            .ok_or_else(|| Error::from("channel closed"))
+    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+        loop {
+            match self.rx.recv().await {
+                Some(PgMessage::PublicationTables(publication)) => {
+                    let publication_tables_json = serde_json::to_string(&PublicationTables {
+                        publication_tables: publication,
+                    })
+                    .map_err(|_| "json error")?;
+                    let json_obj =
+                        serde_json::from_str::<tremor_value::Value>(&publication_tables_json)
+                            .map_err(|_| "json error")?;
+                    return Ok(SourceReply::Structured {
+                        origin_uri: self.origin_uri.clone(),
+                        payload: (json_obj.into_static(), Value::object()).into(),
+                        stream: DEFAULT_STREAM_ID,
+                        port: None,
+                    });
+                }
+                None => return Err(Error::from("Channel closed")),
+                Some(PgMessage::Begin(lsn)) => {
+                    self.first_lsn = Some(lsn);
+                }
+                Some(PgMessage::Data(event)) => {
+                    let serialized_event =
+                        serde_json::to_string_pretty(&SerializedXLogDataBody(event))
+                            .map_err(|_| "json error")?;
+                    let json_obj = serde_json::from_str::<tremor_value::Value>(&serialized_event)
+                        .map_err(|_| "json error")?;
+                    self.last_pull_id = Some(*pull_id);
+                    if let Some(lsn) = self.first_lsn.take() {
+                        self.pull_lsn_mapping
+                            .insert(*pull_id, PullIdMapping::Begin(lsn));
+                    }
+                    return Ok(SourceReply::Structured {
+                        origin_uri: self.origin_uri.clone(),
+                        payload: (json_obj.into_static(), Value::object()).into(),
+                        stream: DEFAULT_STREAM_ID,
+                        port: None,
+                    });
+                }
+                Some(PgMessage::Commit(end_lsn)) => {
+                    if let Some(last_pid) = self.last_pull_id.take() {
+                        if self.pull_lsn_mapping.contains_key(&last_pid) {
+                            self.pull_lsn_mapping
+                                .insert(last_pid, PullIdMapping::BeginAndCommit(end_lsn));
+                        } else {
+                            self.pull_lsn_mapping
+                                .insert(last_pid, PullIdMapping::Commit(end_lsn));
+                        }
+                    }
+                }
+            }
+        }
     }
+
+    async fn ack(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+        let mut last_commit_lsn = None;
+
+        for (pid, lsn) in self.pull_lsn_mapping.range(..=pull_id) {
+            // println!("{pid}: {:?}",lsn);
+            match lsn {
+                PullIdMapping::Commit(end_lsn) => {
+                    last_commit_lsn = Some((pid, end_lsn));
+                }
+                PullIdMapping::Begin(_) => {}
+                PullIdMapping::BeginAndCommit(lsn) => {
+                    last_commit_lsn = Some((pid, lsn));
+                }
+            }
+        }
+        if let Some((pid, lsn)) = last_commit_lsn {
+            let next_pid = pid + 1;
+            let lsn = *lsn;
+            self.pull_lsn_mapping = self.pull_lsn_mapping.split_off(&next_pid);
+            self.as_of.store(lsn, Ordering::SeqCst);
+            self.committed_lsn.store(lsn, Ordering::SeqCst);
+        }
+
+        Ok(())
+    }
+
+    async fn fail(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+        let mut last_begin_lsn = None;
+
+        for (pid, lsn) in self.pull_lsn_mapping.range(..=pull_id) {
+            match lsn {
+                PullIdMapping::Commit(_) => {}
+                PullIdMapping::Begin(begin_lsn) => last_begin_lsn = Some((*pid, *begin_lsn)),
+                PullIdMapping::BeginAndCommit(_) => {}
+            }
+        }
+        if let Some((pid, lsn)) = last_begin_lsn {
+            self.pull_lsn_mapping.split_off(&pid);
+            // the reason we store the as_of first is to guarantee that we set the replication thread
+            // re-start point before we break the current replication with setting replay to true
+            //             P1                         | P2                          | replay               | as_of  | commited_lsp
+            //                                        |                             | false                | 42     | 10
+            //             replay = true              |                             | true                 | 42     | 10
+            //                                        | exit loop                   | true                 | 42     | 10
+            //                                        | replay = false              | false                | 42     | 10
+            //                                        | replay_from(as_of = 42)     | false                | 42     | 10
+            //                                        | produce data                | false                | 42     | 10
+            //              as_of = 23                |                             | false                | 23     | 10
+            //              ack (43)                  |                             | false                | 43     | 43
+            self.as_of.store(lsn, Ordering::SeqCst);
+            self.replay.store(true, Ordering::SeqCst);
+        }
+        Ok(())
+    }
+
     fn is_transactional(&self) -> bool {
-        false
+        true
     }
 
     fn asynchronous(&self) -> bool {
