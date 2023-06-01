@@ -155,7 +155,6 @@ async fn produce_replication<'a>(
                         .as_mut()
                         .standby_status_update(committed_lsn, committed_lsn, committed_lsn, ts, 0)
                         .await?;
-                    println!("Committed LSN {} now", u64::from(committed_lsn));
                     last_feedback = Instant::now();
                 }
             }
@@ -373,8 +372,6 @@ pub(crate) async fn replication(
         );
         // Our snapshot was too far ahead so we must rewind it by reading the replication
         // stream until the snapshot lsn and emitting any rows that we find with negated diffs
-        // // committed_lsn.store(u64::from(slot_lsn), Ordering::SeqCst);
-        // println!("setting the start read LSN pointer to {} now",u64::from(slot_lsn));
         let replication_stream = produce_replication(
             connection_config.clone(),
             slot,

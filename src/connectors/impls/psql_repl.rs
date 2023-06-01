@@ -277,7 +277,6 @@ impl Source for PostgresReplicationSource {
         let mut last_commit_lsn = None;
 
         for (pid, lsn) in self.pull_lsn_mapping.range(..=pull_id) {
-            // println!("{pid}: {:?}",lsn);
             match lsn {
                 PullIdMapping::Commit(end_lsn) => {
                     last_commit_lsn = Some((pid, end_lsn));
