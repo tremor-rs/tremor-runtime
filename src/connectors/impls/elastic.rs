@@ -257,7 +257,6 @@ use std::{fmt::Display, sync::atomic::AtomicBool};
 use tokio::task;
 use tremor_common::time::nanotime;
 use tremor_script::utils::sorted_serialize;
-use tremor_value::value::StaticValue;
 use value_trait::Mutable;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -595,7 +594,10 @@ impl Sink for ElasticSink {
                 .health(ClusterHealthParts::None)
                 .send()
                 .await?;
-            let json = res.json::<StaticValue>().await?.into_value();
+            let mut text = res.text().await?;
+            let json = unsafe {
+                simd_json::from_str::<tremor_value::Value>(&mut text).map_err(|e| format!("{e}"))?
+            };
             let cluster_name = json.get_str("cluster_name").unwrap_or("").to_string();
             info!(
                 "{} Connected to Elasticsearch cluster: {} via node: {}",
@@ -667,8 +669,12 @@ impl Sink for ElasticSink {
                         .send()
                         .await
                         .and_then(Response::error_for_status_code)?;
-                    let value = response.json::<StaticValue>().await?;
-                    Ok(value.into_value())
+                    let mut text = response.text().await?;
+                    let value = unsafe {
+                        simd_json::from_str::<tremor_value::Value>(&mut text)
+                            .map_err(|e| format!("{e}"))?
+                    };
+                    Ok(value.into_static())
                 })()
                 .await;
                 match r {

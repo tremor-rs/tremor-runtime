@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::time::{Duration, Instant};
-
 use super::{setup_for_tls, ConnectorHarness};
 use crate::connectors::impls::elastic;
 use crate::connectors::impls::http::auth::Auth;
@@ -28,6 +26,7 @@ use futures::TryFutureExt;
 use http_types::convert::json;
 use serial_test::serial;
 use std::path::Path;
+use std::time::{Duration, Instant};
 use testcontainers::core::WaitFor;
 use testcontainers::{clients, images::generic::GenericImage, RunnableImage};
 use tokio::process;
@@ -699,19 +698,27 @@ async fn elastic_routing() -> Result<()> {
     );
 
     let res = elastic.get(GetParts::IndexId(index, "01")).send().await?;
+    let mut text = res.text().await?;
+    let json = unsafe {
+        simd_json::from_str::<tremor_value::Value>(&mut text).map_err(|e| format!("{e}"))?
+    };
     assert_eq!(
         literal!({
             "_index": index,
             "_id": "01",
             "found": false
         }),
-        &res.json::<simd_json::OwnedValue>().await?
+        &json
     );
     let res = elastic
         .get(GetParts::IndexId(index, "01"))
         .routing("2")
         .send()
         .await?;
+    let mut text = res.text().await?;
+    let json = unsafe {
+        simd_json::from_str::<tremor_value::Value>(&mut text).map_err(|e| format!("{e}"))?
+    };
     assert_eq!(
         literal!({
             "_index": index,
@@ -727,7 +734,7 @@ async fn elastic_routing() -> Result<()> {
                 "field3": []
             }
         }),
-        &res.json::<simd_json::OwnedValue>().await?
+        &json
     );
 
     let res = elastic
@@ -735,6 +742,10 @@ async fn elastic_routing() -> Result<()> {
         .routing("2")
         .send()
         .await?;
+    let mut text = res.text().await?;
+    let json = unsafe {
+        simd_json::from_str::<tremor_value::Value>(&mut text).map_err(|e| format!("{e}"))?
+    };
     assert_eq!(
         literal!({
             "_index": index,
@@ -752,7 +763,7 @@ async fn elastic_routing() -> Result<()> {
                 }
             }
         }),
-        &res.json::<simd_json::OwnedValue>().await?
+        &json
     );
 
     let res = elastic
@@ -760,13 +771,17 @@ async fn elastic_routing() -> Result<()> {
         .routing("2")
         .send()
         .await?;
+    let mut text = res.text().await?;
+    let json = unsafe {
+        simd_json::from_str::<tremor_value::Value>(&mut text).map_err(|e| format!("{e}"))?
+    };
     assert_eq!(
         literal!({
             "_index": index,
             "_id": "03",
             "found": false
         }),
-        res.json::<simd_json::OwnedValue>().await?
+        json
     );
 
     let res = elastic
@@ -774,6 +789,10 @@ async fn elastic_routing() -> Result<()> {
         .routing("1")
         .send()
         .await?;
+    let mut text = res.text().await?;
+    let json = unsafe {
+        simd_json::from_str::<tremor_value::Value>(&mut text).map_err(|e| format!("{e}"))?
+    };
     assert_eq!(
         literal!({
             "_index": index,
@@ -785,7 +804,7 @@ async fn elastic_routing() -> Result<()> {
             "found": true,
             "_source": {}
         }),
-        &res.json::<simd_json::OwnedValue>().await?
+        json
     );
 
     let (out_events, err_events) = harness.stop().await?;
@@ -893,7 +912,10 @@ async fn auth_api_key() -> Result<()> {
         }))
         .send()
         .await?;
-    let json = res.json::<StaticValue>().await?.into_value();
+    let mut text = res.text().await?;
+    let json = unsafe {
+        simd_json::from_str::<tremor_value::Value>(&mut text).map_err(|e| format!("{e}"))?
+    };
     let api_key_id = json.get_str("id").expect("id missing").to_string();
     let api_key = json
         .get_str("api_key")
@@ -1012,7 +1034,6 @@ async fn auth_client_cert() -> Result<()> {
         );
         return Err(e);
     }
-
     let index = "schmumbleglerp";
 
     let auth_header = Auth::Basic {
@@ -1021,7 +1042,6 @@ async fn auth_client_cert() -> Result<()> {
     }
     .as_header_value()?
     .expect("auth header");
-
     let connector_config = literal!({
         "reconnect": {
             "retry": {

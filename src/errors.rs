@@ -219,6 +219,9 @@ error_chain! {
         HeaderToStringError(http::header::ToStrError);
         MimeParsingError(mime::FromStrError);
         InvalidStatusCode(http::status::InvalidStatusCode);
+        TokioPostgresError(tokio_postgres::error::Error);
+        MzPostgresError(mz_postgres_util::PostgresError);
+        MzScalarEvalError(mz_expr::EvalError);
     }
 
     errors {
