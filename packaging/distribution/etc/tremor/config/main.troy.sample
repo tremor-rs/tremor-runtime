@@ -4,17 +4,19 @@
 define flow main
 flow
   use tremor::pipelines;
-  use bench;
+  use tremor::connectors;
   use std::time::nanos;
 
   define connector metronome from metronome
   with
     config = {"interval": nanos::from_millis(500)}
   end;
+  
   create pipeline main from pipelines::passthrough;
   create connector metronome;
+  create connector console from connectors::console;
 
   connect /connector/metronome to /pipeline/main;
-  connect /pipeline/main to /connector/bench;
+  connect /pipeline/main to /connector/console;
 end;
 deploy flow main;

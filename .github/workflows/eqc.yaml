@@ -12,7 +12,7 @@ on:
 jobs:
   api:
     if: github.repository_owner == 'tremor-rs' && github.actor!= 'dependabot[bot]'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Verify valid EQC_LICENSE
         run: test -n "${{secrets.EQC_LICENSE}}"
@@ -21,15 +21,16 @@ jobs:
         with:
           profile: minimal
       - uses: Swatinem/rust-cache@v2
-      - uses: gleam-lang/setup-erlang@v1.1.3
+      - uses: erlef/setup-beam@v1
         with:
-          otp-version: 23.1
+          otp-version: "24"
+          rebar3-version: "3"
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - name: install yq
         run: wget https://github.com/mikefarah/yq/releases/download/v4.20.2/yq_linux_amd64 -O ~/yq && chmod +x ~/yq
       - name: install EQC
-        run: curl -O http://quviq-licencer.com/downloads/eqcR23.zip && unzip eqcR23.zip && cd Quviq* && sudo erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
+        run: curl -O http://quviq-licencer.com/downloads/eqcR24.zip && unzip eqcR24.zip && cd Quviq* && erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
       - name: Activate EQC
         run: test -n "${{secrets.EQC_LICENSE}}" && erl -noshell -eval 'eqc:registration("${{secrets.EQC_LICENSE}}")' -eval "eqc:start()" -eval "init:stop()"
       - name: generate yaml
@@ -40,7 +41,7 @@ jobs:
         run: ./.github/checks/eqc.sh
   tremor-script:
     if: github.repository_owner == 'tremor-rs' && github.actor!= 'dependabot[bot]'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Verify valid EQC_LICENSE
         run: test -n "${{secrets.EQC_LICENSE}}"
@@ -49,13 +50,14 @@ jobs:
         with:
           profile: minimal
       - uses: Swatinem/rust-cache@v2
-      - uses: gleam-lang/setup-erlang@v1.1.3
+      - uses: erlef/setup-beam@v1
         with:
-          otp-version: 23.1
+          otp-version: "24"
+          rebar3-version: "3"
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - name: install EQC
-        run: curl -O http://quviq-licencer.com/downloads/eqcR23.zip && unzip eqcR23.zip && cd Quviq* && sudo erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
+        run: curl -O http://quviq-licencer.com/downloads/eqcR24.zip && unzip eqcR24.zip && cd Quviq* && erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
       - name: Activate EQC
         run: erl -noshell -eval 'eqc:registration("${{secrets.EQC_LICENSE}}")' -eval "eqc:start()" -eval "init:stop()"
       - name: Run
