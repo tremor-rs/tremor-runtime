@@ -18,5 +18,8 @@ pub use crate::ctx::{EventContext, EventOriginUri};
 pub use crate::interpreter::{AggrType, ExecOpts};
 pub use crate::Return;
 pub use crate::{FALSE, NULL, TRUE};
-pub use simd_json::prelude::*;
+pub use simd_json::prelude::{
+    AccessError, Array, Builder, Mutable, Object as ObjectTrait, ValueAccess, ValueTrait,
+    ValueType, Writable,
+};
 pub use tremor_value::prelude::*;
