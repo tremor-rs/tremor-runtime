@@ -68,7 +68,7 @@ jobs:
           profile: minimal
           toolchain: stable
       - name: Publish tremor-script to crates.io
-        uses: Wandalen/wretry.action@v1.0.11
+        uses: Wandalen/wretry.action@v1.0.42
         with:
           command: cd tremor-script && cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
           attempt_limit: 6

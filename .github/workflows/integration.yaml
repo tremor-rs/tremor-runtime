@@ -67,7 +67,7 @@ jobs:
           name: test-errors
           path: tremor-cli/tests/**/*.log
       - name: Upload coverage to Codecov
-        uses: Wandalen/wretry.action@master
+        uses: Wandalen/wretry.action@v1.0.42
         with:
           action: codecov/codecov-action@v3
           attempt_limit: 6
