@@ -129,6 +129,8 @@ impl NodeMeta {
             name: None,
         }
     }
+    // ALLOW: this is the expected type
+    #[allow(clippy::unnecessary_box_returns)]
     #[cfg(test)]
     pub(crate) fn dummy() -> Box<Self> {
         Box::new(NodeMeta::new(

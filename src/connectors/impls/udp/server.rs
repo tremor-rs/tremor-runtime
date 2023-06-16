@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-///! The UDP server will close the udp spcket on stop
+//! The UDP server will close the udp spcket on stop
 use crate::connectors::{
     prelude::*,
     utils::socket::{udp_socket, UdpSocketOptions},

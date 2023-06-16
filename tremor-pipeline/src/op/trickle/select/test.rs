@@ -43,6 +43,8 @@ fn test_select_stmt(stmt: tremor_script::ast::Select) -> SelectStmt {
     }
 }
 
+// ALLOW: this is the expected type
+#[allow(clippy::unnecessary_box_returns)]
 fn mid() -> Box<NodeMeta> {
     Box::new(NodeMeta::new(Location::default(), Location::default()))
 }
