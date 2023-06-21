@@ -7,6 +7,11 @@ do
   doc_name=$(echo ${f} | sed -e 's;^.*/;;g' -e 's/_/-/g')
   doc_file="${TARGET}/${doc_name}.md"
   echo "${doc_file}"
-  echo "# ${name}\n" > "${doc_file}"
+  if cat "${file}" | grep '^//!' | head -n 1 | grep -q '^//! # '
+  then
+    echo "" > "${doc_file}"
+  else
+    echo "# ${name}\n" > "${doc_file}"
+  fi
   cat "${file}" | grep '^//!' | sed -e 's;^//! ;;g' -e 's;^//!;;g' >> "${doc_file}"
 done

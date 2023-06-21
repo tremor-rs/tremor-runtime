@@ -14,7 +14,7 @@
 
 //! The [`tcp_server`](#tcp_server) and [`tcp_client`](#tcp_client) connectors allow TCP-based clients and servers to be integrated with tremor.
 //!
-//! # `tcp_server`
+//! ## `tcp_server`
 //!
 //! This connector listens for incoming TCP connections on the host and port configured in `url`. Each connection starts its own stream of events. Each TCP packet is received into a local buffer of `buf_size` bytes, which should be equal or bigger than the maximum expected packet size. Each packet is processed by the configured `preprocessors` and `codec`.
 //!
@@ -35,7 +35,7 @@
 //! * Send the event you just received from the `tcp_server` right back to it. It will be able to track the the event to its TCP connection. You can even do this with an aggregate event coming from a select with a window. If an event is the result of events from multiple TCP connections, it will send the event back down to each TCP connection.
 //! * Attach the same metadata you receive on the connection under `$tcp_server` to the event you want to send to that connection.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | Option           | Description                                                                                                 | Type             | Required | Default value                                                                |
 //! |------------------|-------------------------------------------------------------------------------------------------------------|------------------|----------|------------------------------------------------------------------------------|
@@ -69,7 +69,7 @@
 //! ```
 //!
 //!
-//! # `tcp_client`
+//! ## `tcp_client`
 //!
 //! This connector establishes and maintains one TCP connection to the host and port configured in `url`.
 //! Every event this connector receives via its `in` port will be sent to that connection.
@@ -85,7 +85,7 @@
 //! }
 //! ```
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | Option           | Description                                                                                                 | Type              | Required | Default value                                                                |
 //! |------------------|-------------------------------------------------------------------------------------------------------------|-------------------|----------|------------------------------------------------------------------------------|

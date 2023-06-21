@@ -21,11 +21,11 @@
 //! taken when configuring `kafka` with tremor to ensure that the configuration settings make sense given the logic
 //! required of the resulting system.
 //!
-//! # `kafka_consumer`
+//! ## `kafka_consumer`
 //!
 //! To consume from kafka, one needs to define a connector from `kafka_consumer`.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! It supports the following configuration options:
 //!
@@ -37,10 +37,9 @@
 //! | `mode`     | Determines the working mode of the connector. The following modes are supported: `performance` (Default), `transactional` and `custom`. See below for more details. | See below.      | yes      | `"performance"` |
 //!
 //!
-//! ### Mode
+//! #### Mode
 //!
-//!
-//! #### Performance
+//! ##### Performance
 //!
 //! The mode describes how the connector will consume from kafka. Using the mode `"performance"`, this connector will automatically store all offsets of messages it receives and commit them to the broker every 5 secons. This mode has the lowest overhead and is best suited for performance-sensitive applications where a single missed message or a failed message isn ot a big deal. This is the default mode.
 //!
@@ -65,7 +64,7 @@
 //! end;
 //! ```
 //!
-//! #### Transactional
+//! ##### Transactional
 //!
 //! The mode `"transactional"` is for workloads where each and every kafka message needs to be handled successfully in order to make progress. In this mode, the offset for every message
 //! is only stored once it has been handled successfully by a downstream connector. The setting `commit_interval` of the mode determines how often the offsets are committed to the kafka cluster.
@@ -100,7 +99,7 @@
 //! end;
 //! ```
 //!
-//! #### Custom
+//! ##### Custom
 //!
 //! The mode `custom` allows custom configuration of the connector and the underlying `librdkafka`. It contains two settings:
 //!
@@ -195,7 +194,7 @@
 //! end;
 //! ```
 //!
-//! ### Event Metadata
+//! #### Event Metadata
 //!
 //! Events consumed from a `kafka_consumer` connector will have the following event metadata:
 //!
@@ -224,11 +223,11 @@
 //! end;
 //! ```
 //!
-//! # `kafka_producer`
+//! ## `kafka_producer`
 //!
 //! To produce events as kafka messages, the a connector needs to be defined from the `kafka_producer` connector type.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! It supports the following configuration options:
 //!
@@ -261,7 +260,7 @@
 //!     end;
 //! ```
 //!
-//! ## Event Metadata
+//! ### Event Metadata
 //!
 //! To control how the `kafka_producer` produces events as kafka messages, the following metadata options are available:
 //!

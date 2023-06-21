@@ -72,7 +72,6 @@
 //! The entire echo application is as follows:
 //!
 //! ```tremor title="config.troy"
-//! # Encapsulation of the server side logic - our otel o11y `echo` service
 //! define flow server
 //! flow
 //!   use integration;
@@ -121,12 +120,11 @@
 //!   connect /pipeline/echo/exit to /connector/exit;
 //! end;
 //!
-//! # Encapsulation of the client side logic - in a real world application
-//! # the client is more likely going to be via otel instrumentation from
-//! # an opentelemetry instrumented application, or an upstream tremor
-//! # service - perhaps distributing opentelemetry events via other protocols
-//! # or transforming legacy o11y events to otel events
-//! #
+//! ## Encapsulation of the client side logic - in a real world application
+//! ## the client is more likely going to be via otel instrumentation from
+//! ## an opentelemetry instrumented application, or an upstream tremor
+//! ## service - perhaps distributing opentelemetry events via other protocols
+//! ## or transforming legacy o11y events to otel events
 //! define flow client
 //! flow
 //!   use integration;
@@ -156,10 +154,8 @@
 //!   connect /pipeline/replay to /connector/otelc;
 //! end;
 //!
-//! # Deploy the server flow
 //! deploy flow server;
 //!
-//! # Deploy the client flow
 //! deploy flow client;
 //! ```
 //!

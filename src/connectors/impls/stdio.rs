@@ -28,13 +28,10 @@
 //!
 //! create connector console from console;
 //!
-//! # Wire up stadard input to `stdin` pipeline
 //! connect /connector/console to /pipeline/stdin;
 //!
-//! # Wire up `stdout` pipeline to `stdout` on operating system terminal/console
 //! connect /pipeline/stdout to /connector/console;
 //!
-//! # Wire up `stderr` pipeline to `stderr` on operating system terminal/console
 //! connect /pipeline/stderr to /connector/console/err;
 //! ```
 //!
