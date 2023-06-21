@@ -30,7 +30,7 @@
 //!
 //! ## Configuration
 //!
-//! ```troy
+//! ```tremor
 //!   # File: config.troy
 //!   define connector clickhouse from clickhouse
 //!   with
@@ -92,7 +92,7 @@
 //!
 //! The following Tremor values represent a valid `ClickHouse` string:
 //!
-//! ```troy
+//! ```tremor
 //! "Hello, world!"
 //! "Grace Hopper"
 //! ```
@@ -120,7 +120,7 @@
 //!
 //! The following Tremor values can represent any integer type:
 //!
-//! ```troy
+//! ```tremor
 //! 42
 //! 101
 //! 13
@@ -142,7 +142,7 @@
 //!
 //! The following Tremor values represent valid `ClickHouse` `DateTime`:
 //!
-//! ```troy
+//! ```tremor
 //! 1634400000
 //! 954232020
 //! ```
@@ -164,7 +164,7 @@
 //!
 //! The following Tremor values represent valid `ClickHouse` `DateTime64(0, Etc/UTC)` values.
 //!
-//! ```troy
+//! ```tremor
 //! 1634400000
 //! 954232020
 //! ```
@@ -186,7 +186,7 @@
 //!
 //! The following Tremor values represent valid `ClickHouse` `IPv4` values:
 //!
-//! ```troy
+//! ```tremor
 //! "192.168.1.1"
 //! [192, 168, 1, 1]
 //! ```
@@ -208,7 +208,7 @@
 //!
 //! The following Tremor values represent valid `ClickHouse` `IPv6` values:
 //!
-//! ```troy
+//! ```tremor
 //! "FE80:0000:0000:0000:0202:B3FF:FE1E:8329"
 //! [254, 128, 0, 0, 0, 0, 0, 0, 2, 2, 179, 255, 254, 30, 131, 41]
 //! ```
@@ -231,7 +231,7 @@
 //!
 //! The following Tremor values represent valid `ClickHouse` `UInt8` values:
 //!
-//! ```troy
+//! ```tremor
 //! 101
 //! null
 //! ```
@@ -253,7 +253,7 @@
 //!
 //! The following Tremor values represent valid `ClickHouse` `Array(UInt8)` values:
 //!
-//! ```troy
+//! ```tremor
 //! [101, 42, true]
 //! [1, 2, false]
 //! ```
@@ -275,7 +275,7 @@
 //!
 //! The following Tremor values represent valid `ClickHouse` `Uuid` values:
 //!
-//! ```troy
+//! ```tremor
 //! "123e4567-e89b-12d3-a456-426614174000"
 //! [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 //! ```

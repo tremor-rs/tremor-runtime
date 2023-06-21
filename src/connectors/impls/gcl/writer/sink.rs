@@ -142,7 +142,12 @@ where
         let mut entries = Vec::with_capacity(event.len());
         for (data, meta) in event.value_meta_iter() {
             let meta = meta.get("gcl_writer").or(None);
-            entries.push(value_to_log_entry(event.ingest_ns, &self.config, data, meta)?);
+            entries.push(value_to_log_entry(
+                event.ingest_ns,
+                &self.config,
+                data,
+                meta,
+            )?);
         }
 
         let reply_tx = self.reply_tx.clone();
