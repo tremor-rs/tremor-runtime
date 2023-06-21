@@ -11,8 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![allow(clippy::doc_markdown)]
 
-//! ::: info
+//! :::info
 //!
 //! This connector is not intended for production use, but for testing the Tremor runtime itself. To enable it pass `--debug-connectors` to tremor.
 //!
@@ -69,7 +70,7 @@
 //! deploy flow stopper;
 //! ```
 //!
-//! ::: note
+//! :::note
 //! Tremor supports a `quiescence` protocol. As we connect our `console` to the
 //! passthrough before the exit connector `stop` - this means our event from the
 //! console's `stdin` flows through the passthrough to `stdout` in the same connector

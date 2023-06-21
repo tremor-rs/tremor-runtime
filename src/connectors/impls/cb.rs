@@ -11,8 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-//! ::: info
+#![allow(clippy::doc_markdown)]
+//! :::info
 //!
 //! This connector is not intended for production use, but for testing the Tremor runtime itself. To enable it pass `--debug-connectors` to tremor.
 //!
@@ -88,7 +88,7 @@
 //! | close / trigger | *Close* or *trigger* the circuit breaker, so that all upstream connectors stop sending events until it is opened again. |
 //! | open / restore  | *Open* or *restore* the circuit breaker, so that all upstream connectors start sending events again.                    |
 //!
-//! ::: info
+//! :::info
 //!
 //! Only 1 value of the pairs `ack` - `fail` and `open` / `restore` and `close` / `trigger` will be considered.
 //!

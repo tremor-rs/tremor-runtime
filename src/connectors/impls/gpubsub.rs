@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
-//! ::: note
+#![allow(clippy::doc_markdown)]
+//! :::note
 //!    Authentication happens over the [GCP autentication](./index.md#GCP)
 //! :::
 //!
