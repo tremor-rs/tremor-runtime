@@ -21,7 +21,6 @@ use crate::connectors::utils::pb;
 use googapis::google::logging::v2::log_entry::Payload;
 use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
 use googapis::google::logging::v2::{LogEntry, WriteLogEntriesRequest};
-use prost_types::Timestamp;
 use std::time::Duration;
 use tokio::time::timeout;
 use tonic::codegen::InterceptedService;
@@ -62,7 +61,7 @@ where
 }
 
 fn value_to_log_entry(
-    timestamp: Timestamp,
+    timestamp: u64,
     config: &Config,
     data: &Value,
     meta: Option<&Value>,
@@ -70,7 +69,7 @@ fn value_to_log_entry(
     Ok(LogEntry {
         log_name: config.log_name(meta),
         resource: super::value_to_monitored_resource(config.resource.as_ref())?,
-        timestamp: Some(timestamp),
+        timestamp: Some(meta::timestamp(timestamp, meta)),
         receive_timestamp: None,
         severity: config.log_severity(meta)?,
         insert_id: meta::insert_id(meta),
@@ -143,14 +142,7 @@ where
         let mut entries = Vec::with_capacity(event.len());
         for (data, meta) in event.value_meta_iter() {
             let meta = meta.get("gcl_writer").or(None);
-            #[allow(clippy::cast_precision_loss)]
-            #[allow(clippy::cast_possible_wrap)]
-            let mut timestamp = Timestamp {
-                seconds: (event.ingest_ns / 1_000_000_000) as i64,
-                nanos: (event.ingest_ns % 1_000_000_000) as i32,
-            };
-            timestamp.normalize();
-            entries.push(value_to_log_entry(timestamp, &self.config, data, meta)?);
+            entries.push(value_to_log_entry(event.ingest_ns, &self.config, data, meta)?);
         }
 
         let reply_tx = self.reply_tx.clone();
@@ -411,11 +403,6 @@ mod test {
     #[test]
     fn fails_if_the_event_is_not_an_object() -> Result<()> {
         let now = tremor_common::time::nanotime();
-        let mut timestamp = Timestamp {
-            seconds: (now / 1_000_000_000u64) as i64,
-            nanos: (now % 1_000_000_000) as i32,
-        };
-        timestamp.normalize();
         let data = &literal!("snot");
         let config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
@@ -423,7 +410,7 @@ mod test {
         let meta = literal!({});
         let meta = meta.get("gcl_writer").or(None);
 
-        let result = value_to_log_entry(timestamp, &config, data, meta);
+        let result = value_to_log_entry(now, &config, data, meta);
         if let Err(Error(ErrorKind::GclTypeMismatch("Value::Object", x), _)) = result {
             assert_eq!(x, ValueType::String);
             Ok(())
@@ -489,18 +476,13 @@ mod test {
     #[test]
     fn log_name_override() -> Result<()> {
         let now = tremor_common::time::nanotime();
-        let mut timestamp = Timestamp {
-            seconds: now as i64 / 1_000_000_000i64,
-            nanos: (now % 1_000_000_000) as i32,
-        };
-        timestamp.normalize();
         let config: Config = structurize(literal!({
             "token": {"file": file!().to_string()},
             "log_name": "snot"
         }))?;
         let data = literal!({"snot": "badger"});
         let meta = literal!({"log_name": "override"});
-        let le = value_to_log_entry(timestamp, &config, &data, Some(&meta))?;
+        let le = value_to_log_entry(now, &config, &data, Some(&meta))?;
         assert_eq!("override", &le.log_name);
 
         Ok(())
@@ -509,17 +491,12 @@ mod test {
     #[test]
     fn log_severity_override() -> Result<()> {
         let now = tremor_common::time::nanotime();
-        let mut timestamp = Timestamp {
-            seconds: now as i64 / 1_000_000_000i64,
-            nanos: (now % 1_000_000_000) as i32,
-        };
-        timestamp.normalize();
         let config: Config = structurize(literal!({
             "token": {"file": file!().to_string()},
         }))?;
         let data = literal!({"snot": "badger"});
         let meta = literal!({"log_name": "override", "log_severity": LogSeverity::Debug as i32});
-        let le = value_to_log_entry(timestamp, &config, &data, Some(&meta))?;
+        let le = value_to_log_entry(now, &config, &data, Some(&meta))?;
         assert_eq!("override", &le.log_name);
         assert_eq!(LogSeverity::Debug as i32, le.severity);
 

@@ -17,6 +17,7 @@ use googapis::google::logging::{
     r#type::HttpRequest,
     v2::{LogEntryOperation, LogEntrySourceLocation},
 };
+use prost_types::Timestamp;
 use tremor_value::Value;
 use value_trait::ValueAccess;
 
@@ -26,6 +27,21 @@ pub(crate) fn get_or_default(meta: Option<&Value>, key: &str) -> String {
 
 pub(crate) fn insert_id(meta: Option<&Value>) -> String {
     get_or_default(meta, "insert_id")
+}
+
+#[allow(clippy::cast_possible_wrap, clippy::cast_precision_loss)]
+pub(crate) fn timestamp(ingest_ns: u64, meta: Option<&Value>) -> Timestamp {
+    let timestamp = if let Some(timestamp) = meta.get_u64("timestamp") {
+        timestamp
+    } else {
+        ingest_ns
+    };
+    let mut timestamp = Timestamp {
+        seconds: (timestamp / 1_000_000_000) as i64,
+        nanos: (timestamp % 1_000_000_000) as i32,
+    };
+    timestamp.normalize();
+    timestamp
 }
 
 pub(crate) fn http_request(meta: Option<&Value>) -> Option<HttpRequest> {
@@ -441,5 +457,21 @@ mod test {
             }),
             sl
         );
+    }
+
+    #[test]
+    fn timestamp_overrides() {
+        let meta = literal!({
+            "timestamp": 42
+        });
+        let ts = timestamp(0, Some(&meta));
+
+        let mut expected = Timestamp {
+            seconds: 0,
+            nanos: 42,
+        };
+        expected.normalize();
+
+        assert_eq!(expected, ts);
     }
 }
