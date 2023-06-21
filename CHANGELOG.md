@@ -5,6 +5,8 @@
 ### New features
 
 * axiom stdlib module
+* gcl now supports the `timestamp` metadata overwrite
+
 ### Breaking Changes
 
 * All google connectors now require `token` to be either set to `{"file": "<path to json>"}` or `{"json": {...}}`
