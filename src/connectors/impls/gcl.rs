@@ -140,7 +140,7 @@
 //!     C -->|gRPC LogEvent message| D{GCP Cloud Logging}
 //! ```
 //!
-//! ```troy
+//! ```tremor
 //! define flow main
 //! flow
 //!   use std::time::nanos;
