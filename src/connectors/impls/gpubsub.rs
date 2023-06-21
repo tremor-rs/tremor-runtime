@@ -17,11 +17,11 @@
 //!    Authentication happens over the [GCP autentication](./index.md#GCP)
 //! :::
 //!
-//! # `gpubsub_consumer`
+//! ## `gpubsub_consumer`
 //!
 //! This connector allows consuming a Google `PubSub` queue.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | option                 | required? | description                                                                                                                  |
 //! |----------------------------|-----------|--------------------------------------------------------------------------------------------------------------------------|
@@ -44,7 +44,7 @@
 //! end;
 //! ```
 //!
-//! ## Metadata
+//! ### Metadata
 //!
 //! The connector will set the `$pubsub_connector` metadata variable, which is a dictionary of the messages metadata.
 //!
@@ -55,15 +55,15 @@
 //! | `publish_time` | integer                   | The time when the message was published (as nanoseconds since 1st January 1970 00:00:00 UTC |
 //! | `attributes`   | record with string values | The attributes attached to the message                                                      |
 //!
-//! ## Payload structure
+//! ### Payload structure
 //! The raw payload will be passed as is to the codec
 //!
 //!
-//! # `gpubsub_producer`
+//! ## `gpubsub_producer`
 //!
 //! This connector allows producing to a Google `PubSub` queue.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | option            | required? | description                                                                             |
 //! |-------------------|-----------|-----------------------------------------------------------------------------------------|
@@ -112,14 +112,14 @@
 //! deploy flow gbqtest;
 //! ```
 //!
-//! ## Metadata
+//! ### Metadata
 //! The connector will use the `$gpubsub_producer` metadata variable, which can be used to set the `ordering_key`.
 //!
 //! | field          | type   | description                     |
 //! |----------------|--------|---------------------------------|
 //! | `ordering_key` | string | The ordering key of the message |
 //!
-//! ## Payload structure
+//! ### Payload structure
 //! The raw payload will be passed as is to the codec
 
 pub(crate) mod consumer;

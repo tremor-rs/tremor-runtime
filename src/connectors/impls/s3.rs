@@ -12,20 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::doc_markdown)]
 //! The Amazon Web Services `s3` provides integration with the AWS Simple Storage Service or
 //! drop-in compatible replacements such as [MinIO](https://www.min.io).
 //!
 //! Both the [`s3_reader`](#s3reader) and the [`s3_streamer`](#s3streamer) need to authenticate to AWS. This connector uses the default ways of obtaining credentials
 //! from common environment variables like `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, from the AWS `credentials` file or from EC2 instance metadata. Please visit [The AWS docs](https://docs.aws.amazon.com/sdk-for-rust/latest/dg/credentials.html) for more infos on how to provide your credentials.
 //!
-//! # `s3_reader`
+//! ## `s3_reader`
 //!
 //! This connector reads objects from an S3 bucket with the given `prefix`, or all object in that bucket if no prefix was provided.
 //! It does not listen for object changes or new objects being uploaded. It traverses through the bucket once and starts fetching with `max_connections` concurrent tasks.
 //!
 //! This connector uses multipart downloads if an object size exceeds the configurable `multipart_threshold`.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | Option                | Description                                                                                                                                                                     | Type             | Required | Default Value |
 //! |-----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------|----------|---------------|
@@ -62,7 +63,7 @@
 //! end;
 //! ```
 //!
-//! # `s3_streamer`
+//! ## `s3_streamer`
 //!
 //! This connector will write events to the configured AWS S3 bucket.
 //!
@@ -87,11 +88,11 @@
 //! This connector was built with the use case of time based aggregation in mind. E.g. events are aggregated into s3 objects with 1 object containing all objects that arrived within 1 hour. See the example below.
 //!
 //!
-//! ## Modes of operation
+//! ### Modes of operation
 //!
 //! The `s3_streamer` operates in two different modes. The default mode is `yolo`:
 //!
-//! ### `yolo`
+//! #### `yolo`
 //!
 //! The `yolo` mode is going to report every event as successfully delivered if uploading it to s3 worked or not.
 //! This mode is intended for "fire-and-forget" use-cases, where it is not important if a single event in the middle of an upload failed or is missing.
@@ -99,14 +100,14 @@
 //!
 //! This mode is well-suited for e.g. aggregating time-series events into s3 object by time unit (e.g. hour or day) where it is not too important that the resulting s3 object is 1:1 mirroring of all the events in the correct order without gaps.
 //!
-//! ### `consistent`
+//! #### `consistent`
 //!
 //! `consistent` mode, on the other hand, is well suited when uploading consistent and correct s3 objects is important. In this mode, the `s3_streamer` will fail a complete upload whenever only 1 single event could not be successfully uploaded to s3. This guarantees that only complete and consistent s3 objects will show up in your buckets. But due to this logic, it is possible to lose events and whole uploads if the upstream connectors don't replay failed events. The [`wal` connector](./wal.md) and the [`kafka_consumer`](./kafka.md#consumer) can replay events, so it makes sense to pair the `s3_streamer` in `consistent` mode with those.
 //!
 //! This mode guarantees that only complete s3 objects with all events in the right order are uploaded to s3. It is well-suited for uploading complete files, like images or documents.
 //!
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | Option              | Description                                                                                                                                                                      | Type                   | Required | Default Value             |
 //! |---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------|----------|---------------------------|
@@ -138,13 +139,13 @@
 //!   end;
 //! ```
 //!
-//! ## NOTES
+//! :::note
+//!    Environment variables should be set according to the AWS [environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html).
 //!
-//! Environment variables should be set according to the AWS [environment variables](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html).
+//!    A bucket called `snot` will need to be available.
 //!
-//! A bucket called `snot` will need to be available.
-//!
-//! The region in Minio settings should be the same as configured in the server startup.
+//!    The region in Minio settings should be the same as configured in the server startup.
+//! :::
 
 mod auth;
 pub(crate) mod reader;

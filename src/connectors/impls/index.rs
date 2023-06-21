@@ -218,11 +218,7 @@
 //!
 //! :::
 //!
-//! ---
-//! sidebar_label: Common Configuration
-//! ---
-//!
-//! # Common Configuration
+//! ## Common Configuration
 //!
 //! This section explains common configuration options that are used across many connectors.
 //!

@@ -15,7 +15,7 @@
 #![allow(clippy::doc_markdown)]
 //! The [`udp_server`](#udp_server) and [`udp_client`](#udp_client) connectors allow UDP based datagram clients and servers to be integrated with tremor.
 //!
-//! # `udp_server`
+//! ## `udp_server`
 //!
 //! The `udp_server` binds to the host and port given in `url` and listens on incoming UDP packets.
 //! Incoming UDP packets are being received into a local buffer of `buf_size` bytes, which determines the maximum packet size. Each UDP packet will be deserialized by the preprocessors and the codec.
@@ -24,7 +24,7 @@
 //!
 //! Events coming from the `udp_server` connector do not have any metadata associated with them. The [`tremor::origin::scheme()`](../stdlib/tremor/origin.md#scheme) function can be used and checked for equality with `"udp-server"` to determine if an event is coming from the `udp_server` connector.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | Option           | Description                                                                                        | Type             | Required | Default value                                                                |
 //! |------------------|----------------------------------------------------------------------------------------------------|------------------|----------|------------------------------------------------------------------------------|
@@ -51,11 +51,11 @@
 //! end;
 //! ```
 //!
-//! # `udp_client`
+//! ## `udp_client`
 //!
 //! The UDP client will open a UDP socket to write data to the given host and port configured in `url`. It will write the event payload, processed by the configured codec and postprocessors, out to the socket.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | Option           | Description                                                             | Type   | Required | Default value                                                                                |
 //! |------------------|-------------------------------------------------------------------------|--------|----------|----------------------------------------------------------------------------------------------|

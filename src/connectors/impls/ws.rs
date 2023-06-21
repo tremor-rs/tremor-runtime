@@ -18,7 +18,7 @@
 //!
 //! Text and binary frames can be used.
 //!
-//! # `ws_server`
+//! ## `ws_server`
 //!
 //! This connector is a websocket server. It opens a TCP listening socket, and for each incoming connection it initiates the Websocket handshake. Then websocket frames can flow
 //! and are processed with the given `preprocessors` and `codec` and sent to the `out` port of the connector.
@@ -40,7 +40,7 @@
 //! * Send the event you just received from the `ws_server` right back to it. It will be able to track the the event to its websocket connection. You can even do this with an aggregate event coming from a select with a window. If an event is the result of events from multiple websocket connections, it will send the event back down to each websocket connection.
 //! * Attach the same metadata you receive on the connection under `$ws_server` to the event you want to send to that connection.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | Option           | Description                                                                                                 | Type             | Required | Default value                                                                |
 //! |------------------|-------------------------------------------------------------------------------------------------------------|------------------|----------|------------------------------------------------------------------------------|
@@ -90,7 +90,7 @@
 //! end;
 //! ```
 //!
-//! # `ws_client`
+//! ## `ws_client`
 //!
 //! This connector is a websocket client, that establishes one connection to the host and port configured in `url`. Events sent to the `in` port of this connector will be processed by the configured `codec` and `postprocessors` and turned into a text or binary frame, depending on the events boolean metadata value `$ws_server.binary`. If you want to sent a binary frame, you need to set:
 //!
@@ -112,7 +112,7 @@
 //! }
 //! ```
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | Option           | Description                                                                                                 | Type              | Required | Default value                                                                |
 //! |------------------|-------------------------------------------------------------------------------------------------------------|-------------------|----------|------------------------------------------------------------------------------|
@@ -120,7 +120,7 @@
 //! | `tls`            | Optional Transport Level Security configuration. See [TLS configuration](./index.md#client). | record or boolean | no       | No TLS configured.                                                           |
 //! | `socket_options` | See [TCP socket options](./index.md#tcp-socket-options).                                     | record            | no       | See [TCP socket options defaults](./index#tcp-socket-options) |
 //!
-//! ## Examples
+//! ### Examples
 //!
 //! An annotated example of a non-tls plain WS cient configuration leveraging defaults:
 //!

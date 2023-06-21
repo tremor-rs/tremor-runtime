@@ -17,7 +17,7 @@
 //!    Authentication happens over the [GCP autentication](./index.md#GCP)
 //! :::
 //!
-//! # `gcl_writer`
+//! ## `gcl_writer`
 //!
 //! The GCL Writer connector integrates [Google Cloud Logging](https://cloud.google.com/logging) from
 //! the Google Cloud Platform [Operations Suite](https://cloud.google.com/products/operations). This connector
@@ -55,7 +55,7 @@
 //! end
 //! ```
 //!
-//! ## Metadata
+//! ### Metadata
 //!
 //! Metadata can optionally be provided on a per event basis for events flowing to this connector's sink.
 //!
@@ -77,7 +77,7 @@
 //! | `source_location` | Optional. Source code location information associated with the log entry, if any                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 //!
 //!
-//! ### HTTP Request metadata
+//! #### HTTP Request metadata
 //!
 //! Optional related set of HTTP request data relevant to the log entry JSON payload.
 //!
@@ -99,7 +99,7 @@
 //! | `cache_fill_bytes`                   | Bytes of the cache response, if there was a cache hit              |
 //! | `protocol`                           | The effective protocol eg: websockets, grpc                        |
 //!
-//! ### Operation metadata
+//! #### Operation metadata
 //!
 //! Optional operation metadata field relevant to the log entry of the form:
 //!
@@ -112,7 +112,7 @@
 //! }
 //! ```
 //!
-//! ### Source location metadata
+//! #### Source location metadata
 //!
 //! Optional source code location information if available of the form
 //!
@@ -124,7 +124,7 @@
 //! }
 //! ```
 //!
-//! ## Payload structure
+//! ### Payload structure
 //!
 //! The event value is transformed to JSON and transmitted as a JSON Payload with the log entry and any provided optional metadata.
 //!
@@ -244,18 +244,15 @@
 //!   end;
 //!
 //!
-//! #  create connector exit from connectors::exit;
 //!   create connector file from integration::write_file;
 //!   create connector metronome;
 //!   create connector google_cloud_logging;
 //!   create pipeline main;
-//! #  create pipeline exit;
 //!
 //!
 //!   connect /connector/metronome to /pipeline/main;
 //!   connect /pipeline/main to /connector/google_cloud_logging;
 //!   connect /pipeline/main to /connector/file;
-//! #  connect /pipeline/main to /connector/exit;
 //! end;
 //! deploy flow main;
 //! ```
