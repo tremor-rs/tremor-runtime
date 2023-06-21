@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::doc_markdown)]
 //! The stdio connector integrates with standard input, output and error
 //! streams on the host operating system. These facilities are useful for
 //! integrating with UNIX pipelines or processing with command line tools
@@ -43,7 +44,7 @@
 //! often connected with line delimited JSON codecs as a convenience for rapid
 //! applicaiton development.
 //!
-//! ::: note
+//! :::note
 //! These defaults can be overridden in most of the builtin cli tools.
 //!
 //! Consult the builtin help via the `--help` or `-h` flags for each

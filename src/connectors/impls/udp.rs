@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::doc_markdown)]
 //! The [`udp_server`](#udp_server) and [`udp_client`](#udp_client) connectors allow UDP based datagram clients and servers to be integrated with tremor.
 //!
 //! # `udp_server`
@@ -64,7 +65,7 @@
 //!
 //! The `udp` client, by default binds to `0.0.0.0:0` allowing to send to all interfaces of the system running tremor and picking a random port. This can be overwritten adding `"bind": "<ip>:<port>"` to the `config`.
 //!
-//! ::: warn
+//! :::warn
 //! If you are hardening an installation it might make sense to limit the interfaces a udp client can send to by specifying the `"bind"` config.
 //! :::
 //!

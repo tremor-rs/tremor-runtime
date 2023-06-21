@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::doc_markdown)]
 //! The `elastic` connector integrates `ElasticSearch` and compatible systems with tremor.
 //!
 //! Tested with `ElasticSearch` `v6` and `v7` and `OpenSearch` `v1.3.1`
@@ -19,7 +20,7 @@
 //! Events will be sent to the connected `ElasticSearch` compatible cluster via the [ES Bulk API](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html)
 //! using the `index` action by default.  It is recommended to batch events sent to this sink using the [`generic::batch` operator](../operators/batch.md) to reduce the overhead introduced by the [ES Bulk API](https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html).
 //!
-//! ::: note
+//! :::note
 //!
 //! The configuration options `codec` and `postprocessors` are not used, as elastic will always serialize event payloads as JSON.
 //!
