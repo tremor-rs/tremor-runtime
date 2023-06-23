@@ -34,7 +34,7 @@ end;
 
 ## Client to send syslog formated data to axiom.
 ##
-## See the [syslog codec](..../codecs/syslog) for the expected format.
+## See the [syslog codec](../../codecs/syslog) for the expected format.
 ##
 ## arguments:
 ## - `endpoint_hostport`: The host and port of the [Axiom endpoint](https://axiom.co/docs/endpoints/introduction).
