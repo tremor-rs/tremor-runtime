@@ -4,7 +4,7 @@ description = "Tremor Api Callbacks"
 edition = "2021"
 license = "Apache-2.0"
 name = "tremor-api"
-version = "0.13.0-rc.13"
+version = "0.13.0-rc.14"
 
 [dependencies]
 halfbrown = "0.1"
@@ -16,11 +16,11 @@ simd-json = "0.8"
 tokio = { version = "1.27", features = ["full"] }
 # we don't need sessions or cookies or shitty logging middleware
 tide = { version = "0.16", default-features = false, features = ["h1-server"] }
-tremor-pipeline = { version = "0.13.0-rc.13", path = "../tremor-pipeline" }
-tremor-runtime = { version = "0.13.0-rc.13", path = "../" }
-tremor-script = { version = "0.13.0-rc.13", path = "../tremor-script" }
-tremor-value = { version = "0.13.0-rc.13", path = "../tremor-value" }
-tremor-common = { version = "0.13.0-rc.13", path = "../tremor-common" }
+tremor-pipeline = { version = "0.13.0-rc.14", path = "../tremor-pipeline" }
+tremor-runtime = { version = "0.13.0-rc.14", path = "../" }
+tremor-script = { version = "0.13.0-rc.14", path = "../tremor-script" }
+tremor-value = { version = "0.13.0-rc.14", path = "../tremor-value" }
+tremor-common = { version = "0.13.0-rc.14", path = "../tremor-common" }
 
 [dev-dependencies]
 surf = { version = "2.3", default-features = false, features = [
