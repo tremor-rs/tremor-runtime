@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # `gcs_streamer`
+#![allow(clippy::doc_markdown)]
+
+//! ## `gcs_streamer`
 //!
 //! This connector provides the ability to stream events into Google Cloud Storage.
 //!
-//! //! ::: note
+//! :::note
 //!    Authentication happens over the [GCP autentication](./index.md#GCP)
 //! :::
-//!
-//! ## Streamer
 //!
 //! For this connector, while the (name, bucket name) pair does not change, the consecutive events will be appended to the same gcs object.
 //!

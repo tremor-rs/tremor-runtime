@@ -14,6 +14,7 @@
 
 // Note this file is just for documentation purposes
 
+#![allow(clippy::doc_markdown)]
 //! # Connectors
 //!
 //! This section introduces Tremor connectors.
@@ -211,17 +212,13 @@
 //!
 //! This example configuration will attempt a maximum of 10 retries (if reconnect attempts fail), after waiting for an initial 100ms which is growing by a randomized rate of 2.0, so that wait times increase but not all instances will retry at the exact same time to avoid a thundering herd problem.
 //!
-//! ::: note
+//! :::note
 //!
 //! Use the `retry` reconnect config with care! Too many retries can hurt downstream systems and hurt the overall systems liveness in case of errors.
 //!
 //! :::
 //!
-//! ---
-//! sidebar_label: Common Configuration
-//! ---
-//!
-//! # Common Configuration
+//! ## Common Configuration
 //!
 //! This section explains common configuration options that are used across many connectors.
 //!

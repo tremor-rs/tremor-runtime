@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::doc_markdown)]
 //! The stdio connector integrates with standard input, output and error
 //! streams on the host operating system. These facilities are useful for
 //! integrating with UNIX pipelines or processing with command line tools
@@ -27,13 +28,10 @@
 //!
 //! create connector console from console;
 //!
-//! # Wire up stadard input to `stdin` pipeline
 //! connect /connector/console to /pipeline/stdin;
 //!
-//! # Wire up `stdout` pipeline to `stdout` on operating system terminal/console
 //! connect /pipeline/stdout to /connector/console;
 //!
-//! # Wire up `stderr` pipeline to `stderr` on operating system terminal/console
 //! connect /pipeline/stderr to /connector/console/err;
 //! ```
 //!
@@ -43,7 +41,7 @@
 //! often connected with line delimited JSON codecs as a convenience for rapid
 //! applicaiton development.
 //!
-//! ::: note
+//! :::note
 //! These defaults can be overridden in most of the builtin cli tools.
 //!
 //! Consult the builtin help via the `--help` or `-h` flags for each

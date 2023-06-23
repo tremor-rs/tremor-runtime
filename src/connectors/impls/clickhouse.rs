@@ -20,7 +20,7 @@
 //! [olap]: https://en.wikipedia.org/wiki/Online_analytical_processing
 //! [wikipedia-ch]: https://en.wikipedia.org/wiki/ClickHouse
 //!
-//! # The `clickhouse` Connector
+//! ## The `clickhouse` Connector
 //!
 //! The `clickhouse` collector aims integrate the [ClickHouse] database in Tremor. It has been tested with `ClickHouse` `v22.3-lts`.
 //!

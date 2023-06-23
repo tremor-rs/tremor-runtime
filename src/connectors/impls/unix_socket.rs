@@ -14,7 +14,7 @@
 
 //! The [`unix_socket_server`](#unix_socket_server) and [`unix_socket_client`](#unix_socket_client) connectors allow clients and servers based on UNIX domain sockets to be integrated with tremor.
 //!
-//! # `unix_socket_client`
+//! ## `unix_socket_client`
 //!
 //! This connector establishes a connection to the unix domain socket at the given `path`, which must exist for this connector to connect successfully. Every event it receives via its `in` port is processed with the configured codec and postprocessors sent down that socket. Every data received from that socket will be processed with the configured preprocessors and codec and finally emitted as event to its `out` port. Emitted events will contain information about the socket they come from in their metadata via `$unix_socket_client`. The metadata has the following form:
 //!
@@ -29,7 +29,7 @@
 //! | `path`     | Path to an existing unix domain socket.                                                        | string           | yes      |               |
 //! | `buf_size` | Size of the receive buffer in bytes. Determining the maximum packet size that can be received. | positive integer | no       | 8192          |
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! Example:
 //!
@@ -56,7 +56,7 @@
 //! end;
 //! ```
 //!
-//! # `unix_socket_server`
+//! ## `unix_socket_server`
 //!
 //! This connector is creating a unix domain socket at the configured `path` and listens for incoming connections on it.
 //! Each connection starts its own stream of events. Each packet is received into a local buffer of `buf_size` bytes, which should be equal or bigger than the maximum expected packet size. Each packet is processed by the configured `preprocessors` and `codec`.
@@ -75,7 +75,7 @@
 //! * Send the event you just received from the `unix_socket_server` right back to it. It will be able to track the the event to its socket connection. You can even do this with an aggregate event coming from a select with a window. If an event is the result of events from multiple socket connections, it will send the event back down to each connection.
 //! * Attach the same metadata you receive on the connection under `$unix_socket_server` to the event you want to send to that connection.
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | Option        | Description                                                                                             | Type             | Required | Default value |
 //! |---------------|---------------------------------------------------------------------------------------------------------|------------------|----------|---------------|

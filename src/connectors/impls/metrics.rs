@@ -26,7 +26,6 @@
 //!
 //! ...
 //!  
-//! # Redirect system metrics to a user defined pipeline
 //! connect /connector/metrics to /pipeline/my_metrics
 //!
 //! ...

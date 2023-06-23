@@ -11,17 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![allow(clippy::doc_markdown)]
 
-//! //! ::: note
+//! :::note
 //!    Authentication happens over the [GCP autentication](./index.md#GCP)
 //! :::
 //!
-//! # `gbq_writer`
+//! ## `gbq_writer`
 //!
 //! The `gbq_writer` makes it possible to write events to [Google BigQuery](https://cloud.google.com/bigquery) by using its [gRPC] based [storage API v1].
 //!
 //!
-//! ## Configuration
+//! ### Configuration
 //!
 //! | option               | description                                                                                                      |
 //! |----------------------|------------------------------------------------------------------------------------------------------------------|
@@ -47,7 +48,7 @@
 //! end;
 //! ```
 //!
-//! ## Metadata
+//! ### Metadata
 //! The `$gbq_writer.table_id` field can be set, to send an event to a table other than the one globally configured. A new writestream will be opened per distinct `table_id`.
 //!
 //! Example of setting the `table_id` metadata in a script:
@@ -57,7 +58,7 @@
 //!   "table_id": "projects/my_project/datasets/my_dataset/tables/my_table"
 //! };
 //!
-//! ## Payload structure
+//! ### Payload structure
 //!
 //! The event payload sent to the `gbq_writer` connector needs to be a [`record`](../../language/expressions.md#records) with field names being the table column names
 //! and the values need to correspond to the table schema values.
@@ -83,7 +84,7 @@
 //!
 //!
 //!
-//! ### Example
+//! #### Example
 //!
 //! For a table defined like:
 //!

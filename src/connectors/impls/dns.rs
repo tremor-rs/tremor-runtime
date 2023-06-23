@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::doc_markdown)]
 //! The dns connector integrates DNS client access into tremor allowing programmatic DNS queries
 //! against the system-provided domain name system  resolver.
 //!
-//! ::: note
+//! :::note
 //! No codecs, configuration, or processors are supported.
 //! :::
 //!
@@ -80,7 +81,7 @@
 //! * `SVCB`
 //! * `TLSA`
 //!
-//! ::: note
+//! :::note
 //! If type is not specified `A` records will be looked up by default
 //! :::
 

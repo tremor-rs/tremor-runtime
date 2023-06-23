@@ -8,8 +8,8 @@ on:
   push:
     branches: [main]
 jobs:
-  license:
-    runs-on: ubuntu-latest
+  docs:
+    runs-on: ubuntu-latest-8-cores
     steps:
       - uses: actions/checkout@v3
       - name: Install deps
@@ -19,4 +19,12 @@ jobs:
           profile: minimal
       - uses: Swatinem/rust-cache@v2
       - name: make docs
-        run: make docs
+        run: |
+          mkdir docs-test
+          cd docs-test
+          git clone --depth  1 --branch main https://github.com/tremor-rs/tremor-www.git
+          cd tremor-www
+          ln -s ../../../tremor-runtime tremor-runtime
+          make tremor-runtime-docs
+          make openapi
+          make docusaurus 
