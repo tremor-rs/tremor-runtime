@@ -369,7 +369,7 @@ impl<'script> Expr<'script> {
                         .lookup_or_insert_mut(
                             // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1033
                             unsafe { mem::transmute::<&Value, &mut Value>(current) },
-                            || Value::object_with_capacity(halfbrown::VEC_LIMIT_UPPER),
+                            || Value::object_with_capacity(tremor_value::VEC_LIMIT_UPPER),
                         )
                         .map_err(|_| err_need_obj(self, segment, current.value_type())));
                 }

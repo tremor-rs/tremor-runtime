@@ -51,9 +51,12 @@ pub use simd_json::{json, json_typed, AlignedBuf, StaticNode};
 pub use value::from::*;
 pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, Value};
 
-use simd_json::Node;
+use simd_json::{Node, ObjectHasher};
 use simd_json_derive::{Deserialize, Serialize, Tape};
 use value_trait::{ValueAccess, ValueInto, Writable};
+
+/// Maximum size for a vector object
+pub const VEC_LIMIT_UPPER: usize = 32;
 
 impl<'value> Serialize for Value<'value> {
     fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
@@ -122,7 +125,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
     #[inline(always)]
     #[allow(clippy::unwrap_used)]
     fn parse_map(&mut self, len: usize) -> Value<'input> {
-        let mut res = Object::with_capacity(len);
+        let mut res = Object::with_capacity_and_hasher(len, ObjectHasher::default());
 
         // Since we checked if it's empty we know that we at least have one
         // element so we eat this

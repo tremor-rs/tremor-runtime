@@ -463,7 +463,7 @@ impl<'value> Iterator for ValueIter<'value> {
 mod test {
     use super::*;
     use crate::Result;
-    use simd_json::OwnedValue;
+    use simd_json::{ObjectHasher, OwnedValue};
     use tremor_common::ids::{Id, OperatorId};
     use tremor_script::ValueAndMeta;
     use tremor_value::Object;
@@ -471,8 +471,8 @@ mod test {
     #[allow(clippy::unnecessary_wraps)] // as this is a function that gets passed as an argument and needs to fulful the bounds
     fn merge<'head>(this: &mut ValueAndMeta<'head>, other: ValueAndMeta<'head>) -> Result<()> {
         if let Some(ref mut a) = this.value_mut().as_array_mut() {
-            let mut e = Object::with_capacity(7);
-            let mut data = Object::with_capacity(2);
+            let mut e = Object::with_capacity_and_hasher(7, ObjectHasher::default());
+            let mut data = Object::with_capacity_and_hasher(2, ObjectHasher::default());
             let (value, meta) = other.into_parts();
             data.insert_nocheck("value".into(), value);
             data.insert_nocheck("meta".into(), meta);

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use beef::Cow;
-use halfbrown::HashMap;
+use simd_json::ObjectHasher;
 use tremor_common::ports::{Port, ERR, IN, OUT};
 use tremor_pipeline::metrics::{value, value_count};
 use tremor_pipeline::MetricsSender;
@@ -146,7 +146,7 @@ pub(crate) fn make_event_count_metrics_payload(
     count: u64,
     connector_id: &Alias,
 ) -> EventPayload {
-    let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::with_capacity(2);
+    let mut tags = Object::with_capacity_and_hasher(2, ObjectHasher::default());
     tags.insert_nocheck(FLOW, Value::from(connector_id.flow_alias().to_string()));
     tags.insert_nocheck(CONNECTOR, connector_id.to_string().into());
     tags.insert_nocheck(PORT, port.into());
@@ -160,8 +160,8 @@ pub(crate) fn make_event_count_metrics_payload(
 #[must_use]
 pub(crate) fn make_metrics_payload(
     name: &'static str,
-    fields: HashMap<Cow<'static, str>, Value<'static>>,
-    tags: HashMap<Cow<'static, str>, Value<'static>>,
+    fields: Object<'static>,
+    tags: Object<'static>,
     timestamp: u64,
 ) -> EventPayload {
     let value = value(Cow::const_str(name), tags, fields, timestamp);

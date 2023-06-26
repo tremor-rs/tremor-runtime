@@ -14,11 +14,11 @@ version = "0.13.0-rc.14"
 [dependencies]
 base64 = "0.21"
 beef = "0.5"
-halfbrown = { version = "0.1", features = ["fxhash"] }
+halfbrown = "0.2"
 serde = "1.0"
-simd-json = "0.8"
-simd-json-derive = "0.8"
-value-trait = { version = "0.5", features = ["custom-types"] }
+simd-json = "0.10"
+simd-json-derive = "0.10"
+value-trait = { version = "0.6", features = ["custom-types"] }
 tremor-common = { version = "0.13.0-rc.14", path = "../tremor-common" }
 
 [dev-dependencies]

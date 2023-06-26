@@ -13,8 +13,7 @@
 // limitations under the License.
 
 use beef::Cow;
-use halfbrown::HashMap;
-use tremor_value::{literal, Value};
+use tremor_value::{literal, Object, Value};
 
 const COUNT: Cow<'static, str> = Cow::const_str("count");
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
@@ -26,7 +25,7 @@ const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 #[must_use]
 pub fn value_count(
     metric_name: Cow<'static, str>,
-    tags: HashMap<Cow<'static, str>, Value<'static>>,
+    tags: Object<'static>,
     count: u64,
     timestamp: u64,
 ) -> Value<'static> {
@@ -44,7 +43,7 @@ pub fn value_count(
 #[must_use]
 pub fn value_named(
     metric_name: Cow<'static, str>,
-    tags: HashMap<Cow<'static, str>, Value<'static>>,
+    tags: Object<'static>,
     name: &'static str,
     value: u64,
     timestamp: u64,
@@ -63,8 +62,8 @@ pub fn value_named(
 #[must_use]
 pub fn value(
     metric_name: Cow<'static, str>,
-    tags: HashMap<Cow<'static, str>, Value<'static>>,
-    fields: HashMap<Cow<'static, str>, Value<'static>>,
+    tags: Object<'static>,
+    fields: Object<'static>,
     timestamp: u64,
 ) -> Value<'static> {
     literal!({
@@ -77,15 +76,15 @@ pub fn value(
 
 #[cfg(test)]
 mod test {
-    use simd_json::ValueAccess;
+    use simd_json::{ObjectHasher, ValueAccess};
 
     use super::*;
     #[test]
     fn value_test() {
-        let mut t = HashMap::new();
+        let mut t = Object::with_hasher(ObjectHasher::default());
         t.insert("tag".into(), "tag-value".into());
 
-        let mut f = HashMap::new();
+        let mut f = Object::with_hasher(ObjectHasher::default());
         f.insert("field".into(), "tag-value".into());
         let m = value("name".into(), t, f, 42);
 

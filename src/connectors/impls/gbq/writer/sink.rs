@@ -990,10 +990,9 @@ mod test {
 
     #[test]
     pub fn can_encode_a_struct() {
-        let mut values = halfbrown::HashMap::new();
-        values.insert("a".into(), Value::Static(StaticNode::I64(1)));
-        values.insert("b".into(), Value::Static(StaticNode::I64(1024)));
-        let input = Value::Object(Box::new(values));
+        let mut input = Value::object();
+        input.try_insert("a", 1);
+        input.try_insert("b", 1024);
 
         let mut subfields = HashMap::new();
         subfields.insert(
@@ -1075,7 +1074,7 @@ mod test {
 
     #[test]
     pub fn can_encode_json() {
-        let value = Value::Object(Box::new(halfbrown::HashMap::new()));
+        let value = Value::object();
         let field = Field {
             table_type: TableType::Json,
             tag: 1,
@@ -1206,10 +1205,10 @@ mod test {
             ],
             &ctx,
         );
-        let mut fields = halfbrown::HashMap::new();
-        fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
-        fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
-        let result = mapping.map(&Value::Object(Box::new(fields)))?;
+        let mut fields = Value::object();
+        fields.try_insert("a", 12);
+        fields.try_insert("b", 21);
+        let result = mapping.map(&fields)?;
 
         assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
         Ok(())
@@ -1251,11 +1250,11 @@ mod test {
             ],
             &ctx,
         );
-        let mut fields = halfbrown::HashMap::new();
-        fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
-        fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
-        fields.insert("c".into(), Value::Static(StaticNode::I64(33)));
-        let result = mapping.map(&Value::Object(Box::new(fields)))?;
+        let mut fields = Value::object();
+        fields.try_insert("a", 12);
+        fields.try_insert("b", 21);
+        fields.try_insert("c", 33);
+        let result = mapping.map(&fields)?;
 
         assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
         Ok(())
@@ -1294,12 +1293,12 @@ mod test {
             }],
             &ctx,
         );
-        let mut inner_fields = halfbrown::HashMap::new();
-        inner_fields.insert("x".into(), Value::Static(StaticNode::I64(10)));
-        inner_fields.insert("y".into(), Value::Static(StaticNode::I64(10)));
-        let mut fields = halfbrown::HashMap::new();
-        fields.insert("a".into(), Value::Object(Box::new(inner_fields)));
-        let result = mapping.map(&Value::Object(Box::new(fields)))?;
+        let mut inner_fields = Value::object();
+        inner_fields.try_insert("x", 10);
+        inner_fields.try_insert("y", 10);
+        let mut fields = Value::object();
+        fields.try_insert("a", inner_fields);
+        let result = mapping.map(&fields)?;
 
         assert_eq!([10u8, 2u8, 8u8, 10u8], result[..]);
         Ok(())
@@ -1329,9 +1328,9 @@ mod test {
             }],
             &ctx,
         );
-        let mut fields = halfbrown::HashMap::new();
-        fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
-        let result = mapping.map(&Value::Object(Box::new(fields)));
+        let mut fields = Value::object();
+        fields.try_insert("a", 12);
+        let result = mapping.map(&fields);
 
         if let Err(Error(ErrorKind::BigQueryTypeMismatch("bytes", x), _)) = result {
             assert_eq!(x, ValueType::I64);

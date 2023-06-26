@@ -15,7 +15,6 @@
 use super::Result::{Match, MatchNull, NoMatch};
 use super::*;
 use crate::Value;
-use halfbrown::hashmap;
 
 use matches::assert_matches;
 #[test]
@@ -23,16 +22,16 @@ fn test_reg_extractor() {
     let ex = Extractor::new("rerg", "(?P<key>[^=]+)=(?P<val>[^&]+)&").expect("bad extractor");
     match ex {
         Extractor::Rerg { .. } => {
+            let mut v = Value::object();
+            v.try_insert("key", vec!["foo", "baz"]);
+            v.try_insert("val", vec!["bar", "bat"]);
             assert_eq!(
                 ex.extract(
                     true,
                     &Value::from("foo=bar&baz=bat&"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! {
-                    "key".into() => Value::from(vec!["foo", "baz"]),
-                    "val".into() => Value::from(vec!["bar", "bat"])
-                }))
+                Match(v)
             );
         }
         _ => unreachable!(),
@@ -43,10 +42,11 @@ fn test_re_extractor() {
     let ex = Extractor::new("re", "(snot)?foo(?P<snot>.*)").expect("bad extractor");
     match ex {
         Extractor::Re { .. } => {
+            let mut v = Value::object();
+            v.try_insert("snot", "bar");
             assert_eq!(
                 ex.extract(true, &Value::from("foobar"), &EventContext::new(0, None)),
-                Match(Value::from(hashmap! {
-                "snot".into() => Value::from("bar") }))
+                Match(v)
             );
         }
         _ => unreachable!(),
@@ -57,12 +57,12 @@ fn test_kv_extractor() {
     let ex = Extractor::new("kv", "").expect("bad extractor");
     match ex {
         Extractor::Kv { .. } => {
+            let mut v = Value::object();
+            v.try_insert("a", "b");
+            v.try_insert("c", "d");
             assert_eq!(
                 ex.extract(true, &Value::from("a:b c:d"), &EventContext::new(0, None)),
-                Match(Value::from(hashmap! {
-                    "a".into() => "b".into(),
-                   "c".into() => "d".into()
-                }))
+                Match(v)
             );
         }
         _ => unreachable!(),
@@ -74,16 +74,17 @@ fn test_json_extractor() {
     let ex = Extractor::new("json", "").expect("bad extractor");
     match ex {
         Extractor::Json => {
+            let mut v = Value::object();
+            v.try_insert("a", "b");
+            v.try_insert("c", "d");
+
             assert_eq!(
                 ex.extract(
                     true,
                     &Value::from(r#"{"a":"b", "c":"d"}"#),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! {
-                    "a".into() => "b".into(),
-                    "c".into() => "d".into()
-                }))
+                Match(v)
             );
         }
         _ => unreachable!(),
@@ -176,55 +177,43 @@ fn test_cidr_extractor() {
     let ex = Extractor::new("cidr", "").expect("");
     match ex {
         Extractor::Cidr { .. } => {
+            let mut v = Value::object();
+            v.try_insert("prefix", vec![192, 168, 1, 0]);
+            v.try_insert("mask", vec![255, 255, 255, 255]);
+
             assert_eq!(
                 ex.extract(
                     true,
                     &Value::from("192.168.1.0"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! (
-                    "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
-                    "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
-
-
-                )))
+                Match(v)
             );
+            let mut v = Value::object();
+            v.try_insert("prefix", vec![192, 168, 1, 0]);
+            v.try_insert("mask", vec![255, 255, 255, 0]);
             assert_eq!(
                 ex.extract(
                     true,
                     &Value::from("192.168.1.0/24"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! (
-                                    "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
-                                    "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 0.into()])
-
-
-                )))
+                Match(v)
             );
 
-            assert_eq!(
-                ex.extract(
-                    true,
-                    &Value::from("192.168.1.0"),
-                    &EventContext::new(0, None)
-                ),
-                Match(Value::from(hashmap!(
-                            "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
-                            "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
-                )))
+            let mut v = Value::object();
+            v.try_insert("prefix", vec![8193, 18528, 18528, 0, 0, 0, 0, 34952]);
+            v.try_insert(
+                "mask",
+                vec![65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535],
             );
-
             assert_eq!(
                 ex.extract(
                     true,
                     &Value::from("2001:4860:4860:0000:0000:0000:0000:8888"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap!(
-                            "prefix".into() => Value::from(vec![Value::from(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
-                            "mask".into() => Value::from(vec![Value::from(65535), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into()])
-                )))
+                Match(v)
             );
         }
         _ => unreachable!(),
@@ -233,16 +222,17 @@ fn test_cidr_extractor() {
     let rex = Extractor::new("cidr", "10.22.0.0/24, 10.22.1.0/24").expect("bad rex");
     match rex {
         Extractor::Cidr { .. } => {
+            let mut v = Value::object();
+            v.try_insert("prefix", vec![10, 22, 0, 254]);
+            v.try_insert("mask", vec![255, 255, 255, 255]);
+
             assert_eq!(
                 rex.extract(
                     true,
                     &Value::from("10.22.0.254"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! (
-                        "prefix".into() => Value::from(vec![Value::from(10), 22.into(), 0.into(), 254.into()]),
-                        "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()]),
-                )))
+                Match(v)
             );
 
             assert_eq!(
@@ -261,6 +251,15 @@ fn test_cidr_extractor() {
 #[test]
 fn test_influx_extractor() {
     let ex = Extractor::new("influx", "").expect("bad extractor");
+    let mut v = Value::object();
+    v.try_insert("measurement", "wea ther");
+    let mut tags = Value::object();
+    tags.try_insert("location", "us-midwest");
+    v.try_insert("tags", tags);
+    let mut fields = Value::object();
+    fields.try_insert("temperature", 82.0);
+    v.try_insert("fields", fields);
+    v.try_insert("timestamp", 1_465_839_830_100_400_200_u64);
     match ex {
         Extractor::Influx => assert_eq!(
             ex.extract(
@@ -268,12 +267,7 @@ fn test_influx_extractor() {
                 &Value::from("wea\\ ther,location=us-midwest temperature=82 1465839830100400200"),
                 &EventContext::new(0, None)
             ),
-            Match(Value::from(hashmap! (
-                   "measurement".into() => "wea ther".into(),
-                   "tags".into() => Value::from(hashmap!("location".into() => "us-midwest".into())),
-                   "fields".into() => Value::from(hashmap!("temperature".into() => 82.0_f64.into())),
-                   "timestamp".into() => Value::from(1_465_839_830_100_400_200_u64)
-            )))
+            Match(v)
         ),
         _ => unreachable!(),
     }

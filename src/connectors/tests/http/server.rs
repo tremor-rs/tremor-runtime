@@ -426,9 +426,10 @@ async fn https_server_test() -> Result<()> {
         data.extend_from_slice(&chunk);
     }
     let body = String::from_utf8(data)?;
-    assert_eq!(
-        format!(
-            r#"meta:
+    let body = serde_yaml::from_str::<serde_yaml::Value>(&body)?;
+    let expected = serde_yaml::from_str::<serde_yaml::Value>(&format!(
+        r#"
+meta:
   uri: /
   version: HTTP/1.1
   protocol: http
@@ -437,10 +438,9 @@ async fn https_server_test() -> Result<()> {
     - localhost:{port}
   method: DELETE
 value: null
-"#
-        ),
-        body
-    );
+  "#
+    ))?;
+    assert_eq!(expected, body);
     assert_eq!(StatusCode::OK, response.status());
     assert_eq!(
         Some("application/yaml; charset=UTF-8"),

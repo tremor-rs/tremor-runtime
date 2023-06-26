@@ -318,8 +318,8 @@ pub struct Binding {
 
 #[cfg(test)]
 mod tests {
-    use halfbrown::HashMap;
     use serde::Deserialize;
+    use std::collections::HashMap;
 
     use super::*;
     use crate::{errors::Result, system::flow};
@@ -412,7 +412,7 @@ mod tests {
             "application/yaml": {"name": "yaml"},
             "*/*": codec,
         });
-        let nac = HashMap::<String, NameWithConfig>::deserialize(data)
+        let nac = std::collections::HashMap::<String, NameWithConfig>::deserialize(data)
             .expect("could structurize two element struct");
 
         assert_eq!(nac.len(), 3);

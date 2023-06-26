@@ -24,7 +24,6 @@ use std::{
 use super::prelude::*;
 use beef::Cow;
 use byteorder::{ByteOrder, NetworkEndian, ReadBytesExt, WriteBytesExt};
-use halfbrown::HashMap;
 use simd_json::StaticNode;
 
 /// Tremor to Tremor codec
@@ -122,7 +121,12 @@ impl Tremor {
         let (len, mut total) = Self::read_len::<E>(t, data)?;
         //ALLOW: `total` is the data we've already read so we know they exist
         data = unsafe { data.get_unchecked(total..) };
-        let mut o = HashMap::with_capacity(len);
+        let mut v = Value::object_with_capacity(len);
+        let o = match v.as_object_mut() {
+            Some(o) => o,
+            // ALLOW: We knowm tis is an object
+            None => unreachable!(),
+        };
         for _ in 0..len {
             let mut cursor = Cursor::new(data);
             let len = cursor.read_u64::<E>()? as usize;
@@ -139,7 +143,7 @@ impl Tremor {
             data = unsafe { data.get_unchecked(read..) };
             o.insert_nocheck(Cow::from(k), v);
         }
-        Ok((Value::Object(Box::new(o)), 1 + total))
+        Ok((v, 1 + total))
     }
     #[inline]
     #[allow(clippy::cast_possible_truncation)]
@@ -221,10 +225,7 @@ impl Tremor {
         Ok(())
     }
     #[inline]
-    fn write_object<E: ByteOrder>(
-        o: &HashMap<Cow<'_, str>, Value>,
-        w: &mut impl Write,
-    ) -> Result<()> {
+    fn write_object<E: ByteOrder>(o: &Object, w: &mut impl Write) -> Result<()> {
         Self::write_type_and_len::<E>(Self::OBJECT, o.len(), w)?;
         for (k, v) in o.iter() {
             w.write_u64::<E>(k.len() as u64)?;

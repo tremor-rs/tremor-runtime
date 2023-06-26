@@ -72,8 +72,8 @@ file-mode = "0.1"
 futures = "0.3.28"
 event-listener = "2.5"
 glob = "0.3"
-halfbrown = "0.1"
-hashbrown = { version = "0.13", features = ["serde"] }
+halfbrown = "0.2"
+hashbrown = { version = "0.14", features = ["serde"] }
 hex = "0.4"
 hostname = "0.3"
 http-types = "2.12"
@@ -90,8 +90,8 @@ regex = "1.7"
 rmp-serde = "1.1"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
-simd-json = { version = "0.8", features = ["known-key"] }
-simd-json-derive = "0.8"
+simd-json = { version = "0.10", features = ["known-key"] }
+simd-json-derive = "0.10"
 snap = "1"
 socket2 = { version = "0.5", features = ["all"] }
 syslog_loose = "0.18"
@@ -101,7 +101,7 @@ tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
 url = "2.3"
-value-trait = "0.5"
+value-trait = "0.6"
 zstd = "0.12"
 
 # blaster / blackhole
