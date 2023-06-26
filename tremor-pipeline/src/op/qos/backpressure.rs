@@ -233,6 +233,7 @@ impl Operator for Backpressure {
 mod test {
     use super::*;
     use crate::SignalKind;
+    use simd_json::ObjectHasher;
     use tremor_common::ids::Id;
     use tremor_value::Object;
 
@@ -312,7 +313,7 @@ mod test {
         // Insert a timeout event with `time` set top `200`
         // this is over our limit of `100` so we syould move
         // one up the backup steps
-        let mut m = Object::new();
+        let mut m = Object::with_hasher(ObjectHasher::default());
         m.insert("time".into(), 200_000_000.into());
 
         let mut op_meta = OpMeta::default();
@@ -408,7 +409,7 @@ mod test {
         // Insert a timeout event with `time` set top `200`
         // this is over our limit of `100` so we syould move
         // one up the backup steps
-        let mut m = Object::new();
+        let mut m = Object::with_hasher(ObjectHasher::default());
         m.insert("time".into(), 200_000_000.into());
 
         let mut op_meta = OpMeta::default();
@@ -497,7 +498,7 @@ mod test {
         }
         .into();
         // An contraflow that fails the timeout
-        let mut m = Object::new();
+        let mut m = Object::with_hasher(ObjectHasher::default());
         m.insert("time".into(), 200_000_000.into());
         let mut op_meta = OpMeta::default();
         op_meta.insert(operator_id, OwnedValue::null());

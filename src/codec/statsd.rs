@@ -51,6 +51,8 @@
 
 use std::io::Write;
 
+use simd_json::ObjectHasher;
+
 use super::prelude::*;
 
 #[derive(Clone, Default, Debug)]
@@ -132,7 +134,7 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
     }
     let data = simdutf8::basic::from_utf8(data)?;
 
-    let mut m = Object::with_capacity(4);
+    let mut m = Object::with_capacity_and_hasher(4, ObjectHasher::default());
 
     let (metric, data) = data.split_once(':').ok_or_else(invalid)?;
     m.insert_nocheck("metric".into(), Value::from(metric));

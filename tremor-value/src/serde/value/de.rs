@@ -19,7 +19,7 @@ use serde_ext::de::{
     self, Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
 };
 use serde_ext::forward_to_deserialize_any;
-use simd_json::StaticNode;
+use simd_json::{ObjectHasher, StaticNode};
 use std::fmt;
 
 impl<'de> de::Deserializer<'de> for Value<'de> {
@@ -225,13 +225,13 @@ impl<'de> SeqAccess<'de> for Array<'de> {
     }
 }
 
-struct ObjectAccess<'de> {
-    i: halfbrown::IntoIter<Cow<'de, str>, Value<'de>>,
+struct ObjectAccess<'de, const N: usize = 32> {
+    i: halfbrown::IntoIter<Cow<'de, str>, Value<'de>, N>,
     v: Option<Value<'de>>,
 }
 
-impl<'de> ObjectAccess<'de> {
-    fn new(i: halfbrown::IntoIter<Cow<'de, str>, Value<'de>>) -> Self {
+impl<'de, const N: usize> ObjectAccess<'de, N> {
+    fn new(i: halfbrown::IntoIter<Cow<'de, str>, Value<'de>, N>) -> Self {
         Self { i, v: None }
     }
 }
@@ -508,7 +508,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     {
         let size = map.size_hint().unwrap_or_default();
 
-        let mut m = Object::with_capacity(size);
+        let mut m = Object::with_capacity_and_hasher(size, ObjectHasher::default());
         while let Some(k) = map.next_key::<&str>()? {
             let v = map.next_value()?;
             m.insert(k.into(), v);

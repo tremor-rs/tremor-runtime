@@ -208,11 +208,7 @@ impl Operator for Grouper {
         }
     }
 
-    fn metrics(
-        &self,
-        tags: &HashMap<Cow<'static, str>, Value<'static>>,
-        timestamp: u64,
-    ) -> Result<Vec<Value<'static>>> {
+    fn metrics(&self, tags: &Object<'static>, timestamp: u64) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
         if !self.buckets.is_empty() {
             let mut tags = tags.clone();
@@ -233,6 +229,7 @@ impl Operator for Grouper {
 #[cfg(test)]
 mod test {
     use super::*;
+    use simd_json::ObjectHasher;
     use tremor_common::ids::Id;
     use tremor_value::Value;
 
@@ -311,7 +308,7 @@ mod test {
         assert_eq!(port, "out");
         assert_eq!(e, event3);
 
-        let mut m = op.metrics(&HashMap::new(), 0)?;
+        let mut m = op.metrics(&Object::with_hasher(ObjectHasher::default()), 0)?;
         let overflow = m.pop().ok_or("no data")?;
         let pass = m.pop().ok_or("no data")?;
         assert!(m.is_empty());

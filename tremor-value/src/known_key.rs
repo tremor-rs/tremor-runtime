@@ -15,6 +15,7 @@
 use crate::Value;
 use beef::Cow;
 use halfbrown::RawEntryMut;
+use simd_json::ObjectHasher;
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, ValueAccess, ValueType};
@@ -55,7 +56,7 @@ where
 {
     fn from(key: S) -> Self {
         let key = Cow::from(key);
-        let hash_builder = halfbrown::DefaultHashBuilder::default();
+        let hash_builder = ObjectHasher::default();
         let mut hasher = hash_builder.build_hasher();
         key.hash(&mut hasher);
         Self {
@@ -115,7 +116,7 @@ impl<'key> KnownKey<'key> {
     #[must_use]
     pub fn map_lookup<'target, 'value>(
         &self,
-        map: &'target halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target halfbrown::HashMap<Cow<'value, str>, Value<'value>, ObjectHasher>,
     ) -> Option<&'target Value<'value>>
     where
         'value: 'target,
@@ -180,7 +181,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_mut<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>, ObjectHasher>,
     ) -> Option<&'target mut Value<'value>>
     where
         'key: 'value,
@@ -277,7 +278,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_or_insert_mut<'target, 'value, F>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>, ObjectHasher>,
         with: F,
     ) -> &'target mut Value<'value>
     where
@@ -365,7 +366,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_insert<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>, ObjectHasher>,
         value: Value<'value>,
     ) -> Option<Value<'value>>
     where

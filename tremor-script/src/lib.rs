@@ -128,7 +128,6 @@ mod tests {
     use super::*;
     use crate::interpreter::AggrType;
     use crate::prelude::*;
-    use halfbrown::hashmap;
 
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
@@ -160,7 +159,7 @@ mod tests {
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
-            let mut global_map = Value::from(hashmap! {});
+            let mut global_map = Value::object();
             let _value = runnable.run(
                 &EventContext::new(0, None),
                 AggrType::Emit,
@@ -178,7 +177,7 @@ mod tests {
             let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
-            let mut global_map = Value::from(hashmap! {});
+            let mut global_map = Value::object();
             let _value = runnable.run(
                 &EventContext::new(0, None),
                 AggrType::Emit,
@@ -305,14 +304,14 @@ mod tests {
     fn test_assign_local() {
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $out = test;",
-            Value::from(hashmap! {
-                "out".into() => Value::from(vec![2_u64, 4, 6, 8]),
+            literal!({
+                "out": vec![2_u64, 4, 6, 8],
             })
         );
         eval_global!(
             "\"hello\"; let test = [4,6,8,10]; let test = [test]; let $out = test;",
-            Value::from(hashmap! {
-                "out".into() => Value::from(vec![vec![4_u64, 6, 8, 10]]),
+            literal!({
+                "out": vec![vec![4_u64, 6, 8, 10]],
             })
         );
     }
@@ -321,14 +320,14 @@ mod tests {
     fn test_assign_meta() {
         eval_global!(
             "\"hello\"; let $test = [2,4,6,8];",
-            Value::from(hashmap! {
-                "test".into() => Value::from(vec![2_u64, 4, 6, 8]),
+            literal!({
+                "test": vec![2_u64, 4, 6, 8],
             })
         );
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $test = [test];",
-            Value::from(hashmap! {
-                "test".into() => Value::from(vec![vec![2_u64, 4, 6, 8]]),
+            literal!({
+                "test": vec![vec![2_u64, 4, 6, 8]],
             })
         );
     }
@@ -337,14 +336,14 @@ mod tests {
     fn test_assign_event() {
         eval_event!(
             "\"hello\"; let event.test = [2,4,6,8];",
-            Value::from(hashmap! {
-                "test".into() => Value::from(vec![2_u64, 4, 6, 8]),
+            literal!({
+                "test": vec![2_u64, 4, 6, 8],
             })
         );
         eval_event!(
             "\"hello\"; let $test = [2,4,6,8]; let event.test = [$test];",
-            Value::from(hashmap! {
-                "test".into() => Value::from(vec![vec![2_u64, 4, 6, 8]]),
+            literal!({
+                "test": vec![vec![2_u64, 4, 6, 8]],
             })
         );
     }
@@ -353,9 +352,6 @@ mod tests {
     fn test_single_json_expr_is_valid() {
         eval!("true ", Value::from(true));
         eval!("true;", Value::from(true));
-        eval!(
-            "{ \"snot\": \"badger\" }",
-            Value::from(hashmap! { "snot".into() => "badger".into() })
-        );
+        eval!("{ \"snot\": \"badger\" }", literal!({ "snot": "badger"}));
     }
 }

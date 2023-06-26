@@ -251,7 +251,6 @@ use elasticsearch::{
     Bulk, BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, BulkUpdateOperation,
     Elasticsearch,
 };
-use halfbrown::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt::Display, sync::atomic::AtomicBool};
@@ -280,7 +279,7 @@ pub(crate) struct Config {
 
     #[serde(default = "Default::default")]
     /// custom headers to add to each request to elastic
-    headers: HashMap<String, Header>,
+    headers: std::collections::HashMap<String, Header>,
 
     /// means for authenticating towards elastic
     #[serde(default = "Default::default")]

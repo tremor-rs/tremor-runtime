@@ -102,6 +102,8 @@
 //! }
 //! ```
 
+use simd_json::ObjectHasher;
+
 use super::prelude::*;
 use std::io::Write;
 
@@ -321,8 +323,8 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
 }
 
 fn decode_metric(data: &str) -> Result<Value> {
-    let mut map = Object::with_capacity(1);
-    let mut m = Object::with_capacity(6);
+    let mut map = Object::with_capacity_and_hasher(1, ObjectHasher::default());
+    let mut m = Object::with_capacity_and_hasher(6, ObjectHasher::default());
 
     let (metric, data) = data.split_once(':').ok_or_else(invalid)?;
     m.insert_nocheck("metric".into(), Value::from(metric));
@@ -372,8 +374,8 @@ fn decode_metric(data: &str) -> Result<Value> {
 
 // _e{21,36}:An exception occurred|Cannot parse CSV file from 10.0.0.17|t:warning|#err_type:bad_file
 fn decode_event(data: &str) -> Result<Value> {
-    let mut map = Object::with_capacity(1);
-    let mut m = Object::with_capacity(10);
+    let mut map = Object::with_capacity_and_hasher(1, ObjectHasher::default());
+    let mut m = Object::with_capacity_and_hasher(10, ObjectHasher::default());
 
     let (titel_len, data) = data.split_once(',').ok_or_else(invalid)?;
     let (text_len, data) = data.split_once("}:").ok_or_else(invalid)?;
@@ -419,8 +421,8 @@ fn decode_event(data: &str) -> Result<Value> {
 
 //_sc|Redis connection|2|#env:dev|m:Redis connection timed out after 10s
 fn decode_service_check(data: &str) -> Result<Value> {
-    let mut map = Object::with_capacity(1);
-    let mut m = Object::with_capacity(7);
+    let mut map = Object::with_capacity_and_hasher(1, ObjectHasher::default());
+    let mut m = Object::with_capacity_and_hasher(7, ObjectHasher::default());
 
     let (name, data) = data.split_once('|').ok_or_else(invalid)?;
     m.insert_nocheck("name".into(), Value::from(name));

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::op::prelude::*;
-use beef::Cow;
 use tremor_script::{
     ast::{self, Helper},
     prelude::*,
@@ -92,11 +91,7 @@ impl Operator for TrickleOperator {
         self.op.on_contraflow(uid, contraevent);
     }
 
-    fn metrics(
-        &self,
-        tags: &HashMap<Cow<'static, str>, Value<'static>>,
-        timestamp: u64,
-    ) -> Result<Vec<Value<'static>>> {
+    fn metrics(&self, tags: &Object<'static>, timestamp: u64) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
     }
 

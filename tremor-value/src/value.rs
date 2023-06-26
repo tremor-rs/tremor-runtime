@@ -23,7 +23,7 @@ pub mod r#static;
 use crate::{Error, Result};
 use beef::Cow;
 use halfbrown::HashMap;
-use simd_json::prelude::*;
+use simd_json::{prelude::*, ObjectHasher};
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
 use std::{borrow::Borrow, convert::TryInto, fmt};
 use std::{cmp::Ord, hash::Hash};
@@ -36,7 +36,7 @@ pub use crate::serde::to_value;
 pub use r#static::StaticValue;
 
 /// Representation of a JSON object
-pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
+pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>, ObjectHasher>;
 /// Bytes
 pub type Bytes<'value> = Cow<'value, [u8]>;
 
@@ -374,7 +374,10 @@ impl<'value> Builder<'value> for Value<'value> {
     #[inline]
     #[must_use]
     fn object_with_capacity(capacity: usize) -> Self {
-        Self::Object(Box::new(Object::with_capacity(capacity)))
+        Self::Object(Box::new(Object::with_capacity_and_hasher(
+            capacity,
+            ObjectHasher::default(),
+        )))
     }
 }
 
@@ -389,7 +392,9 @@ impl<'value> Mutable for Value<'value> {
     }
     #[inline]
     #[must_use]
-    fn as_object_mut(&mut self) -> Option<&mut HashMap<<Self as ValueAccess>::Key, Self>> {
+    fn as_object_mut(
+        &mut self,
+    ) -> Option<&mut HashMap<<Self as ValueAccess>::Key, Self, ObjectHasher>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
@@ -400,7 +405,7 @@ impl<'value> ValueAccess for Value<'value> {
     type Target = Self;
     type Key = Cow<'value, str>;
     type Array = Vec<Self>;
-    type Object = HashMap<Self::Key, Self>;
+    type Object = HashMap<Self::Key, Self, ObjectHasher>;
 
     #[inline]
     #[must_use]
@@ -490,7 +495,7 @@ impl<'value> ValueAccess for Value<'value> {
 
     #[inline]
     #[must_use]
-    fn as_object(&self) -> Option<&HashMap<Self::Key, Self>> {
+    fn as_object(&self) -> Option<&HashMap<Self::Key, Self, ObjectHasher>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
@@ -607,7 +612,7 @@ impl<'de> ValueDeserializer<'de> {
 
     #[cfg_attr(not(feature = "no-inline"), inline(always))]
     fn parse_map(&mut self, len: usize) -> Value<'de> {
-        let mut res = Object::with_capacity(len);
+        let mut res = Object::with_capacity_and_hasher(len, ObjectHasher::default());
 
         for _ in 0..len {
             // The tape might contain duplicate keys, by doing a regular map insert
@@ -632,8 +637,8 @@ mod test {
 
     #[test]
     fn test_cmp_map() {
-        let mut o1 = Object::new();
-        let mut o2 = Object::new();
+        let mut o1 = Object::with_hasher(ObjectHasher::default());
+        let mut o2 = Object::with_hasher(ObjectHasher::default());
 
         assert_eq!(cmp_map(&o1, &o2), Ordering::Equal);
         o1.insert("snot".into(), 1.into());
@@ -1225,7 +1230,7 @@ mod test {
 
     #[test]
     fn conversions_object() {
-        let v = Value::from(Object::new());
+        let v = Value::from(Object::with_hasher(ObjectHasher::default()));
         assert!(v.is_object());
         assert_eq!(v.value_type(), ValueType::Object);
         let v = Value::from("no object");

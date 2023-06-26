@@ -290,9 +290,9 @@ pub(crate) mod producer;
 
 use crate::connectors::prelude::*;
 use beef::Cow;
-use halfbrown::HashMap;
 use rdkafka::{error::KafkaError, ClientContext, Statistics};
 use rdkafka_sys::RDKafkaErrorCode;
+use simd_json::ObjectHasher;
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -423,12 +423,12 @@ where
         let metrics_payload = match stats.client_type.as_str() {
             Self::PRODUCER => {
                 let timestamp = u64::try_from(stats.time)? * 1_000_000_000;
-                let mut fields = HashMap::with_capacity(3);
+                let mut fields = Object::with_capacity_and_hasher(3, ObjectHasher::default());
                 fields.insert(Self::TX_MSGS, Value::from(stats.txmsgs));
                 fields.insert(Self::TX_MSG_BYTES, Value::from(stats.txmsg_bytes));
                 fields.insert(Self::QUEUED_MSGS, Value::from(stats.msg_cnt));
 
-                let mut tags = HashMap::with_capacity(1);
+                let mut tags = Object::with_capacity_and_hasher(1, ObjectHasher::default());
                 tags.insert(Self::CONNECTOR, Value::from(self.ctx.alias().to_string()));
 
                 make_metrics_payload(Self::KAFKA_PRODUCER_STATS, fields, tags, timestamp)
@@ -437,7 +437,7 @@ where
                 let timestamp = u64::try_from(stats.time)? * 1_000_000_000;
 
                 // consumer stats
-                let mut fields = HashMap::with_capacity(4);
+                let mut fields = Object::with_capacity_and_hasher(4, ObjectHasher::default());
                 fields.insert(Self::RX_MSGS, Value::from(stats.rxmsgs));
                 fields.insert(Self::RX_MSG_BYTES, Value::from(stats.rxmsg_bytes));
                 if let Some(cg) = stats.cgrp {
@@ -452,7 +452,7 @@ where
                     }
                 }
                 fields.insert(Self::CONSUMER_LAG, Value::from(consumer_lag));
-                let mut tags = HashMap::with_capacity(1);
+                let mut tags = Object::with_capacity_and_hasher(1, ObjectHasher::default());
                 tags.insert(Self::CONNECTOR, Value::from(self.ctx.alias().to_string()));
                 make_metrics_payload(Self::KAFKA_CONSUMER_STATS, fields, tags, timestamp)
             }

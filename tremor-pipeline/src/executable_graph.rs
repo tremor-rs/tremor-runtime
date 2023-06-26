@@ -20,12 +20,12 @@ use crate::{
     ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
-use beef::Cow;
 use halfbrown::HashMap;
+use simd_json::ObjectHasher;
 use std::{fmt, fmt::Display};
 use tremor_common::{ids::OperatorId, ports::Port, stry};
 use tremor_script::{ast::Helper, ast::Stmt};
-use tremor_value::Value;
+use tremor_value::{Object, Value};
 
 /// Configuration for a node
 #[derive(Debug, Clone, Default)]
@@ -152,11 +152,7 @@ impl Operator for OperatorNode {
         self.op.on_contraflow(self.uid, contraevent);
     }
 
-    fn metrics(
-        &self,
-        tags: &HashMap<Cow<'static, str>, Value<'static>>,
-        timestamp: u64,
-    ) -> Result<Vec<Value<'static>>> {
+    fn metrics(&self, tags: &Object<'static>, timestamp: u64) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
     }
 
@@ -212,7 +208,7 @@ impl NodeMetrics {
     fn to_value(
         &self,
         metric_name: &str,
-        tags: &mut HashMap<Cow<'static, str>, Value<'static>>,
+        tags: &mut Object<'static>,
         timestamp: u64,
     ) -> Vec<Value<'static>> {
         let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
@@ -450,7 +446,7 @@ impl ExecutableGraph {
             .map(|ival| event.ingest_ns - self.last_metrics > ival)
             .unwrap_or_default()
         {
-            let mut tags = HashMap::with_capacity(8);
+            let mut tags = HashMap::with_capacity_and_hasher(8, ObjectHasher::default());
             tags.insert("pipeline".into(), common_cow(&self.id).into());
             self.send_metrics("events", tags, event.ingest_ns);
             self.last_metrics = event.ingest_ns;
@@ -515,12 +511,7 @@ impl ExecutableGraph {
         }
     }
 
-    fn send_metrics(
-        &mut self,
-        metric_name: &str,
-        mut tags: HashMap<Cow<'static, str>, Value<'static>>,
-        ingest_ns: u64,
-    ) {
+    fn send_metrics(&mut self, metric_name: &str, mut tags: Object<'static>, ingest_ns: u64) {
         for (i, m) in self.metrics.iter().enumerate() {
             tags.insert("node".into(), unsafe {
                 self.graph.get_unchecked(i).id.clone().into()
@@ -714,11 +705,7 @@ mod test {
 
         fn on_contraflow(&mut self, _uid: OperatorId, _insight: &mut Event) {}
 
-        fn metrics(
-            &self,
-            _tags: &HashMap<Cow<'static, str>, Value<'static>>,
-            _timestamp: u64,
-        ) -> Result<Vec<Value<'static>>> {
+        fn metrics(&self, _tags: &Object<'static>, _timestamp: u64) -> Result<Vec<Value<'static>>> {
             Ok(Vec::new())
         }
 
@@ -850,7 +837,11 @@ mod test {
         assert_eq!(returns.len(), 1);
         returns.clear();
 
-        g.send_metrics("test-metric", HashMap::new(), 123);
+        g.send_metrics(
+            "test-metric",
+            HashMap::with_hasher(ObjectHasher::default()),
+            123,
+        );
         let mut metrics = Vec::new();
         while let Ok(m) = rx.try_recv() {
             metrics.push(m);
@@ -870,7 +861,11 @@ mod test {
         assert_eq!(returns.len(), 1);
         returns.clear();
 
-        g.send_metrics("test-metric", HashMap::new(), 123);
+        g.send_metrics(
+            "test-metric",
+            HashMap::with_hasher(ObjectHasher::default()),
+            123,
+        );
         let mut metrics = Vec::new();
         while let Ok(m) = rx.try_recv() {
             metrics.push(m);

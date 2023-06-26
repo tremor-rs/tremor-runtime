@@ -42,6 +42,7 @@ use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
+use simd_json::ObjectHasher;
 
 use super::{
     base_expr::Ranged,
@@ -351,7 +352,7 @@ impl<'script> Upable<'script> for RecordRaw<'script> {
     type Target = Record<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Record {
-            base: crate::Object::new(),
+            base: crate::Object::with_hasher(ObjectHasher::default()),
             mid: self.mid,
             fields: self.fields.up(helper)?,
         })

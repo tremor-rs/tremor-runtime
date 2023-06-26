@@ -21,7 +21,7 @@ use crate::{
 };
 use bimap::BiMap;
 use either::Either;
-use hashbrown::HashMap;
+use std::collections::HashMap;
 use std::{
     hash::Hash,
     marker::PhantomData,
@@ -208,9 +208,15 @@ where
         }
         // clean out closed streams
         if clean_closed_streams {
-            for (stream_id, _) in self.streams.drain_filter(|_k, v| v.is_closed()) {
-                self.streams_meta.remove_by_right(&stream_id);
-                serializer.drop_stream(stream_id);
+            let closed_streams: Vec<_> = self
+                .streams
+                .iter()
+                .filter_map(|(k, v)| v.is_closed().then_some(*k))
+                .collect();
+            for id in closed_streams {
+                self.streams.remove(&id);
+                self.streams_meta.remove_by_right(&id);
+                serializer.drop_stream(id);
             }
         }
         self.streams.is_empty()

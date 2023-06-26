@@ -767,7 +767,6 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
 #[test]
 fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
-    use halfbrown::hashmap;
     let target = test_target();
     let mut stmt_ast = test_stmt(target);
     stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
@@ -776,8 +775,8 @@ fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
     }));
     stmt_ast.maybe_having = Some(ImutExpr::from(Literal {
         mid: mid(),
-        value: Value::from(hashmap! {
-            "snot".into() => "badger".into(),
+        value: literal!({
+            "snot": "badger"
         }),
     }));
 

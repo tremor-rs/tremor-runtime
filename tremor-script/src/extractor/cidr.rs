@@ -102,9 +102,9 @@ use cidr_utils::{
     cidr::{IpCidr, Ipv4Cidr},
     utils::IpCidrCombiner,
 };
-use halfbrown::{hashmap, HashMap};
+use halfbrown::HashMap;
+use simd_json::ObjectHasher;
 use std::{
-    hash::BuildHasherDefault,
     iter::{Iterator, Peekable},
     net::{IpAddr, Ipv4Addr},
     result::Result as StdResult,
@@ -240,20 +240,32 @@ impl std::ops::Deref for Cidr {
     }
 }
 
-impl<'cidr> From<Cidr>
-    for HashMap<Cow<'cidr, str>, Value<'cidr>, BuildHasherDefault<fxhash::FxHasher>>
-{
+impl<'cidr> From<Cidr> for HashMap<Cow<'cidr, str>, Value<'cidr>, ObjectHasher> {
     fn from(x: Cidr) -> Self {
+        let mut r = HashMap::with_capacity_and_hasher(2, ObjectHasher::default());
         match x.0 {
-            IpCidr::V4(y) => hashmap!(
-                       "prefix".into() => Value::from(y.get_prefix_as_u8_array().to_vec()),
-                       "mask".into() => Value::from(y.get_mask_as_u8_array().to_vec()),
-            ),
-            IpCidr::V6(y) => hashmap!(
-                       "prefix".into() => Value::from(y.get_prefix_as_u16_array().to_vec()),
-                       "mask".into() => Value::from(y.get_mask_as_u16_array().to_vec()),
-            ),
+            IpCidr::V4(y) => {
+                r.insert_nocheck(
+                    "prefix".into(),
+                    Value::from(y.get_prefix_as_u8_array().to_vec()),
+                );
+                r.insert_nocheck(
+                    "mask".into(),
+                    Value::from(y.get_mask_as_u8_array().to_vec()),
+                );
+            }
+            IpCidr::V6(y) => {
+                r.insert_nocheck(
+                    "prefix".into(),
+                    Value::from(y.get_prefix_as_u16_array().to_vec()),
+                );
+                r.insert_nocheck(
+                    "mask".into(),
+                    Value::from(y.get_mask_as_u16_array().to_vec()),
+                );
+            }
         }
+        r
     }
 }
 

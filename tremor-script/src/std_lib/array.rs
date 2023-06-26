@@ -137,8 +137,23 @@ mod test {
         let f = fun("array", "sort");
         let v = Value::from(vec!["this", "is", "a", "test"]);
         assert_val!(f(&[&v]), Value::from(vec!["a", "is", "test", "this"]));
+        let v = Value::from(vec!["1", "0", "2"]);
+        assert_val!(f(&[&v]), Value::from(vec!["0", "1", "2"]));
         let v = Value::from(vec![3, 2, 3, 1, 4]);
         assert_val!(f(&[&v]), Value::from(vec![1, 2, 3, 3, 4]));
+        let v = Value::from(vec![
+            vec!["1", "one", "other"],
+            vec!["2", "two", "other"],
+            vec!["0", "zip", "other"],
+        ]);
+        assert_val!(
+            f(&[&v]),
+            Value::from(vec![
+                vec!["0", "zip", "other"],
+                vec!["1", "one", "other"],
+                vec!["2", "two", "other"]
+            ])
+        );
     }
 
     #[test]
