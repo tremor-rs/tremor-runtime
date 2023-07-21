@@ -351,6 +351,7 @@ impl ErrorKind {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.start().absolute() == outer.start().absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
             UnrecognizedToken(_, _, t, _) if t == "##" => Some(format!("`{t}` is as doc comment, it needs to be followed by a statement, did you want to use `#` here?")),
             UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `;` in the prior statement".into()),
+            UnrecognizedToken(_, _, t, l) if t == "\"" && l.contains(&("`<ident>`".to_string())) => Some("Did you mean to quote an ident? If so use ` (a back tick) not \" (a quote).".into()),
             UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use '{t}' as an ident, consider quoting it as `{t}` to make it an identifier.")),
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             UnrecognizedToken(_, _, key, options) => {

@@ -1,0 +1,4 @@
+Error: 
+    1 | event."@timestamp"
+      |       ^ Found the token `"` but expected `<ident>`
+      |         NOTE: Did you mean to quote an ident? If so use ` (a back tick) not " (a quote).

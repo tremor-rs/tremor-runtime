@@ -4,6 +4,7 @@
 
 ### New features
 
+* hygienic errors for strings in path segements
 * axiom stdlib module
 * gcl now supports the `timestamp` metadata overwrite
 
