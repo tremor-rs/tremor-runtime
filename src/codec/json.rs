@@ -62,7 +62,7 @@ impl<S: Sorting> Clone for Json<S> {
 impl<S: Sorting> Default for Json<S> {
     fn default() -> Self {
         Self {
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
             input_buffer: AlignedBuf::with_capacity(1024),
             string_buffer: vec![0u8; 1024],
             data_buf: Vec::new(),

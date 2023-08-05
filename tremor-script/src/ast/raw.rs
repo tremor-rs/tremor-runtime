@@ -78,7 +78,7 @@ impl<'script> ScriptRaw<'script> {
     #[allow(clippy::too_many_lines)]
     pub(crate) fn up_script<'registry>(
         self,
-        mut helper: &mut Helper<'script, 'registry>,
+        helper: &mut Helper<'script, 'registry>,
     ) -> Result<Script<'script>> {
         helper.enter_scope();
         let mut exprs = vec![];

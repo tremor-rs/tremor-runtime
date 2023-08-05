@@ -198,7 +198,7 @@ impl<T: Id> IdGen<T> {
     pub fn new() -> Self {
         Self {
             current: 0,
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         }
     }
     /// return the next id for this generator

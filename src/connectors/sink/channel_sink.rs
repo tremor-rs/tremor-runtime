@@ -168,7 +168,7 @@ where
             tx,
             rx,
             reply_tx,
-            _b: PhantomData::default(),
+            _b: PhantomData,
             sink_is_connected,
         }
     }

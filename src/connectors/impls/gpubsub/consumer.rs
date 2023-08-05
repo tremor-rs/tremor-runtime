@@ -108,7 +108,7 @@ impl ConnectorBuilder for Builder {
             config,
             url,
             client_id,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         }))
     }
 }
