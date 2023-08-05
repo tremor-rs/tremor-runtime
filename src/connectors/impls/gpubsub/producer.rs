@@ -79,7 +79,7 @@ impl ConnectorBuilder for Builder {
 
         Ok(Box::new(GpubConnectorWithTokenProvider {
             config,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         }))
     }
 }

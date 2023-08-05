@@ -103,7 +103,7 @@ impl<D: Defaults> Clone for Url<D> {
     fn clone(&self) -> Self {
         Self {
             url: self.url.clone(),
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         }
     }
 }
@@ -126,7 +126,7 @@ impl<D: Defaults> Default for Url<D> {
             url: url::Url::parse(&format!("{}://{}:{}", D::SCHEME, D::HOST, D::PORT))
                 // ALLOW: this is a known safe url
                 .expect("DEFAULT URL INVALID"),
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         }
     }
 }

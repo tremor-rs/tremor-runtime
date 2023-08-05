@@ -73,7 +73,7 @@ pub struct DeployRaw<'script> {
 impl<'script> DeployRaw<'script> {
     pub(crate) fn up_script<'registry>(
         self,
-        mut helper: &mut Helper<'script, 'registry>,
+        helper: &mut Helper<'script, 'registry>,
     ) -> Result<Deploy<'script>> {
         let mut stmts: Vec<DeployStmt<'script>> = vec![];
         for (_i, stmt) in self.stmts.into_iter().enumerate() {
