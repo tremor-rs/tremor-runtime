@@ -9,10 +9,15 @@
 * gcl now supports the `timestamp` metadata overwrite
 * basic avro codec
 
+### Fixes
+
+* Fix bug in GBQ connector where batches were not sent
+
 ### Breaking Changes
 
 * All google connectors now require `token` to be either set to `{"file": "<path to json>"}` or `{"json": {...}}`
-* 
+
+
 ## [0.13.0-rc.12]
 
 ### Fixes
