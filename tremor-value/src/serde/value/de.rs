@@ -509,9 +509,9 @@ impl<'de> Visitor<'de> for ValueVisitor {
         let size = map.size_hint().unwrap_or_default();
 
         let mut m = Object::with_capacity_and_hasher(size, ObjectHasher::default());
-        while let Some(k) = map.next_key::<&str>()? {
+        while let Some(k) = map.next_key::<Cow<'_, str>>()? {
             let v = map.next_value()?;
-            m.insert(k.into(), v);
+            m.insert(k, v);
         }
         Ok(Value::from(m))
     }

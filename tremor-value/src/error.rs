@@ -22,6 +22,8 @@ use fmt::Display;
 pub enum Error {
     /// A map was expected but some other value was found
     ExpectedMap,
+    /// Bytes was expected but some other value was found
+    ExpectedBytes,
     /// A generic serde error
     Serde(String),
     /// A SIMD Json error
@@ -42,6 +44,7 @@ impl Display for Error {
             Error::ExpectedMap => write!(f, "Expected a struct, but did not find one"),
             Error::Serde(s) | Error::Generic(s) => f.write_str(s),
             Error::SimdJson(e) => write!(f, "SIMD JSON error: {e}"),
+            Error::ExpectedBytes => write!(f, "Expected bytes, but did not find any"),
         }
     }
 }

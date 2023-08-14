@@ -18,6 +18,7 @@ use crate::{
 };
 use std::fmt::{Debug, Display};
 use tremor_value::Value;
+pub(crate) mod avro;
 pub(crate) mod binary;
 pub(crate) mod binflux;
 pub(crate) mod csv;
@@ -97,6 +98,7 @@ impl Debug for dyn Codec {
 ///  * if the codec doesn't exist
 pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
     match config.name.as_str() {
+        "avro" => avro::from_config(config.config.as_ref()),
         "binary" => Ok(Box::new(binary::Binary {})),
         "binflux" => Ok(Box::<binflux::BInflux>::default()),
         "csv" => Ok(Box::new(csv::Csv {})),

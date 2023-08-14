@@ -20,9 +20,11 @@ mod serialize;
 /// a static value newtype workaround for rust quirks
 pub mod r#static;
 
+pub use crate::serde::to_value;
 use crate::{Error, Result};
 use beef::Cow;
 use halfbrown::HashMap;
+pub use r#static::StaticValue;
 use simd_json::{prelude::*, ObjectHasher};
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
 use std::{borrow::Borrow, convert::TryInto, fmt};
@@ -31,9 +33,6 @@ use std::{
     cmp::Ordering,
     ops::{Index, IndexMut},
 };
-
-pub use crate::serde::to_value;
-pub use r#static::StaticValue;
 
 /// Representation of a JSON object
 pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>, ObjectHasher>;
@@ -316,6 +315,18 @@ impl<'value> Value<'value> {
             Value::Bytes(bs) => Some(bs),
             Value::String(bs) => Some(bs.as_bytes()),
             _ => None,
+        }
+    }
+    /// Tries to get the bytes from a Value
+    ///
+    /// # Errors
+    /// if the value is not a byte array or string
+    #[inline]
+    pub fn try_as_bytes(&self) -> Result<&[u8]> {
+        match self {
+            Value::Bytes(bs) => Ok(bs),
+            Value::String(bs) => Ok(bs.as_bytes()),
+            _ => Err(Error::ExpectedBytes),
         }
     }
 
