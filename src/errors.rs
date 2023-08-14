@@ -219,6 +219,7 @@ error_chain! {
         HeaderToStringError(http::header::ToStrError);
         MimeParsingError(mime::FromStrError);
         InvalidStatusCode(http::status::InvalidStatusCode);
+        AvroError(apache_avro::Error);
     }
 
     errors {
