@@ -98,7 +98,7 @@ impl Debug for dyn Codec {
 ///  * if the codec doesn't exist
 pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
     match config.name.as_str() {
-        "avro" => avro::from_config(config.config.as_ref()),
+        "avro" => avro::Avro::from_config(config.config.as_ref()),
         "binary" => Ok(Box::new(binary::Binary {})),
         "binflux" => Ok(Box::<binflux::BInflux>::default()),
         "csv" => Ok(Box::new(csv::Csv {})),
