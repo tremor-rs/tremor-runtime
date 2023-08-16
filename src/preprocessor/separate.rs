@@ -58,7 +58,7 @@
 //! end;
 //! ```
 
-use super::Preprocessor;
+use super::prelude::*;
 use crate::{
     connectors::prelude::*,
     errors::{Kind as ErrorKind, Result},
@@ -207,7 +207,12 @@ impl Preprocessor for Separate {
         "separate"
     }
 
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         // split incoming bytes by specifed separator
         let separator = self.separator;
         let mut events = Vec::with_capacity(self.parts_per_chunk);
@@ -221,10 +226,10 @@ impl Preprocessor for Separate {
                     .get(last_idx..first_fragment_idx)
                     .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?;
                 if !self.buffer.is_empty() {
-                    events.push(self.complete_fragment(first_fragment)?);
+                    events.push((self.complete_fragment(first_fragment)?, meta.clone()));
                 // invalid lines are ignored (and logged about here)
                 } else if self.is_valid_chunk(first_fragment) {
-                    events.push(first_fragment.to_vec());
+                    events.push((first_fragment.to_vec(), meta.clone()));
                 }
                 last_idx = first_fragment_idx + 1;
 
@@ -233,7 +238,7 @@ impl Preprocessor for Separate {
                         .get(last_idx..fragment_idx)
                         .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?;
                     if self.is_valid_chunk(fragment) {
-                        events.push(fragment.to_vec());
+                        events.push((fragment.to_vec(), meta.clone()));
                     }
                     last_idx = fragment_idx + 1;
                 }
@@ -253,21 +258,23 @@ impl Preprocessor for Separate {
         } else {
             for split_point in split_points {
                 if !self.exceeds_max_length(split_point - last_idx) {
-                    events.push(
+                    events.push((
                         data.get(last_idx..split_point)
                             .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?
                             .to_vec(),
-                    );
+                        meta.clone(),
+                    ));
                 }
                 last_idx = split_point + 1;
             }
             // push the rest out, if finished or not
             if last_idx <= data.len() {
-                events.push(
+                events.push((
                     data.get(last_idx..)
                         .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?
                         .to_vec(),
-                );
+                    meta,
+                ));
             }
         }
 
@@ -276,17 +283,26 @@ impl Preprocessor for Separate {
         Ok(events)
     }
 
-    fn finish(&mut self, data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+    fn finish(
+        &mut self,
+        data: Option<&[u8]>,
+        meta: Option<Value<'static>>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         let mut tmp = 0_u64;
         if let Some(data) = data {
-            self.process(&mut tmp, data).map(|mut processed| {
-                if !self.buffer.is_empty() {
-                    processed.push(self.buffer.split_off(0));
-                }
-                processed
-            })
+            self.process(&mut tmp, data, meta.clone().unwrap_or_else(Value::object))
+                .map(|mut processed| {
+                    if !self.buffer.is_empty() {
+                        processed
+                            .push((self.buffer.split_off(0), meta.unwrap_or_else(Value::object)));
+                    }
+                    processed
+                })
         } else if !self.buffer.is_empty() {
-            Ok(vec![self.buffer.split_off(0)])
+            Ok(vec![(
+                self.buffer.split_off(0),
+                meta.unwrap_or_else(Value::object),
+            )])
         } else {
             Ok(vec![])
         }
@@ -333,41 +349,43 @@ mod test {
         let mut i = 0_u64;
 
         // Test simple split
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // split test
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        assert!(pp.process(&mut i, b"0123456789\n").is_err());
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        assert!(pp
+            .process(&mut i, b"0123456789\n", Value::object())
+            .is_err());
 
         // Test if we still work with new data
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        assert!(pp.process(&mut i, b"0123456789").is_err());
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        assert!(pp.process(&mut i, b"0123456789", Value::object()).is_err());
 
         // Test if we still work with new data
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
-        assert!(pp.finish(None)?.is_empty());
+        assert!(pp.finish(None, None)?.is_empty());
 
         Ok(())
     }
@@ -378,33 +396,35 @@ mod test {
         let mut i = 0_u64;
 
         // Test simple split
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // split test
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        assert!(pp.process(&mut i, b"0123456789\n").is_err());
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        assert!(pp
+            .process(&mut i, b"0123456789\n", Value::object())
+            .is_err());
 
         // Test if we still work with new data
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        assert!(pp.process(&mut i, b"0123456789").is_err());
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        assert!(pp.process(&mut i, b"0123456789", Value::object()).is_err());
         Ok(())
     }
 
@@ -414,30 +434,32 @@ mod test {
         let mut i = 0_u64;
 
         // Test simple split
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // split test
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        assert!(pp.process(&mut i, b"0123456789\n").is_err());
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        assert!(pp
+            .process(&mut i, b"0123456789\n", Value::object())
+            .is_err());
 
         // Test if we still work with new data
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
-        assert!(pp.finish(None)?.is_empty());
+        assert!(pp.finish(None, None)?.is_empty());
 
         Ok(())
     }
@@ -448,22 +470,24 @@ mod test {
         let mut i = 0_u64;
 
         // Test simple split
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // split test
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // error for adding too much
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        assert!(pp.process(&mut i, b"0123456789\n").is_err());
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        assert!(pp
+            .process(&mut i, b"0123456789\n", Value::object())
+            .is_err());
 
         Ok(())
     }
@@ -475,17 +499,17 @@ mod test {
         let mut i = 0_u64;
 
         // Test simple split
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         // split test
-        assert!(pp.process(&mut i, b"012345")?.is_empty());
-        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert!(pp.process(&mut i, b"012345", Value::object())?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         Ok(())
@@ -498,10 +522,10 @@ mod test {
         let mut i = 0_u64;
 
         // Test simple split
-        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         Ok(())
@@ -513,10 +537,10 @@ mod test {
         let mut i = 0_u64;
 
         // Test simple split
-        let mut r = pp.process(&mut i, b"012345\x000123456789\x00")?;
+        let mut r = pp.process(&mut i, b"012345\x000123456789\x00", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
         Ok(())
@@ -526,7 +550,7 @@ mod test {
     fn test_empty_data() -> Result<()> {
         let mut pp = Separate::default();
         let mut i = 0_u64;
-        assert!(pp.process(&mut i, b"")?.is_empty());
+        assert!(pp.process(&mut i, b"", Value::object())?.is_empty());
         Ok(())
     }
 
@@ -534,8 +558,8 @@ mod test {
     fn test_empty_data_after_buffer() -> Result<()> {
         let mut pp = Separate::default();
         let mut i = 0_u64;
-        assert!(pp.process(&mut i, b"a")?.is_empty());
-        assert!(pp.process(&mut i, b"")?.is_empty());
+        assert!(pp.process(&mut i, b"a", Value::object())?.is_empty());
+        assert!(pp.process(&mut i, b"", Value::object())?.is_empty());
         Ok(())
     }
 
@@ -545,13 +569,13 @@ mod test {
         let mut i = 0_u64;
 
         // Test simple split
-        let mut r = pp.process(&mut i, b"012345\n0123456789\nabc\n")?;
+        let mut r = pp.process(&mut i, b"012345\n0123456789\nabc\n", Value::object())?;
         // since we pop this is going to be reverse order
-        assert_eq!(r.pop().unwrap_or_default(), b"abc");
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        assert_eq!(r.pop().unwrap_or_default().0, b"abc");
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
-        let r = pp.finish(None)?;
+        let r = pp.finish(None, None)?;
         assert!(r.is_empty());
 
         Ok(())
@@ -563,15 +587,15 @@ mod test {
         let mut i = 0_u64;
 
         // both split and buffer
-        let mut r = pp.process(&mut i, b"0123456789\n012345")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        let mut r = pp.process(&mut i, b"0123456789\n012345", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
         assert!(r.is_empty());
 
         // test picking up from the buffer
-        let mut r = pp.process(&mut i, b"\n")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        let mut r = pp.process(&mut i, b"\n", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
-        assert!(pp.finish(None)?.is_empty());
+        assert!(pp.finish(None, None)?.is_empty());
 
         Ok(())
     }
@@ -582,17 +606,17 @@ mod test {
         let mut i = 0_u64;
 
         // both split and buffer
-        let mut r = pp.process(&mut i, b"0123456789\n012345")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        let mut r = pp.process(&mut i, b"0123456789\n012345", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
         assert!(r.is_empty());
 
         // pick up from the buffer and add to buffer
-        let mut r = pp.process(&mut i, b"\nabc")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"012345");
+        let mut r = pp.process(&mut i, b"\nabc", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345");
         assert!(r.is_empty());
 
-        let mut r = pp.finish(None)?;
-        assert_eq!(r.pop().unwrap_or_default(), b"abc");
+        let mut r = pp.finish(None, None)?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"abc");
         assert!(r.is_empty());
 
         Ok(())
@@ -604,13 +628,13 @@ mod test {
         let mut i = 0_u64;
 
         // both split and buffer
-        let mut r = pp.process(&mut i, b"0123456789\n012345")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"0123456789");
+        let mut r = pp.process(&mut i, b"0123456789\n012345", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"0123456789");
         assert!(r.is_empty());
 
         // pick up from the buffer and add to buffer as well
-        let mut r = pp.process(&mut i, b"abc\n")?;
-        assert_eq!(r.pop().unwrap_or_default(), b"012345abc");
+        let mut r = pp.process(&mut i, b"abc\n", Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"012345abc");
         assert!(r.is_empty());
 
         Ok(())
@@ -622,16 +646,18 @@ mod test {
         let mut ingest_ns = 0_u64;
 
         let data = b"123\n456";
-        let mut r = pp.process(&mut ingest_ns, data)?;
-        assert_eq!(r.pop().unwrap_or_default(), b"123");
+        let mut r = pp.process(&mut ingest_ns, data, Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"123");
         assert!(r.is_empty());
 
-        assert!(pp.process(&mut ingest_ns, b"7890")?.is_empty());
-        let mut r = pp.process(&mut ingest_ns, data)?;
-        assert_eq!(r.pop().unwrap_or_default(), b"4567890123");
+        assert!(pp
+            .process(&mut ingest_ns, b"7890", Value::object())?
+            .is_empty());
+        let mut r = pp.process(&mut ingest_ns, data, Value::object())?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"4567890123");
         assert!(r.is_empty());
-        let mut r = pp.finish(None)?;
-        assert_eq!(r.pop().unwrap_or_default(), b"456");
+        let mut r = pp.finish(None, None)?;
+        assert_eq!(r.pop().unwrap_or_default().0, b"456");
         assert!(r.is_empty());
         assert!(pp.buffer.is_empty());
         Ok(())
@@ -644,11 +670,11 @@ mod test {
 
         let mut data = [b'A'; 10000];
         data[9998] = b'\n';
-        let r = pp.process(&mut ingest_ns, &data)?;
+        let r = pp.process(&mut ingest_ns, &data, Value::object())?;
         assert_eq!(2, r.len());
-        assert_eq!(9998, r[0].len());
-        assert_eq!(1, r[1].len());
-        let r = pp.finish(None)?;
+        assert_eq!(9998, r[0].0.len());
+        assert_eq!(1, r[1].0.len());
+        let r = pp.finish(None, None)?;
         assert_eq!(0, r.len());
         Ok(())
     }
@@ -665,13 +691,13 @@ mod test {
 
         let mut data = [b'A'; 10000];
         data[9998] = b'\n';
-        let r = pp.process(&mut ingest_ns, &data)?;
+        let r = pp.process(&mut ingest_ns, &data, Value::object())?;
         assert_eq!(1, r.len());
-        assert_eq!(9998, r[0].len());
+        assert_eq!(9998, r[0].0.len());
 
-        let r = pp.finish(None)?;
+        let r = pp.finish(None, None)?;
         assert_eq!(1, r.len());
-        assert_eq!(1, r[0].len());
+        assert_eq!(1, r[0].0.len());
         Ok(())
     }
 
@@ -686,15 +712,15 @@ mod test {
         let mut pp = Separate::from_config(&config)?;
         let mut data = [b'A'; 100];
         data[89] = b'|';
-        let r = pp.process(&mut ingest_ns, &data)?;
+        let r = pp.process(&mut ingest_ns, &data, Value::object())?;
         assert_eq!(2, r.len());
-        assert_eq!(89, r[0].len());
-        assert_eq!(10, r[1].len());
+        assert_eq!(89, r[0].0.len());
+        assert_eq!(10, r[1].0.len());
 
-        let r = pp.finish(Some(&[b'|']))?;
+        let r = pp.finish(Some(&[b'|']), None)?;
         assert_eq!(2, r.len());
-        assert_eq!(0, r[0].len());
-        assert_eq!(0, r[1].len());
+        assert_eq!(0, r[0].0.len());
+        assert_eq!(0, r[1].0.len());
         Ok(())
     }
 
@@ -709,14 +735,14 @@ mod test {
         let mut pp = Separate::from_config(&config)?;
         let mut data = [b'A'; 100];
         data[89] = b'|';
-        let r = pp.process(&mut ingest_ns, &data)?;
+        let r = pp.process(&mut ingest_ns, &data, Value::object())?;
         assert_eq!(1, r.len());
-        assert_eq!(89, r[0].len());
+        assert_eq!(89, r[0].0.len());
 
-        let r = pp.finish(Some(&[b'|', b'A']))?;
+        let r = pp.finish(Some(&[b'|', b'A']), None)?;
         assert_eq!(2, r.len());
-        assert_eq!(10, r[0].len());
-        assert_eq!(1, r[1].len());
+        assert_eq!(10, r[0].0.len());
+        assert_eq!(1, r[1].0.len());
         Ok(())
     }
 }

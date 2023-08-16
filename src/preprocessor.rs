@@ -20,9 +20,14 @@ mod length_prefixed;
 mod remove_empty;
 pub(crate) mod separate;
 mod textual_length_prefixed;
-
+pub(crate) mod prelude {
+    pub use super::Preprocessor;
+    pub use crate::errors::Result;
+    pub use tremor_value::Value;
+    pub use value_trait::Builder;
+}
+use self::prelude::*;
 use crate::{config::Preprocessor as PreprocessorConfig, connectors::Alias, errors::Result};
-use std::str;
 
 //pub type Lines = lines::Lines;
 
@@ -38,7 +43,12 @@ pub trait Preprocessor: Sync + Send {
     /// # Errors
     ///
     /// * Errors if the data can not processed
-    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
+    fn process(
+        &mut self,
+        ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>>;
 
     /// Finish processing data and emit anything that might be left.
     /// Takes a `data` buffer of input data, that is potentially empty,
@@ -47,7 +57,11 @@ pub trait Preprocessor: Sync + Send {
     /// # Errors
     ///
     /// * if finishing fails for some reason lol
-    fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+    fn finish(
+        &mut self,
+        _data: Option<&[u8]>,
+        _meta: Option<Value<'static>>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         Ok(vec![])
     }
 }
@@ -105,14 +119,15 @@ pub fn preprocess(
     preprocessors: &mut [Box<dyn Preprocessor>],
     ingest_ns: &mut u64,
     data: Vec<u8>,
+    meta: Value<'static>,
     alias: &Alias,
-) -> Result<Vec<Vec<u8>>> {
-    let mut data = vec![data];
+) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    let mut data = vec![(data, meta)];
     let mut data1 = Vec::new();
     for pp in preprocessors {
-        data1.clear();
-        for (i, d) in data.iter().enumerate() {
-            match pp.process(ingest_ns, d) {
+        for (i, (d, m)) in data.drain(..).enumerate() {
+            match pp.process(ingest_ns, &d, m) {
+                // FIXME: can we avoid this clone?
                 Ok(mut r) => data1.append(&mut r),
                 Err(e) => {
                     error!("[Connector::{alias}] Preprocessor [{i}] error: {e}");
@@ -130,9 +145,12 @@ pub fn preprocess(
 /// # Errors
 ///
 /// * If a preprocessor failed
-pub fn finish(preprocessors: &mut [Box<dyn Preprocessor>], alias: &Alias) -> Result<Vec<Vec<u8>>> {
+pub fn finish(
+    preprocessors: &mut [Box<dyn Preprocessor>],
+    alias: &Alias,
+) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
     if let Some((head, tail)) = preprocessors.split_first_mut() {
-        let mut data = match head.finish(None) {
+        let mut data = match head.finish(None, None) {
             Ok(d) => d,
             Err(e) => {
                 error!(
@@ -144,9 +162,9 @@ pub fn finish(preprocessors: &mut [Box<dyn Preprocessor>], alias: &Alias) -> Res
         };
         let mut data1 = Vec::new();
         for pp in tail {
-            data1.clear();
-            for d in &data {
-                match pp.finish(Some(d)) {
+            for (d, m) in data.drain(..) {
+                // FIXME: can we make this owned?
+                match pp.finish(Some(&d), Some(m)) {
                     Ok(mut r) => data1.append(&mut r),
                     Err(e) => {
                         error!(
@@ -183,17 +201,18 @@ mod test {
 
         let mut in_ns = 0u64;
         let decoded = pre_p
-            .process(&mut in_ns, &encoded)?
+            .process(&mut in_ns, &encoded, Value::object())?
             .pop()
-            .ok_or("no data")?;
+            .ok_or("no data")?
+            .0;
 
-        assert!(pre_p.finish(None)?.is_empty());
+        assert!(pre_p.finish(None, None)?.is_empty());
 
         assert_eq!(data, decoded);
         assert_eq!(in_ns, 42);
 
         // data too short
-        assert!(pre_p.process(&mut in_ns, &[0_u8]).is_err());
+        assert!(pre_p.process(&mut in_ns, &[0_u8], Value::object()).is_err());
         Ok(())
     }
 
@@ -241,12 +260,12 @@ mod test {
         fn textual_length_prefix_prop((lengths, datas) in multiple_textual_lengths(5)) {
             let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
             let mut in_ns = 0_u64;
-            let res: Vec<Vec<u8>> = datas.into_iter().flat_map(|data| {
-                pre_p.process(&mut in_ns, data.as_bytes()).unwrap_or_default()
+            let res: Vec<_> = datas.into_iter().flat_map(|data| {
+                pre_p.process(&mut in_ns, data.as_bytes(), Value::object()).unwrap_or_default()
             }).collect();
             assert_eq!(lengths.len(), res.len());
             for (processed, expected_len) in res.iter().zip(lengths) {
-                assert_eq!(expected_len, processed.len());
+                assert_eq!(expected_len, processed.0.len());
             }
         }
 
@@ -257,9 +276,9 @@ mod test {
             let mut post_p = post::textual_length_prefixed::TextualLengthPrefixed::default();
             let encoded = post_p.process(0, 0, &data).unwrap_or_default().pop().unwrap_or_default();
             let mut in_ns = 0_u64;
-            let mut res = pre_p.process(&mut in_ns, &encoded).unwrap_or_default();
+            let mut res = pre_p.process(&mut in_ns, &encoded, Value::object()).unwrap_or_default();
             assert_eq!(1, res.len());
-            let payload = res.pop().unwrap_or_default();
+            let payload = res.pop().unwrap_or_default().0;
             assert_eq!(length, payload.len());
         }
     }
@@ -276,17 +295,17 @@ mod test {
         let lengths: Vec<usize> = vec![24, 36, 60, 9];
         let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
         let mut in_ns = 0_u64;
-        let res: Vec<Vec<u8>> = datas
+        let res: Vec<_> = datas
             .into_iter()
             .flat_map(|data| {
                 pre_p
-                    .process(&mut in_ns, data.as_bytes())
+                    .process(&mut in_ns, data.as_bytes(), Value::object())
                     .unwrap_or_default()
             })
             .collect();
         assert_eq!(lengths.len(), res.len());
         for (processed, expected_len) in res.iter().zip(lengths) {
-            assert_eq!(expected_len, processed.len());
+            assert_eq!(expected_len, processed.0.len());
         }
     }
 
@@ -296,10 +315,10 @@ mod test {
         let data = textual_prefix(42);
         let mut in_ns = 0_u64;
         let mut res = pre_p
-            .process(&mut in_ns, data.as_bytes())
+            .process(&mut in_ns, data.as_bytes(), Value::object())
             .unwrap_or_default();
         assert_eq!(1, res.len());
-        let payload = res.pop().unwrap_or_default();
+        let payload = res.pop().unwrap_or_default().0;
         assert_eq!(42, payload.len());
     }
 
@@ -309,7 +328,9 @@ mod test {
         let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
         let mut post_p = post::textual_length_prefixed::TextualLengthPrefixed::default();
         let mut in_ns = 0_u64;
-        let res = pre_p.process(&mut in_ns, data).unwrap_or_default();
+        let res = pre_p
+            .process(&mut in_ns, data, Value::object())
+            .unwrap_or_default();
         assert_eq!(0, res.len());
 
         let data_empty = vec![];
@@ -319,9 +340,11 @@ mod test {
             .pop()
             .unwrap_or_default();
         assert_eq!("0 ", String::from_utf8_lossy(&encoded));
-        let mut res2 = pre_p.process(&mut in_ns, &encoded).unwrap_or_default();
+        let mut res2 = pre_p
+            .process(&mut in_ns, &encoded, Value::object())
+            .unwrap_or_default();
         assert_eq!(1, res2.len());
-        let payload = res2.pop().unwrap_or_default();
+        let payload = res2.pop().unwrap_or_default().0;
         assert_eq!(0, payload.len());
     }
 
@@ -337,13 +360,31 @@ mod test {
         let (start, end) = wire[0].split_at(7);
         let alias = Alias::new("test", "test");
         let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
-        let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &alias)?;
+        let recv = preprocess(
+            pps.as_mut_slice(),
+            &mut it,
+            start.to_vec(),
+            Value::object(),
+            &alias,
+        )?;
         assert!(recv.is_empty());
-        let recv = preprocess(pps.as_mut_slice(), &mut it, end.to_vec(), &alias)?;
-        assert_eq!(recv[0], data);
+        let recv = preprocess(
+            pps.as_mut_slice(),
+            &mut it,
+            end.to_vec(),
+            Value::object(),
+            &alias,
+        )?;
+        assert_eq!(recv[0].0, data);
 
         // incomplete data
-        let processed = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &alias)?;
+        let processed = preprocess(
+            pps.as_mut_slice(),
+            &mut it,
+            start.to_vec(),
+            Value::object(),
+            &alias,
+        )?;
         assert!(processed.is_empty());
         // not emitted upon finish
         let finished = finish(pps.as_mut_slice(), &alias)?;
@@ -377,15 +418,15 @@ mod test {
     #[test]
     fn test_filter_empty() {
         let mut pre = remove_empty::RemoveEmpty::default();
-        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[]));
-        assert_eq!(Ok(vec![]), pre.finish(None));
+        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[], Value::object()));
+        assert_eq!(Ok(vec![]), pre.finish(None, None));
     }
 
     #[test]
     fn test_filter_null() {
         let mut pre = remove_empty::RemoveEmpty::default();
-        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[]));
-        assert_eq!(Ok(vec![]), pre.finish(None));
+        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[], Value::object()));
+        assert_eq!(Ok(vec![]), pre.finish(None, None));
     }
 
     #[test]
@@ -407,14 +448,14 @@ mod test {
         // Assert actual encoded form is as expected
         assert_eq!(enc, ext);
 
-        let r = pre.process(&mut ingest_ns, ext);
-        let out2 = &r?[0];
+        let r = pre.process(&mut ingest_ns, ext, Value::object());
+        let out2 = &r?[0].0;
         let out2 = out2.as_slice();
         // Assert actual decoded form is as expected
         assert_eq!(out, out2);
 
         // assert empty finish, no leftovers
-        assert!(pre.finish(None)?.is_empty());
+        assert!(pre.finish(None, None)?.is_empty());
         Ok(())
     }
 
@@ -423,13 +464,13 @@ mod test {
         let input = "snot\nbadger\nwombat\ncapybara\nquagga".as_bytes();
         let mut pre = separate::Separate::new(b'\n', 1000, true);
         let mut ingest_ns = 0_u64;
-        let mut res = pre.process(&mut ingest_ns, input)?;
+        let mut res = pre.process(&mut ingest_ns, input, Value::object())?;
         let splitted = input
             .split(|c| *c == b'\n')
-            .map(<[u8]>::to_vec)
+            .map(|v| (v.to_vec(), Value::object()))
             .collect::<Vec<_>>();
         assert_eq!(splitted[..splitted.len() - 1].to_vec(), res);
-        let mut finished = pre.finish(None)?;
+        let mut finished = pre.finish(None, None)?;
         res.append(&mut finished);
         assert_eq!(splitted, res);
         Ok(())
@@ -438,7 +479,11 @@ mod test {
     macro_rules! assert_separate_no_buffer {
         ($inbound:expr, $outbound1:expr, $outbound2:expr, $case_number:expr, $separator:expr) => {
             let mut ingest_ns = 0_u64;
-            let r = separate::Separate::new($separator, 0, false).process(&mut ingest_ns, $inbound);
+            let r = separate::Separate::new($separator, 0, false).process(
+                &mut ingest_ns,
+                $inbound,
+                Value::object(),
+            );
 
             let out = &r?;
             // Assert preprocessor output is as expected
@@ -450,18 +495,18 @@ mod test {
                 out.len()
             );
             assert!(
-                $outbound1 == out[0].as_slice(),
+                $outbound1 == out[0].0.as_slice(),
                 "Test case : {} => expected output = \"{}\", actual output = \"{}\"",
                 $case_number,
                 std::str::from_utf8($outbound1).unwrap(),
-                std::str::from_utf8(out[0].as_slice()).unwrap()
+                std::str::from_utf8(out[0].0.as_slice()).unwrap()
             );
             assert!(
-                $outbound2 == out[1].as_slice(),
+                $outbound2 == out[1].0.as_slice(),
                 "Test case : {} => expected output = \"{}\", actual output = \"{}\"",
                 $case_number,
                 std::str::from_utf8($outbound2).unwrap(),
-                std::str::from_utf8(out[1].as_slice()).unwrap()
+                std::str::from_utf8(out[1].0.as_slice()).unwrap()
             );
         };
     }
@@ -516,14 +561,14 @@ mod test {
         // Assert actual encoded form is as expected
         assert_eq!(&enc, &ext);
 
-        let r = pre.process(&mut ingest_ns, ext);
-        let out = &r?[0];
+        let r = pre.process(&mut ingest_ns, ext, Value::object());
+        let out = &r?[0].0;
         let out = out.as_slice();
         // Assert actual decoded form is as expected
         assert_eq!(&int, &out);
 
         // assert empty finish, no leftovers
-        assert!(pre.finish(None)?.is_empty());
+        assert!(pre.finish(None, None)?.is_empty());
         Ok(())
     }
 
@@ -533,10 +578,19 @@ mod test {
             "chucky"
         }
 
-        fn process(&mut self, _ingest_ns: &mut u64, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        fn process(
+            &mut self,
+            _ingest_ns: &mut u64,
+            _data: &[u8],
+            _meta: Value<'static>,
+        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
             Err("chucky".into())
         }
-        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+        fn finish(
+            &mut self,
+            _data: Option<&[u8]>,
+            _meta: Option<Value<'static>>,
+        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
             Ok(vec![])
         }
     }
@@ -547,11 +601,20 @@ mod test {
             "chucky"
         }
 
-        fn process(&mut self, _ingest_ns: &mut u64, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        fn process(
+            &mut self,
+            _ingest_ns: &mut u64,
+            _data: &[u8],
+            _meta: Value<'static>,
+        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
             Ok(vec![])
         }
 
-        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+        fn finish(
+            &mut self,
+            _data: Option<&[u8]>,
+            _meta: Option<Value<'static>>,
+        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
             Err("chucky revenge".into())
         }
     }
@@ -562,11 +625,20 @@ mod test {
             "nily"
         }
 
-        fn process(&mut self, _ingest_ns: &mut u64, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
-            Ok(vec![b"non".to_vec()])
+        fn process(
+            &mut self,
+            _ingest_ns: &mut u64,
+            _data: &[u8],
+            meta: Value<'static>,
+        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+            Ok(vec![(b"non".to_vec(), meta)])
         }
-        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
-            Ok(vec![b"nein".to_vec()])
+        fn finish(
+            &mut self,
+            _data: Option<&[u8]>,
+            meta: Option<Value<'static>>,
+        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+            Ok(vec![(b"nein".to_vec(), meta.unwrap_or_else(Value::object))])
         }
     }
 
@@ -576,10 +648,10 @@ mod test {
         assert_eq!("chucky", pre.name());
 
         let mut ingest_ns = 0_u64;
-        let r = pre.process(&mut ingest_ns, b"foo");
+        let r = pre.process(&mut ingest_ns, b"foo", Value::object());
         assert!(r.is_err());
 
-        let r = pre.finish(Some(b"foo"));
+        let r = pre.finish(Some(b"foo"), Some(Value::object()));
         assert!(r.is_ok());
     }
 
@@ -589,10 +661,10 @@ mod test {
         assert_eq!("chucky", pre.name());
 
         let mut ingest_ns = 0_u64;
-        let r = pre.process(&mut ingest_ns, b"foo");
+        let r = pre.process(&mut ingest_ns, b"foo", Value::object());
         assert!(r.is_ok());
 
-        let r = pre.finish(Some(b"foo"));
+        let r = pre.finish(Some(b"foo"), Some(Value::object()));
         assert!(r.is_err());
     }
 
@@ -604,7 +676,13 @@ mod test {
             "chucky".to_string(),
         );
         let mut ingest_ns = 0_u64;
-        let r = preprocess(&mut [pre], &mut ingest_ns, b"foo".to_vec(), &alias);
+        let r = preprocess(
+            &mut [pre],
+            &mut ingest_ns,
+            b"foo".to_vec(),
+            Value::object(),
+            &alias,
+        );
         assert!(r.is_err());
     }
 
@@ -618,7 +696,13 @@ mod test {
             "chucky".to_string(),
         );
         let mut ingest_ns = 0_u64;
-        let r = preprocess(&mut [noop, pre], &mut ingest_ns, b"foo".to_vec(), &alias);
+        let r = preprocess(
+            &mut [noop, pre],
+            &mut ingest_ns,
+            b"foo".to_vec(),
+            Value::object(),
+            &alias,
+        );
         assert!(r.is_err());
     }
 
@@ -636,7 +720,7 @@ mod test {
     #[test]
     fn direct_pre_finish_err() {
         let mut pre = Box::new(BadFinisher {});
-        let r = pre.finish(Some(b"foo"));
+        let r = pre.finish(Some(b"foo"), Some(Value::object()));
         assert!(r.is_err());
     }
 

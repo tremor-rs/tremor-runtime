@@ -1018,7 +1018,7 @@ where
                 pull_id,
                 &origin_uri,
                 None,
-                &meta.unwrap_or_else(Value::object),
+                meta.unwrap_or_else(Value::object),
                 self.is_transactional,
             );
             if results.is_empty() {
@@ -1089,7 +1089,7 @@ where
                 &origin_uri,
                 port.as_ref(),
                 data,
-                &meta.unwrap_or_else(Value::object),
+                meta.unwrap_or_else(Value::object),
                 self.is_transactional,
             );
             if results.is_empty() {
@@ -1116,7 +1116,7 @@ where
                 &origin_uri,
                 port.as_ref(),
                 data,
-                &meta,
+                meta.clone(), // FIXME: can we avoid this clone?
                 self.is_transactional,
             );
             // finish up the stream immediately
@@ -1127,7 +1127,7 @@ where
                 pull_id,
                 &origin_uri,
                 None,
-                &meta,
+                meta,
                 self.is_transactional,
             );
             results.append(&mut last_events);
@@ -1248,18 +1248,19 @@ fn build_events(
     origin_uri: &EventOriginUri,
     port: Option<&Port<'static>>,
     data: Vec<u8>,
-    meta: &Value<'static>,
+    meta: Value<'static>,
     is_transactional: bool,
 ) -> Vec<(Port<'static>, Event)> {
     match preprocess(
         stream_state.preprocessors.as_mut_slice(),
         ingest_ns,
         data,
+        meta.clone(),
         alias,
     ) {
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());
-            for chunk in processed {
+            for (chunk, meta) in processed {
                 let line_value = EventPayload::try_new::<Option<Error>, _>(chunk, |mut_data| {
                     match stream_state.codec.decode(mut_data, *ingest_ns) {
                         Ok(None) => Err(None),
@@ -1292,7 +1293,7 @@ fn build_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone());
+            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id, meta);
             let event = build_event(
                 stream_state,
                 pull_id,
@@ -1316,13 +1317,13 @@ fn build_last_events(
     pull_id: u64,
     origin_uri: &EventOriginUri,
     port: Option<&Port<'static>>,
-    meta: &Value<'static>,
+    meta: Value<'static>,
     is_transactional: bool,
 ) -> Vec<(Port<'static>, Event)> {
     match finish(stream_state.preprocessors.as_mut_slice(), alias) {
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());
-            for chunk in processed {
+            for (chunk, meta) in processed {
                 let line_value = EventPayload::try_new::<Option<Error>, _>(chunk, |mut_data| {
                     match stream_state.codec.decode(mut_data, *ingest_ns) {
                         Ok(None) => Err(None),
@@ -1355,7 +1356,7 @@ fn build_last_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone());
+            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id, meta);
             let event = build_event(
                 stream_state,
                 pull_id,

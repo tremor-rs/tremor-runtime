@@ -14,7 +14,7 @@
 
 //! Removes empty messages (aka zero len). This one is best used in a chain after a splitting preprocessor, like [`separate`](./separate.md)
 
-use super::Preprocessor;
+use super::prelude::*;
 use crate::Result;
 
 #[derive(Default, Debug, Clone)]
@@ -24,11 +24,16 @@ impl Preprocessor for RemoveEmpty {
     fn name(&self) -> &str {
         "remove-empty"
     }
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         if data.is_empty() {
             Ok(vec![])
         } else {
-            Ok(vec![data.to_vec()])
+            Ok(vec![(data.to_vec(), meta)])
         }
     }
 }

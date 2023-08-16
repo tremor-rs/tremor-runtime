@@ -13,8 +13,7 @@
 // limitations under the License.
 
 //! Decodes base64 encoded data to the raw bytes.
-use super::Preprocessor;
-use crate::Result;
+use super::prelude::*;
 use base64::Engine;
 use tremor_common::base64::BASE64;
 
@@ -25,7 +24,12 @@ impl Preprocessor for Base64 {
         "base64"
     }
 
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(vec![BASE64.decode(data)?])
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+        Ok(vec![(BASE64.decode(data)?, meta)])
     }
 }

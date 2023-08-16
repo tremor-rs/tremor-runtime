@@ -106,10 +106,12 @@ impl Ingress {
                 Ok(n) => {
                     let mut at = nanotime();
                     // We access the entire read buffer the len is provided by read
-                    let x = self
-                        .preprocessor
-                        .process(&mut at, unsafe { self.buf.get_unchecked(0..n) })?;
-                    for mut data in x {
+                    let x = self.preprocessor.process(
+                        &mut at,
+                        unsafe { self.buf.get_unchecked(0..n) },
+                        Value::object(),
+                    )?;
+                    for (mut data, _meta) in x {
                         let event = match self.codec.decode(data.as_mut_slice(), at) {
                             Ok(Some(data)) => data,
                             Ok(None) => continue,

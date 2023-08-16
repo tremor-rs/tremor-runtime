@@ -79,9 +79,8 @@ impl Postprocessor for Gelf {
 
 #[cfg(test)]
 mod test {
-    use crate::errors::Result;
     use crate::postprocessor::Postprocessor;
-    use crate::preprocessor::{self as pre, Preprocessor};
+    use crate::preprocessor::{self as pre, prelude::*};
 
     #[test]
     fn simple_encode_decode() -> Result<()> {
@@ -101,14 +100,14 @@ mod test {
         assert_eq!(encoded_data.len(), 3);
 
         assert!(decoder
-            .process(&mut ingest_ns, &encoded_data[0])?
+            .process(&mut ingest_ns, &encoded_data[0], Value::const_null())?
             .is_empty());
         assert!(decoder
-            .process(&mut ingest_ns, &encoded_data[1])?
+            .process(&mut ingest_ns, &encoded_data[1], Value::const_null())?
             .is_empty());
-        let r = decoder.process(&mut ingest_ns, &encoded_data[2])?;
+        let r = decoder.process(&mut ingest_ns, &encoded_data[2], Value::const_null())?;
         assert_eq!(r.len(), 1);
-        assert_eq!(r[0], input_data);
+        assert_eq!(r[0].0, input_data);
         Ok(())
     }
 }

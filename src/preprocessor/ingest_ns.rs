@@ -14,8 +14,7 @@
 
 //! Extracts the ingest timestamp from the first 8 bytes of the message and removes it from the message.
 
-use super::Preprocessor;
-use crate::Result;
+use super::prelude::*;
 use byteorder::{BigEndian, ReadBytesExt};
 
 #[derive(Clone, Default, Debug)]
@@ -25,11 +24,16 @@ impl Preprocessor for ExtractIngestTs {
         "ingest-ts"
     }
 
-    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         use std::io::Cursor;
         if let Some(d) = data.get(8..) {
             *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
-            Ok(vec![d.to_vec()])
+            Ok(vec![(d.to_vec(), meta)])
         } else {
             Err("Extract Ingest Ts Preprocessor: < 8 byte".into())
         }

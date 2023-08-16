@@ -13,8 +13,7 @@
 // limitations under the License.
 
 //! Separates a continuous stream of data based on length prefixing. The length for each package in a stream is based on the first 64 bit decoded as an unsigned big endian integer.
-use super::Preprocessor;
-use crate::Result;
+use super::prelude::*;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
 
@@ -29,7 +28,12 @@ impl Preprocessor for LengthPrefixed {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         self.buffer.extend(data);
 
         let mut res = Vec::new();
@@ -38,7 +42,7 @@ impl Preprocessor for LengthPrefixed {
                 if self.buffer.len() >= l {
                     let mut part = self.buffer.split_off(l);
                     std::mem::swap(&mut part, &mut self.buffer);
-                    res.push(part.to_vec());
+                    res.push((part.to_vec(), meta.clone()));
                     self.len = None;
                 } else {
                     break;
