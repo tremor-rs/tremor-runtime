@@ -52,7 +52,7 @@
 //! end;
 //! ```
 
-use super::Preprocessor;
+use super::prelude::*;
 use crate::errors::{Kind as ErrorKind, Result};
 use hashbrown::{hash_map::Entry, HashMap};
 use rand::{self, RngCore};
@@ -133,10 +133,15 @@ impl Preprocessor for GelfChunking {
         "gelf"
     }
 
-    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         let msg = decode_gelf(data)?;
         if let Some(data) = self.enqueue(*ingest_ns, msg) {
-            Ok(vec![data])
+            Ok(vec![(data, meta)])
         } else {
             Ok(vec![])
         }
@@ -272,8 +277,8 @@ mod test {
         assert!(g.last_buffer.is_empty());
         assert_eq!(0, g.last_swap);
         let d = br#"{"snot": "badger"}"#;
-        let r = g.process(&mut 0, d)?;
-        assert_eq!(r, vec![d.to_vec()]);
+        let r = g.process(&mut 0, d, Value::object())?;
+        assert_eq!(r[0].0, d.to_vec());
         Ok(())
     }
 

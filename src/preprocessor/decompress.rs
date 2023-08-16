@@ -46,11 +46,9 @@
 //!
 //!Decompress Zlib (deflate) compressed payload.
 
-use super::Preprocessor;
-use crate::Result;
+use super::prelude::*;
 use simd_json::ValueAccess;
 use std::io::{self, Read};
-use tremor_value::Value;
 
 #[derive(Clone, Default, Debug)]
 struct Gzip {}
@@ -59,12 +57,17 @@ impl Preprocessor for Gzip {
         "gzip"
     }
 
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         use libflate::gzip::MultiDecoder;
         let mut decoder = MultiDecoder::new(data)?;
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
-        Ok(vec![decompressed])
+        Ok(vec![(decompressed, meta)])
     }
 }
 
@@ -75,12 +78,17 @@ impl Preprocessor for Zlib {
         "zlib"
     }
 
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         use libflate::zlib::Decoder;
         let mut decoder = Decoder::new(data)?;
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
-        Ok(vec![decompressed])
+        Ok(vec![(decompressed, meta)])
     }
 }
 
@@ -91,12 +99,17 @@ impl Preprocessor for Xz2 {
         "xz2"
     }
 
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         use xz2::read::XzDecoder as Decoder;
         let mut decoder = Decoder::new(data);
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
-        Ok(vec![decompressed])
+        Ok(vec![(decompressed, meta)])
     }
 }
 
@@ -107,13 +120,18 @@ impl Preprocessor for Snappy {
         "snappy"
     }
 
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         use snap::read::FrameDecoder;
         let mut rdr = FrameDecoder::new(data);
         let decompressed_len = snap::raw::decompress_len(data)?;
         let mut decompressed = Vec::with_capacity(decompressed_len);
         io::copy(&mut rdr, &mut decompressed)?;
-        Ok(vec![decompressed])
+        Ok(vec![(decompressed, meta)])
     }
 }
 
@@ -124,12 +142,17 @@ impl Preprocessor for Lz4 {
         "lz4"
     }
 
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         use lz4::Decoder;
         let mut decoder = Decoder::new(data)?;
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
-        Ok(vec![decompressed])
+        Ok(vec![(decompressed, meta)])
     }
 }
 
@@ -139,9 +162,14 @@ impl Preprocessor for Zstd {
     fn name(&self) -> &str {
         "ztd"
     }
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         let decoded: Vec<u8> = zstd::decode_all(data)?;
-        Ok(vec![decoded])
+        Ok(vec![(decoded, meta)])
     }
 }
 
@@ -152,7 +180,12 @@ impl Preprocessor for Fingerprinted {
         "autodetect"
     }
 
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         let r = match data.get(0..6) {
             Some(&[0x1f, 0x8b, _, _, _, _]) => {
                 use libflate::gzip::Decoder;
@@ -195,7 +228,7 @@ impl Preprocessor for Fingerprinted {
             Some(&[0x28, 0xb5, 0x2f, 0xfd, _, _]) => zstd::decode_all(data)?,
             _ => data.to_vec(),
         };
-        Ok(vec![r])
+        Ok(vec![(r, meta)])
     }
 }
 
@@ -221,8 +254,13 @@ impl Preprocessor for Decompress {
     fn name(&self) -> &str {
         "decompress"
     }
-    fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        self.codec.process(ingest_ns, data)
+    fn process(
+        &mut self,
+        ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+        self.codec.process(ingest_ns, data, meta)
     }
 }
 
@@ -259,13 +297,13 @@ mod test {
         // Assert actual encoded form is as expected ( magic code only )
         assert_eq!(algo, decode_magic(ext));
 
-        let r = pre.process(&mut ingest_ns, ext);
-        let out = &r?[0];
+        let r = pre.process(&mut ingest_ns, ext, Value::object());
+        let out = &r?[0].0;
         let out = out.as_slice();
         // Assert actual decoded form is as expected
         assert_eq!(&internal, &out);
         // assert empty finish, no leftovers
-        assert!(pre.finish(None)?.is_empty());
+        assert!(pre.finish(None, None)?.is_empty());
         Ok(())
     }
 
@@ -284,13 +322,13 @@ mod test {
         let ext = &r?[0];
         let ext = ext.as_slice();
 
-        let r = pre.process(&mut ingest_ns, ext);
-        let out = &r?[0];
+        let r = pre.process(&mut ingest_ns, ext, Value::object());
+        let out = &r?[0].0;
         let out = out.as_slice();
         // Assert actual decoded form is as expected
         assert_eq!(&internal, &out);
         // assert empty finish, no leftovers
-        assert!(pre.finish(None)?.is_empty());
+        assert!(pre.finish(None, None)?.is_empty());
         Ok(())
     }
 
