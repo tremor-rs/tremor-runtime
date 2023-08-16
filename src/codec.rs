@@ -66,7 +66,8 @@ pub trait Codec: Send + Sync {
         &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>>;
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>>;
     /// Encodes a Value into a binary
     ///
     /// # Errors

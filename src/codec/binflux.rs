@@ -206,8 +206,9 @@ impl Codec for BInflux {
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
-        Self::decode(data).map(Some)
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
+        Self::decode(data).map(|v| Some((v, meta)))
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {

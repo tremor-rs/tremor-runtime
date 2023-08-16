@@ -49,11 +49,14 @@ impl Codec for Influx {
         &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         let s: &'input str = str::from_utf8(data)?;
-        influx::decode::<'input, Value<'input>>(s, ingest_ns).map_err(|e| {
-            ErrorKind::InvalidInfluxData(String::from_utf8_lossy(data).to_string(), e).into()
-        })
+        influx::decode::<'input, Value<'input>>(s, ingest_ns)
+            .map_err(|e| {
+                ErrorKind::InvalidInfluxData(String::from_utf8_lossy(data).to_string(), e).into()
+            })
+            .map(|v| v.map(|v| (v, meta)))
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
@@ -117,7 +120,7 @@ mod tests {
         let mut codec = Influx {};
 
         let decoded = codec
-            .decode(s.as_mut_slice(), 0)
+            .decode(s.as_mut_slice(), 0, Value::object())
             .expect("failed to decode")
             .expect("failed to decode");
 
@@ -127,7 +130,7 @@ mod tests {
             "fields": {"temperature": 82.0},
             "timestamp": 1_465_839_830_100_400_200_i64
         });
-        assert_eq!(decoded, &e);
+        assert_eq!(decoded.0, &e);
     }
 
     #[allow(clippy::too_many_lines)]
@@ -288,15 +291,15 @@ mod tests {
             let mut encoded = codec.encode(&v)?;
 
             let decoded = codec
-                .decode(encoded.as_mut_slice(), 0)?
+                .decode(encoded.as_mut_slice(), 0, Value::object())?
                 .expect("failed to decode");
             let expected: Value = case.1.clone();
             let got = decoded;
             let mut bin = Vec::new();
             BInflux::encode(&expected, &mut bin)?;
-            if got != expected {
+            if got.0 != expected {
                 println!("{} fails while decoding", &case.2);
-                assert_eq!(got.encode(), expected.encode());
+                assert_eq!(got.0.encode(), expected.encode());
             }
 
             let decoded_bin = BInflux::decode(&bin)?;
@@ -313,7 +316,7 @@ mod tests {
         let mut codec = Influx {};
 
         let decoded = codec
-            .decode(s.as_mut_slice(), 0)
+            .decode(s.as_mut_slice(), 0, Value::object())
             .expect("failed to decode")
             .expect("failed to decode");
 
@@ -324,7 +327,7 @@ mod tests {
 
             "timestamp": 1_465_839_830_100_400_200_i64
         });
-        assert_eq!(decoded, &e);
+        assert_eq!(decoded.0, &e);
     }
 
     #[test]
@@ -333,7 +336,7 @@ mod tests {
         let mut codec = Influx {};
 
         let decoded = codec
-            .decode(s.as_mut_slice(), 0)
+            .decode(s.as_mut_slice(), 0, Value::object())
             .expect("failed to decode")
             .expect("failed to decode");
 
@@ -343,7 +346,7 @@ mod tests {
             "fields": {"temperature": 82},
             "timestamp": 1_465_839_830_100_400_200_i64
         });
-        assert_eq!(decoded, &e);
+        assert_eq!(decoded.0, &e);
     }
 
     #[test]
@@ -374,12 +377,12 @@ mod tests {
                     "timestamp" : 1_562_179_275_506_000_000_i64
         });
         let decoded = codec
-            .decode(s.as_mut_slice(), 0)
+            .decode(s.as_mut_slice(), 0, Value::object())
             .expect("failed to decode")
             .expect("failed to decode");
-        let encoded = codec.encode(&decoded).expect("failed to encode");
+        let encoded = codec.encode(&decoded.0).expect("failed to encode");
 
-        assert_eq!(decoded, &e);
+        assert_eq!(decoded.0, &e);
         unsafe {
             assert_eq!(
                 str::from_utf8_unchecked(&encoded),

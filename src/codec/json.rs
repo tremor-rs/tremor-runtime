@@ -99,7 +99,8 @@ impl<S: Sorting> Codec for Json<S> {
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         // The input buffer will be automatically grown if required
         if self.string_buffer.capacity() < data.len() {
             let new_len = max(self.string_buffer.capacity(), data.len()) * 2;
@@ -110,7 +111,7 @@ impl<S: Sorting> Codec for Json<S> {
             &mut self.input_buffer,
             &mut self.string_buffer,
         )
-        .map(Some)
+        .map(|v| Some((v, meta)))
         .map_err(Error::from)
     }
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
@@ -144,14 +145,18 @@ mod test {
         let expected = literal!({ "snot": "badger" });
 
         let mut data = br#"{ "snot": "badger" }"#.to_vec();
-        let output = codec.decode(&mut data, 42)?.unwrap_or_default();
-        assert_eq!(output, expected);
+        let output = codec
+            .decode(&mut data, 42, Value::object())?
+            .expect("no data");
+        assert_eq!(output.0, expected);
 
         let mut codec = codec.clone();
 
         let mut data = br#"{ "snot": "badger" }"#.to_vec();
-        let output = codec.decode(&mut data, 42)?.unwrap_or_default();
-        assert_eq!(output, expected);
+        let output = codec
+            .decode(&mut data, 42, Value::object())?
+            .expect("no data");
+        assert_eq!(output.0, expected);
 
         Ok(())
     }
@@ -163,7 +168,9 @@ mod test {
         let mut codec = Json::<Unsorted>::default();
 
         let mut as_raw = codec.encode(&seed)?;
-        assert!(codec.decode(as_raw.as_mut_slice(), 0)?.is_some());
+        assert!(codec
+            .decode(as_raw.as_mut_slice(), 0, Value::object())?
+            .is_some());
 
         Ok(())
     }
@@ -174,7 +181,9 @@ mod test {
         let mut codec = Json::<Sorted>::default();
 
         let mut as_raw = codec.encode(&seed)?;
-        assert!(codec.decode(as_raw.as_mut_slice(), 0)?.is_some());
+        assert!(codec
+            .decode(as_raw.as_mut_slice(), 0, Value::object())?
+            .is_some());
 
         Ok(())
     }
@@ -183,10 +192,12 @@ mod test {
     fn duplicate_keys_unsorted() -> Result<()> {
         let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
         let mut codec = Json::<Unsorted>::default();
-        let res = codec.decode(input.as_mut_slice(), 0)?;
-        assert_eq!(Some(literal!({"key": 2})), res); // duplicate keys are deduplicated with last-key-wins strategy
-        let value = res.expect("No value");
-        let serialized = codec.encode(&value)?;
+        let res = codec
+            .decode(input.as_mut_slice(), 0, Value::object())?
+            .expect("no data");
+        assert_eq!(literal!({"key": 2}), res.0); // duplicate keys are deduplicated with last-key-wins strategy
+
+        let serialized = codec.encode(&res.0)?;
         assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
 
         Ok(())
@@ -196,10 +207,11 @@ mod test {
     fn duplicate_keys_sorted() -> Result<()> {
         let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
         let mut codec = Json::<Sorted>::default();
-        let res = codec.decode(input.as_mut_slice(), 0)?;
-        assert_eq!(Some(literal!({"key": 2})), res); // duplicate keys are deduplicated with last-key-wins strategy
-        let value = res.expect("No value");
-        let serialized = codec.encode(&value)?;
+        let res = codec
+            .decode(input.as_mut_slice(), 0, Value::object())?
+            .expect("no data");
+        assert_eq!(literal!({"key": 2}), res.0); // duplicate keys are deduplicated with last-key-wins strategy
+        let serialized = codec.encode(&res.0)?;
         assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
 
         Ok(())
@@ -209,10 +221,11 @@ mod test {
     fn duplicate_keys_into_static() -> Result<()> {
         let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
         let mut codec = Json::<Unsorted>::default();
-        let res = codec.decode(input.as_mut_slice(), 0)?;
-        assert_eq!(Some(literal!({"key": 2})), res); // duplicate keys are deduplicated with last-key-wins strategy
-        let value = res.expect("No value");
-        let serialized = codec.encode(&value)?;
+        let res = codec
+            .decode(input.as_mut_slice(), 0, Value::object())?
+            .expect("no data");
+        assert_eq!(literal!({"key": 2}), res.0); // duplicate keys are deduplicated with last-key-wins strategy
+        let serialized = codec.encode(&res.0)?;
         assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
 
         Ok(())

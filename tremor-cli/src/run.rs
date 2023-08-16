@@ -111,9 +111,9 @@ impl Ingress {
                         unsafe { self.buf.get_unchecked(0..n) },
                         Value::object(),
                     )?;
-                    for (mut data, _meta) in x {
-                        let event = match self.codec.decode(data.as_mut_slice(), at) {
-                            Ok(Some(data)) => data,
+                    for (mut data, meta) in x {
+                        let event = match self.codec.decode(data.as_mut_slice(), at, meta) {
+                            Ok(Some((data, _))) => data,
                             Ok(None) => continue,
                             Err(e) => return Err(e.into()),
                         };

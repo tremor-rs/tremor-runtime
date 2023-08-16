@@ -36,10 +36,11 @@ impl Codec for String {
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         std::str::from_utf8(data)
             .map(Value::from)
-            .map(Some)
+            .map(|v| Some((v, meta)))
             .map_err(Error::from)
     }
 
@@ -67,7 +68,7 @@ mod test {
 
         let mut codec = String {};
         let mut as_raw = codec.encode(&seed)?;
-        let as_json = codec.decode(as_raw.as_mut_slice(), 0);
+        let as_json = codec.decode(as_raw.as_mut_slice(), 0, Value::object());
         assert!(as_json.is_ok());
 
         Ok(())

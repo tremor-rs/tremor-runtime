@@ -1116,7 +1116,7 @@ where
                 &origin_uri,
                 port.as_ref(),
                 data,
-                meta.clone(), // FIXME: can we avoid this clone?
+                meta.clone(),
                 self.is_transactional,
             );
             // finish up the stream immediately
@@ -1262,11 +1262,14 @@ fn build_events(
             let mut res = Vec::with_capacity(processed.len());
             for (chunk, meta) in processed {
                 let line_value = EventPayload::try_new::<Option<Error>, _>(chunk, |mut_data| {
-                    match stream_state.codec.decode(mut_data, *ingest_ns) {
+                    match stream_state
+                        .codec
+                        .decode(mut_data, *ingest_ns, meta.clone())
+                    {
                         Ok(None) => Err(None),
                         Err(e) => Err(Some(e)),
-                        Ok(Some(decoded)) => {
-                            Ok(ValueAndMeta::from_parts(decoded, meta.clone()))
+                        Ok(Some((decoded, meta))) => {
+                            Ok(ValueAndMeta::from_parts(decoded, meta))
                             // TODO: avoid clone on last iterator element
                         }
                     }
@@ -1276,7 +1279,7 @@ fn build_events(
                     Err(None) => continue,
                     Err(Some(e)) => (
                         ERR,
-                        make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone()),
+                        make_error(alias, &e, stream_state.stream_id, pull_id, meta),
                     ),
                 };
                 let event = build_event(
@@ -1325,11 +1328,14 @@ fn build_last_events(
             let mut res = Vec::with_capacity(processed.len());
             for (chunk, meta) in processed {
                 let line_value = EventPayload::try_new::<Option<Error>, _>(chunk, |mut_data| {
-                    match stream_state.codec.decode(mut_data, *ingest_ns) {
+                    match stream_state
+                        .codec
+                        .decode(mut_data, *ingest_ns, meta.clone())
+                    {
                         Ok(None) => Err(None),
                         Err(e) => Err(Some(e)),
-                        Ok(Some(decoded)) => {
-                            Ok(ValueAndMeta::from_parts(decoded, meta.clone()))
+                        Ok(Some((decoded, meta))) => {
+                            Ok(ValueAndMeta::from_parts(decoded, meta))
                             // TODO: avoid clone on last iterator element
                         }
                     }
@@ -1339,7 +1345,7 @@ fn build_last_events(
                     Err(None) => continue,
                     Err(Some(e)) => (
                         ERR,
-                        make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone()),
+                        make_error(alias, &e, stream_state.stream_id, pull_id, meta),
                     ),
                 };
                 let event = build_event(
