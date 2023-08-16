@@ -262,7 +262,8 @@ where
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         let line: &str = std::str::from_utf8(data)?;
         let parsed = syslog_loose::parse_message_with_year_tz(
             line,
@@ -326,7 +327,7 @@ where
             decoded.try_insert("msg", Value::from(parsed.msg));
         }
 
-        Ok(Some(decoded))
+        Ok(Some((decoded, meta)))
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
@@ -443,9 +444,15 @@ mod test {
         let mut s = b"<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut=\"3\" eventSource= \"Application\" eventID=\"1011\"][examplePriority@32473 class=\"high\"] BOMAn application event log entry...".to_vec();
 
         let mut codec = test_codec();
-        let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap_or_default();
+        let decoded = codec
+            .decode(s.as_mut_slice(), 0, Value::object())?
+            .unwrap_or_default()
+            .0;
         let mut a = codec.encode(&decoded)?;
-        let b = codec.decode(a.as_mut_slice(), 0)?.unwrap_or_default();
+        let b = codec
+            .decode(a.as_mut_slice(), 0, Value::object())?
+            .unwrap_or_default()
+            .0;
         assert_eq!(decoded, b);
         Ok(())
     }
@@ -454,7 +461,10 @@ mod test {
     fn test_decode_empty() -> Result<()> {
         let mut s = b"<191>1 2021-03-18T20:30:00.123Z - - - - - message".to_vec();
         let mut codec = test_codec();
-        let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap_or_default();
+        let decoded = codec
+            .decode(s.as_mut_slice(), 0, Value::object())?
+            .unwrap_or_default()
+            .0;
         let expected = literal!({
             "severity": "debug",
             "facility": "local7",
@@ -472,9 +482,12 @@ mod test {
 
     #[test]
     fn decode_invalid_message() -> Result<()> {
-        let mut msg = b"an invalid message".to_vec();
+        let mut s = b"an invalid message".to_vec();
         let mut codec = test_codec();
-        let decoded = codec.decode(msg.as_mut_slice(), 0)?.unwrap_or_default();
+        let decoded = codec
+            .decode(s.as_mut_slice(), 0, Value::object())?
+            .unwrap_or_default()
+            .0;
         let expected = literal!({
             "msg": "an invalid message",
             "protocol": "RFC3164",
@@ -500,7 +513,10 @@ mod test {
         let mut encoded = codec.encode(&msg)?;
         let expected = "<165>1 1970-01-01T00:00:00+00:00 - - - - - test message";
         assert_eq!(std::str::from_utf8(&encoded)?, expected);
-        let decoded = codec.decode(&mut encoded, 0)?.unwrap_or_default();
+        let decoded = codec
+            .decode(&mut encoded, 0, Value::object())?
+            .unwrap_or_default()
+            .0;
         assert_eq!(msg, decoded);
 
         Ok(())
@@ -590,11 +606,14 @@ mod test {
 
     #[test]
     fn test_incorrect_sd() -> Result<()> {
-        let mut msg =
+        let mut s =
             b"<13>1 2021-03-18T20:30:00.123Z 74794bfb6795 root 8449 - [incorrect x] message"
                 .to_vec();
         let mut codec = test_codec();
-        let decoded = codec.decode(msg.as_mut_slice(), 0)?.unwrap_or_default();
+        let decoded = codec
+            .decode(s.as_mut_slice(), 0, Value::object())?
+            .unwrap_or_default()
+            .0;
         let expected = literal!({
             "hostname": "74794bfb6795",
             "severity": "notice",
@@ -617,7 +636,10 @@ mod test {
     fn test_invalid_sd_3164() -> Result<()> {
         let mut s: Vec<u8> = r#"<46>Jan  5 15:33:03 plertrood-ThinkPad-X220 rsyslogd:  [software="rsyslogd" swVersion="8.32.0"] message"#.as_bytes().to_vec();
         let mut codec = test_codec();
-        let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap_or_default();
+        let decoded = codec
+            .decode(s.as_mut_slice(), 0, Value::object())?
+            .unwrap_or_default()
+            .0;
         // we use the current year for this shitty old format
         // to not have to change this test every year, we use the current one for the expected timestamp
         let year = chrono::Utc::now().year();
@@ -684,7 +706,10 @@ mod test {
     fn rfc3164_examples(sample: &'static str, expected: Option<&'static str>) -> Result<()> {
         let mut codec = test_codec();
         let mut vec = sample.as_bytes().to_vec();
-        let decoded = codec.decode(&mut vec, 0)?.unwrap_or_default();
+        let decoded = codec
+            .decode(&mut vec, 0, Value::object())?
+            .unwrap_or_default()
+            .0;
         let a = codec.encode(&decoded)?;
         if let Some(expected) = expected {
             // compare against expected output
@@ -709,7 +734,10 @@ mod test {
     fn rfc5424_examples(sample: &'static str, expected: &'static str) -> Result<()> {
         let mut codec = test_codec();
         let mut vec = sample.as_bytes().to_vec();
-        let decoded = codec.decode(&mut vec, 0)?.unwrap_or_default();
+        let decoded = codec
+            .decode(&mut vec, 0, Value::object())?
+            .unwrap_or_default()
+            .0;
         let a = codec.encode(&decoded)?;
         assert_eq!(expected, std::str::from_utf8(&a)?);
         Ok(())

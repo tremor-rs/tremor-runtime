@@ -69,8 +69,9 @@ impl Codec for StatsD {
         &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
-        decode(data, ingest_ns).map(Some)
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
+        decode(data, ingest_ns).map(|v| Some((v, meta)))
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
@@ -289,7 +290,7 @@ mod test {
         let mut data = b"horst:42.23|h".to_vec();
 
         let parsed = c
-            .decode(data.as_mut_slice(), 0)
+            .decode(data.as_mut_slice(), 0, Value::object())
             .ok()
             .and_then(identity)
             .unwrap_or_default();
@@ -299,8 +300,8 @@ mod test {
             "value": 42.23,
 
         });
-        assert_eq!(parsed, expected);
-        let encoded = c.encode(&parsed).expect("failed to encode");
+        assert_eq!(parsed.0, expected);
+        let encoded = c.encode(&parsed.0).expect("failed to encode");
         assert_eq!(encoded, b"horst:42.23|h");
     }
 

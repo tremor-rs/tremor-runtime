@@ -121,8 +121,9 @@ impl Codec for DogStatsD {
         &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
-        decode(data, ingest_ns).map(Some)
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
+        decode(data, ingest_ns).map(|v| Some((v, meta)))
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {

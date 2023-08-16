@@ -278,11 +278,12 @@ impl Codec for Avro {
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         let reader = Reader::new(&*data)?;
 
         let mut vals = reader.map(|v| Self::convert_avro_value(v?));
-        vals.next().transpose()
+        vals.next().map(|v| v.map(|v| (v, meta))).transpose()
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
@@ -501,9 +502,11 @@ mod test {
         writer.append_ser(test)?;
         let mut encoded = writer.into_inner()?;
 
-        let decoded = codec.decode(encoded.as_mut_slice(), 0)?;
+        let decoded = codec
+            .decode(encoded.as_mut_slice(), 0, Value::object())?
+            .expect("no data");
 
-        assert_eq!(decoded, Some(expected));
+        assert_eq!(decoded.0, expected);
         Ok(())
     }
     #[test]
@@ -552,8 +555,10 @@ mod test {
         });
         let mut encoded = codec.encode(&decoded)?;
 
-        let redecoded = codec.decode(&mut encoded, 0)?;
-        assert_eq!(Some(decoded), redecoded);
+        let redecoded = codec
+            .decode(&mut encoded, 0, Value::object())?
+            .expect("no data");
+        assert_eq!(decoded, redecoded.0);
 
         Ok(())
     }

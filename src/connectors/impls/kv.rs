@@ -380,11 +380,12 @@ impl KvSink {
             // TODO: We could optimize this
             Ok(self
                 .codec
-                .decode(data, ingest_ns)?
+                .decode(data, ingest_ns, Value::const_null())?
                 .unwrap_or_default()
+                .0
                 .into_static())
         } else {
-            Ok(Value::null())
+            Ok(Value::const_null())
         }
     }
     fn encode(&mut self, v: &Value) -> Result<Vec<u8>> {

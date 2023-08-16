@@ -127,7 +127,6 @@ pub fn preprocess(
     for pp in preprocessors {
         for (i, (d, m)) in data.drain(..).enumerate() {
             match pp.process(ingest_ns, &d, m) {
-                // FIXME: can we avoid this clone?
                 Ok(mut r) => data1.append(&mut r),
                 Err(e) => {
                     error!("[Connector::{alias}] Preprocessor [{i}] error: {e}");
@@ -163,7 +162,6 @@ pub fn finish(
         let mut data1 = Vec::new();
         for pp in tail {
             for (d, m) in data.drain(..) {
-                // FIXME: can we make this owned?
                 match pp.finish(Some(&d), Some(m)) {
                     Ok(mut r) => data1.append(&mut r),
                     Err(e) => {

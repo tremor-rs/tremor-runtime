@@ -34,9 +34,10 @@ impl Codec for Binary {
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         let data: &'input [u8] = data;
-        Ok(Some(Value::Bytes(data.into())))
+        Ok(Some((Value::Bytes(data.into()), meta)))
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
@@ -65,8 +66,10 @@ mod test {
         let mut codec = Binary {};
         let mut as_raw = codec.encode(&seed)?;
         assert_eq!(as_raw, b"snot badger");
-        let as_value = codec.decode(as_raw.as_mut_slice(), 0)?.unwrap_or_default();
-        assert_eq!(as_value, seed);
+        let as_value = codec
+            .decode(as_raw.as_mut_slice(), 0, Value::object())?
+            .unwrap_or_default();
+        assert_eq!(as_value.0, seed);
 
         Ok(())
     }

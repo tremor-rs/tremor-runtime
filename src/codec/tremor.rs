@@ -259,8 +259,9 @@ impl Codec for Tremor {
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
-        Tremor::decode(data).map(Some)
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
+        Tremor::decode(data).map(|v| Some((v, meta)))
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {

@@ -42,9 +42,10 @@ impl Codec for MsgPack {
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         rmps::from_slice::<Value>(data)
-            .map(Some)
+            .map(|v| Some((v, meta)))
             .map_err(Error::from)
     }
 
@@ -68,7 +69,9 @@ mod test {
 
         let mut codec = MsgPack {};
         let mut as_raw = codec.encode(&seed)?;
-        assert!(codec.decode(as_raw.as_mut_slice(), 0)?.is_some());
+        assert!(codec
+            .decode(as_raw.as_mut_slice(), 0, Value::object())?
+            .is_some());
 
         Ok(())
     }

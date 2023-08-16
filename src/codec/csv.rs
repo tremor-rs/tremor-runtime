@@ -56,7 +56,8 @@ impl Codec for Csv {
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
-    ) -> Result<Option<Value<'input>>> {
+        meta: Value<'input>,
+    ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(false)
             .from_reader(&*data); // the reborrow here is needed because std::io::Read is implemented only for &[u8], not &mut [u8]
@@ -72,7 +73,7 @@ impl Codec for Csv {
             fields.push(Value::String(Cow::from(field.to_string())));
         }
 
-        Ok(Some(Value::Array(fields)))
+        Ok(Some((Value::Array(fields), meta)))
     }
 
     fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
@@ -108,21 +109,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_can_decode_csv() {
+    fn test_can_decode_csv() -> Result<()> {
         let mut codec = Csv {};
         let mut data = b"a,b,c,123".to_vec();
-        let result = codec.decode(&mut data, 0);
+        let result = codec
+            .decode(&mut data, 0, Value::object())?
+            .expect("no data");
 
-        assert_eq!(Ok(Some(literal!(["a", "b", "c", "123"]))), result);
+        assert_eq!(literal!(["a", "b", "c", "123"]), result.0);
+        Ok(())
     }
 
     #[test]
-    fn test_can_encode_csv() {
+    fn test_can_encode_csv() -> Result<()> {
         let mut codec = Csv {};
         let data = literal!(["a", "b", "c", 123]);
 
-        let result = codec.encode(&data).unwrap_or_default();
+        let result = codec.encode(&data)?;
 
         assert_eq!(b"a,b,c,123".to_vec(), result);
+        Ok(())
     }
 }
