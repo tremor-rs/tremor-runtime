@@ -74,7 +74,7 @@ trait Generator: BaseGenerator {
             stry!(self.write(b"{"));
 
             // We know this exists since it's not empty
-            let Some((key, value)) =  iter.next() else {
+            let Some((key, value)) = iter.next() else {
                 // ALLOW: We check against size
                 unreachable!()
             };
@@ -164,7 +164,7 @@ trait FastGenerator: BaseGenerator {
             stry!(self.write(b"{\""));
 
             // We know this exists since it's not empty
-            let Some((key, value)) =  iter.next() else {
+            let Some((key, value)) = iter.next() else {
                 // ALLOW: We check against size
                 unreachable!()
             };
