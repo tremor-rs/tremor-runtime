@@ -55,15 +55,17 @@ const AVRO_BUFFER_CAP: usize = 512;
 
 #[derive(Clone, Debug, Default)]
 struct AvroRegistry {
-    schemas: HashMap<Name, Schema>,
+    by_name: HashMap<Name, Schema>,
+    by_id: HashMap<u32, Schema>,
 }
 
 impl AvroRegistry {
-    // fn get_schema_by_id(&self, _id: u32) -> Option<&Schema> {
-    //     None
-    // }
+    #[allow(dead_code, clippy::unused_self)] // FIXME: use this
+    fn get_schema_by_id(&self, id: u32) -> Option<&Schema> {
+        self.by_id.get(&id)
+    }
     fn get_schema_by_name(&self, name: &Name) -> Option<&Schema> {
-        self.schemas.get(name)
+        self.by_name.get(name)
     }
 }
 
@@ -91,7 +93,7 @@ impl Avro {
             Some(schema) => {
                 let schema = Schema::parse_str(&schema.encode())?;
                 if let Some(name) = schema.name().cloned() {
-                    registry.schemas.insert(name, schema.clone());
+                    registry.by_name.insert(name, schema.clone());
                 }
                 Ok(Box::new(Avro {
                     schema,
