@@ -180,7 +180,7 @@ impl Operator for Grouper {
                 window
             } else {
                 let Some(rate) = Rate::from_meta(meta) else {
-                        return Ok(vec![(ERR, event)].into());
+                    return Ok(vec![(ERR, event)].into());
                 };
                 groups.cache.put(
                     dimensions.clone(),

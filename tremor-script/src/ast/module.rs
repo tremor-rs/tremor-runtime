@@ -431,7 +431,7 @@ impl Manager {
     pub(crate) fn find_module(mut root: Index, nest: &[String]) -> Result<Option<Index>> {
         let ms = MODULES.read()?;
         for k in nest {
-            let Some(m) =  ms.modules.get(root.0) else {
+            let Some(m) = ms.modules.get(root.0) else {
                 return Ok(None);
             };
             root = if let Some(m) = m.modules.get(k) {

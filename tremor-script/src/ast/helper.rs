@@ -42,7 +42,7 @@ pub struct Scope<'script> {
 }
 impl<'script> Scope<'script> {
     pub(crate) fn get_module(&self, id: &[String]) -> Result<Option<module::Index>> {
-        let Some((first, rest)) =  id.split_first() else {
+        let Some((first, rest)) = id.split_first() else {
             return Ok(None);
         };
         let Some(id) = self.modules.get(first) else {

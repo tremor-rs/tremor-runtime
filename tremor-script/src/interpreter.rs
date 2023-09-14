@@ -1222,7 +1222,7 @@ where
                     }
                 }
                 PredicatePattern::TildeEq { test, .. } => {
-                    let Some(testee) =  known_key.map_lookup(record) else {
+                    let Some(testee) = known_key.map_lookup(record) else {
                         return Ok(None);
                     };
                     if let Some(x) = test
@@ -1270,7 +1270,7 @@ where
                     }
                 }
                 PredicatePattern::ArrayPatternEq { pattern, .. } => {
-                    let Some(testee)  = known_key.map_lookup(record) else {
+                    let Some(testee) = known_key.map_lookup(record) else {
                         return Ok(None);
                     };
 
@@ -1289,7 +1289,7 @@ where
                     }
                 }
                 PredicatePattern::TuplePatternEq { pattern, .. } => {
-                    let Some(testee)  = known_key.map_lookup(record) else {
+                    let Some(testee) = known_key.map_lookup(record) else {
                         return Ok(None);
                     };
 
