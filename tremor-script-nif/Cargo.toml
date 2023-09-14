@@ -16,7 +16,7 @@ name = "tremor"
 crate-type = ["dylib"]
 
 [dependencies]
-rustler = "0.26.0"
+rustler = "0.29"
 tremor-script = { path = "../tremor-script" }
 
 [features]

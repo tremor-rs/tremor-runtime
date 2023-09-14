@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
 };
 
-use clickhouse_chrono_tz::Tz;
+use chrono_tz::Tz;
 pub(super) use clickhouse_rs::types::Value as CValue;
 use either::Either;
 use simd_json::{Value, ValueAccess};

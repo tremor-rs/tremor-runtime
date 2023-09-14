@@ -50,7 +50,7 @@ use std::{
 };
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use clickhouse_chrono_tz::Tz;
+use chrono_tz::Tz;
 use clickhouse_rs::Pool;
 use testcontainers::{clients, core::Port, images::generic::GenericImage, RunnableImage};
 use tremor_common::ports::IN;
