@@ -181,7 +181,7 @@ impl TLSClientConfig {
         if let (Some(cert), Some(key)) = (self.cert.as_ref(), self.key.as_ref()) {
             let cert = load_certs(cert)?;
             let key = load_keys(key)?;
-            Ok(tls_config.with_single_cert(cert, key)?)
+            Ok(tls_config.with_client_auth_cert(cert, key)?)
         } else {
             Ok(tls_config.with_no_client_auth())
         }
