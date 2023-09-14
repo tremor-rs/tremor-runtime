@@ -19,7 +19,7 @@ use std::{boxed::Box, sync::atomic::AtomicBool};
 use trust_dns_resolver::{
     lookup::Lookup,
     proto::rr::{RData, RecordType},
-    TokioAsyncResolver, TokioHandle,
+    TokioAsyncResolver,
 };
 
 #[derive(Debug, Default)]
@@ -139,7 +139,7 @@ impl DnsSink {
 #[async_trait::async_trait]
 impl Sink for DnsSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        self.resolver = Some(TokioAsyncResolver::from_system_conf(TokioHandle)?);
+        self.resolver = Some(TokioAsyncResolver::tokio_from_system_conf()?);
         Ok(true)
     }
     async fn on_event(

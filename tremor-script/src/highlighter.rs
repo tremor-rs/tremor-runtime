@@ -660,7 +660,7 @@ impl Highlighter for Term {
         &mut self.buff
     }
     fn ensure_newline(&mut self) -> std::result::Result<(), io::Error> {
-        match strip_ansi_escapes::strip(self.buff.as_slice())?.last() {
+        match strip_ansi_escapes::strip(self.buff.as_slice()).last() {
             Some(0xa) => Ok(()),
             _ => writeln!(self.buff),
         }

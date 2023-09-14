@@ -80,7 +80,7 @@
 
 use super::prelude::*;
 use chrono::{DateTime, Datelike, Offset, TimeZone, Utc};
-use syslog_loose::{IncompleteDate, ProcId, Protocol, SyslogFacility, SyslogSeverity};
+use syslog_loose::{IncompleteDate, ProcId, Protocol, SyslogFacility, SyslogSeverity, Variant};
 use tremor_value::Value;
 
 const DEFAULT_PRI: i32 = 13;
@@ -268,6 +268,7 @@ where
             line,
             resolve_year,
             Some(chrono::offset::Utc.fix()),
+            Variant::Either,
         );
 
         let mut decoded = Value::object_with_capacity(11);
