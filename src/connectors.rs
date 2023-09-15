@@ -746,7 +746,7 @@ async fn connector_task(
                     connector_addr.send_sink(SinkMsg::Pause).await?;
 
                     connector_state = State::Paused;
-                    quiescence_beacon.pause();
+                    quiescence_beacon.pause()?;
 
                     info!("{ctx} Paused.");
                 }
@@ -757,7 +757,7 @@ async fn connector_task(
                     info!("{ctx} Resuming...");
                     ctx.swallow_err(connector.on_resume(&ctx).await, "Error during on_resume");
                     connector_state = State::Running;
-                    quiescence_beacon.resume();
+                    quiescence_beacon.resume()?;
 
                     connector_addr.send_source(SourceMsg::Resume)?;
                     connector_addr.send_sink(SinkMsg::Resume).await?;

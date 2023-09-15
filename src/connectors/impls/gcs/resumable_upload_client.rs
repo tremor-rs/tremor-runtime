@@ -157,7 +157,6 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
         })
         .await?;
         let status = response.status();
-        if status.is_server_error() {}
         let mut data: Vec<u8> = Vec::new();
         while let Some(chunk) = response.data().await.transpose()? {
             data.extend_from_slice(&chunk);

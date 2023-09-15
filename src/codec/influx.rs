@@ -88,7 +88,7 @@ mod tests {
     #[test]
     pub fn encode_mixed_bag() {
         let s: Value = literal!({
-            "measurement": r#"wea,\ ther"#,
+            "measurement": r"wea,\ ther",
             "tags": {},
             "fields": {"temp=erature": 82.0, r#"too\ \\\"hot""#: true},
             "timestamp": 1_465_839_830_100_400_200_i64
@@ -215,7 +215,7 @@ mod tests {
                 literal!({
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
-                    "fields": {"temperature_str": r#"too hot\cold"#},
+                    "fields": {"temperature_str": r"too hot\cold"},
                     "timestamp": 1_465_839_830_100_400_200_i64
                 }),
                 "case 7"
@@ -226,7 +226,7 @@ mod tests {
                 literal!({
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
-                    "fields": {"temperature_str": r#"too hot\\cold"#},
+                    "fields": {"temperature_str": r"too hot\\cold"},
                     "timestamp": 1_465_839_830_100_400_204_i64
                 }),
                 "case 8"

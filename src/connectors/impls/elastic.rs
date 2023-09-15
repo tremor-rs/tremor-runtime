@@ -648,7 +648,7 @@ impl Sink for ElasticSink {
             let default_index = self.config.index.clone();
             let task_ctx = ctx.clone();
             task::spawn(async move {
-                let r: Result<Value> = (|| async {
+                let r: Result<Value> = async {
                     // build bulk request (we can't do that in a separate function)
                     let mut ops = BulkOperations::new();
                     // per request options - extract from event metadata (ignoring batched)
@@ -669,7 +669,7 @@ impl Sink for ElasticSink {
                         .and_then(Response::error_for_status_code)?;
                     let value = response.json::<StaticValue>().await?;
                     Ok(value.into_value())
-                })()
+                }
                 .await;
                 match r {
                     Err(e) => {

@@ -125,7 +125,7 @@ where
             ))
         })?;
         let mut elem = String::with_capacity(16);
-        for (id, params) in sd.iter() {
+        for (id, params) in sd {
             elem.push('[');
             elem.push_str(id);
             let params = params.as_array().ok_or_else(|| {

@@ -213,7 +213,7 @@ mod test {
         assert_val!(f(&[&Value::from(n)]), "");
         let n = 16;
         assert!(match f(&[&Value::from(n)]) {
-            Ok(Value::String(s)) => s.len() as i64 == n,
+            Ok(Value::String(s)) => s.len() == n,
             _ => false,
         });
     }

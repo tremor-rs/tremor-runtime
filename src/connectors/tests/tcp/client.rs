@@ -46,7 +46,7 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
 
     // simple echo server
     let mut echo_server = EchoServer::new(server_addr.clone(), use_tls);
-    echo_server.run().await?;
+    echo_server.run()?;
     let tls_config = if use_tls {
         literal!({
             "cafile": "./tests/localhost.cert",

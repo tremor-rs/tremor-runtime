@@ -77,7 +77,7 @@ impl Before {
 
         let fg_out_file = base.join(format!("before.out.{num}.log"));
         let fg_err_file = base.join(format!("before.err.{num}.log"));
-        process.stdio_tailer(&fg_out_file, &fg_err_file).await?;
+        process.stdio_tailer(&fg_out_file, &fg_err_file)?;
 
         debug!(
             "Spawning before: {} in {}",
@@ -122,7 +122,7 @@ impl Before {
                     let err = Error::from(msg);
                     return Err(err);
                 }
-                for (k, v) in conditions.iter() {
+                for (k, v) in conditions {
                     match k.as_str() {
                         "port-open" => {
                             for port in v {

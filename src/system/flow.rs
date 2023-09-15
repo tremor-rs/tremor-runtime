@@ -245,11 +245,10 @@ impl Flow {
 
         let addr = spawn_task(
             flow_alias.clone(),
-            pipelines,
+            &pipelines,
             connectors,
             &flow.defn.connections,
-        )
-        .await?;
+        );
 
         addr.send(Msg::Start).await?;
 
@@ -394,12 +393,12 @@ async fn link(
 
 /// task handling flow instance control plane
 #[allow(clippy::too_many_lines)]
-async fn spawn_task(
+fn spawn_task(
     id: Alias,
-    pipelines: HashMap<String, pipeline::Addr>,
+    pipelines: &HashMap<String, pipeline::Addr>,
     connectors: HashMap<String, connectors::Addr>,
     links: &[ConnectStmt],
-) -> Result<Addr> {
+) -> Addr {
     #[derive(Debug)]
     /// wrapper for all possible messages handled by the flow task
     enum MsgWrapper {
@@ -713,7 +712,7 @@ async fn spawn_task(
         info!("{prefix} Stopped.");
         Result::Ok(())
     });
-    Ok(addr)
+    addr
 }
 
 #[cfg(test)]

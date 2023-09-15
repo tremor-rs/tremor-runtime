@@ -227,7 +227,7 @@ impl Tremor {
     #[inline]
     fn write_object<E: ByteOrder>(o: &Object, w: &mut impl Write) -> Result<()> {
         Self::write_type_and_len::<E>(Self::OBJECT, o.len(), w)?;
-        for (k, v) in o.iter() {
+        for (k, v) in o {
             w.write_u64::<E>(k.len() as u64)?;
             w.write_all(k.as_bytes())?;
             Tremor::encode_::<E>(v, w)?;
@@ -383,6 +383,8 @@ mod test {
 
     use proptest::prelude::*;
 
+    // ALLOW: This is a test
+    #[allow(clippy::arc_with_non_send_sync)]
     fn arb_tremor_value() -> BoxedStrategy<Value<'static>> {
         let leaf = prop_oneof![
             Just(Value::Static(StaticNode::Null)),
