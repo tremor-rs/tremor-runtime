@@ -122,10 +122,10 @@ pub fn load(registry: &mut Registry) {
         )
         .insert(map_function!(is_empty))
         .insert(tremor_const_fn! (string|len(_context, _input: String) {
-            Ok(Value::from(_input.chars().count() as i64))
+            Ok(Value::from(_input.chars().count()))
         }))
         .insert(tremor_const_fn! (string|bytes(_context, _input: String) {
-            Ok(Value::from(_input.len() as i64))
+            Ok(Value::from(_input.len() ))
         }))
         .insert(tremor_const_fn! (string|trim(_context, _input: String) {
             Ok(Value::from(_input.trim().to_string()))

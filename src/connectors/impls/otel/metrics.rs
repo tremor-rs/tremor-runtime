@@ -506,7 +506,7 @@ pub(crate) fn instrumentation_library_metrics_to_pb(
         .as_array()
         .ok_or("Invalid json mapping for InstrumentationLibraryMetrics")?;
     let mut pb = Vec::with_capacity(data.len());
-    for data in data.iter() {
+    for data in data {
         let mut metrics = Vec::new();
         if let Some(data) = data.get_array("metrics") {
             for metric in data {

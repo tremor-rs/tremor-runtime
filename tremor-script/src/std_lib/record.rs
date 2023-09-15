@@ -20,7 +20,7 @@ use crate::Object;
 pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_const_fn! (record|len(_context, _input: Object) {
-            Ok(Value::from(_input.len() as i64))
+            Ok(Value::from(_input.len() ))
         }))
         .insert(tremor_const_fn! (record|is_empty(_context, _input: Object) {
             Ok(Value::from(_input.is_empty()))

@@ -207,7 +207,7 @@ impl Sink for KafkaProducerSink {
                 }
                 if let Some(headers_obj) = kafka_meta.get_object("headers") {
                     let mut headers = OwnedHeaders::new_with_capacity(headers_obj.len());
-                    for (k, v) in headers_obj.iter() {
+                    for (k, v) in headers_obj {
                         // supporting string or bytes as headers value
                         if let Some(v_bytes) = v.as_bytes() {
                             headers = headers.insert(Header {

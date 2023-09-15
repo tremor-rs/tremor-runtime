@@ -81,7 +81,7 @@ impl EchoServer {
         Ok(())
     }
 
-    pub(crate) async fn run(&mut self) -> Result<()> {
+    pub(crate) fn run(&mut self) -> Result<()> {
         let server_run = self.i_shall_run.clone();
         let mut conns = vec![];
         let addr = self.addr.clone();

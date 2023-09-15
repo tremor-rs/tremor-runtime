@@ -142,7 +142,7 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
 
     fn send(&mut self, data: &str) -> Result<()> {
         self.client
-            .write_message(Message::Text(data.into()))
+            .send(Message::Text(data.into()))
             .chain_err(|| "Failed to send to ws server")
     }
 
@@ -154,7 +154,7 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
     }
 
     fn expect(&mut self) -> Result<ExpectMessage> {
-        match self.client.read_message() {
+        match self.client.read() {
             Ok(Message::Text(data)) => Ok(ExpectMessage::Text(data)),
             Ok(Message::Binary(data)) => Ok(ExpectMessage::Binary(data)),
             Ok(other) => Ok(ExpectMessage::Unexpected(other)),
@@ -169,7 +169,7 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
             reason: "WS Test client closing.".into(),
         }))?;
         // finish closing handshake
-        self.client.write_pending()?;
+        self.client.flush()?;
         info!("WS test client closed.");
         Ok(())
     }
@@ -215,7 +215,7 @@ impl TestServer {
         }
     }
 
-    async fn start(&mut self) -> Result<()> {
+    fn start(&mut self) {
         let endpoint = self.endpoint.clone();
         let tx = self.tx.clone();
         let stopped = self.stopped.clone();
@@ -235,8 +235,6 @@ impl TestServer {
             }
             info!("Test Server stopped.");
         });
-
-        Ok(())
     }
 
     fn stop(&mut self) {
@@ -366,7 +364,7 @@ async fn ws_client_binary_routing() -> Result<()> {
 
     let free_port = find_free_tcp_port().await?;
     let mut ts = TestServer::new("127.0.0.1", free_port);
-    ts.start().await?;
+    ts.start();
 
     let defn = literal!({
       "codec": "json",
@@ -415,7 +413,7 @@ async fn ws_client_text_routing() -> Result<()> {
 
     let free_port = find_free_tcp_port().await?;
     let mut ts = TestServer::new("127.0.0.1", free_port);
-    ts.start().await?;
+    ts.start();
 
     let defn = literal!({
       "codec": "json",

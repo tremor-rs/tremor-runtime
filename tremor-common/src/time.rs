@@ -14,6 +14,9 @@
 use std::time::SystemTime;
 
 /// Get a nanosecond timestamp
+///
+/// # Panics
+/// if we travled to the past
 #[must_use]
 #[allow(clippy::cast_possible_truncation)]
 pub fn nanotime() -> u64 {

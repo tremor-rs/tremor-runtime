@@ -68,7 +68,7 @@ async fn fake_server_dispatch(
 }
 
 impl TestHttpServer {
-    async fn new(raw_url: String) -> Result<Self> {
+    fn new(raw_url: String) -> Self {
         let mut instance = TestHttpServer { acceptor: None };
         instance.acceptor = Some(spawn(async move {
             let url: Url<HttpDefaults> = Url::parse(&raw_url)?;
@@ -118,7 +118,7 @@ impl TestHttpServer {
             };
             Ok(())
         }));
-        Ok(instance)
+        instance
     }
 
     fn stop(&mut self) {
@@ -153,7 +153,7 @@ async fn rtt(
     let defn = literal!({
       "config": config,
     });
-    let mut fake = TestHttpServer::new(url.clone()).await?;
+    let mut fake = TestHttpServer::new(url.clone());
     let mut harness = ConnectorHarness::new(
         function_name!(),
         &http_impl::client::Builder::default(),

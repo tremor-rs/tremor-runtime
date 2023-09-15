@@ -252,7 +252,7 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
                 if let Some(precondition) = precondition {
                     self.walk_precondition(precondition)?;
                 }
-                for (_v, (es, e)) in tree.iter_mut() {
+                for (es, e) in tree.values_mut() {
                     for e in es {
                         self.walk_expr(e)?;
                     }
@@ -574,7 +574,7 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
     /// if the walker function fails
     fn walk_segments(&mut self, segments: &mut Vec<Segment<'script>>) -> Result<()> {
         stop!(self.visit_segments(segments), self.leave_segments(segments));
-        for segment in segments.iter_mut() {
+        for segment in &mut *segments {
             self.walk_segment(segment)?;
         }
         self.leave_segments(segments)

@@ -176,7 +176,7 @@ impl Config {
         let mut labels = HashMap::new();
 
         if let Some(has_meta) = meta.get_object("labels") {
-            for (k, v) in has_meta.iter() {
+            for (k, v) in has_meta {
                 labels.insert(k.to_string(), v.to_string());
             }
         }

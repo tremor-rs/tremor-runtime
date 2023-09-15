@@ -208,7 +208,7 @@ pub trait Walker<'script>: ExprVisitor<'script> + ImutExprWalker<'script> {
                 if let Some(precondition) = precondition {
                     self.walk_precondition(precondition)?;
                 }
-                for (_v, (es, e)) in tree.iter_mut() {
+                for (es, e) in tree.values_mut() {
                     for e in es {
                         Walker::walk_expr(self, e)?;
                     }

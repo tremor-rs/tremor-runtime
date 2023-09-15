@@ -82,6 +82,8 @@ pub(crate) struct TargetProcess {
     pub(crate) stdout_receiver: Option<UnboundedReceiver<String>>,
 }
 
+type TailerHandles = (JoinHandle<Result<()>>, JoinHandle<Result<()>>);
+
 impl TargetProcess {
     /// create a process in the current directory
     pub fn new_in_current_dir<S>(
@@ -198,11 +200,11 @@ impl TargetProcess {
         Ok(self.process.wait().await?)
     }
 
-    pub(crate) async fn stdio_tailer(
+    pub(crate) fn stdio_tailer(
         &mut self,
         stdout_path: &Path,
         stderr_path: &Path,
-    ) -> Result<(JoinHandle<Result<()>>, JoinHandle<Result<()>>)> {
+    ) -> Result<TailerHandles> {
         let mut stdout_rx = self.stdout_receiver.take().ok_or("already tailing")?;
         let stdout_path = stdout_path.to_path_buf();
         let stdout_handle = spawn(async move {
@@ -240,7 +242,7 @@ impl TargetProcess {
         stdout_path: &Path,
         stderr_path: &Path,
     ) -> Result<ExitStatus> {
-        let (stdout_handle, stderr_handle) = self.stdio_tailer(stdout_path, stderr_path).await?;
+        let (stdout_handle, stderr_handle) = self.stdio_tailer(stdout_path, stderr_path)?;
 
         let exit_status = self.join().await?;
 

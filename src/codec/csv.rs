@@ -68,7 +68,7 @@ impl Codec for Csv {
         }?;
 
         let mut fields = vec![];
-        for field in record.iter() {
+        for field in &record {
             fields.push(Value::String(Cow::from(field.to_string())));
         }
 
