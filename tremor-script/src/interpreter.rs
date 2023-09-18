@@ -408,7 +408,7 @@ where
     // - snot badger - Darach
     use BinOpKind::{Add, BitAnd, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq};
     use StaticNode::Bool;
-    use Value::{Array, Bytes, Static, String};
+    use Value::{Array, Bytes, Object, Static, String};
     match (op, lhs, rhs) {
         (Eq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(true)),
         (NotEq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(false)),
@@ -479,11 +479,26 @@ where
             Ok(Cow::Owned(Value::from(result)))
         }
 
+        // Record
+        (Add, Object(l), Object(r)) => {
+            // We need to clone all values anyhow, so we clone the RHS values as we know we keep them
+            let mut result = r.clone();
+            // then we iterate thorugh the LHS and clone only those not included in the RHS already
+            for (k, v) in l.iter() {
+                result
+                    .raw_entry_mut()
+                    .from_key(k)
+                    .or_insert_with(|| (k.clone(), v.clone()));
+            }
+            Ok(Cow::Owned(Value::Object(result)))
+        }
+
         // Errors
         (op, Bytes(_) | String(_), Bytes(_) | String(_))
         | (op, Static(Bool(_)), Static(Bool(_))) => {
             error_invalid_binary(outer, inner, op, lhs, rhs)
         }
+
         // numeric
         (op, l, r) => exec_binary_numeric(outer, inner, op, l, r),
     }

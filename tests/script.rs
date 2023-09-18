@@ -160,6 +160,7 @@ test_cases!(
     empty_array_pattern,
     const_in_const_lookup,
     // INSERT
+    record_add,
     nested_use_with_path,
     multi_use,
     for_comprehension_filter,
