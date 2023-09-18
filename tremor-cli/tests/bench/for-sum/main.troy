@@ -1,0 +1,33 @@
+define flow main
+flow
+  use tremor::{pipelines, connectors};
+  use bench;
+  
+
+  define pipeline main
+  pipeline
+    define script runtime
+    script
+      use std::string;
+      for event of
+        case (k, v) => string::len(k)
+      into 0 end
+    end;
+
+
+    create script runtime;
+
+    select event from in into runtime;
+    select event from runtime into out;
+    select event from runtime/err into err;
+  end;
+  create pipeline main;
+  create connector bench from bench::bench;
+  create connector console from connectors::console;
+
+  connect /connector/bench to /pipeline/main;
+  connect /pipeline/main to /connector/bench;
+  connect /pipeline/main/err to /connector/console/stderr;
+
+end;
+deploy flow main;
