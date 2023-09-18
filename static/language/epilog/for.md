@@ -7,5 +7,39 @@ An illustration of the rule is a set of case statements, followed by an optional
   end
 ```
 
+Alternatively for expressions have have a initial value and a fold operator. If neither is given the
+initial value is `[]` and the operator `+` is used - so the above example can also be written as:
+
+```tremor
+  for event of
+    ## Cases
+  into []
+  use +
+  end
+```
+
+For inserting a few keys into a record we could write
+
+```tremor
+  for new_values of
+    case (k,v) => {k: v}
+  into {}
+  end
+```
+
+For creating the product of numbers in a array we use:
+
+```tremor
+  for event of
+    case (k,v) => v
+  into 1
+  use *
+  end
+```
+
+The current supported operators in `use` are: `+`, `-`, `*` and `/`.
+
+
+
 The `ForCaseClause` rule has examples of the two basic forms for record and array comprehensions.
 

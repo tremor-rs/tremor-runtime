@@ -1250,7 +1250,34 @@ Merge: MergeRaw<'input> = {
 // Merges a perge spec (record) into the target
 
 For: ComprehensionRaw<'input, ExprRaw<'input>> = {
-    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "end" <end:@L> => ComprehensionRaw{target, cases, mid: NodeMeta::new_box(start, end)},
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "end" <end:@L> => ComprehensionRaw{
+        target,
+        cases,
+        mid: NodeMeta::new_box(start, end),
+        initial: ImutExprRaw::Literal(LiteralRaw{value: Value::array(), mid: NodeMeta::new_box(start, end)}),
+        fold: ComprehensionFoldOpRaw(BinOpKind::Add)
+    },
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "into" <initial:ComplexExprImut> "end" <end:@L> => ComprehensionRaw{
+        target,
+        cases,
+        mid: NodeMeta::new_box(start, end),
+        initial,
+        fold: ComprehensionFoldOpRaw(BinOpKind::Add)
+    },
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "into" <initial:ComplexExprImut> "use" <fold:FoldOperator> "end" <end:@L> => ComprehensionRaw{
+        target,
+        cases,
+        mid: NodeMeta::new_box(start, end),
+        initial,
+        fold
+    },
+}
+
+FoldOperator: ComprehensionFoldOpRaw = {
+    "+" => ComprehensionFoldOpRaw(BinOpKind::Add),
+    "-" => ComprehensionFoldOpRaw(BinOpKind::Sub),
+    "*" => ComprehensionFoldOpRaw(BinOpKind::Mul),
+    "/" => ComprehensionFoldOpRaw(BinOpKind::Div),
 }
 
 ForCaseClauses: ComprehensionCasesRaw<'input, ExprRaw<'input>> = {
@@ -1270,7 +1297,28 @@ ForCaseClause: ComprehensionCaseRaw<'input, ExprRaw<'input>> = {
 // // Merges a perge spec (record) into the target
 
 ForImut: ComprehensionRaw<'input, ImutExprRaw<'input>> = {
-    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "end" <end:@L> => ComprehensionRaw{target, cases, mid: NodeMeta::new_box(start, end)},
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "end" <end:@L> => ComprehensionRaw{
+        target,
+        cases,
+        mid: NodeMeta::new_box(start, end),
+        initial: ImutExprRaw::Literal(LiteralRaw{value: Value::array(), mid: NodeMeta::new_box(start, end)}),
+        fold: ComprehensionFoldOpRaw(BinOpKind::Add)
+    },
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "into" <initial:ComplexExprImut> "end" <end:@L> => ComprehensionRaw{
+        target,
+        cases,
+        mid: NodeMeta::new_box(start, end),
+        initial,
+        fold: ComprehensionFoldOpRaw(BinOpKind::Add)
+    },
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "into" <initial:ComplexExprImut> "use" <fold:FoldOperator> "end" <end:@L> => ComprehensionRaw{
+        target,
+        cases,
+        mid: NodeMeta::new_box(start, end),
+        initial,
+        fold
+    },
+
 }
 
 ForCaseClausesImut: ComprehensionCasesRaw<'input, ImutExprRaw<'input>> = {

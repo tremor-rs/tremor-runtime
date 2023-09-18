@@ -48,7 +48,7 @@ use super::{
     base_expr::Ranged,
     docs::{FnDoc, ModDoc},
     module::Manager,
-    warning, Const, NodeId, NodeMeta,
+    warning, ComprehensionFoldOp, Const, NodeId, NodeMeta,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Eq)]
@@ -1229,6 +1229,8 @@ impl<'script> Upable<'script> for MergeRaw<'script> {
         })
     }
 }
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ComprehensionFoldOpRaw(pub BinOpKind);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ComprehensionRaw<'script, Ex>
@@ -1238,8 +1240,11 @@ where
 {
     pub target: ImutExprRaw<'script>,
     pub cases: ComprehensionCasesRaw<'script, Ex>,
+    pub initial: ImutExprRaw<'script>,
+    pub fold: ComprehensionFoldOpRaw,
     pub(crate) mid: Box<NodeMeta>,
 }
+
 impl_expr_exraw!(ComprehensionRaw);
 
 impl<'script, Ex> Upable<'script> for ComprehensionRaw<'script, Ex>
@@ -1252,6 +1257,8 @@ where
         // We compute the target before shadowing the key and value
 
         let target = self.target.up(helper)?;
+        let initial = self.initial.up(helper)?;
+        let fold = ComprehensionFoldOp(self.fold.0);
 
         // We know that each case will have a key and a value as a shadowed
         // variable so we reserve two ahead of time so we know what id's those
@@ -1264,6 +1271,8 @@ where
             mid: self.mid,
             target,
             cases,
+            initial,
+            fold,
             key_id,
             val_id,
         })

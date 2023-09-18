@@ -129,6 +129,7 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     // INSERT
+    bad_fold,
     strnig_as_ident,
     sub_overflow,
     mul_overflow,
