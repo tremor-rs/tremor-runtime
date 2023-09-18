@@ -1,0 +1,28 @@
+define flow main
+flow
+  use tremor::pipelines;
+  use bench;
+  create connector bench from bench::bench;
+
+  define pipeline main
+  pipeline
+    define script runtime
+    script
+      for event of
+        case (k, v) => v
+      end
+    end;
+
+
+    create script runtime;
+
+    select event from in into runtime;
+    select event from runtime into out;
+    
+  end;
+  create pipeline main;
+
+  connect /connector/bench to /pipeline/main;
+  connect /pipeline/main to /connector/bench;
+end;
+deploy flow main;

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use tremor_common::ports::Port;
+use value_trait::ValueInto;
 
 use super::{
     resolve, resolve_value, set_local_shadow, test_guard, test_predicate_expr, Env, ExecOpts,
@@ -284,23 +285,21 @@ impl<'script> Expr<'script> {
                     ));
                     // NOTE: We are creating a new value so we have to clone;
                     if opts.result_needed {
+                        let v = v.into_owned();
                         if let Some(lhs) = result.as_array_mut() {
                             match expr.fold {
                                 ComprehensionFoldOp(BinOpKind::Add) => {
-                                    lhs.push(v.into_owned());
+                                    lhs.push(v);
                                 }
                                 ComprehensionFoldOp(_) => {
                                     return Err("Invalid fold operation".into())
                                 }
                             }
-                        } else if let Some((lhs, rhs)) = result
-                            .as_object_mut()
-                            .and_then(|o| Some((o, v.as_object()?)))
-                        {
+                        } else if let Some(lhs) = result.as_object_mut() {
                             match expr.fold {
                                 ComprehensionFoldOp(BinOpKind::Add) => {
-                                    for (k, v) in rhs {
-                                        lhs.insert(k.clone(), v.clone());
+                                    for (k, v) in v.into_object().ok_or("Invalid fold operation")? {
+                                        lhs.insert(k, v);
                                     }
                                 }
                                 ComprehensionFoldOp(_) => {
