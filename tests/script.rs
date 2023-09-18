@@ -160,6 +160,12 @@ test_cases!(
     empty_array_pattern,
     const_in_const_lookup,
     // INSERT
+    fold_number_op,
+    fold_number,
+    fold_record,
+    fold_array_initial_op,
+    fold_array_initial,
+    fold_array,
     record_add,
     nested_use_with_path,
     multi_use,

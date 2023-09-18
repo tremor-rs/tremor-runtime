@@ -101,6 +101,7 @@ pub trait Walker<'script>: ExprVisitor<'script> + ImutExprWalker<'script> {
             Walker::walk_expr(self, &mut comp_case.last_expr)?;
         }
         ImutExprWalker::walk_expr(self, &mut comp.target)?;
+        ImutExprWalker::walk_expr(self, &mut comp.initial)?;
         ExprVisitor::leave_comprehension(self, comp)
     }
 

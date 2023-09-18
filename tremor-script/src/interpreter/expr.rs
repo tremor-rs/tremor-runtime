@@ -18,12 +18,14 @@ use super::{
     resolve, resolve_value, set_local_shadow, test_guard, test_predicate_expr, Env, ExecOpts,
     LocalStack, NULL,
 };
-use crate::errors::{
-    err_need_obj, error_assign_array, error_assign_to_const, error_bad_key_err,
-    error_invalid_assign_target, error_no_clause_hit, Result,
+use crate::{
+    ast::BinOpKind,
+    errors::{
+        err_need_obj, error_assign_array, error_assign_to_const, error_bad_key_err,
+        error_invalid_assign_target, error_no_clause_hit, Result,
+    },
 };
-use crate::prelude::*;
-use crate::registry::RECUR_PTR;
+use crate::{ast::ComprehensionFoldOp, prelude::*};
 use crate::{
     ast::{
         BaseExpr, ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath,
@@ -31,6 +33,7 @@ use crate::{
     },
     errors::error_oops_err,
 };
+use crate::{interpreter::exec_binary_numeric, registry::RECUR_PTR};
 use crate::{stry, Value};
 use std::mem;
 use std::{
@@ -242,7 +245,6 @@ impl<'script> Expr<'script> {
             (k.into(), v)
         }
 
-        let mut value_vec = vec![];
         let target = &expr.target;
         let cases = &expr.cases;
         let t = stry!(target.run(opts, env, event, state, meta, local,));
@@ -256,11 +258,17 @@ impl<'script> Expr<'script> {
             },
             |t| (t.len(), Box::new(t.clone().into_iter().map(kv))),
         );
-
-        if opts.result_needed {
-            value_vec.reserve(l);
-        }
-
+        let mut result = if opts.result_needed {
+            let mut r = stry!(expr.initial.run(opts, env, event, state, meta, local)).into_owned();
+            if let Some(v) = r.as_array_mut() {
+                v.reserve(l);
+            } else if let Some(v) = r.as_object_mut() {
+                v.reserve(l);
+            }
+            r
+        } else {
+            Value::const_null()
+        };
         'outer: for (k, v) in items {
             stry!(set_local_shadow(self, local, expr.key_id, k));
             stry!(set_local_shadow(self, local, expr.val_id, v));
@@ -276,14 +284,40 @@ impl<'script> Expr<'script> {
                     ));
                     // NOTE: We are creating a new value so we have to clone;
                     if opts.result_needed {
-                        value_vec.push(v.into_owned());
+                        if let Some(lhs) = result.as_array_mut() {
+                            match expr.fold {
+                                ComprehensionFoldOp(BinOpKind::Add) => {
+                                    lhs.push(v.into_owned());
+                                }
+                                ComprehensionFoldOp(_) => {
+                                    return Err("Invalid fold operation".into())
+                                }
+                            }
+                        } else if let Some((lhs, rhs)) = result
+                            .as_object_mut()
+                            .and_then(|o| Some((o, v.as_object()?)))
+                        {
+                            match expr.fold {
+                                ComprehensionFoldOp(BinOpKind::Add) => {
+                                    for (k, v) in rhs {
+                                        lhs.insert(k.clone(), v.clone());
+                                    }
+                                }
+                                ComprehensionFoldOp(_) => {
+                                    return Err("Invalid fold operation".into())
+                                }
+                            }
+                        } else {
+                            result = stry!(exec_binary_numeric(self, e, expr.fold.0, &result, &v))
+                                .into_owned();
+                        }
                     }
                     continue 'outer;
                 }
             }
         }
 
-        Ok(Cont::Cont(Cow::Owned(Value::from(value_vec))))
+        Ok(Cont::Cont(Cow::Owned(result)))
     }
 
     #[inline]

@@ -162,6 +162,7 @@ test_cases!(
     subslice_no_arr,
     subslice_out_of_bounds,
     // INSERT
+    bad_fold_type,
     bad_merge2,
     bad_merge,
     meta_and_use,

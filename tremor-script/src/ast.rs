@@ -1531,6 +1531,10 @@ pub struct Merge<'script> {
 }
 impl_expr!(Merge);
 
+/// Fold operation for for comprehensiosn
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ComprehensionFoldOp(pub(crate) BinOpKind);
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a structure comprehension form
 pub struct Comprehension<'script, Ex: Expression + 'script> {
@@ -1542,6 +1546,10 @@ pub struct Comprehension<'script, Ex: Expression + 'script> {
     pub val_id: usize,
     /// Target of the comprehension
     pub target: ImutExpr<'script>,
+    /// Initial value
+    pub initial: ImutExpr<'script>,
+    /// Fold operation
+    pub fold: ComprehensionFoldOp,
     /// Case applications against target elements
     pub cases: ComprehensionCases<'script, Ex>,
 }
