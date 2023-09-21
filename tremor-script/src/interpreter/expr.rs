@@ -22,8 +22,8 @@ use super::{
 use crate::{
     ast::BinOpKind,
     errors::{
-        err_need_obj, error_assign_array, error_assign_to_const, error_bad_key_err,
-        error_invalid_assign_target, error_no_clause_hit, Result,
+        err_generic, err_need_obj, error_assign_array, error_assign_to_const, error_bad_key_err,
+        error_invalid_assign_target, error_no_clause_hit, AddSpan, Result,
     },
 };
 use crate::{ast::ComprehensionFoldOp, prelude::*};
@@ -41,6 +41,10 @@ use std::{
     borrow::{Borrow, Cow},
     iter,
 };
+
+pub(crate) type ComprehensionIter<'event, 'run> =
+    Box<dyn Iterator<Item = (Value<'event>, Value<'event>)> + 'run>;
+pub(crate) type ComprehensionItem<'event, 'run> = (usize, ComprehensionIter<'event, 'run>);
 
 #[derive(Debug)]
 /// Continuation context to control program flow
@@ -226,6 +230,116 @@ impl<'script> Expr<'script> {
         }
     }
 
+    fn comprehension_array<'run, 'event>(
+        &'run self,
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event>,
+        event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut LocalStack<'event>,
+        expr: &'run Comprehension<'event, Expr>,
+        items: ComprehensionIter<'event, 'run>,
+        mut result: Vec<Value<'event>>,
+    ) -> Result<Cont<'run, 'event>> {
+        let cases = &expr.cases;
+
+        'outer: for (k, v) in items {
+            stry!(set_local_shadow(self, local, expr.key_id, k));
+            stry!(set_local_shadow(self, local, expr.val_id, v));
+
+            for e in cases {
+                if stry!(test_guard(
+                    self, opts, env, event, state, meta, local, &e.guard
+                )) {
+                    let es = &e.exprs;
+                    let l = &e.last_expr;
+                    let v = demit!(Self::execute_effectors(
+                        opts, env, event, state, meta, local, es, l,
+                    ));
+                    // NOTE: We are creating a new value so we have to clone;
+                    if opts.result_needed {
+                        let v = v.into_owned();
+                        result.push(v);
+                    }
+                    continue 'outer;
+                }
+            }
+        }
+
+        Ok(Cont::Cont(Cow::Owned(Value::Array(result))))
+    }
+    fn comprehension_record<'run, 'event>(
+        &'run self,
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event>,
+        event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut LocalStack<'event>,
+        expr: &'run Comprehension<'event, Expr>,
+        items: ComprehensionIter<'event, 'run>,
+        mut result: Object<'event>,
+    ) -> Result<Cont<'run, 'event>> {
+        let cases = &expr.cases;
+        let no_res = opts.without_result();
+
+        'outer: for (k, v) in items {
+            stry!(set_local_shadow(self, local, expr.key_id, k));
+            stry!(set_local_shadow(self, local, expr.val_id, v));
+
+            for e in cases {
+                if stry!(test_guard(
+                    self, opts, env, event, state, meta, local, &e.guard
+                )) {
+                    let l = &e.last_expr;
+                    if let Expr::Imut(ImutExpr::Record(r)) = l {
+                        for effector in &e.exprs {
+                            demit!(effector.run(no_res, env, event, state, meta, local));
+                        }
+
+                        if opts.result_needed {
+                            for (k, v) in &r.base {
+                                result.insert(k.clone(), v.clone());
+                            }
+                            for f in &r.fields {
+                                let k = stry!(f.name.run(opts, env, event, state, meta, local));
+                                let v = stry!(f.value.run(opts, env, event, state, meta, local));
+                                result.insert(k.clone(), v.into_owned());
+                            }
+                        } else {
+                            for f in &r.fields {
+                                if opts.result_needed {
+                                    let k = stry!(f.name.run(opts, env, event, state, meta, local));
+                                    let v =
+                                        stry!(f.value.run(opts, env, event, state, meta, local));
+
+                                    result.insert(k.clone(), v.into_owned());
+                                } else {
+                                    stry!(f.value.run(opts, env, event, state, meta, local));
+                                }
+                            }
+                        }
+                    } else {
+                        let v = demit!(Self::execute_effectors(
+                            opts, env, event, state, meta, local, &e.exprs, l,
+                        ));
+                        // NOTE: We are creating a new value so we have to clone;
+                        if opts.result_needed {
+                            let v = v.into_owned();
+
+                            for (k, v) in v.try_into_object().add_span(expr, l)? {
+                                result.insert(k, v);
+                            }
+                        }
+                    }
+                    continue 'outer;
+                }
+            }
+        }
+
+        Ok(Cont::Cont(Cow::Owned(Value::Object(Box::new(result)))))
+    }
     // TODO: Quite some overlap with `ImutExprInt::comprehension`
     fn comprehension<'run, 'event>(
         &'run self,
@@ -237,7 +351,6 @@ impl<'script> Expr<'script> {
         local: &'run mut LocalStack<'event>,
         expr: &'run Comprehension<'event, Expr>,
     ) -> Result<Cont<'run, 'event>> {
-        type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
         fn kv<'k, K>((k, v): (K, Value)) -> (Value<'k>, Value)
         where
             K: 'k,
@@ -247,12 +360,11 @@ impl<'script> Expr<'script> {
         }
 
         let target = &expr.target;
-        let cases = &expr.cases;
         let t = stry!(target.run(opts, env, event, state, meta, local,));
 
-        let (l, items): Bi = t.as_object().map_or_else(
+        let (l, items): ComprehensionItem = t.as_object().map_or_else(
             || {
-                t.as_array().map_or_else::<Bi, _, _>(
+                t.as_array().map_or_else::<ComprehensionItem, _, _>(
                     || (0, Box::new(iter::empty())),
                     |t| (t.len(), Box::new(t.clone().into_iter().enumerate().map(kv))),
                 )
@@ -270,6 +382,20 @@ impl<'script> Expr<'script> {
         } else {
             Value::const_null()
         };
+        // short circuite for common cases
+        if expr.fold == ComprehensionFoldOp(BinOpKind::Add) {
+            if result.is_array() {
+                let a = result.into_array().unwrap_or_default();
+                return self
+                    .comprehension_array(opts, env, event, state, meta, local, expr, items, a);
+            } else if result.is_object() {
+                let o = result.into_object().unwrap_or_default();
+                return self
+                    .comprehension_record(opts, env, event, state, meta, local, expr, items, o);
+            }
+        }
+        let cases = &expr.cases;
+
         'outer: for (k, v) in items {
             stry!(set_local_shadow(self, local, expr.key_id, k));
             stry!(set_local_shadow(self, local, expr.val_id, v));
@@ -292,18 +418,18 @@ impl<'script> Expr<'script> {
                                     lhs.push(v);
                                 }
                                 ComprehensionFoldOp(_) => {
-                                    return Err("Invalid fold operation".into())
+                                    return err_generic(expr, l, &"Invalid fold operation");
                                 }
                             }
                         } else if let Some(lhs) = result.as_object_mut() {
                             match expr.fold {
                                 ComprehensionFoldOp(BinOpKind::Add) => {
-                                    for (k, v) in v.into_object().ok_or("Invalid fold operation")? {
+                                    for (k, v) in v.try_into_object().add_span(expr, l)? {
                                         lhs.insert(k, v);
                                     }
                                 }
                                 ComprehensionFoldOp(_) => {
-                                    return Err("Invalid fold operation".into())
+                                    return err_generic(expr, l, &"Invalid fold operation");
                                 }
                             }
                         } else {
