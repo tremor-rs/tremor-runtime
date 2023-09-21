@@ -7,9 +7,10 @@ flow
   pipeline
     define script runtime
     script
-      for event of
-         case (k, v) => {"#{k}": v}
-      into {} end
+      use std::record;
+      record::from_array(for event of
+         case (k, v) => [k, v]
+      end)
     end;
 
     create script runtime;

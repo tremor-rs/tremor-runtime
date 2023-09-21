@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{ArrayAppend, BooleanBinExpr, BooleanBinOpKind};
-use crate::static_bool;
 use crate::{
     ast::{
         base_expr::Ranged, binary::extend_bytes_from_value, BaseExpr, BinExpr, Comprehension,
@@ -22,8 +20,8 @@ use crate::{
     },
     errors::Kind as ErrorKind,
     errors::{
-        error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
-        error_no_clause_hit, error_oops, error_oops_err, Result,
+        err_generic, error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj,
+        error_need_str, error_no_clause_hit, error_oops, error_oops_err, Result,
     },
     interpreter::{
         exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
@@ -34,11 +32,18 @@ use crate::{
     registry::{Registry, TremorAggrFnWrapper, RECUR_REF},
     stry, Object, Value,
 };
+use crate::{
+    ast::{ArrayAppend, BinOpKind, BooleanBinExpr, BooleanBinOpKind, ComprehensionFoldOp},
+    interpreter::exec_binary_numeric,
+};
+use crate::{errors::AddSpan, static_bool};
 use std::{
     borrow::{Borrow, Cow},
     iter, mem,
 };
 use value_trait::ValueInto;
+
+use super::expr::{ComprehensionItem, ComprehensionIter};
 
 fn owned_val<'val, T>(v: T) -> Cow<'val, Value<'val>>
 where
@@ -47,8 +52,6 @@ where
 {
     Cow::Owned(Value::from(v))
 }
-
-type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
 
 impl<'script> ImutExpr<'script> {
     /// Checks if the expression is a literal expression
@@ -273,6 +276,95 @@ impl<'script> ImutExpr<'script> {
         }
     }
 
+    fn comprehension_array<'run, 'event>(
+        &'run self,
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event>,
+        event: &'run Value<'event>,
+        state: &'run Value<'static>,
+        meta: &'run Value<'event>,
+        local: &'run LocalStack<'event>,
+        expr: &'run Comprehension<'event, ImutExpr>,
+        items: ComprehensionIter<'event, 'run>,
+        mut result: Vec<Value<'event>>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
+        let cases = &expr.cases;
+        'outer: for (k, v) in items {
+            stry!(set_local_shadow(self, local, expr.key_id, k));
+            stry!(set_local_shadow(self, local, expr.val_id, v));
+
+            for e in cases {
+                if stry!(test_guard(
+                    self, opts, env, event, state, meta, local, &e.guard
+                )) {
+                    let l = &e.last_expr;
+                    let v = stry!(Self::execute_effectors(
+                        opts, env, event, state, meta, local, l,
+                    ));
+                    result.push(v.into_owned());
+                    continue 'outer;
+                }
+            }
+        }
+
+        Ok(Cow::Owned(Value::Array(result)))
+    }
+    fn comprehension_record<'run, 'event>(
+        &'run self,
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event>,
+        event: &'run Value<'event>,
+        state: &'run Value<'static>,
+        meta: &'run Value<'event>,
+        local: &'run LocalStack<'event>,
+        expr: &'run Comprehension<'event, ImutExpr>,
+        items: ComprehensionIter<'event, 'run>,
+        mut result: Object<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
+        let cases = &expr.cases;
+
+        'outer: for (k, v) in items {
+            stry!(set_local_shadow(self, local, expr.key_id, k));
+            stry!(set_local_shadow(self, local, expr.val_id, v));
+
+            for e in cases {
+                if stry!(test_guard(
+                    self, opts, env, event, state, meta, local, &e.guard
+                )) {
+                    let l = &e.last_expr;
+                    if let ImutExpr::Record(r) = l {
+                        for (k, v) in &r.base {
+                            result.insert(k.clone(), v.clone());
+                        }
+                        for f in &r.fields {
+                            let k = stry!(f.name.run(opts, env, event, state, meta, local));
+                            let v = stry!(f.value.run(opts, env, event, state, meta, local));
+                            result.insert(k.clone(), v.into_owned());
+                        }
+                    } else {
+                        let v = stry!(Self::execute_effectors(
+                            opts, env, event, state, meta, local, l,
+                        ));
+                        // NOTE: We are creating a new value so we have to clone;
+                        let v = v.into_owned();
+
+                        for (k, v) in v.try_into_object().add_span(expr, l)? {
+                            result.insert(k, v);
+                        }
+                    }
+                    continue 'outer;
+                }
+            }
+        }
+
+        Ok(Cow::Owned(Value::Object(Box::new(result))))
+    }
     fn comprehension<'run, 'event>(
         &'run self,
         opts: ExecOpts,
@@ -281,42 +373,54 @@ impl<'script> ImutExpr<'script> {
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Comprehension<'event, ImutExpr<'event>>,
+        expr: &'run Comprehension<'event, ImutExpr>,
     ) -> Result<Cow<'run, Value<'event>>>
     where
         'script: 'event,
     {
-        fn kv<'v, K>((k, v): (K, &Value<'v>)) -> (Value<'v>, Value<'v>)
+        fn kv<'k, K>((k, v): (K, Value)) -> (Value<'k>, Value)
         where
-            K: 'v + Clone,
-            Value<'v>: From<K>,
+            K: 'k,
+            Value<'k>: From<K>,
         {
-            (k.into(), v.clone())
+            (k.into(), v)
         }
 
-        let mut value_vec = vec![];
         let target = &expr.target;
-        let t = stry!(target.run(opts, env, event, state, meta, local));
+        let t = stry!(target.run(opts, env, event, state, meta, local,));
 
-        let (l, items): Bi = t.as_object().map_or_else(
+        let (l, items): ComprehensionItem = t.as_object().map_or_else(
             || {
-                t.as_array().map_or_else::<Bi, _, _>(
+                t.as_array().map_or_else::<ComprehensionItem, _, _>(
                     || (0, Box::new(iter::empty())),
-                    |t| (t.len(), Box::new(t.iter().enumerate().map(kv))),
+                    |t| (t.len(), Box::new(t.clone().into_iter().enumerate().map(kv))),
                 )
             },
-            |t| {
-                (
-                    t.len(),
-                    Box::new(t.iter().map(|(k, v)| (k.clone().into(), v.clone()))),
-                )
-            },
+            |t| (t.len(), Box::new(t.clone().into_iter().map(kv))),
         );
-
-        if opts.result_needed {
-            value_vec.reserve(l);
+        let mut result = if opts.result_needed {
+            let mut r = stry!(expr.initial.run(opts, env, event, state, meta, local)).into_owned();
+            if let Some(v) = r.as_array_mut() {
+                v.reserve(l);
+            } else if let Some(v) = r.as_object_mut() {
+                v.reserve(l);
+            }
+            r
+        } else {
+            Value::const_null()
+        };
+        // short circuite for common cases
+        if expr.fold == ComprehensionFoldOp(BinOpKind::Add) {
+            if result.is_array() {
+                let a = result.into_array().unwrap_or_default();
+                return self
+                    .comprehension_array(opts, env, event, state, meta, local, expr, items, a);
+            } else if result.is_object() {
+                let o = result.into_object().unwrap_or_default();
+                return self
+                    .comprehension_record(opts, env, event, state, meta, local, expr, items, o);
+            }
         }
-
         let cases = &expr.cases;
 
         'outer: for (k, v) in items {
@@ -331,13 +435,39 @@ impl<'script> ImutExpr<'script> {
                     let v = stry!(Self::execute_effectors(
                         opts, env, event, state, meta, local, l
                     ));
-                    value_vec.push(v.into_owned());
                     // NOTE: We are creating a new value so we have to clone;
+                    let v = v.into_owned();
+                    if let Some(lhs) = result.as_array_mut() {
+                        match expr.fold {
+                            ComprehensionFoldOp(BinOpKind::Add) => {
+                                lhs.push(v);
+                            }
+                            ComprehensionFoldOp(_) => {
+                                return err_generic(expr, l, &"Invalid fold operation")
+                            }
+                        }
+                    } else if let Some(lhs) = result.as_object_mut() {
+                        match expr.fold {
+                            ComprehensionFoldOp(BinOpKind::Add) => {
+                                for (k, v) in v.try_into_object().add_span(expr, l)? {
+                                    lhs.insert(k, v);
+                                }
+                            }
+                            ComprehensionFoldOp(_) => {
+                                return err_generic(expr, l, &"Invalid fold operation")
+                            }
+                        }
+                    } else {
+                        result = stry!(exec_binary_numeric(self, e, expr.fold.0, &result, &v))
+                            .into_owned();
+                    }
+
                     continue 'outer;
                 }
             }
         }
-        Ok(owned_val(value_vec))
+
+        Ok(Cow::Owned(result))
     }
 
     #[inline]

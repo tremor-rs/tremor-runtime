@@ -88,7 +88,44 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
 
 impl From<TryTypeError> for Error {
     fn from(e: TryTypeError) -> Self {
-        ErrorKind::TypeError(e.expected, e.got).into()
+        ErrorKind::TypeError(None, None, e.expected, e.got).into()
+    }
+}
+
+pub(crate) trait AddSpan<O, I>
+where
+    O: BaseExpr + Ranged,
+    I: BaseExpr + Ranged,
+{
+    type Output;
+    fn add_span(self, outer: &O, inner: &I) -> Self::Output;
+}
+
+impl<O, I> AddSpan<O, I> for Error
+where
+    O: BaseExpr + Ranged,
+    I: BaseExpr + Ranged,
+{
+    type Output = Self;
+    fn add_span(self, outer: &O, inner: &I) -> Self {
+        match self {
+            Error(ErrorKind::TypeError(_, _, e, g), state) => Error(
+                ErrorKind::TypeError(Some(outer.extent()), Some(inner.extent()), e, g),
+                state,
+            ),
+            _ => self,
+        }
+    }
+}
+impl<T, E, O, I> AddSpan<O, I> for std::result::Result<T, E>
+where
+    O: BaseExpr + Ranged,
+    I: BaseExpr + Ranged,
+    Error: From<E>,
+{
+    type Output = Result<T>;
+    fn add_span(self, outer: &O, inner: &I) -> Self::Output {
+        self.map_err(|e| Error::from(e).add_span(outer, inner))
     }
 }
 
@@ -294,9 +331,10 @@ impl ErrorKind {
             | CyclicUse(outer, inner, _)
             | InvalidDefinitionalWithParam(outer, inner, _, _, _)
             | UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
+
+            TypeError(outer, inner, _, _) => (*outer, *inner),
             // Special cases
             EmptyScript
-            | TypeError(_, _)
             | AccessError(_)
             | CantSetArgsConst
             | CantSetGroupConst
@@ -556,7 +594,7 @@ error_chain! {
             description(" Cyclic dependency detected!")
                 display(" Cyclic dependency detected: {}", uses.join(" -> "))
         }
-        TypeError(expected: ValueType, found: ValueType) {
+        TypeError(expr: Option<Span>, inner: Option<Span>, expected: ValueType, found: ValueType) {
             description("Type error")
                 display("Type error: Expected {}, found {}", expected, found)
         }
@@ -1384,7 +1422,7 @@ mod test {
         .0;
         assert_matches!(
             r,
-            ErrorKind::TypeError(ValueType::Object, ValueType::String)
+            ErrorKind::TypeError(None, None, ValueType::Object, ValueType::String)
         );
     }
 }
