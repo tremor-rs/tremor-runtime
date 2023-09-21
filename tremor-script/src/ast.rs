@@ -836,18 +836,17 @@ impl<'script> StringLit<'script> {
         if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
             return Ok(l.clone());
         }
-        let mut out = String::with_capacity(128);
-        for e in &self.elements {
-            match e {
-                StrLitElement::Lit(l) => out.push_str(l),
+        if let Some((h, t)) = self.elements.split_first() {
+            let mut res = match h {
+                StrLitElement::Lit(l) => l.to_string(),
                 #[cfg(not(feature = "erlang-float-testing"))]
                 StrLitElement::Expr(e) => {
                     let r = stry!(e.run(opts, env, event, state, meta, local));
                     if let Some(s) = r.as_str() {
-                        out.push_str(s);
+                        s.to_string()
                     } else {
-                        out.push_str(r.encode().as_str());
-                    };
+                        r.encode().to_string()
+                    }
                 }
                 // TODO: The float scenario is different in erlang and rust
                 // We knowingly excluded float correctness in string interpolation
@@ -857,16 +856,47 @@ impl<'script> StringLit<'script> {
                 crate::ast::StrLitElement::Expr(e) => {
                     let r = e.run(opts, env, event, state, meta, local)?;
                     if let Some(s) = r.as_str() {
-                        out.push_str(s);
+                        s.to_string()
                     } else if let Some(_f) = r.as_f64() {
-                        out.push_str("42");
+                        "42".to_string()
                     } else {
-                        out.push_str(&crate::utils::sorted_serialize(&r)?);
-                    };
+                        crate::utils::sorted_serialize(&r)?
+                    }
                 }
+            };
+            for e in t {
+                match e {
+                    StrLitElement::Lit(l) => res.push_str(l),
+                    #[cfg(not(feature = "erlang-float-testing"))]
+                    StrLitElement::Expr(e) => {
+                        let r = stry!(e.run(opts, env, event, state, meta, local));
+                        if let Some(s) = r.as_str() {
+                            res.push_str(s);
+                        } else {
+                            res.push_str(&r.encode());
+                        }
+                    }
+                    // TODO: The float scenario is different in erlang and rust
+                    // We knowingly excluded float correctness in string interpolation
+                    // as we don't want to over engineer and write own format functions.
+                    // any suggestions are welcome
+                    #[cfg(feature = "erlang-float-testing")]
+                    crate::ast::StrLitElement::Expr(e) => {
+                        let r = e.run(opts, env, event, state, meta, local)?;
+                        if let Some(s) = r.as_str() {
+                            res.push_str(s);
+                        } else if let Some(_f) = r.as_f64() {
+                            res.push_str("42");
+                        } else {
+                            res.push_str(&crate::utils::sorted_serialize(&r)?);
+                        }
+                    }
+                };
             }
+            Ok(Cow::from(res))
+        } else {
+            Ok(Cow::from(""))
         }
-        Ok(Cow::owned(out))
     }
 }
 impl_expr!(StringLit);
