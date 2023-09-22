@@ -1,0 +1,3 @@
+(for event of
+  case (k, v) => v
+into 0 end)
