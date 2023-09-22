@@ -130,6 +130,7 @@ test_cases!(
     pp_nest_cyclic,
     // INSERT
     bad_fold,
+    bad_fold_imut,
     strnig_as_ident,
     sub_overflow,
     mul_overflow,

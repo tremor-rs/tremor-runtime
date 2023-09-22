@@ -163,6 +163,7 @@ test_cases!(
     subslice_out_of_bounds,
     // INSERT
     bad_fold_type,
+    bad_fold_type_imut,
     bad_merge2,
     bad_merge,
     meta_and_use,

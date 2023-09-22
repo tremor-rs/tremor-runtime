@@ -1,0 +1,5 @@
+Error: 
+    1 | (for event of
+    2 |   case (k, v) => v
+    3 | into [] use merge end)
+      |             ^^^^^ Found the token `merge` but expected one of `*`, `+`, `-`, `/`
