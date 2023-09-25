@@ -1,0 +1,5 @@
+Warning(general): 
+    1 | for event of
+    2 |   case (k, v) => v
+    3 | into 0 use + end
+      | ^^^^^^^^^^^^^^^^ The `use <op>` syntax is experimental and may be deprecated or replaced
