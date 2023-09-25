@@ -7,7 +7,7 @@ An illustration of the rule is a set of case statements, followed by an optional
   end
 ```
 
-Alternatively for expressions have have a initial value and a fold operator. If neither is given the
+Alternatively for expressions have an initial value and a fold operator. If neither is given the
 initial value is `[]` and the operator `+` is used - so the above example can also be written as:
 
 ```tremor

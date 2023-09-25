@@ -4,7 +4,7 @@
 
 ### New features
 
-* Expand the `for` comprehension to include initial values and folding (using a limmited set of possible opperations for now)
+* Expand the `for` comprehension to include initial values and folding (using a limited set of possible operations for now)
 * Add `+` for `record + record`
 * hygienic errors for strings in path segements
 * axiom stdlib module
