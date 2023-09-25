@@ -1272,10 +1272,10 @@ MaybeFoldOperator: Option<ComprehensionFoldOpRaw> = {
 }
 
 FoldOperator: ComprehensionFoldOpRaw = {
-    "+" => ComprehensionFoldOpRaw(BinOpKind::Add),
-    "-" => ComprehensionFoldOpRaw(BinOpKind::Sub),
-    "*" => ComprehensionFoldOpRaw(BinOpKind::Mul),
-    "/" => ComprehensionFoldOpRaw(BinOpKind::Div),
+    <BinAdd> => ComprehensionFoldOpRaw(<>),
+    <BinMul> => ComprehensionFoldOpRaw(<>),
+    <BinBitAnd> => ComprehensionFoldOpRaw(<>),
+    <BinBitXor> => ComprehensionFoldOpRaw(<>),
 }
 
 ForCaseClauses: ComprehensionCasesRaw<'input, ExprRaw<'input>> = {

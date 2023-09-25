@@ -38,9 +38,6 @@ For creating the product of numbers in a array we use:
   end
 ```
 
-The current supported operators in `use` are: `+`, `-`, `*` and `/`.
-
-
+For a overview of supported operators see the [operators](./../expressions/#operators) section.
 
 The `ForCaseClause` rule has examples of the two basic forms for record and array comprehensions.
-
