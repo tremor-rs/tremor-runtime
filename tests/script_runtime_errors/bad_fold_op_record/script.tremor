@@ -1,0 +1,3 @@
+for event of
+  case (k, v) => {"#{k}": v}
+into {} use / end

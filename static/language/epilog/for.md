@@ -21,9 +21,10 @@ initial value is `[]` and the operator `+` is used - so the above example can al
 For inserting a few keys into a record we could write
 
 ```tremor
+  let base = {"snot": "badger"}
   for new_values of
     case (k,v) => {k: v}
-  into {}
+  into base
   end
 ```
 

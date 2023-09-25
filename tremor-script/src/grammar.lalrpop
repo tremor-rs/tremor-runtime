@@ -1255,22 +1255,20 @@ For: ComprehensionRaw<'input, ExprRaw<'input>> = {
         cases,
         mid: NodeMeta::new_box(start, end),
         initial: ImutExprRaw::Literal(LiteralRaw{value: Value::array(), mid: NodeMeta::new_box(start, end)}),
-        fold: ComprehensionFoldOpRaw(BinOpKind::Add)
+        fold: None
     },
-    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "into" <initial:ComplexExprImut> "end" <end:@L> => ComprehensionRaw{
-        target,
-        cases,
-        mid: NodeMeta::new_box(start, end),
-        initial,
-        fold: ComprehensionFoldOpRaw(BinOpKind::Add)
-    },
-    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "into" <initial:ComplexExprImut> "use" <fold:FoldOperator> "end" <end:@L> => ComprehensionRaw{
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "into" <initial:ComplexExprImut> <fold:MaybeFoldOperator> "end" <end:@L> => ComprehensionRaw{
         target,
         cases,
         mid: NodeMeta::new_box(start, end),
         initial,
         fold
     },
+}
+
+
+MaybeFoldOperator: Option<ComprehensionFoldOpRaw> = {
+    ("use" <FoldOperator>)? => <>,
 }
 
 FoldOperator: ComprehensionFoldOpRaw = {
@@ -1302,16 +1300,10 @@ ForImut: ComprehensionRaw<'input, ImutExprRaw<'input>> = {
         cases,
         mid: NodeMeta::new_box(start, end),
         initial: ImutExprRaw::Literal(LiteralRaw{value: Value::array(), mid: NodeMeta::new_box(start, end)}),
-        fold: ComprehensionFoldOpRaw(BinOpKind::Add)
+        fold: None
     },
-    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "into" <initial:ComplexExprImut> "end" <end:@L> => ComprehensionRaw{
-        target,
-        cases,
-        mid: NodeMeta::new_box(start, end),
-        initial,
-        fold: ComprehensionFoldOpRaw(BinOpKind::Add)
-    },
-    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "into" <initial:ComplexExprImut> "use" <fold:FoldOperator> "end" <end:@L> => ComprehensionRaw{
+
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "into" <initial:ComplexExprImut> <fold:MaybeFoldOperator> "end" <end:@L> => ComprehensionRaw{
         target,
         cases,
         mid: NodeMeta::new_box(start, end),

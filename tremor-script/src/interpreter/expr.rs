@@ -382,8 +382,9 @@ impl<'script> Expr<'script> {
         } else {
             Value::const_null()
         };
+        let fold = expr.fold.unwrap_or_default();
         // short circuite for common cases
-        if expr.fold == ComprehensionFoldOp(BinOpKind::Add) {
+        if fold == ComprehensionFoldOp(BinOpKind::Add) {
             if result.is_array() {
                 let a = result.into_array().unwrap_or_default();
                 return self
@@ -413,27 +414,35 @@ impl<'script> Expr<'script> {
                     if opts.result_needed {
                         let v = v.into_owned();
                         if let Some(lhs) = result.as_array_mut() {
-                            match expr.fold {
+                            match fold {
                                 ComprehensionFoldOp(BinOpKind::Add) => {
                                     lhs.push(v);
                                 }
-                                ComprehensionFoldOp(_) => {
-                                    return err_generic(expr, l, &"Invalid fold operation");
+                                ComprehensionFoldOp(op) => {
+                                    return err_generic(
+                                        expr,
+                                        l,
+                                        &format!("Invalid fold operation {op} for arrays"),
+                                    );
                                 }
                             }
                         } else if let Some(lhs) = result.as_object_mut() {
-                            match expr.fold {
+                            match fold {
                                 ComprehensionFoldOp(BinOpKind::Add) => {
                                     for (k, v) in v.try_into_object().add_span(expr, l)? {
                                         lhs.insert(k, v);
                                     }
                                 }
-                                ComprehensionFoldOp(_) => {
-                                    return err_generic(expr, l, &"Invalid fold operation");
+                                ComprehensionFoldOp(op) => {
+                                    return err_generic(
+                                        expr,
+                                        l,
+                                        &format!("Invalid fold operation {op} for records"),
+                                    );
                                 }
                             }
                         } else {
-                            result = stry!(exec_binary_numeric(self, e, expr.fold.0, &result, &v))
+                            result = stry!(exec_binary_numeric(self, e, fold.0, &result, &v))
                                 .into_owned();
                         }
                     }

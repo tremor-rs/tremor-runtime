@@ -162,6 +162,10 @@ test_cases!(
     subslice_no_arr,
     subslice_out_of_bounds,
     // INSERT
+    bad_fold_op_record,
+    bad_fold_op,
+    bad_fold_op_record_imut,
+    bad_fold_op_imut,
     bad_fold_type,
     bad_fold_type_imut,
     bad_merge2,

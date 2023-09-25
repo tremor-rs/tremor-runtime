@@ -1229,7 +1229,7 @@ impl<'script> Upable<'script> for MergeRaw<'script> {
         })
     }
 }
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Copy)]
 pub struct ComprehensionFoldOpRaw(pub BinOpKind);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1241,7 +1241,7 @@ where
     pub target: ImutExprRaw<'script>,
     pub cases: ComprehensionCasesRaw<'script, Ex>,
     pub initial: ImutExprRaw<'script>,
-    pub fold: ComprehensionFoldOpRaw,
+    pub fold: Option<ComprehensionFoldOpRaw>,
     pub(crate) mid: Box<NodeMeta>,
 }
 
@@ -1256,9 +1256,17 @@ where
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // We compute the target before shadowing the key and value
 
+        if self.fold.is_some() {
+            helper.warn(
+                self.extent().expand_lines(2),
+                self.extent(),
+                &"The `use <op>` syntax is experimental and may be deprecated or replaced",
+                warning::Class::General,
+            );
+        }
         let target = self.target.up(helper)?;
         let initial = self.initial.up(helper)?;
-        let fold = ComprehensionFoldOp(self.fold.0);
+        let fold = self.fold.map(|f| ComprehensionFoldOp(f.0));
 
         // We know that each case will have a key and a value as a shadowed
         // variable so we reserve two ahead of time so we know what id's those

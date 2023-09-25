@@ -1,0 +1,5 @@
+Error: 
+    1 | (for event of
+    2 |   case (k, v) => v
+      |                  ^ Invalid fold operation / for arrays
+    3 | into [] use / end)

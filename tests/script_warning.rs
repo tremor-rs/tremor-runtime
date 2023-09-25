@@ -66,6 +66,7 @@ test_cases!(
     match_imut_no_default,
     match_imut_multiple_default,
     // INSERT
+    for_fold_op,
     record_perf,
     array_perf,
     nanotime,
