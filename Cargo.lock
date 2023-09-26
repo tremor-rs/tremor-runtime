@@ -1891,7 +1891,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5a455a9f5318b6b5a0e7637ef105a4aef43093b67b4d2e127eae8c8af294bdf"
 dependencies = [
- "simd-json",
+ "simd-json 0.10.7",
 ]
 
 [[package]]
@@ -4991,28 +4991,45 @@ dependencies = [
 ]
 
 [[package]]
-name = "simd-json-derive"
-version = "0.10.1"
+name = "simd-json"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4890c6d2a14dea1e8f46eb222df969189acdeeba78415865407546a766b8ff9"
+checksum = "5292d9aeaa0fcfd2732c6254761ef6394a4c1a9f255426c0c95b77069184816f"
+dependencies = [
+ "ahash",
+ "getrandom 0.2.10",
+ "halfbrown",
+ "lexical-core 0.8.5",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "simdutf8",
+ "value-trait",
+]
+
+[[package]]
+name = "simd-json-derive"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f920cc69fb922cea4c97604b86413b6d16f4906e27f180bec8a5b6d9322d3d4"
 dependencies = [
  "chrono",
  "itoa 1.0.9",
  "ryu",
- "simd-json",
+ "simd-json 0.11.0",
  "simd-json-derive-int",
  "value-trait",
 ]
 
 [[package]]
 name = "simd-json-derive-int"
-version = "0.10.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47e83cea81f13d69ae012ccd021e7b8c7b4657f10fdbe175ac8f37a42b823cb9"
+checksum = "af7c2a20f0fdee683a96b6e741729b2c9e178c1abb00b3b9d76e559d5eeae33e"
 dependencies = [
  "proc-macro2",
  "quote",
- "simd-json",
+ "simd-json 0.11.0",
  "syn 2.0.33",
 ]
 
@@ -5950,7 +5967,7 @@ dependencies = [
  "log",
  "serde",
  "serde_yaml 0.9.25",
- "simd-json",
+ "simd-json 0.11.0",
  "surf",
  "tide",
  "tokio",
@@ -5988,7 +6005,7 @@ dependencies = [
  "shell-words",
  "signal-hook",
  "signal-hook-tokio",
- "simd-json",
+ "simd-json 0.11.0",
  "snmalloc-rs",
  "surf",
  "tch",
@@ -6012,7 +6029,7 @@ dependencies = [
  "beef",
  "rand 0.8.5",
  "serde",
- "simd-json",
+ "simd-json 0.11.0",
  "simd-json-derive",
  "tokio",
  "url",
@@ -6025,7 +6042,7 @@ dependencies = [
  "criterion",
  "lexical",
  "pretty_assertions",
- "simd-json",
+ "simd-json 0.11.0",
  "snmalloc-rs",
  "value-trait",
 ]
@@ -6037,7 +6054,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ca20240378486f81a13354fc9beb180fd9d65ee469d90419ddad520ee5169b2"
 dependencies = [
  "serde",
- "simd-json",
+ "simd-json 0.10.7",
 ]
 
 [[package]]
@@ -6072,7 +6089,7 @@ dependencies = [
  "rust-bert",
  "serde",
  "serde_yaml 0.9.25",
- "simd-json",
+ "simd-json 0.11.0",
  "simd-json-derive",
  "sled",
  "tempfile",
@@ -6167,7 +6184,7 @@ dependencies = [
  "serial_test",
  "signal-hook",
  "signal-hook-tokio",
- "simd-json",
+ "simd-json 0.11.0",
  "simd-json-derive",
  "simdutf8",
  "sled",
@@ -6231,7 +6248,7 @@ dependencies = [
  "regex",
  "serde",
  "sha2 0.10.7",
- "simd-json",
+ "simd-json 0.11.0",
  "simd-json-derive",
  "sketches-ddsketch",
  "strip-ansi-escapes",
@@ -6260,7 +6277,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "simd-json",
+ "simd-json 0.11.0",
  "simd-json-derive",
  "tremor-common",
  "value-trait",

@@ -38,7 +38,7 @@ serde = "1"
 serde_yaml = "0.9"
 signal-hook = "0.3"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
-simd-json = { version = "0.10", features = ["known-key"] }
+simd-json = { version = "0.11", features = ["known-key"] }
 # We need to stay with 0.2 for now as there are reasons that can be named for the need to be able to
 # compile and run on operating systems that are a decade old. (insert apropriate ammount rage)
 snmalloc-rs = { version = "0.3" }

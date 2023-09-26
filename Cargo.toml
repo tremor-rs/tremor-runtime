@@ -88,8 +88,8 @@ regex = "1.9"
 rmp-serde = "1.1"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
-simd-json = { version = "0.10", features = ["known-key"] }
-simd-json-derive = "0.10"
+simd-json = { version = "0.11", features = ["known-key"] }
+simd-json-derive = "0.11"
 snap = "1"
 socket2 = { version = "0.5", features = ["all"] }
 syslog_loose = "0.19"
