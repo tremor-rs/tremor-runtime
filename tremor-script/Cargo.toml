@@ -47,8 +47,8 @@ percent-encoding = "2"
 rand = { version = "0.8", features = ["small_rng"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
-simd-json = { version = "0.10", features = ["known-key"] }
-simd-json-derive = "0.10"
+simd-json = { version = "0.11", features = ["known-key"] }
+simd-json-derive = "0.11"
 sketches-ddsketch = "0.2"
 strip-ansi-escapes = "0.2"
 termcolor = "1.2"
