@@ -160,6 +160,10 @@ test_cases!(
     empty_array_pattern,
     const_in_const_lookup,
     // INSERT
+    fold_bool_or,
+    fold_bool_or_imut,
+    fold_bool_imut,
+    fold_bool,
     fold_number_op,
     fold_number,
     fold_record,

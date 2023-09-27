@@ -1230,7 +1230,18 @@ impl<'script> Upable<'script> for MergeRaw<'script> {
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Copy)]
-pub struct ComprehensionFoldOpRaw(pub BinOpKind);
+pub enum ComprehensionFoldOpRaw {
+    Arith(BinOpKind),
+    Logic(BooleanBinOpKind),
+}
+impl From<ComprehensionFoldOpRaw> for ComprehensionFoldOp {
+    fn from(val: ComprehensionFoldOpRaw) -> Self {
+        match val {
+            ComprehensionFoldOpRaw::Arith(o) => ComprehensionFoldOp::Arith(o),
+            ComprehensionFoldOpRaw::Logic(o) => ComprehensionFoldOp::Logic(o),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ComprehensionRaw<'script, Ex>
@@ -1266,7 +1277,7 @@ where
         }
         let target = self.target.up(helper)?;
         let initial = self.initial.up(helper)?;
-        let fold = self.fold.map(|f| ComprehensionFoldOp(f.0));
+        let fold = self.fold.map(Into::into);
 
         // We know that each case will have a key and a value as a shadowed
         // variable so we reserve two ahead of time so we know what id's those

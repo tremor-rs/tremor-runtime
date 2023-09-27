@@ -22,17 +22,21 @@ use super::{
 use crate::{
     ast::BinOpKind,
     errors::{
-        err_generic, err_need_obj, error_assign_array, error_assign_to_const, error_bad_key_err,
-        error_invalid_assign_target, error_no_clause_hit, AddSpan, Result,
+        err_invalid_fold, err_need_obj, error_assign_array, error_assign_to_const,
+        error_bad_key_err, error_invalid_assign_target, error_invalid_bool_op, error_no_clause_hit,
+        AddSpan, Result,
     },
 };
-use crate::{ast::ComprehensionFoldOp, prelude::*};
 use crate::{
     ast::{
         BaseExpr, ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath,
         Expr, IfElse, ImutExpr, Match, Path, Segment,
     },
     errors::error_oops_err,
+};
+use crate::{
+    ast::{BooleanBinOpKind, ComprehensionFoldOp},
+    prelude::*,
 };
 use crate::{interpreter::exec_binary_numeric, registry::RECUR_PTR};
 use crate::{stry, Value};
@@ -341,6 +345,7 @@ impl<'script> Expr<'script> {
         Ok(Cont::Cont(Cow::Owned(Value::Object(Box::new(result)))))
     }
     // TODO: Quite some overlap with `ImutExprInt::comprehension`
+    #[allow(clippy::too_many_lines)]
     fn comprehension<'run, 'event>(
         &'run self,
         opts: ExecOpts,
@@ -384,7 +389,7 @@ impl<'script> Expr<'script> {
         };
         let fold = expr.fold.unwrap_or_default();
         // short circuite for common cases
-        if fold == ComprehensionFoldOp(BinOpKind::Add) {
+        if fold == ComprehensionFoldOp::Arith(BinOpKind::Add) {
             if result.is_array() {
                 let a = result.into_array().unwrap_or_default();
                 return self
@@ -415,35 +420,55 @@ impl<'script> Expr<'script> {
                         let v = v.into_owned();
                         if let Some(lhs) = result.as_array_mut() {
                             match fold {
-                                ComprehensionFoldOp(BinOpKind::Add) => {
+                                ComprehensionFoldOp::Arith(BinOpKind::Add) => {
                                     lhs.push(v);
                                 }
-                                ComprehensionFoldOp(op) => {
-                                    return err_generic(
-                                        expr,
-                                        l,
-                                        &format!("Invalid fold operation {op} for arrays"),
-                                    );
+                                op => {
+                                    return err_invalid_fold(expr, l, op);
                                 }
                             }
                         } else if let Some(lhs) = result.as_object_mut() {
                             match fold {
-                                ComprehensionFoldOp(BinOpKind::Add) => {
+                                ComprehensionFoldOp::Arith(BinOpKind::Add) => {
                                     for (k, v) in v.try_into_object().add_span(expr, l)? {
                                         lhs.insert(k, v);
                                     }
                                 }
-                                ComprehensionFoldOp(op) => {
-                                    return err_generic(
-                                        expr,
-                                        l,
-                                        &format!("Invalid fold operation {op} for records"),
-                                    );
+                                op => {
+                                    return err_invalid_fold(expr, l, op);
                                 }
                             }
                         } else {
-                            result = stry!(exec_binary_numeric(self, e, fold.0, &result, &v))
-                                .into_owned();
+                            match fold {
+                                ComprehensionFoldOp::Arith(op) => {
+                                    result = stry!(exec_binary_numeric(self, e, op, &result, &v))
+                                        .into_owned();
+                                }
+                                ComprehensionFoldOp::Logic(op) => {
+                                    let lval = result.try_as_bool().map_err(|e| {
+                                        error_invalid_bool_op(expr, l, op, e.got, None)
+                                    })?;
+                                    let rval = v.try_as_bool().map_err(|e| {
+                                        error_invalid_bool_op(expr, l, op, e.got, None)
+                                    })?;
+
+                                    match op {
+                                        BooleanBinOpKind::Or => {
+                                            result = (lval || rval).into();
+                                            if result.as_bool() == Some(true) {
+                                                return Ok(Cont::Cont(Cow::Owned(result)));
+                                            }
+                                        }
+                                        BooleanBinOpKind::And => {
+                                            result = (lval && rval).into();
+                                            if result.as_bool() == Some(false) {
+                                                return Ok(Cont::Cont(Cow::Owned(result)));
+                                            }
+                                        }
+                                        BooleanBinOpKind::Xor => result = (lval ^ rval).into(),
+                                    }
+                                }
+                            }
                         }
                     }
                     continue 'outer;

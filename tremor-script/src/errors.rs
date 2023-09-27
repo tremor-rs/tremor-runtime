@@ -20,7 +20,7 @@
 pub use crate::prelude::ValueType;
 use crate::{
     arena,
-    ast::{self, base_expr::Ranged, BaseExpr},
+    ast::{self, base_expr::Ranged, BaseExpr, BooleanBinOpKind},
     errors, lexer,
     pos::{self, Span},
     prelude::*,
@@ -31,8 +31,8 @@ use lalrpop_util::ParseError as LalrpopError;
 use simd_json::{ExtendedValueType, TryTypeError};
 
 use crate::errors::ErrorKind::InvalidBinaryBoolean;
-use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
+use std::{fmt::Display, num};
 
 #[derive(Debug)]
 //// An error with a associated arena index
@@ -1097,6 +1097,22 @@ pub fn error_generic<O: Ranged, I: Ranged, S: ToString>(outer: &O, inner: &I, er
     ErrorKind::Generic(outer.extent(), inner.extent(), error.to_string()).into()
 }
 
+pub(crate) fn err_invalid_fold<O: Ranged, I: Ranged, Op: Display, T>(
+    outer: &O,
+    inner: &I,
+    op: Op,
+) -> Result<T> {
+    err_generic(outer, inner, &format!("Invalid fold operation {op}"))
+}
+pub(crate) fn error_invalid_bool_op<O: Ranged, I: Ranged>(
+    outer: &O,
+    inner: &I,
+    op: BooleanBinOpKind,
+    left: ValueType,
+    right: Option<ValueType>,
+) -> Error {
+    ErrorKind::InvalidBinaryBoolean(outer.extent(), inner.extent(), op, left, right).into()
+}
 pub(crate) fn error_type_conflict_mult<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
