@@ -361,7 +361,7 @@ mod tests {
     fn nanos_to_datetime_coverage() -> Result<()> {
         let input = 0_u64;
         let dt = nanos_to_datetime(&chrono_tz::UTC, input)?;
-        assert_eq!(input as i64, dt.timestamp_nanos());
+        assert_eq!(Some(input as i64), dt.timestamp_nanos_opt());
         Ok(())
     }
 

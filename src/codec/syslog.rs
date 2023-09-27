@@ -281,8 +281,8 @@ where
         if let Some(facility) = parsed.facility {
             decoded.try_insert("facility", facility.as_str());
         }
-        if let Some(timestamp) = parsed.timestamp {
-            decoded.try_insert("timestamp", timestamp.timestamp_nanos());
+        if let Some(timestamp) = parsed.timestamp.and_then(|t| t.timestamp_nanos_opt()) {
+            decoded.try_insert("timestamp", timestamp);
         }
         decoded.try_insert(
             "protocol",
@@ -630,7 +630,7 @@ mod test {
             "appname": "rsyslogd",
             "msg": "[software=\"rsyslogd\" swVersion=\"8.32.0\"] message",
             "protocol": "RFC3164",
-            "timestamp": timestamp.timestamp_nanos()
+            "timestamp": timestamp.timestamp_nanos_opt().unwrap_or_default()
         });
         assert_eq!(
             tremor_script::utils::sorted_serialize(&expected)?,

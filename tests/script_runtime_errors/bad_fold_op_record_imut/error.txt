@@ -1,5 +1,5 @@
 Error: 
     1 | (for event of
     2 |   case (k, v) => {"#{k}": v}
-      |                  ^^^^^^^^^^^ Invalid fold operation / for records
+      |                  ^^^^^^^^^^^ Invalid fold operation /
     3 | into {} use / end)

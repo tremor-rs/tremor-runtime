@@ -162,6 +162,10 @@ test_cases!(
     subslice_no_arr,
     subslice_out_of_bounds,
     // INSERT
+    fold_bool_or_imut,
+    fold_bool_or,
+    fold_bool_op_imut,
+    fold_bool_op,
     bad_fold_op_record,
     bad_fold_op,
     bad_fold_op_record_imut,

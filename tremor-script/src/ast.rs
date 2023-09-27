@@ -1563,11 +1563,24 @@ impl_expr!(Merge);
 
 /// Fold operation for for comprehensiosn
 #[derive(Clone, Debug, PartialEq, Serialize, Copy)]
-pub struct ComprehensionFoldOp(pub(crate) BinOpKind);
+pub enum ComprehensionFoldOp {
+    /// Arith expressions
+    Arith(BinOpKind),
+    /// Logical expressions
+    Logic(BooleanBinOpKind),
+}
+impl std::fmt::Display for ComprehensionFoldOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Arith(op) => op.fmt(f),
+            Self::Logic(op) => op.fmt(f),
+        }
+    }
+}
 
 impl Default for ComprehensionFoldOp {
     fn default() -> Self {
-        Self(BinOpKind::Add)
+        Self::Arith(BinOpKind::Add)
     }
 }
 

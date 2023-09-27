@@ -21,11 +21,13 @@ pub fn _parse(datetime: &str, input_fmt: &str, has_timezone: bool) -> Result<u64
     if has_timezone {
         Ok(DateTime::parse_from_str(datetime, input_fmt)
             .map_err(|e| Error::from(format!("Datetime Parse Error: {e:?}")))?
-            .timestamp_nanos() as u64)
+            .timestamp_nanos_opt()
+            .ok_or("Datetime Parse Error")? as u64)
     } else {
         Ok(NaiveDateTime::parse_from_str(datetime, input_fmt)
             .map_err(|e| Error::from(format!("Datetime Parse Error: {e:?}")))?
-            .timestamp_nanos() as u64)
+            .timestamp_nanos_opt()
+            .ok_or("Datetime Parse Error")? as u64)
     }
 }
 
