@@ -303,8 +303,8 @@ where
         let mut event_tracked = false;
 
         for (value, meta) in event.value_meta_iter() {
-            let meta = ctx.extract_meta(meta);
-            let new_object_id: ObjectId = self.sink_impl.get_object_id(meta)?;
+            let sink_meta = ctx.extract_meta(meta);
+            let new_object_id: ObjectId = self.sink_impl.get_object_id(sink_meta)?;
 
             // ignore current event (or part of it if batched) if current upload with same file_id is failed
             if let Some(current_upload) = self.current_upload.as_mut() {
@@ -345,7 +345,7 @@ where
 
             // At this point we defo have a healthy upload
             // accumulate event payload for the current upload
-            let serialized_data = serializer.serialize(value, event.ingest_ns)?;
+            let serialized_data = serializer.serialize(value, meta, event.ingest_ns)?;
             for item in serialized_data {
                 self.buffers.write(item);
                 // upload some data if necessary
@@ -439,8 +439,8 @@ where
         _start: u64,
     ) -> Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {
-            let meta = ctx.extract_meta(meta);
-            let object_id = self.sink_impl.get_object_id(meta)?;
+            let sink_meta = ctx.extract_meta(meta);
+            let object_id = self.sink_impl.get_object_id(sink_meta)?;
 
             if let Some(current_upload) = self.current_upload.as_mut() {
                 if object_id != *current_upload.object_id() {
@@ -467,7 +467,7 @@ where
                 };
                 self.current_upload = Some(upload);
             }
-            let serialized_data = serializer.serialize(value, event.ingest_ns)?;
+            let serialized_data = serializer.serialize(value, meta, event.ingest_ns)?;
             for item in serialized_data {
                 self.buffer.write(item);
                 while let Some(data) = self.buffer.read_current_block() {

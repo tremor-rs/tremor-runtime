@@ -288,7 +288,7 @@ impl Codec for Avro {
         vals.next().map(|v| v.map(|v| (v, meta))).transpose()
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         let mut writer = Writer::with_codec(
             &self.schema,
             Vec::with_capacity(AVRO_BUFFER_CAP),
@@ -341,7 +341,7 @@ mod test {
     fn encode() -> Result<()> {
         let mut codec = test_codec(test_schema())?;
         let decoded = literal!({ "long": 27, "string": "string" });
-        let encoded = dbg!(codec.encode(&decoded));
+        let encoded = dbg!(codec.encode(&decoded, &Value::const_null()));
 
         assert!(encoded.is_ok());
         Ok(())
@@ -351,7 +351,7 @@ mod test {
     fn null() -> Result<()> {
         let mut codec = test_codec(literal!({"type": "null"}))?;
         let decoded = literal!(());
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -361,7 +361,7 @@ mod test {
     fn boolean() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"boolean"}))?;
         let decoded = literal!(true);
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -371,7 +371,7 @@ mod test {
     fn int() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"int"}))?;
         let decoded = literal!(42i32);
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -381,7 +381,7 @@ mod test {
     fn long() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"long"}))?;
         let decoded = literal!(42);
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -391,7 +391,7 @@ mod test {
     fn float() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"float"}))?;
         let decoded = literal!(42f32);
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -401,7 +401,7 @@ mod test {
     fn double() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"double"}))?;
         let decoded = literal!(42f64);
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -411,7 +411,7 @@ mod test {
     fn bytes() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"bytes"}))?;
         let decoded = Value::Bytes(vec![1, 2, 3].into());
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -421,7 +421,7 @@ mod test {
     fn string() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"string"}))?;
         let decoded = literal!("foo");
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -435,7 +435,7 @@ mod test {
             "fields": [{"name": "one", "type": "int"}]
         }))?;
         let decoded = literal!({"one": 1});
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -449,7 +449,7 @@ mod test {
             "symbols": ["SNOT", "BADGER"]
         }))?;
         let decoded = literal!("SNOT");
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -462,7 +462,7 @@ mod test {
             "items":"string"
         }))?;
         let decoded = literal!(["SNOT", "BADGER"]);
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -475,7 +475,7 @@ mod test {
             "values":"string"
         }))?;
         let decoded = literal!({"SNOT": "BADGER"});
-        let encoded = codec.encode(&decoded);
+        let encoded = codec.encode(&decoded, &Value::const_null());
 
         assert!(encoded.is_ok());
         Ok(())
@@ -555,7 +555,7 @@ mod test {
             "array": ["SNOT", "BADGER"],
             "map": {"SNOT": "BADGER"}
         });
-        let mut encoded = codec.encode(&decoded)?;
+        let mut encoded = codec.encode(&decoded, &Value::const_null())?;
 
         let redecoded = codec
             .decode(&mut encoded, 0, Value::object())?

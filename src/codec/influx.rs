@@ -59,7 +59,7 @@ impl Codec for Influx {
             .map(|v| v.map(|v| (v, meta)))
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Ok(influx::encode(data)?)
     }
 
@@ -99,7 +99,9 @@ mod tests {
 
         let mut codec = Influx {};
 
-        let encoded = codec.encode(&s).expect("failed to encode");
+        let encoded = codec
+            .encode(&s, &Value::const_null())
+            .expect("failed to encode");
 
         let raw =
             r#"wea\,\\\ ther temp\=erature=82.0,too\\\ \\\\\\\"hot\"=true 1465839830100400200"#;
@@ -288,7 +290,7 @@ mod tests {
         for case in &pairs {
             let mut codec = Influx {};
             let v = case.1.clone();
-            let mut encoded = codec.encode(&v)?;
+            let mut encoded = codec.encode(&v, &Value::const_null())?;
 
             let decoded = codec
                 .decode(encoded.as_mut_slice(), 0, Value::object())?
@@ -380,7 +382,9 @@ mod tests {
             .decode(s.as_mut_slice(), 0, Value::object())
             .expect("failed to decode")
             .expect("failed to decode");
-        let encoded = codec.encode(&decoded.0).expect("failed to encode");
+        let encoded = codec
+            .encode(&decoded.0, &Value::const_null())
+            .expect("failed to encode");
 
         assert_eq!(decoded.0, &e);
         unsafe {

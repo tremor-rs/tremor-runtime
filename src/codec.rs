@@ -72,7 +72,7 @@ pub trait Codec: Send + Sync {
     ///
     /// # Errors
     ///  * If the encoding fails
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>>;
+    fn encode(&mut self, data: &Value, meta: &Value) -> Result<Vec<u8>>;
 
     /// special clone method for getting clone functionality
     /// into a this trait referenced as trait object

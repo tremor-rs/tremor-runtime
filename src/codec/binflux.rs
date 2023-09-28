@@ -211,7 +211,7 @@ impl Codec for BInflux {
         Self::decode(data).map(|v| Some((v, meta)))
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Self::encode(data, &mut self.buf)?;
         let v = self.buf.clone();
         self.buf.clear();
@@ -231,7 +231,7 @@ mod test {
         let mut o = Value::object();
         let mut c = BInflux::default();
         assert_eq!(
-            c.encode(&o)
+            c.encode(&o, &Value::const_null())
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -240,7 +240,7 @@ mod test {
 
         o.try_insert("measurement", "m");
         assert_eq!(
-            c.encode(&o)
+            c.encode(&o, &Value::const_null())
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -252,7 +252,7 @@ mod test {
 
         o.try_insert("fields", fields);
         assert_eq!(
-            c.encode(&o)
+            c.encode(&o, &Value::const_null())
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),

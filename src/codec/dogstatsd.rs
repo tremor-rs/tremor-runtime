@@ -126,7 +126,7 @@ impl Codec for DogStatsD {
         decode(data, ingest_ns).map(|v| Some((v, meta)))
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         encode(data, &mut self.buf)?;
         let v = self.buf.clone();
         self.buf.clear();

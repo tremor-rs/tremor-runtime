@@ -175,8 +175,8 @@ impl Sink for UnixSocketSink {
         _start: u64,
     ) -> Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
-        for value in event.value_iter() {
-            let data = serializer.serialize(value, ingest_ns)?;
+        for (value, meta) in event.value_meta_iter() {
+            let data = serializer.serialize(value, meta, ingest_ns)?;
             if let Err(e) = self.write(data).await {
                 error!("{ctx} Error sending data: {e}. Initiating Reconnect...");
                 self.writer = None;

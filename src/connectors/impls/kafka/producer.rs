@@ -200,7 +200,7 @@ impl Sink for KafkaProducerSink {
                 .get("key")
                 .and_then(Value::as_bytes)
                 .or_else(|| self.config.key.as_ref().map(String::as_bytes));
-            for payload in serializer.serialize(value, ingest_ns)? {
+            for payload in serializer.serialize(value, meta, ingest_ns)? {
                 let mut record = FutureRecord::to(self.config.topic.as_str());
                 if let Some(key) = kafka_key {
                     record = record.key(key);

@@ -519,10 +519,10 @@ impl Sink for Blackhole {
         if !self.finished {
             let now_ns = nanotime();
 
-            for value in event.value_iter() {
+            for (value, meta) in event.value_meta_iter() {
                 if now_ns > self.warmup {
                     let delta_ns = now_ns - event.ingest_ns;
-                    if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
+                    if let Ok(bufs) = event_serializer.serialize(value, meta, event.ingest_ns) {
                         self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
                     } else {
                         error!("{ctx} failed to encode");

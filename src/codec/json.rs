@@ -114,7 +114,7 @@ impl<S: Sorting> Codec for Json<S> {
         .map(|v| Some((v, meta)))
         .map_err(Error::from)
     }
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if S::SORTED {
             Ok(sorted_serialize(data)?.into_bytes())
         } else {
@@ -167,7 +167,7 @@ mod test {
 
         let mut codec = Json::<Unsorted>::default();
 
-        let mut as_raw = codec.encode(&seed)?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
         assert!(codec
             .decode(as_raw.as_mut_slice(), 0, Value::object())?
             .is_some());
@@ -180,7 +180,7 @@ mod test {
 
         let mut codec = Json::<Sorted>::default();
 
-        let mut as_raw = codec.encode(&seed)?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
         assert!(codec
             .decode(as_raw.as_mut_slice(), 0, Value::object())?
             .is_some());
@@ -197,7 +197,7 @@ mod test {
             .expect("no data");
         assert_eq!(literal!({"key": 2}), res.0); // duplicate keys are deduplicated with last-key-wins strategy
 
-        let serialized = codec.encode(&res.0)?;
+        let serialized = codec.encode(&res.0, &Value::const_null())?;
         assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
 
         Ok(())
@@ -211,7 +211,7 @@ mod test {
             .decode(input.as_mut_slice(), 0, Value::object())?
             .expect("no data");
         assert_eq!(literal!({"key": 2}), res.0); // duplicate keys are deduplicated with last-key-wins strategy
-        let serialized = codec.encode(&res.0)?;
+        let serialized = codec.encode(&res.0, &Value::const_null())?;
         assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
 
         Ok(())
@@ -225,7 +225,7 @@ mod test {
             .decode(input.as_mut_slice(), 0, Value::object())?
             .expect("no data");
         assert_eq!(literal!({"key": 2}), res.0); // duplicate keys are deduplicated with last-key-wins strategy
-        let serialized = codec.encode(&res.0)?;
+        let serialized = codec.encode(&res.0, &Value::const_null())?;
         assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
 
         Ok(())

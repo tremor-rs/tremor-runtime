@@ -74,7 +74,7 @@ impl Codec for StatsD {
         decode(data, ingest_ns).map(|v| Some((v, meta)))
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         encode(data, &mut self.buf)?;
         let v = self.buf.clone();
         self.buf.clear();
@@ -301,7 +301,9 @@ mod test {
 
         });
         assert_eq!(parsed.0, expected);
-        let encoded = c.encode(&parsed.0).expect("failed to encode");
+        let encoded = c
+            .encode(&parsed.0, &Value::const_null())
+            .expect("failed to encode");
         assert_eq!(encoded, b"horst:42.23|h");
     }
 

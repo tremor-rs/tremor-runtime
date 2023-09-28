@@ -442,9 +442,9 @@ impl Sink for HttpRequestSink {
             });
 
             // if we have a chunked request we still gotta do some work (sending the chunks)
-            for value in event.value_iter() {
+            for (value, meta) in event.value_meta_iter() {
                 ctx.bail_err(
-                    builder.append(value, ingest_ns, serializer).await,
+                    builder.append(value, meta, ingest_ns, serializer).await,
                     "Error serializing event into request body",
                 )?;
             }

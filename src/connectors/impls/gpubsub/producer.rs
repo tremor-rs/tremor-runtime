@@ -171,7 +171,7 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
         let mut messages = Vec::with_capacity(event.len());
 
         for (value, meta) in event.value_meta_iter() {
-            for payload in serializer.serialize(value, event.ingest_ns)? {
+            for payload in serializer.serialize(value, meta, event.ingest_ns)? {
                 let ordering_key = ctx
                     .extract_meta(meta)
                     .get("ordering_key")

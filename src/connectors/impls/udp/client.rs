@@ -148,8 +148,8 @@ impl Sink for UdpClientSink {
             .socket
             .as_ref()
             .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
-        for value in event.value_iter() {
-            let data = serializer.serialize(value, event.ingest_ns)?;
+        for (value, meta) in event.value_meta_iter() {
+            let data = serializer.serialize(value, meta, event.ingest_ns)?;
             if let Err(e) = Self::send_event(socket, data).await {
                 error!("{} UDP Error: {}. Initiating Reconnect...", &ctx, &e);
                 // TODO: upon which errors to actually trigger a reconnect?

@@ -44,7 +44,7 @@ impl Codec for String {
             .map_err(Error::from)
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if let Some(s) = data.as_str() {
             Ok(s.as_bytes().to_vec())
         } else {
@@ -67,7 +67,7 @@ mod test {
         let seed = literal!("snot badger");
 
         let mut codec = String {};
-        let mut as_raw = codec.encode(&seed)?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0, Value::object());
         assert!(as_json.is_ok());
 
@@ -79,7 +79,7 @@ mod test {
         let seed = literal!(["snot badger"]);
 
         let mut codec = String {};
-        let as_raw = codec.encode(&seed)?;
+        let as_raw = codec.encode(&seed, &Value::const_null())?;
         assert_eq!(as_raw, b"[\"snot badger\"]");
 
         Ok(())

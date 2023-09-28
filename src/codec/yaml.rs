@@ -41,7 +41,7 @@ impl Codec for Yaml {
             .map(|v| Some((v, meta)))
             .map_err(Error::from)
     }
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Ok(serde_yaml::to_string(data)?.into_bytes())
     }
 
@@ -60,7 +60,7 @@ mod test {
         let seed = literal!({ "snot": "badger" });
 
         let mut codec = Yaml {};
-        let mut as_raw = codec.encode(&seed)?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
         let as_json = codec
             .decode(as_raw.as_mut_slice(), 0, Value::object())?
             .expect("no data");
