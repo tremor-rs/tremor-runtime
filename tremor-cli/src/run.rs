@@ -196,7 +196,7 @@ impl Egress {
                         highlight(self.is_pretty, &value)?;
                     }
 
-                    let encoded = self.codec.encode(&value);
+                    let encoded = self.codec.encode(&value, &Value::const_null());
 
                     let ppd = self
                         .postprocessor

@@ -389,7 +389,7 @@ impl KvSink {
         }
     }
     fn encode(&mut self, v: &Value) -> Result<Vec<u8>> {
-        self.codec.encode(v)
+        self.codec.encode(v, &Value::const_null())
     }
     fn execute(
         &mut self,

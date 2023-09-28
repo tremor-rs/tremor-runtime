@@ -76,7 +76,7 @@ impl Codec for Csv {
         Ok(Some((Value::Array(fields), meta)))
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if let Some(values) = data.as_array() {
             let fields: Vec<String> = values.iter().map(ToString::to_string).collect();
 
@@ -125,7 +125,7 @@ mod tests {
         let mut codec = Csv {};
         let data = literal!(["a", "b", "c", 123]);
 
-        let result = codec.encode(&data)?;
+        let result = codec.encode(&data, &Value::const_null())?;
 
         assert_eq!(b"a,b,c,123".to_vec(), result);
         Ok(())

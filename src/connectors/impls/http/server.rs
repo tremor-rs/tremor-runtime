@@ -406,7 +406,7 @@ impl Sink for HttpServerSink {
                             )?;
 
                             ctx.bail_err(
-                                response.append(value, ingest_ns, serializer).await,
+                                response.append(value, meta, ingest_ns, serializer).await,
                                 Self::ERROR_MSG_APPEND_RESPONSE,
                             )?;
                             k.insert(response);
@@ -419,7 +419,7 @@ impl Sink for HttpServerSink {
                     }
                     Entry::Occupied(mut o) => {
                         ctx.bail_err(
-                            o.get_mut().append(value, ingest_ns, serializer).await,
+                            o.get_mut().append(value, meta, ingest_ns, serializer).await,
                             Self::ERROR_MSG_APPEND_RESPONSE,
                         )?;
                     }
@@ -446,7 +446,7 @@ impl Sink for HttpServerSink {
                                     )?;
 
                                     ctx.bail_err(
-                                        response.append(value, ingest_ns, serializer).await,
+                                        response.append(value, meta, ingest_ns, serializer).await,
                                         Self::ERROR_MSG_APPEND_RESPONSE,
                                     )?;
                                     k.insert(response);
@@ -457,7 +457,7 @@ impl Sink for HttpServerSink {
                             }
                             Entry::Occupied(mut o) => {
                                 ctx.bail_err(
-                                    o.get_mut().append(value, ingest_ns, serializer).await,
+                                    o.get_mut().append(value, meta, ingest_ns, serializer).await,
                                     Self::ERROR_MSG_APPEND_RESPONSE,
                                 )?;
                             }
@@ -481,7 +481,9 @@ impl Sink for HttpServerSink {
                                         )?;
 
                                         ctx.bail_err(
-                                            response.append(value, ingest_ns, serializer).await,
+                                            response
+                                                .append(value, meta, ingest_ns, serializer)
+                                                .await,
                                             Self::ERROR_MSG_APPEND_RESPONSE,
                                         )?;
                                         k.insert(response);
@@ -492,7 +494,9 @@ impl Sink for HttpServerSink {
                                 }
                                 Entry::Occupied(mut o) => {
                                     ctx.bail_err(
-                                        o.get_mut().append(value, ingest_ns, serializer).await,
+                                        o.get_mut()
+                                            .append(value, meta, ingest_ns, serializer)
+                                            .await,
                                         Self::ERROR_MSG_APPEND_RESPONSE,
                                     )?;
                                 }
@@ -619,11 +623,13 @@ impl SinkResponse {
     async fn append<'event>(
         &mut self,
         value: &'event Value<'event>,
+        meta: &'event Value<'event>,
         ingest_ns: u64,
         serializer: &mut EventSerializer,
     ) -> Result<()> {
         let chunks = serializer.serialize_for_stream_with_codec(
             value,
+            meta,
             ingest_ns,
             self.request_id.get(),
             self.codec_overwrite.as_ref(),

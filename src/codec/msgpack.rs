@@ -49,7 +49,7 @@ impl Codec for MsgPack {
             .map_err(Error::from)
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Ok(rmps::to_vec(&data)?)
     }
 
@@ -68,7 +68,7 @@ mod test {
         let seed = literal!({ "snot": "badger" });
 
         let mut codec = MsgPack {};
-        let mut as_raw = codec.encode(&seed)?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
         assert!(codec
             .decode(as_raw.as_mut_slice(), 0, Value::object())?
             .is_some());

@@ -264,7 +264,7 @@ impl Codec for Tremor {
         Tremor::decode(data).map(|v| Some((v, meta)))
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Self::encode(data, &mut self.buf)?;
         let res = self.buf.clone();
         self.buf.clear();

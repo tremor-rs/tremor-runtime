@@ -38,7 +38,7 @@ impl Codec for Cbor {
         //.map_err(|e| format!("{}", e).into())
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         let mut res = Vec::with_capacity(128);
         ciborium::ser::into_writer(data, &mut res).map_err(|e| Error::from(format!("{}", e)))?;
         Ok(res)
@@ -59,7 +59,7 @@ mod test {
         let seed = literal!({ "snot": "badger" });
 
         let mut codec = Cbor {};
-        let mut as_raw = codec.encode(&seed)?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0)?;
 
         Ok(())

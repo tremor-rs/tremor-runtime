@@ -30,9 +30,9 @@ impl Codec for Null {
         _ingest_ns: u64,
         meta: Value<'input>,
     ) -> Result<Option<(Value<'input>, Value<'input>)>> {
-        Ok(Some((Value::null(), meta)))
+        Ok(Some((Value::const_null(), meta)))
     }
-    fn encode(&mut self, _data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, _data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Ok(vec![])
     }
 
@@ -52,7 +52,7 @@ mod test {
         let seed: Value = seed.into();
 
         let mut codec = Null {};
-        let mut as_raw = codec.encode(&seed)?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0, Value::object());
         assert!(as_json.is_ok());
         as_json?;

@@ -330,7 +330,7 @@ where
         Ok(Some((decoded, meta)))
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         let protocol = match (data.get_str("protocol"), data.get_u32("protocol_version")) {
             (Some("RFC3164"), _) => Ok(Protocol::RFC3164),
             (Some("RFC5424"), Some(version)) => Ok(Protocol::RFC5424(version)),
@@ -448,7 +448,7 @@ mod test {
             .decode(s.as_mut_slice(), 0, Value::object())?
             .unwrap_or_default()
             .0;
-        let mut a = codec.encode(&decoded)?;
+        let mut a = codec.encode(&decoded, &Value::const_null())?;
         let b = codec
             .decode(a.as_mut_slice(), 0, Value::object())?
             .unwrap_or_default()
@@ -510,7 +510,7 @@ mod test {
             "protocol_version": 1,
             "timestamp": 0_u64
         });
-        let mut encoded = codec.encode(&msg)?;
+        let mut encoded = codec.encode(&msg, &Value::const_null())?;
         let expected = "<165>1 1970-01-01T00:00:00+00:00 - - - - - test message";
         assert_eq!(std::str::from_utf8(&encoded)?, expected);
         let decoded = codec
@@ -533,7 +533,7 @@ mod test {
             "protocol_version": 1,
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).is_err());
     }
 
     #[test]
@@ -547,7 +547,7 @@ mod test {
             "protocol_version": 1,
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).is_err());
     }
 
     #[test]
@@ -560,7 +560,7 @@ mod test {
             "protocol": "RFC5424",
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).is_err());
     }
 
     #[test]
@@ -573,7 +573,7 @@ mod test {
             "protocol_version": 1,
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).is_err());
     }
 
     #[test]
@@ -586,7 +586,7 @@ mod test {
             "protocol": "snot",
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).is_err());
     }
 
     #[test]
@@ -598,7 +598,7 @@ mod test {
             "msg": "test message",
             "protocol": "RFC3164"
         }));
-        let encoded = codec.encode(&msg)?;
+        let encoded = codec.encode(&msg, &Value::const_null())?;
         let expected = "<165>Jan  1 00:00:00 - : test message";
         assert_eq!(std::str::from_utf8(&encoded)?, expected);
         Ok(())
@@ -667,7 +667,7 @@ mod test {
         let mut codec = test_codec();
         assert_eq!(
             codec
-                .encode(&o)
+                .encode(&o, &Value::const_null())
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -677,7 +677,7 @@ mod test {
         o.insert("facility", "cron")?;
         assert_eq!(
             codec
-                .encode(&o)
+                .encode(&o, &Value::const_null())
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -688,7 +688,7 @@ mod test {
         o.insert("structured_data", "sd")?;
         assert_eq!(
             codec
-                .encode(&o)
+                .encode(&o, &Value::const_null())
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -710,7 +710,7 @@ mod test {
             .decode(&mut vec, 0, Value::object())?
             .unwrap_or_default()
             .0;
-        let a = codec.encode(&decoded)?;
+        let a = codec.encode(&decoded, &Value::const_null())?;
         if let Some(expected) = expected {
             // compare against expected output
             assert_eq!(expected, std::str::from_utf8(&a)?);
@@ -738,7 +738,7 @@ mod test {
             .decode(&mut vec, 0, Value::object())?
             .unwrap_or_default()
             .0;
-        let a = codec.encode(&decoded)?;
+        let a = codec.encode(&decoded, &Value::const_null())?;
         assert_eq!(expected, std::str::from_utf8(&a)?);
         Ok(())
     }

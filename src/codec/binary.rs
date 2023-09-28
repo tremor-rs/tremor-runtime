@@ -40,7 +40,7 @@ impl Codec for Binary {
         Ok(Some((Value::Bytes(data.into()), meta)))
     }
 
-    fn encode(&mut self, data: &Value) -> Result<Vec<u8>> {
+    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if let Some(s) = data.as_str() {
             Ok(s.as_bytes().to_vec())
         } else if let Value::Bytes(b) = data {
@@ -64,7 +64,7 @@ mod test {
         let seed = Value::Bytes("snot badger".as_bytes().into());
 
         let mut codec = Binary {};
-        let mut as_raw = codec.encode(&seed)?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
         assert_eq!(as_raw, b"snot badger");
         let as_value = codec
             .decode(as_raw.as_mut_slice(), 0, Value::object())?
