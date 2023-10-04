@@ -345,7 +345,7 @@ where
 
             // At this point we defo have a healthy upload
             // accumulate event payload for the current upload
-            let serialized_data = serializer.serialize(value, meta, event.ingest_ns)?;
+            let serialized_data = serializer.serialize(value, meta, event.ingest_ns).await?;
             for item in serialized_data {
                 self.buffers.write(item);
                 // upload some data if necessary
@@ -467,7 +467,7 @@ where
                 };
                 self.current_upload = Some(upload);
             }
-            let serialized_data = serializer.serialize(value, meta, event.ingest_ns)?;
+            let serialized_data = serializer.serialize(value, meta, event.ingest_ns).await?;
             for item in serialized_data {
                 self.buffer.write(item);
                 while let Some(data) = self.buffer.read_current_block() {

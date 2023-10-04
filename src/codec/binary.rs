@@ -21,6 +21,7 @@ use super::prelude::*;
 #[derive(Clone)]
 pub struct Binary {}
 
+#[async_trait::async_trait]
 impl Codec for Binary {
     fn name(&self) -> &str {
         "bytes"
@@ -30,7 +31,7 @@ impl Codec for Binary {
         vec!["application/octet-stream"]
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -40,7 +41,7 @@ impl Codec for Binary {
         Ok(Some((Value::Bytes(data.into()), meta)))
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if let Some(s) = data.as_str() {
             Ok(s.as_bytes().to_vec())
         } else if let Value::Bytes(b) = data {
@@ -59,15 +60,16 @@ impl Codec for Binary {
 mod test {
     use super::*;
 
-    #[test]
-    fn test_binary_codec() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_binary_codec() -> Result<()> {
         let seed = Value::Bytes("snot badger".as_bytes().into());
 
         let mut codec = Binary {};
-        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
         assert_eq!(as_raw, b"snot badger");
         let as_value = codec
-            .decode(as_raw.as_mut_slice(), 0, Value::object())?
+            .decode(as_raw.as_mut_slice(), 0, Value::object())
+            .await?
             .unwrap_or_default();
         assert_eq!(as_value.0, seed);
 

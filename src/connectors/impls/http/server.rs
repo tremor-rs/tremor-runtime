@@ -627,13 +627,15 @@ impl SinkResponse {
         ingest_ns: u64,
         serializer: &mut EventSerializer,
     ) -> Result<()> {
-        let chunks = serializer.serialize_for_stream_with_codec(
-            value,
-            meta,
-            ingest_ns,
-            self.request_id.get(),
-            self.codec_overwrite.as_ref(),
-        )?;
+        let chunks = serializer
+            .serialize_for_stream_with_codec(
+                value,
+                meta,
+                ingest_ns,
+                self.request_id.get(),
+                self.codec_overwrite.as_ref(),
+            )
+            .await?;
         self.append_data(chunks).await
     }
 

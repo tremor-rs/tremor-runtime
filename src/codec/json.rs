@@ -80,7 +80,7 @@ pub(crate) fn from_config(config: Option<&Value>) -> Result<Box<dyn Codec>> {
         .into()),
     }
 }
-
+#[async_trait::async_trait]
 impl<S: Sorting> Codec for Json<S> {
     fn name(&self) -> &str {
         if S::SORTED {
@@ -95,7 +95,7 @@ impl<S: Sorting> Codec for Json<S> {
         // TODO: application/json-seq for one json doc per line?
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -114,7 +114,7 @@ impl<S: Sorting> Codec for Json<S> {
         .map(|v| Some((v, meta)))
         .map_err(Error::from)
     }
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if S::SORTED {
             Ok(sorted_serialize(data)?.into_bytes())
         } else {
@@ -135,8 +135,8 @@ mod test {
     use super::*;
     use tremor_value::literal;
 
-    #[test]
-    fn decode() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn decode() -> Result<()> {
         let mut codec: Json<Unsorted> = Json {
             input_buffer: AlignedBuf::with_capacity(0),
             string_buffer: Vec::new(),
@@ -146,7 +146,8 @@ mod test {
 
         let mut data = br#"{ "snot": "badger" }"#.to_vec();
         let output = codec
-            .decode(&mut data, 42, Value::object())?
+            .decode(&mut data, 42, Value::object())
+            .await?
             .expect("no data");
         assert_eq!(output.0, expected);
 
@@ -154,78 +155,84 @@ mod test {
 
         let mut data = br#"{ "snot": "badger" }"#.to_vec();
         let output = codec
-            .decode(&mut data, 42, Value::object())?
+            .decode(&mut data, 42, Value::object())
+            .await?
             .expect("no data");
         assert_eq!(output.0, expected);
 
         Ok(())
     }
 
-    #[test]
-    fn test_json_codec() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_json_codec() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
 
         let mut codec = Json::<Unsorted>::default();
 
-        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
         assert!(codec
-            .decode(as_raw.as_mut_slice(), 0, Value::object())?
+            .decode(as_raw.as_mut_slice(), 0, Value::object())
+            .await?
             .is_some());
 
         Ok(())
     }
-    #[test]
-    fn test_json_codec_sorted() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_json_codec_sorted() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
 
         let mut codec = Json::<Sorted>::default();
 
-        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
         assert!(codec
-            .decode(as_raw.as_mut_slice(), 0, Value::object())?
+            .decode(as_raw.as_mut_slice(), 0, Value::object())
+            .await?
             .is_some());
 
         Ok(())
     }
 
-    #[test]
-    fn duplicate_keys_unsorted() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn duplicate_keys_unsorted() -> Result<()> {
         let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
         let mut codec = Json::<Unsorted>::default();
         let res = codec
-            .decode(input.as_mut_slice(), 0, Value::object())?
+            .decode(input.as_mut_slice(), 0, Value::object())
+            .await?
             .expect("no data");
         assert_eq!(literal!({"key": 2}), res.0); // duplicate keys are deduplicated with last-key-wins strategy
 
-        let serialized = codec.encode(&res.0, &Value::const_null())?;
+        let serialized = codec.encode(&res.0, &Value::const_null()).await?;
         assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
 
         Ok(())
     }
 
-    #[test]
-    fn duplicate_keys_sorted() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn duplicate_keys_sorted() -> Result<()> {
         let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
         let mut codec = Json::<Sorted>::default();
         let res = codec
-            .decode(input.as_mut_slice(), 0, Value::object())?
+            .decode(input.as_mut_slice(), 0, Value::object())
+            .await?
             .expect("no data");
         assert_eq!(literal!({"key": 2}), res.0); // duplicate keys are deduplicated with last-key-wins strategy
-        let serialized = codec.encode(&res.0, &Value::const_null())?;
+        let serialized = codec.encode(&res.0, &Value::const_null()).await?;
         assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
 
         Ok(())
     }
 
-    #[test]
-    fn duplicate_keys_into_static() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn duplicate_keys_into_static() -> Result<()> {
         let mut input = r#"{"key": 1, "key":2}"#.as_bytes().to_vec();
         let mut codec = Json::<Unsorted>::default();
         let res = codec
-            .decode(input.as_mut_slice(), 0, Value::object())?
+            .decode(input.as_mut_slice(), 0, Value::object())
+            .await?
             .expect("no data");
         assert_eq!(literal!({"key": 2}), res.0); // duplicate keys are deduplicated with last-key-wins strategy
-        let serialized = codec.encode(&res.0, &Value::const_null())?;
+        let serialized = codec.encode(&res.0, &Value::const_null()).await?;
         assert_eq!(r#"{"key":2}"#.as_bytes(), serialized.as_slice());
 
         Ok(())

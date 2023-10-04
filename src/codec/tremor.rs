@@ -246,6 +246,7 @@ impl Tremor {
     }
 }
 
+#[async_trait::async_trait]
 impl Codec for Tremor {
     fn name(&self) -> &str {
         "tremor"
@@ -255,7 +256,7 @@ impl Codec for Tremor {
         vec!["application/octet-stream"]
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -264,7 +265,7 @@ impl Codec for Tremor {
         Tremor::decode(data).map(|v| Some((v, meta)))
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Self::encode(data, &mut self.buf)?;
         let res = self.buf.clone();
         self.buf.clear();
@@ -281,16 +282,16 @@ mod test {
     use super::*;
     use tremor_value::literal;
 
-    #[test]
-    fn test_null() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_null() -> Result<()> {
         let mut v: Vec<u8> = Vec::new();
         Tremor::encode(&Value::const_null(), &mut v)?;
         let val = Tremor::decode(&v)?;
         assert_eq!(val, Value::const_null());
         Ok(())
     }
-    #[test]
-    fn test_bool() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_bool() -> Result<()> {
         let mut v: Vec<u8> = Vec::new();
         Tremor::encode(&Value::const_true(), &mut v)?;
         let val = Tremor::decode(&v)?;
@@ -302,8 +303,8 @@ mod test {
         assert_eq!(val, Value::const_false());
         Ok(())
     }
-    #[test]
-    fn test_i64() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_i64() -> Result<()> {
         let mut v: Vec<u8> = Vec::new();
         let forty_two = Value::from(-42_i64);
         Tremor::encode(&forty_two, &mut v)?;
@@ -312,8 +313,8 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn test_u64() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_u64() -> Result<()> {
         let mut v: Vec<u8> = Vec::new();
         let forty_two = Value::from(42_u64);
         Tremor::encode(&forty_two, &mut v)?;
@@ -328,8 +329,8 @@ mod test {
 
         Ok(())
     }
-    #[test]
-    fn test_f64() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_f64() -> Result<()> {
         let mut v: Vec<u8> = Vec::new();
         let forty_two = Value::from(42_f64);
         Tremor::encode(&forty_two, &mut v)?;
@@ -337,8 +338,8 @@ mod test {
         assert_eq!(val, forty_two);
         Ok(())
     }
-    #[test]
-    fn test_string() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_string() -> Result<()> {
         let mut v: Vec<u8> = Vec::new();
         let forty_two = Value::from("42 🦡");
         Tremor::encode(&forty_two, &mut v)?;
@@ -346,8 +347,8 @@ mod test {
         assert_eq!(val, forty_two);
         Ok(())
     }
-    #[test]
-    fn test_bytes() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_bytes() -> Result<()> {
         let mut v: Vec<u8> = Vec::new();
         let forty_two_tree_four = Value::Bytes(vec![42_u8, 43, 44].into());
         Tremor::encode(&forty_two_tree_four, &mut v)?;
@@ -355,8 +356,8 @@ mod test {
         assert_eq!(val, forty_two_tree_four);
         Ok(())
     }
-    #[test]
-    fn test_array() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_array() -> Result<()> {
         let mut v: Vec<u8> = Vec::new();
         let forty_two_tree_four = Value::Array(vec![
             Value::from(42_u64),
@@ -368,8 +369,8 @@ mod test {
         assert_eq!(val, forty_two_tree_four);
         Ok(())
     }
-    #[test]
-    fn test_ojbect() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_ojbect() -> Result<()> {
         let mut v: Vec<u8> = Vec::new();
         let forty_two_tree_four = literal!({
             "a": 42,

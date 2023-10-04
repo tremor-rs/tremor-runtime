@@ -38,6 +38,7 @@ use crate::{
     errors::empty_error,
 };
 pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
+use futures::executor::block_on;
 use hashbrown::HashSet;
 use simd_json::Mutable;
 use std::collections::{btree_map::Entry, BTreeMap};
@@ -1262,10 +1263,12 @@ fn build_events(
             let mut res = Vec::with_capacity(processed.len());
             for (chunk, meta) in processed {
                 let line_value = EventPayload::try_new::<Option<Error>, _>(chunk, |mut_data| {
-                    match stream_state
-                        .codec
-                        .decode(mut_data, *ingest_ns, meta.clone())
-                    {
+                    // FIXME: making this function async is a pain I've failed so far
+                    match block_on(
+                        stream_state
+                            .codec
+                            .decode(mut_data, *ingest_ns, meta.clone()),
+                    ) {
                         Ok(None) => Err(None),
                         Err(e) => Err(Some(e)),
                         Ok(Some((decoded, meta))) => {
@@ -1328,10 +1331,12 @@ fn build_last_events(
             let mut res = Vec::with_capacity(processed.len());
             for (chunk, meta) in processed {
                 let line_value = EventPayload::try_new::<Option<Error>, _>(chunk, |mut_data| {
-                    match stream_state
-                        .codec
-                        .decode(mut_data, *ingest_ns, meta.clone())
-                    {
+                    // FIXME: making this function async is a pain I've failed so far
+                    match block_on(
+                        stream_state
+                            .codec
+                            .decode(mut_data, *ingest_ns, meta.clone()),
+                    ) {
                         Ok(None) => Err(None),
                         Err(e) => Err(Some(e)),
                         Ok(Some((decoded, meta))) => {

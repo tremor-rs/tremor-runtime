@@ -423,7 +423,9 @@ where
 
             for (stream_id, sender) in streams {
                 trace!("{ctx} Send to stream {stream_id}.");
-                let data = serializer.serialize_for_stream(value, meta, ingest_ns, *stream_id)?;
+                let data = serializer
+                    .serialize_for_stream(value, meta, ingest_ns, *stream_id)
+                    .await?;
                 let meta = if B::NEEDS_META {
                     Some(meta.clone_static())
                 } else {

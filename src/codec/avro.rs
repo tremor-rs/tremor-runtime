@@ -48,6 +48,7 @@ use apache_avro::{
     schema::Name, types::Value as AvroValue, Codec as Compression, Decimal, Duration, Reader,
     Schema, Writer,
 };
+use futures::executor::block_on;
 use serde::Deserialize;
 use value_trait::TryTypeError;
 
@@ -57,6 +58,7 @@ const AVRO_BUFFER_CAP: usize = 512;
 struct AvroRegistry {
     by_name: HashMap<Name, Schema>,
     by_id: HashMap<u32, Schema>,
+    registry_url: Option<String>,
 }
 
 impl AvroRegistry {
@@ -66,6 +68,27 @@ impl AvroRegistry {
     }
     fn get_schema_by_name(&self, name: &Name) -> Option<&Schema> {
         self.by_name.get(name)
+    }
+
+    async fn maybe_fetch_id(&mut self, id: u32) -> Result<()> {
+        if self.by_id.contains_key(&id) {
+            return Ok(());
+        }
+        if let Some(url) = self.registry_url.as_ref() {
+            let schema = String::from_utf8(
+                reqwest::get(&format!("{url}/schemas/ids/{id}"))
+                    .await?
+                    .bytes()
+                    .await?
+                    .to_vec(),
+            )?;
+            let schema = Schema::parse_str(&schema)?;
+            if let Some(name) = schema.name().cloned() {
+                self.by_name.insert(name, schema.clone());
+            }
+            self.by_id.insert(id, schema);
+        }
+        Ok(())
     }
 }
 
@@ -88,7 +111,11 @@ impl Avro {
             Some(c) => return Err(format!("Unknown compression codec: {c}").into()),
         };
 
-        let mut registry = AvroRegistry::default();
+        let mut registry = AvroRegistry {
+            registry_url: config.get_str("registry").map(ToString::to_string),
+            ..AvroRegistry::default()
+        };
+
         match config.get("schema") {
             Some(schema) => {
                 let schema = Schema::parse_str(&schema.encode())?;
@@ -266,6 +293,7 @@ impl Avro {
     }
 }
 
+#[async_trait::async_trait]
 impl Codec for Avro {
     fn name(&self) -> &str {
         "avro"
@@ -276,7 +304,7 @@ impl Codec for Avro {
         // TODO: application/json-seq for one json doc per line?
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -288,9 +316,18 @@ impl Codec for Avro {
         vals.next().map(|v| v.map(|v| (v, meta))).transpose()
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, meta: &Value) -> Result<Vec<u8>> {
+        let schema = if let Some(schema_id) = meta.get_u32("schema_id") {
+            // FIXME: How do we want to handle async tasks is codecs, or how do we want to hand this in general
+            block_on(self.registry.maybe_fetch_id(schema_id))?;
+            self.registry
+                .get_schema_by_id(schema_id)
+                .ok_or_else(|| format!("No schema found for id {schema_id} in registry"))?
+        } else {
+            &self.schema
+        };
         let mut writer = Writer::with_codec(
-            &self.schema,
+            schema,
             Vec::with_capacity(AVRO_BUFFER_CAP),
             self.compression,
         );
@@ -337,152 +374,152 @@ mod test {
             "compression": "none",
         })))
     }
-    #[test]
-    fn encode() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn encode() -> Result<()> {
         let mut codec = test_codec(test_schema())?;
         let decoded = literal!({ "long": 27, "string": "string" });
-        let encoded = dbg!(codec.encode(&decoded, &Value::const_null()));
+        let encoded = dbg!(codec.encode(&decoded, &Value::const_null()).await);
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn null() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn null() -> Result<()> {
         let mut codec = test_codec(literal!({"type": "null"}))?;
         let decoded = literal!(());
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn boolean() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn boolean() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"boolean"}))?;
         let decoded = literal!(true);
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn int() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn int() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"int"}))?;
         let decoded = literal!(42i32);
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn long() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn long() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"long"}))?;
         let decoded = literal!(42);
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn float() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn float() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"float"}))?;
         let decoded = literal!(42f32);
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn double() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn double() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"double"}))?;
         let decoded = literal!(42f64);
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn bytes() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bytes() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"bytes"}))?;
         let decoded = Value::Bytes(vec![1, 2, 3].into());
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn string() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn string() -> Result<()> {
         let mut codec = test_codec(literal!({"type":"string"}))?;
         let decoded = literal!("foo");
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn record() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn record() -> Result<()> {
         let mut codec = test_codec(literal!({
             "type":"record",
             "name":"test",
             "fields": [{"name": "one", "type": "int"}]
         }))?;
         let decoded = literal!({"one": 1});
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn _enum() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn _enum() -> Result<()> {
         let mut codec = test_codec(literal!({
             "type":"enum",
             "name":"test",
             "symbols": ["SNOT", "BADGER"]
         }))?;
         let decoded = literal!("SNOT");
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn array() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn array() -> Result<()> {
         let mut codec = test_codec(literal!({
             "type":"array",
             "items":"string"
         }))?;
         let decoded = literal!(["SNOT", "BADGER"]);
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn map() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn map() -> Result<()> {
         let mut codec = test_codec(literal!({
             "type":"map",
             "values":"string"
         }))?;
         let decoded = literal!({"SNOT": "BADGER"});
-        let encoded = codec.encode(&decoded, &Value::const_null());
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
     }
 
-    #[test]
-    fn decode() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn decode() -> Result<()> {
         let mut codec = test_codec(test_schema())?;
 
         let expected = literal!({
@@ -505,14 +542,15 @@ mod test {
         let mut encoded = writer.into_inner()?;
 
         let decoded = codec
-            .decode(encoded.as_mut_slice(), 0, Value::object())?
+            .decode(encoded.as_mut_slice(), 0, Value::object())
+            .await?
             .expect("no data");
 
         assert_eq!(decoded.0, expected);
         Ok(())
     }
-    #[test]
-    fn round_robin() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn round_robin() -> Result<()> {
         let mut codec = test_codec(literal!(
             {
                 "type": "record",
@@ -555,10 +593,11 @@ mod test {
             "array": ["SNOT", "BADGER"],
             "map": {"SNOT": "BADGER"}
         });
-        let mut encoded = codec.encode(&decoded, &Value::const_null())?;
+        let mut encoded = codec.encode(&decoded, &Value::const_null()).await?;
 
         let redecoded = codec
-            .decode(&mut encoded, 0, Value::object())?
+            .decode(&mut encoded, 0, Value::object())
+            .await?
             .expect("no data");
         assert_eq!(decoded, redecoded.0);
 

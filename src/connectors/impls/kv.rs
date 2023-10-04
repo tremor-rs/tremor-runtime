@@ -374,13 +374,14 @@ struct KvSink {
 }
 
 impl KvSink {
-    fn decode(&mut self, mut v: Option<IVec>, ingest_ns: u64) -> Result<Value<'static>> {
+    async fn decode(&mut self, mut v: Option<IVec>, ingest_ns: u64) -> Result<Value<'static>> {
         if let Some(v) = v.as_mut() {
             let data: &mut [u8] = v;
             // TODO: We could optimize this
             Ok(self
                 .codec
-                .decode(data, ingest_ns, Value::const_null())?
+                .decode(data, ingest_ns, Value::const_null())
+                .await?
                 .unwrap_or_default()
                 .0
                 .into_static())
@@ -388,47 +389,56 @@ impl KvSink {
             Ok(Value::const_null())
         }
     }
-    fn encode(&mut self, v: &Value) -> Result<Vec<u8>> {
-        self.codec.encode(v, &Value::const_null())
+    async fn encode<'v>(&mut self, v: &Value<'v>) -> Result<Vec<u8>> {
+        self.codec.encode(v, &Value::const_null()).await
     }
-    fn execute(
+    async fn execute<'v>(
         &mut self,
-        cmd: Command,
+        cmd: Command<'v>,
         op_name: &'static str,
-        value: &Value,
+        value: &Value<'v>,
         ingest_ns: u64,
     ) -> Result<Vec<(Value<'static>, Value<'static>)>> {
         match cmd {
             Command::Get { key } => self
                 .decode(self.db.get(&key)?, ingest_ns)
+                .await
                 .map(|v| oks(op_name, key, v)),
             Command::Put { key } => {
                 // return the new value
-                let value_vec = self.encode(value)?;
+                let value_vec = self.encode(value).await?;
                 let v = self.db.insert(&key, value_vec)?;
                 self.decode(v, ingest_ns)
+                    .await
                     .map(|_old_value| oks(op_name, key, value.clone_static()))
             }
             Command::Swap { key } => {
                 // return the old value
-                let value = self.encode(value)?;
+                let value = self.encode(value).await?;
                 let v = self.db.insert(&key, value)?;
                 self.decode(v, ingest_ns)
+                    .await
                     .map(|old_value| oks(op_name, key, old_value))
             }
             Command::Delete { key } => self
                 .decode(self.db.remove(&key)?, ingest_ns)
+                .await
                 .map(|v| oks(op_name, key, v)),
             Command::Cas { key, old } => {
-                let vec = self.encode(value)?;
-                let old = old.map(|v| self.encode(v)).transpose()?;
+                let vec = self.encode(value).await?;
+                let old = if let Some(v) = old {
+                    Some(self.encode(v).await?)
+                } else {
+                    None
+                };
+
                 if let Err(CompareAndSwapError { current, proposed }) =
                     self.db.compare_and_swap(&key, old, Some(vec))?
                 {
                     Err(format!(
                         "CAS error: expected {} but found {}.",
-                        self.decode(proposed, ingest_ns)?,
-                        self.decode(current, ingest_ns)?,
+                        self.decode(proposed, ingest_ns).await?,
+                        self.decode(current, ingest_ns).await?,
                     )
                     .into())
                 } else {
@@ -445,7 +455,11 @@ impl KvSink {
                     let (key, e) = e?;
                     let key: &[u8] = &key;
 
-                    res.push(ok(op_name, key.to_vec(), self.decode(Some(e), ingest_ns)?));
+                    res.push(ok(
+                        op_name,
+                        key.to_vec(),
+                        self.decode(Some(e), ingest_ns).await?,
+                    ));
                 }
                 Ok(res)
             }
@@ -474,6 +488,7 @@ impl Sink for KvSink {
                     let name = cmd.op_name();
                     let key = cmd.key();
                     self.execute(cmd, name, v, ingest_ns)
+                        .await
                         .map_err(|e| (Some(name), key, e))
                 }
                 Err(e) => {

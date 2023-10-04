@@ -41,6 +41,7 @@ mod prelude {
     pub use tremor_value::{Object, Value};
 }
 
+#[async_trait::async_trait]
 /// The codec trait, to encode and decode data
 pub trait Codec: Send + Sync {
     /// The canonical name for this codec
@@ -62,7 +63,7 @@ pub trait Codec: Send + Sync {
     ///
     /// # Errors
     ///  * if we can't decode the data
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
@@ -72,7 +73,7 @@ pub trait Codec: Send + Sync {
     ///
     /// # Errors
     ///  * If the encoding fails
-    fn encode(&mut self, data: &Value, meta: &Value) -> Result<Vec<u8>>;
+    async fn encode(&mut self, data: &Value, meta: &Value) -> Result<Vec<u8>>;
 
     /// special clone method for getting clone functionality
     /// into a this trait referenced as trait object

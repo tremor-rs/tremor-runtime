@@ -25,6 +25,7 @@ use rmp_serde as rmps;
 #[derive(Clone)]
 pub struct MsgPack {}
 
+#[async_trait::async_trait]
 impl Codec for MsgPack {
     fn name(&self) -> &str {
         "msgpack"
@@ -38,7 +39,7 @@ impl Codec for MsgPack {
         ]
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -49,7 +50,7 @@ impl Codec for MsgPack {
             .map_err(Error::from)
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Ok(rmps::to_vec(&data)?)
     }
 
@@ -63,14 +64,15 @@ mod test {
     use super::*;
     use tremor_value::literal;
 
-    #[test]
-    fn test_msgpack_codec() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_msgpack_codec() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
 
         let mut codec = MsgPack {};
-        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
         assert!(codec
-            .decode(as_raw.as_mut_slice(), 0, Value::object())?
+            .decode(as_raw.as_mut_slice(), 0, Value::object())
+            .await?
             .is_some());
 
         Ok(())

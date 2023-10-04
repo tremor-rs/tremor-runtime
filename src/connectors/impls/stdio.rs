@@ -196,7 +196,7 @@ impl Sink for StdStreamSink {
         _start: u64,
     ) -> Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {
-            let data = serializer.serialize(value, meta, event.ingest_ns)?;
+            let data = serializer.serialize(value, meta, event.ingest_ns).await?;
             for chunk in data {
                 match input {
                     "in" | "stdout" => self.stdout.write_all(&chunk).await?,

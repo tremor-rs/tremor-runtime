@@ -43,6 +43,7 @@ use beef::Cow;
 #[derive(Clone)]
 pub struct Csv {}
 
+#[async_trait::async_trait]
 impl Codec for Csv {
     fn name(&self) -> &str {
         "csv"
@@ -52,7 +53,7 @@ impl Codec for Csv {
         vec!["text/csv"]
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -76,7 +77,7 @@ impl Codec for Csv {
         Ok(Some((Value::Array(fields), meta)))
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if let Some(values) = data.as_array() {
             let fields: Vec<String> = values.iter().map(ToString::to_string).collect();
 
@@ -108,24 +109,25 @@ impl Codec for Csv {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_can_decode_csv() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_can_decode_csv() -> Result<()> {
         let mut codec = Csv {};
         let mut data = b"a,b,c,123".to_vec();
         let result = codec
-            .decode(&mut data, 0, Value::object())?
+            .decode(&mut data, 0, Value::object())
+            .await?
             .expect("no data");
 
         assert_eq!(literal!(["a", "b", "c", "123"]), result.0);
         Ok(())
     }
 
-    #[test]
-    fn test_can_encode_csv() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_can_encode_csv() -> Result<()> {
         let mut codec = Csv {};
         let data = literal!(["a", "b", "c", 123]);
 
-        let result = codec.encode(&data, &Value::const_null())?;
+        let result = codec.encode(&data, &Value::const_null()).await?;
 
         assert_eq!(b"a,b,c,123".to_vec(), result);
         Ok(())

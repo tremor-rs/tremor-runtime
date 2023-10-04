@@ -197,12 +197,13 @@ impl BInflux {
     }
 }
 
+#[async_trait::async_trait]
 impl Codec for BInflux {
     fn name(&self) -> &str {
         "binflux"
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -211,7 +212,7 @@ impl Codec for BInflux {
         Self::decode(data).map(|v| Some((v, meta)))
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Self::encode(data, &mut self.buf)?;
         let v = self.buf.clone();
         self.buf.clear();
@@ -226,12 +227,13 @@ impl Codec for BInflux {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[test]
-    fn errors() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn errors() {
         let mut o = Value::object();
         let mut c = BInflux::default();
         assert_eq!(
             c.encode(&o, &Value::const_null())
+                .await
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -241,6 +243,7 @@ mod test {
         o.try_insert("measurement", "m");
         assert_eq!(
             c.encode(&o, &Value::const_null())
+                .await
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -253,6 +256,7 @@ mod test {
         o.try_insert("fields", fields);
         assert_eq!(
             c.encode(&o, &Value::const_null())
+                .await
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
