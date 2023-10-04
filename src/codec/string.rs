@@ -23,6 +23,7 @@ use super::prelude::*;
 #[derive(Clone)]
 pub struct String {}
 
+#[async_trait::async_trait]
 impl Codec for String {
     fn name(&self) -> &str {
         "string"
@@ -32,7 +33,7 @@ impl Codec for String {
         vec!["text/plain", "text/html"]
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -44,7 +45,7 @@ impl Codec for String {
             .map_err(Error::from)
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if let Some(s) = data.as_str() {
             Ok(s.as_bytes().to_vec())
         } else {
@@ -62,24 +63,26 @@ mod test {
     use super::*;
     use tremor_value::literal;
 
-    #[test]
-    fn test_string_codec() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_string_codec() -> Result<()> {
         let seed = literal!("snot badger");
 
         let mut codec = String {};
-        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
-        let as_json = codec.decode(as_raw.as_mut_slice(), 0, Value::object());
+        let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
+        let as_json = codec
+            .decode(as_raw.as_mut_slice(), 0, Value::object())
+            .await;
         assert!(as_json.is_ok());
 
         Ok(())
     }
 
-    #[test]
-    fn test_string_codec2() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_string_codec2() -> Result<()> {
         let seed = literal!(["snot badger"]);
 
         let mut codec = String {};
-        let as_raw = codec.encode(&seed, &Value::const_null())?;
+        let as_raw = codec.encode(&seed, &Value::const_null()).await?;
         assert_eq!(as_raw, b"[\"snot badger\"]");
 
         Ok(())

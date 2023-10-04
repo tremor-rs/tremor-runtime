@@ -21,6 +21,7 @@ use super::prelude::*;
 #[derive(Clone)]
 pub struct Yaml {}
 
+#[async_trait::async_trait]
 impl Codec for Yaml {
     fn name(&self) -> &str {
         "yaml"
@@ -30,7 +31,7 @@ impl Codec for Yaml {
         vec!["application/yaml"]
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -41,7 +42,7 @@ impl Codec for Yaml {
             .map(|v| Some((v, meta)))
             .map_err(Error::from)
     }
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Ok(serde_yaml::to_string(data)?.into_bytes())
     }
 
@@ -55,14 +56,15 @@ mod test {
     use super::*;
     use tremor_value::literal;
 
-    #[test]
-    fn test_yaml_codec() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_yaml_codec() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
 
         let mut codec = Yaml {};
-        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
+        let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
         let as_json = codec
-            .decode(as_raw.as_mut_slice(), 0, Value::object())?
+            .decode(as_raw.as_mut_slice(), 0, Value::object())
+            .await?
             .expect("no data");
 
         assert_eq!(seed, as_json.0);

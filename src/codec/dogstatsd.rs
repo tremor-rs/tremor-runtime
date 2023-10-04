@@ -112,12 +112,13 @@ pub struct DogStatsD {
     buf: Vec<u8>,
 }
 
+#[async_trait::async_trait]
 impl Codec for DogStatsD {
     fn name(&self) -> &str {
         "dogstatsd"
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
@@ -126,7 +127,7 @@ impl Codec for DogStatsD {
         decode(data, ingest_ns).map(|v| Some((v, meta)))
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         encode(data, &mut self.buf)?;
         let v = self.buf.clone();
         self.buf.clear();

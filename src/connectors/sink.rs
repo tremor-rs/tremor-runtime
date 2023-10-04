@@ -504,28 +504,30 @@ impl EventSerializer {
     ///
     /// # Errors
     ///   * if serialization failed (codec or postprocessors)
-    pub(crate) fn serialize(
+    pub(crate) async fn serialize<'v>(
         &mut self,
-        value: &Value,
-        meta: &Value,
+        value: &Value<'v>,
+        meta: &Value<'v>,
         ingest_ns: u64,
     ) -> Result<Vec<Vec<u8>>> {
         self.serialize_for_stream(value, meta, ingest_ns, DEFAULT_STREAM_ID)
+            .await
     }
 
     /// serialize event for a certain stream
     ///
     /// # Errors
     ///   * if serialization failed (codec or postprocessors)
-    pub(crate) fn serialize_for_stream(
+    pub(crate) async fn serialize_for_stream<'v>(
         &mut self,
-        value: &Value,
-        meta: &Value,
+        value: &Value<'v>,
+        meta: &Value<'v>,
 
         ingest_ns: u64,
         stream_id: u64,
     ) -> Result<Vec<Vec<u8>>> {
         self.serialize_for_stream_with_codec(value, meta, ingest_ns, stream_id, None)
+            .await
     }
 
     /// Serialize an event for a certain stream with the possibility to overwrite the configured codec.
@@ -535,10 +537,10 @@ impl EventSerializer {
     ///
     /// # Errors
     ///   * if serialization fails (codec or postprocessors)
-    pub(crate) fn serialize_for_stream_with_codec(
+    pub(crate) async fn serialize_for_stream_with_codec<'v>(
         &mut self,
-        value: &Value,
-        meta: &Value,
+        value: &Value<'v>,
+        meta: &Value<'v>,
         ingest_ns: u64,
         stream_id: u64,
         codec_overwrite: Option<&NameWithConfig>,
@@ -548,14 +550,19 @@ impl EventSerializer {
             postprocess(
                 &mut self.postprocessors,
                 ingest_ns,
-                self.codec.encode(value, meta)?,
+                self.codec.encode(value, meta).await?,
                 &self.alias,
             )
         } else {
             match self.streams.entry(stream_id) {
                 Entry::Occupied(mut entry) => {
                     let (codec, pps) = entry.get_mut();
-                    postprocess(pps, ingest_ns, codec.encode(value, meta)?, &self.alias)
+                    postprocess(
+                        pps,
+                        ingest_ns,
+                        codec.encode(value, meta).await?,
+                        &self.alias,
+                    )
                 }
                 Entry::Vacant(entry) => {
                     // codec overwrite only considered for new streams
@@ -566,7 +573,7 @@ impl EventSerializer {
                     let pps = make_postprocessors(self.postprocessor_configs.as_slice())?;
                     // insert data for a new stream
                     let (c, pps2) = entry.insert((codec, pps));
-                    postprocess(pps2, ingest_ns, c.encode(value, meta)?, &self.alias)
+                    postprocess(pps2, ingest_ns, c.encode(value, meta).await?, &self.alias)
                 }
             }
         }

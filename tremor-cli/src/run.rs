@@ -16,6 +16,7 @@ use crate::cli::Run;
 use crate::env;
 use crate::errors::Result;
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
+use futures::executor::block_on;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use tremor_common::{
@@ -89,7 +90,7 @@ impl Ingress {
         })
     }
 
-    fn process<T>(
+    async fn process<T>(
         &mut self,
         runnable: &mut T,
         mut id: u64,
@@ -112,7 +113,7 @@ impl Ingress {
                         Value::object(),
                     )?;
                     for (mut data, meta) in x {
-                        let event = match self.codec.decode(data.as_mut_slice(), at, meta) {
+                        let event = match self.codec.decode(data.as_mut_slice(), at, meta).await {
                             Ok(Some((data, _))) => data,
                             Ok(None) => continue,
                             Err(e) => return Err(e.into()),
@@ -178,7 +179,7 @@ impl Egress {
         })
     }
 
-    fn process(&mut self, _src: &str, event: &Value, ret: Return) -> Result<()> {
+    async fn process<'v>(&mut self, _src: &str, event: &Value<'v>, ret: Return<'v>) -> Result<()> {
         match ret {
             Return::Drop => Ok(()),
             Return::Emit { value, port } => {
@@ -196,7 +197,7 @@ impl Egress {
                         highlight(self.is_pretty, &value)?;
                     }
 
-                    let encoded = self.codec.encode(&value, &Value::const_null());
+                    let encoded = self.codec.encode(&value, &Value::const_null()).await;
 
                     let ppd = self
                         .postprocessor
@@ -224,7 +225,7 @@ impl Egress {
 }
 
 impl Run {
-    fn run_tremor_source(&self) -> Result<()> {
+    async fn run_tremor_source(&self) -> Result<()> {
         let raw = slurp_string(&self.script);
         if let Err(e) = raw {
             eprintln!("Error processing file {}: {e}", self.script);
@@ -245,51 +246,53 @@ impl Run {
                 let mut egress = Egress::from_args(self)?;
                 let id = 0_u64;
                 let src = self.script.clone();
-                ingress.process(
-                    &mut script,
-                    id,
-                    &mut egress,
-                    &move |runnable, _id, egress, state, at, event| {
-                        let mut global_map = Value::object();
-                        let mut event = event.clone_static();
-                        match runnable.run(
-                            &EventContext::new(at, None),
-                            AggrType::Tick,
-                            &mut event,
-                            state,
-                            &mut global_map,
-                        ) {
-                            Ok(r) => egress.process(&src, &event, r),
-                            Err(e) => {
-                                if let (Some(r), _) = e.context() {
-                                    let mut inner = TermHighlighter::stderr();
-                                    let tokens: Vec<_> =
-                                        Lexer::new(raw, aid).tokenize_until_err().collect();
+                ingress
+                    .process(
+                        &mut script,
+                        id,
+                        &mut egress,
+                        &move |runnable, _id, egress, state, at, event| {
+                            let mut global_map = Value::object();
+                            let mut event = event.clone_static();
+                            match runnable.run(
+                                &EventContext::new(at, None),
+                                AggrType::Tick,
+                                &mut event,
+                                state,
+                                &mut global_map,
+                            ) {
+                                Ok(r) => block_on(egress.process(&src, &event, r)),
+                                Err(e) => {
+                                    if let (Some(r), _) = e.context() {
+                                        let mut inner = TermHighlighter::stderr();
+                                        let tokens: Vec<_> =
+                                            Lexer::new(raw, aid).tokenize_until_err().collect();
 
-                                    if let Err(highlight_error) = inner.highlight_error(
-                                        Some(&src),
-                                        &tokens,
-                                        "",
-                                        true,
-                                        Some(r),
-                                        Some(HighlighterError::from(&e)),
-                                    ) {
-                                        eprintln!(
+                                        if let Err(highlight_error) = inner.highlight_error(
+                                            Some(&src),
+                                            &tokens,
+                                            "",
+                                            true,
+                                            Some(r),
+                                            Some(HighlighterError::from(&e)),
+                                        ) {
+                                            eprintln!(
                                             "Error during error highlighting: {highlight_error}",
                                         );
-                                        Err(highlight_error.into())
+                                            Err(highlight_error.into())
+                                        } else {
+                                            inner.finalize()?;
+                                            Ok(()) // error has already been displayed
+                                        }
                                     } else {
-                                        inner.finalize()?;
-                                        Ok(()) // error has already been displayed
+                                        eprintln!("Error processing event: {e}");
+                                        Err(e.into())
                                     }
-                                } else {
-                                    eprintln!("Error processing event: {e}");
-                                    Err(e.into())
                                 }
                             }
-                        }
-                    },
-                )?;
+                        },
+                    )
+                    .await?;
 
                 Ok(())
             }
@@ -304,7 +307,7 @@ impl Run {
         }
     }
 
-    fn run_trickle_source(&self) -> Result<()> {
+    async fn run_trickle_source(&self) -> Result<()> {
         let raw = slurp_string(&self.script);
         if let Err(e) = raw {
             eprintln!("Error processing file {}: {e}", self.script);
@@ -326,9 +329,10 @@ impl Run {
             }
         };
         self.run_trickle_query(runnable, self.script.to_string(), &mut h)
+            .await
     }
 
-    fn run_trickle_query(
+    async fn run_trickle_query(
         &self,
         runnable: Query,
         file: String,
@@ -344,72 +348,77 @@ impl Run {
         let mut pipeline = runnable.to_executable_graph(&mut idgen)?;
         let id = 0_u64;
 
-        ingress.process(
-            &mut pipeline,
-            id,
-            &mut egress,
-            &move |runnable, id, egress, _state, at, event| {
-                let value = EventPayload::new(vec![], |_| ValueAndMeta::from(event.clone_static()));
+        ingress
+            .process(
+                &mut pipeline,
+                id,
+                &mut egress,
+                &move |runnable, id, egress, _state, at, event| {
+                    let value =
+                        EventPayload::new(vec![], |_| ValueAndMeta::from(event.clone_static()));
 
-                let mut continuation = vec![];
+                    let mut continuation = vec![];
 
-                if let Err(e) = runnable.enqueue(
-                    IN,
-                    Event {
-                        id: EventId::from_id(0, 0, *id),
-                        data: value.clone(),
-                        ingest_ns: at,
-                        ..Event::default()
-                    },
-                    &mut continuation,
-                ) {
-                    match e.0 {
-                        tremor_pipeline::errors::ErrorKind::Script(script_kind) => {
-                            let script_error: tremor_script::errors::Error = script_kind.into();
-                            if let (Some(r), _) = script_error.context() {
-                                let mut inner = TermHighlighter::stderr();
-                                let aid = script_error.aid();
-                                let input = Arena::io_get(aid)?;
+                    if let Err(e) = runnable.enqueue(
+                        IN,
+                        Event {
+                            id: EventId::from_id(0, 0, *id),
+                            data: value.clone(),
+                            ingest_ns: at,
+                            ..Event::default()
+                        },
+                        &mut continuation,
+                    ) {
+                        match e.0 {
+                            tremor_pipeline::errors::ErrorKind::Script(script_kind) => {
+                                let script_error: tremor_script::errors::Error = script_kind.into();
+                                if let (Some(r), _) = script_error.context() {
+                                    let mut inner = TermHighlighter::stderr();
+                                    let aid = script_error.aid();
+                                    let input = Arena::io_get(aid)?;
 
-                                let tokens: Vec<_> =
-                                    Lexer::new(input, aid).tokenize_until_err().collect();
+                                    let tokens: Vec<_> =
+                                        Lexer::new(input, aid).tokenize_until_err().collect();
 
-                                if let Err(highlight_error) = inner.highlight_error(
-                                    Some(&file),
-                                    &tokens,
-                                    "",
-                                    true,
-                                    Some(r),
-                                    Some(HighlighterError::from(&script_error)),
-                                ) {
-                                    eprintln!("Error during error highlighting: {highlight_error}");
-                                    return Err(highlight_error.into());
+                                    if let Err(highlight_error) = inner.highlight_error(
+                                        Some(&file),
+                                        &tokens,
+                                        "",
+                                        true,
+                                        Some(r),
+                                        Some(HighlighterError::from(&script_error)),
+                                    ) {
+                                        eprintln!(
+                                            "Error during error highlighting: {highlight_error}"
+                                        );
+                                        return Err(highlight_error.into());
+                                    }
+                                    inner.finalize()?;
+                                    return Ok(());
                                 }
-                                inner.finalize()?;
-                                return Ok(());
+                            }
+                            _ => {
+                                return Err(e.into());
                             }
                         }
-                        _ => {
-                            return Err(e.into());
-                        }
                     }
-                }
-                *id += 1;
+                    *id += 1;
 
-                for (port, rvalue) in continuation.drain(..) {
-                    egress.process(
-                        &simd_json::to_string_pretty(&value.suffix().value())?,
-                        &event,
-                        Return::Emit {
-                            value: rvalue.data.suffix().value().clone_static(),
-                            port: Some(port),
-                        },
-                    )?;
-                }
+                    for (port, rvalue) in continuation.drain(..) {
+                        block_on(egress.process(
+                            &simd_json::to_string_pretty(&value.suffix().value())?,
+                            &event,
+                            Return::Emit {
+                                value: rvalue.data.suffix().value().clone_static(),
+                                port: Some(port),
+                            },
+                        ))?;
+                    }
 
-                Ok(())
-            },
-        )?;
+                    Ok(())
+                },
+            )
+            .await?;
 
         h.finalize()?;
 
@@ -429,8 +438,8 @@ impl Run {
     pub(crate) async fn run(&self) -> Result<()> {
         match get_source_kind(&self.script) {
             SourceKind::Troy => self.run_troy_source().await,
-            SourceKind::Trickle => self.run_trickle_source(),
-            SourceKind::Tremor => self.run_tremor_source(),
+            SourceKind::Trickle => self.run_trickle_source().await,
+            SourceKind::Tremor => self.run_tremor_source().await,
             SourceKind::Json | SourceKind::Unsupported(_) => {
                 Err(format!("Error: Unable to execute source: {}", &self.script).into())
             }

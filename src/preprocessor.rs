@@ -16,6 +16,7 @@ mod base64;
 mod decompress;
 pub(crate) mod gelf_chunking;
 mod ingest_ns;
+mod kafka_schema_registry_prefix;
 mod length_prefixed;
 mod remove_empty;
 pub(crate) mod separate;
@@ -82,6 +83,9 @@ pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preproc
         "gelf-chunking" => Ok(Box::<gelf_chunking::GelfChunking>::default()),
         "ingest-ns" => Ok(Box::<ingest_ns::ExtractIngestTs>::default()),
         "length-prefixed" => Ok(Box::<length_prefixed::LengthPrefixed>::default()),
+        "schema-refistry" => {
+            Ok(Box::<kafka_schema_registry_prefix::SchemaRegistryPrefix>::default())
+        }
         "textual-length-prefixed" => {
             Ok(Box::<textual_length_prefixed::TextualLengthPrefixed>::default())
         }

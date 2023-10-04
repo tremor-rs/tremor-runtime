@@ -19,12 +19,13 @@ use super::prelude::*;
 #[derive(Clone)]
 pub struct Null {}
 
+#[async_trait::async_trait]
 impl Codec for Null {
     fn name(&self) -> &str {
         "null"
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         _data: &'input mut [u8],
         _ingest_ns: u64,
@@ -32,7 +33,7 @@ impl Codec for Null {
     ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         Ok(Some((Value::const_null(), meta)))
     }
-    fn encode(&mut self, _data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, _data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         Ok(vec![])
     }
 
@@ -46,14 +47,16 @@ mod test {
     use super::*;
     use simd_json::OwnedValue;
 
-    #[test]
-    fn test_null_codec() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_null_codec() -> Result<()> {
         let seed: OwnedValue = OwnedValue::null();
         let seed: Value = seed.into();
 
         let mut codec = Null {};
-        let mut as_raw = codec.encode(&seed, &Value::const_null())?;
-        let as_json = codec.decode(as_raw.as_mut_slice(), 0, Value::object());
+        let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
+        let as_json = codec
+            .decode(as_raw.as_mut_slice(), 0, Value::object())
+            .await;
         assert!(as_json.is_ok());
         as_json?;
 

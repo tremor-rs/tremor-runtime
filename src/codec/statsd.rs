@@ -60,12 +60,13 @@ pub struct StatsD {
     buf: Vec<u8>,
 }
 
+#[async_trait::async_trait]
 impl Codec for StatsD {
     fn name(&self) -> &str {
         "statsd"
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
@@ -74,7 +75,7 @@ impl Codec for StatsD {
         decode(data, ingest_ns).map(|v| Some((v, meta)))
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         encode(data, &mut self.buf)?;
         let v = self.buf.clone();
         self.buf.clear();
@@ -218,8 +219,8 @@ mod test {
     use tremor_value::literal;
 
     // gorets:1|c
-    #[test]
-    fn gorets() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn gorets() {
         let data = b"gorets:1|c";
         let parsed = decode(data, 0).expect("failed to decode");
         let expected = literal!({
@@ -234,8 +235,8 @@ mod test {
         assert_eq!(encoded.as_slice(), data);
     }
     // glork:320|ms
-    #[test]
-    fn glork() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn glork() {
         let data = b"glork:320|ms";
         let parsed = decode(data, 0).expect("failed to decode");
         let expected = literal!({
@@ -251,8 +252,8 @@ mod test {
     }
 
     // gaugor:333|g
-    #[test]
-    fn gaugor() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn gaugor() {
         let data = b"gaugor:333|g";
         let parsed = decode(data, 0).expect("failed to decode");
         let expected = literal!({
@@ -268,8 +269,8 @@ mod test {
     }
 
     // uniques:765|s
-    #[test]
-    fn uniques() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn uniques() {
         let data = b"uniques:765|s";
         let parsed = decode(data, 0).expect("failed to decode");
         let expected = literal!({
@@ -284,13 +285,14 @@ mod test {
         assert_eq!(encoded, data);
     }
 
-    #[test]
-    fn horst() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn horst() {
         let mut c = StatsD::default();
         let mut data = b"horst:42.23|h".to_vec();
 
         let parsed = c
             .decode(data.as_mut_slice(), 0, Value::object())
+            .await
             .ok()
             .and_then(identity)
             .unwrap_or_default();
@@ -303,12 +305,13 @@ mod test {
         assert_eq!(parsed.0, expected);
         let encoded = c
             .encode(&parsed.0, &Value::const_null())
+            .await
             .expect("failed to encode");
         assert_eq!(encoded, b"horst:42.23|h");
     }
 
-    #[test]
-    fn sam() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn sam() {
         let data = b"sam:7|c|@0.1";
         let parsed = decode(data, 0).expect("failed to decode");
         let expected = literal!({
@@ -324,8 +327,8 @@ mod test {
         assert_eq!(encoded, data);
     }
 
-    #[test]
-    fn addy() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn addy() {
         let data = b"addy:+123|g";
         let parsed = decode(data, 0).expect("failed to decode");
         let expected = literal!({
@@ -341,8 +344,8 @@ mod test {
         assert_eq!(encoded, data);
     }
 
-    #[test]
-    fn subastian() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn subastian() {
         let data = b"subastian:-234|g";
         let parsed = decode(data, 0).expect("failed to decode");
         let expected = literal!({
@@ -358,8 +361,8 @@ mod test {
         assert_eq!(encoded, data);
     }
 
-    #[test]
-    fn bench() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bench() {
         let data = b"foo:1620649445.3351967|h";
         let m = decode(data, 0).expect("failed to decode");
         let mut res = Vec::new();

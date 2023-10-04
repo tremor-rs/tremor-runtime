@@ -302,7 +302,7 @@ impl Sink for TcpClientSink {
     ) -> Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
         for (value, meta) in event.value_meta_iter() {
-            let data = serializer.serialize(value, meta, ingest_ns)?;
+            let data = serializer.serialize(value, meta, ingest_ns).await?;
             if let Err(e) = self.write(data).await {
                 error!("{ctx} Error sending data: {e}. Initiating Reconnect...",);
                 // TODO: figure upon which errors to actually reconnect

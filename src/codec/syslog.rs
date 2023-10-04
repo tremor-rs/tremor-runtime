@@ -250,6 +250,7 @@ where
     }
 }
 
+#[async_trait::async_trait]
 impl<N> Codec for Syslog<N>
 where
     N: Now + 'static,
@@ -258,7 +259,7 @@ where
         "syslog"
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -330,7 +331,7 @@ where
         Ok(Some((decoded, meta)))
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         let protocol = match (data.get_str("protocol"), data.get_u32("protocol_version")) {
             (Some("RFC3164"), _) => Ok(Protocol::RFC3164),
             (Some("RFC5424"), Some(version)) => Ok(Protocol::RFC5424(version)),
@@ -420,6 +421,7 @@ fn compose_pri(facility: SyslogFacility, severity: SyslogSeverity) -> i32 {
 mod test {
     use super::*;
     use chrono::LocalResult;
+    use futures::executor::block_on;
     use test_case::test_case;
     use tremor_value::literal;
 
@@ -439,30 +441,33 @@ mod test {
         Syslog { now: TestNow {} }
     }
 
-    #[test]
-    fn test_syslog_codec() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_syslog_codec() -> Result<()> {
         let mut s = b"<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut=\"3\" eventSource= \"Application\" eventID=\"1011\"][examplePriority@32473 class=\"high\"] BOMAn application event log entry...".to_vec();
 
         let mut codec = test_codec();
         let decoded = codec
-            .decode(s.as_mut_slice(), 0, Value::object())?
+            .decode(s.as_mut_slice(), 0, Value::object())
+            .await?
             .unwrap_or_default()
             .0;
-        let mut a = codec.encode(&decoded, &Value::const_null())?;
+        let mut a = codec.encode(&decoded, &Value::const_null()).await?;
         let b = codec
-            .decode(a.as_mut_slice(), 0, Value::object())?
+            .decode(a.as_mut_slice(), 0, Value::object())
+            .await?
             .unwrap_or_default()
             .0;
         assert_eq!(decoded, b);
         Ok(())
     }
 
-    #[test]
-    fn test_decode_empty() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_decode_empty() -> Result<()> {
         let mut s = b"<191>1 2021-03-18T20:30:00.123Z - - - - - message".to_vec();
         let mut codec = test_codec();
         let decoded = codec
-            .decode(s.as_mut_slice(), 0, Value::object())?
+            .decode(s.as_mut_slice(), 0, Value::object())
+            .await?
             .unwrap_or_default()
             .0;
         let expected = literal!({
@@ -480,12 +485,13 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn decode_invalid_message() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn decode_invalid_message() -> Result<()> {
         let mut s = b"an invalid message".to_vec();
         let mut codec = test_codec();
         let decoded = codec
-            .decode(s.as_mut_slice(), 0, Value::object())?
+            .decode(s.as_mut_slice(), 0, Value::object())
+            .await?
             .unwrap_or_default()
             .0;
         let expected = literal!({
@@ -499,8 +505,8 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn encode_empty_rfc5424() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn encode_empty_rfc5424() -> Result<()> {
         let mut codec = test_codec();
         let msg = literal!({
             "severity": "notice",
@@ -510,11 +516,12 @@ mod test {
             "protocol_version": 1,
             "timestamp": 0_u64
         });
-        let mut encoded = codec.encode(&msg, &Value::const_null())?;
+        let mut encoded = codec.encode(&msg, &Value::const_null()).await?;
         let expected = "<165>1 1970-01-01T00:00:00+00:00 - - - - - test message";
         assert_eq!(std::str::from_utf8(&encoded)?, expected);
         let decoded = codec
-            .decode(&mut encoded, 0, Value::object())?
+            .decode(&mut encoded, 0, Value::object())
+            .await?
             .unwrap_or_default()
             .0;
         assert_eq!(msg, decoded);
@@ -522,8 +529,8 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn encode_invalid_facility() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn encode_invalid_facility() {
         let mut codec = test_codec();
         let msg = literal!({
             "severity": "notice",
@@ -533,11 +540,11 @@ mod test {
             "protocol_version": 1,
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg, &Value::const_null()).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).await.is_err());
     }
 
-    #[test]
-    fn encode_invalid_severity() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn encode_invalid_severity() {
         let mut codec = test_codec();
         let msg = literal!({
             "severity": "snot",
@@ -547,11 +554,11 @@ mod test {
             "protocol_version": 1,
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg, &Value::const_null()).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).await.is_err());
     }
 
-    #[test]
-    fn encode_rfc5424_missing_version() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn encode_rfc5424_missing_version() {
         let mut codec = test_codec();
         let msg = literal!({
             "severity": "debug",
@@ -560,11 +567,11 @@ mod test {
             "protocol": "RFC5424",
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg, &Value::const_null()).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).await.is_err());
     }
 
-    #[test]
-    fn encode_missing_protocol() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn encode_missing_protocol() {
         let mut codec = test_codec();
         let msg = literal!({
             "severity": "notice",
@@ -573,11 +580,11 @@ mod test {
             "protocol_version": 1,
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg, &Value::const_null()).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).await.is_err());
     }
 
-    #[test]
-    fn encode_invalid_protocol() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn encode_invalid_protocol() {
         let mut codec = test_codec();
         let msg = literal!({
             "severity": "notice",
@@ -586,11 +593,11 @@ mod test {
             "protocol": "snot",
             "timestamp": 0_u64
         });
-        assert!(codec.encode(&msg, &Value::const_null()).is_err());
+        assert!(codec.encode(&msg, &Value::const_null()).await.is_err());
     }
 
-    #[test]
-    fn encode_empty_rfc3164() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn encode_empty_rfc3164() -> Result<()> {
         let mut codec = test_codec();
         let msg = Value::from(simd_json::json!({
             "severity": "notice",
@@ -598,20 +605,21 @@ mod test {
             "msg": "test message",
             "protocol": "RFC3164"
         }));
-        let encoded = codec.encode(&msg, &Value::const_null())?;
+        let encoded = codec.encode(&msg, &Value::const_null()).await?;
         let expected = "<165>Jan  1 00:00:00 - : test message";
         assert_eq!(std::str::from_utf8(&encoded)?, expected);
         Ok(())
     }
 
-    #[test]
-    fn test_incorrect_sd() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_incorrect_sd() -> Result<()> {
         let mut s =
             b"<13>1 2021-03-18T20:30:00.123Z 74794bfb6795 root 8449 - [incorrect x] message"
                 .to_vec();
         let mut codec = test_codec();
         let decoded = codec
-            .decode(s.as_mut_slice(), 0, Value::object())?
+            .decode(s.as_mut_slice(), 0, Value::object())
+            .await?
             .unwrap_or_default()
             .0;
         let expected = literal!({
@@ -632,12 +640,13 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn test_invalid_sd_3164() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_invalid_sd_3164() -> Result<()> {
         let mut s: Vec<u8> = r#"<46>Jan  5 15:33:03 plertrood-ThinkPad-X220 rsyslogd:  [software="rsyslogd" swVersion="8.32.0"] message"#.as_bytes().to_vec();
         let mut codec = test_codec();
         let decoded = codec
-            .decode(s.as_mut_slice(), 0, Value::object())?
+            .decode(s.as_mut_slice(), 0, Value::object())
+            .await?
             .unwrap_or_default()
             .0;
         // we use the current year for this shitty old format
@@ -661,13 +670,14 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn errors() -> Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn errors() -> Result<()> {
         let mut o = Value::object();
         let mut codec = test_codec();
         assert_eq!(
             codec
                 .encode(&o, &Value::const_null())
+                .await
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -678,6 +688,7 @@ mod test {
         assert_eq!(
             codec
                 .encode(&o, &Value::const_null())
+                .await
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -689,6 +700,7 @@ mod test {
         assert_eq!(
             codec
                 .encode(&o, &Value::const_null())
+                .await
                 .err()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -706,11 +718,10 @@ mod test {
     fn rfc3164_examples(sample: &'static str, expected: Option<&'static str>) -> Result<()> {
         let mut codec = test_codec();
         let mut vec = sample.as_bytes().to_vec();
-        let decoded = codec
-            .decode(&mut vec, 0, Value::object())?
+        let decoded = block_on(codec.decode(&mut vec, 0, Value::object()))?
             .unwrap_or_default()
             .0;
-        let a = codec.encode(&decoded, &Value::const_null())?;
+        let a = block_on(codec.encode(&decoded, &Value::const_null()))?;
         if let Some(expected) = expected {
             // compare against expected output
             assert_eq!(expected, std::str::from_utf8(&a)?);
@@ -734,11 +745,10 @@ mod test {
     fn rfc5424_examples(sample: &'static str, expected: &'static str) -> Result<()> {
         let mut codec = test_codec();
         let mut vec = sample.as_bytes().to_vec();
-        let decoded = codec
-            .decode(&mut vec, 0, Value::object())?
+        let decoded = block_on(codec.decode(&mut vec, 0, Value::object()))?
             .unwrap_or_default()
             .0;
-        let a = codec.encode(&decoded, &Value::const_null())?;
+        let a = block_on(codec.encode(&decoded, &Value::const_null()))?;
         assert_eq!(expected, std::str::from_utf8(&a)?);
         Ok(())
     }

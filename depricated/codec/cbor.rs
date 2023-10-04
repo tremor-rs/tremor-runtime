@@ -17,6 +17,7 @@ use super::prelude::*;
 #[derive(Clone)]
 pub(crate) struct Cbor {}
 
+#[async_trait::async_trait]
 impl Codec for Cbor {
     fn name(&self) -> &str {
         "yaml"
@@ -26,7 +27,7 @@ impl Codec for Cbor {
         vec!["application/cbor"]
     }
 
-    fn decode<'input>(
+    async fn decode<'input>(
         &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
@@ -38,7 +39,7 @@ impl Codec for Cbor {
         //.map_err(|e| format!("{}", e).into())
     }
 
-    fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         let mut res = Vec::with_capacity(128);
         ciborium::ser::into_writer(data, &mut res).map_err(|e| Error::from(format!("{}", e)))?;
         Ok(res)

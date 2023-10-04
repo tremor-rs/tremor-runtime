@@ -522,7 +522,10 @@ impl Sink for Blackhole {
             for (value, meta) in event.value_meta_iter() {
                 if now_ns > self.warmup {
                     let delta_ns = now_ns - event.ingest_ns;
-                    if let Ok(bufs) = event_serializer.serialize(value, meta, event.ingest_ns) {
+                    if let Ok(bufs) = event_serializer
+                        .serialize(value, meta, event.ingest_ns)
+                        .await
+                    {
                         self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
                     } else {
                         error!("{ctx} failed to encode");

@@ -416,7 +416,7 @@ impl Sink for FileSink {
             .ok_or_else(|| Error::from("No file available."))?;
         let ingest_ns = event.ingest_ns;
         for (value, meta) in event.value_meta_iter() {
-            let data = serializer.serialize(value, meta, ingest_ns)?;
+            let data = serializer.serialize(value, meta, ingest_ns).await?;
             for chunk in data {
                 if let Err(e) = file.write_all(&chunk).await {
                     error!("{ctx} Error writing to file: {e}");
