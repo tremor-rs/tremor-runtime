@@ -10,7 +10,7 @@ postprocessor-docs:
 	scripts/gen.sh src/postprocessor postprocessors
 
 codec-docs: 
-	scripts/gen.sh src/codec codecs
+	scripts/gen.sh tremor-codec/src/codec codecs
 
 extractor-docs: 
 	scripts/gen.sh tremor-script/src/extractor extractors

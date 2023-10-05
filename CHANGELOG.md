@@ -4,6 +4,7 @@
 
 ### New features
 
+* kafka schema registry integration
 * Expand the `for` comprehension to include initial values and folding (using a limited set of possible operations for now)
 * Add `+` for `record + record`
 * hygienic errors for strings in path segements

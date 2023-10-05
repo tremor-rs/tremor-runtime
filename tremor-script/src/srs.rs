@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use tremor_codec::Codec;
+
 use crate::prelude::*;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 
@@ -92,7 +94,7 @@ impl EventPayload {
     }
 
     /// Creates a new Payload with a given byte vector and
-    /// a function to turn it into a value and metadata set.
+    /// a codec to decode it.
     ///
     /// The return can reference the the data it gets passed
     /// in the function.
@@ -102,20 +104,27 @@ impl EventPayload {
     ///
     /// # Errors
     /// errors if the conversion function fails
-    pub fn try_new<E, F>(raw: Vec<u8>, f: F) -> std::result::Result<Self, E>
-    where
-        F: for<'head> FnOnce(&'head mut [u8]) -> std::result::Result<ValueAndMeta<'head>, E>,
-    {
+    pub async fn from_codec(
+        raw: Vec<u8>,
+        meta: Value<'static>,
+        ingest_ns: &mut u64,
+        codec: &mut Box<dyn Codec>,
+    ) -> std::result::Result<Self, Option<crate::errors::Error>> {
         let mut raw = Pin::new(raw);
-        let data = f(raw.as_mut().get_mut())?;
-        // This is where the magic happens
-        // ALLOW: this is sound since we implement a self referential struct
-        let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
-        let raw = vec![Arc::new(raw)];
-        Ok(Self {
-            raw,
-            data: structured,
-        })
+        // We are keeping the Vector pinnd and as part of the same struct, and the decoded data
+        // can't leak this function aside of inside this struct.
+        // ALLOW: See above explenation
+        let r = unsafe { mem::transmute::<&mut [u8], &'static mut [u8]>(raw.as_mut().get_mut()) };
+        let res = codec.decode(r, *ingest_ns, meta).await;
+        match res {
+            Ok(None) => Err(None),
+            Err(e) => Err(Some(e.into())),
+            Ok(Some((decoded, meta))) => {
+                let data = ValueAndMeta::from_parts(decoded, meta);
+                let raw = vec![Arc::new(raw)];
+                Ok(Self { raw, data })
+            }
+        }
     }
 
     /// Named after the original rental struct for easy rewriting.

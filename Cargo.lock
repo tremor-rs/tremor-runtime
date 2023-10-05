@@ -192,21 +192,20 @@ checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
 
 [[package]]
 name = "apache-avro"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c0fdddc3fdac97394ffcc5c89c634faa9c1c166ced54189af34e407c97b6ee7"
+checksum = "ceb7c683b2f8f40970b70e39ff8be514c95b96fcb9c4af87e1ed2cb2e10801a0"
 dependencies = [
- "byteorder",
  "bzip2",
  "crc32fast",
  "digest 0.10.7",
  "lazy_static",
- "libflate 1.4.0",
+ "libflate",
  "log",
  "num-bigint 0.4.4",
  "quad-rand",
  "rand 0.8.5",
- "regex",
+ "regex-lite",
  "serde",
  "serde_json",
  "snap",
@@ -216,7 +215,6 @@ dependencies = [
  "typed-builder",
  "uuid",
  "xz2",
- "zerocopy",
  "zstd 0.12.4",
 ]
 
@@ -492,15 +490,6 @@ dependencies = [
  "tokio-rustls 0.23.4",
  "tungstenite 0.17.3",
  "webpki-roots 0.22.6",
-]
-
-[[package]]
-name = "async_fn_traits"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc58d489c5f2d2c5be31b9004cec7af25a70d23df4d8111715eee736234cf217"
-dependencies = [
- "paste",
 ]
 
 [[package]]
@@ -3117,17 +3106,6 @@ checksum = "a08173bc88b7955d1b3145aa561539096c421ac8debde8cbc3612ec635fee29b"
 
 [[package]]
 name = "libflate"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ff4ae71b685bbad2f2f391fe74f6b7659a34871c08b210fdc039e43bee07d18"
-dependencies = [
- "adler32",
- "crc32fast",
- "libflate_lz77 1.2.0",
-]
-
-[[package]]
-name = "libflate"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7d5654ae1795afc7ff76f4365c2c8791b0feb18e8996a96adad8ffd7c3b2bf"
@@ -3136,16 +3114,7 @@ dependencies = [
  "core2",
  "crc32fast",
  "dary_heap",
- "libflate_lz77 2.0.0",
-]
-
-[[package]]
-name = "libflate_lz77"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a52d3a8bfc85f250440e4424db7d857e241a3aebbbe301f3eb606ab15c39acbf"
-dependencies = [
- "rle-decode-fast",
+ "libflate_lz77",
 ]
 
 [[package]]
@@ -4310,6 +4279,12 @@ dependencies = [
  "memchr",
  "regex-syntax",
 ]
+
+[[package]]
+name = "regex-lite"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f96ede7f386ba6e910092e7ccdc04176cface62abebea07ed6b46d870ed95ca2"
 
 [[package]]
 name = "regex-syntax"
@@ -6085,11 +6060,9 @@ dependencies = [
  "beef",
  "byteorder",
  "chrono",
- "chrono-tz",
  "csv",
  "error-chain",
  "futures",
- "hdrhistogram",
  "itoa 1.0.9",
  "lexical",
  "matches",
@@ -6099,13 +6072,12 @@ dependencies = [
  "ryu",
  "serde",
  "serde_yaml 0.9.25",
- "simd-json 0.11.1",
+ "simd-json",
  "simd-json-derive",
  "simdutf8",
  "syslog_loose",
  "test-case",
  "tokio",
- "tremor-common",
  "tremor-influx",
  "tremor-value",
  "uuid",
@@ -6243,7 +6215,7 @@ dependencies = [
  "itoa 1.0.9",
  "lazy_static",
  "lexical",
- "libflate 2.0.0",
+ "libflate",
  "log",
  "lz4",
  "matches",
@@ -6305,8 +6277,6 @@ dependencies = [
 name = "tremor-script"
 version = "0.13.0-rc.15"
 dependencies = [
- "async-trait",
- "async_fn_traits",
  "atty",
  "base64 0.21.4",
  "beef",
@@ -6468,13 +6438,22 @@ dependencies = [
 
 [[package]]
 name = "typed-builder"
-version = "0.14.0"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64cba322cb9b7bc6ca048de49e83918223f35e7a86311267013afff257004870"
+checksum = "34085c17941e36627a879208083e25d357243812c30e7d7387c3b954f30ade16"
+dependencies = [
+ "typed-builder-macro",
+]
+
+[[package]]
+name = "typed-builder-macro"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f03ca4cb38206e2bef0700092660bb74d696f808514dae47fa1467cbfe26e96e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.38",
 ]
 
 [[package]]
@@ -7179,27 +7158,6 @@ name = "yansi"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
-
-[[package]]
-name = "zerocopy"
-version = "0.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20707b61725734c595e840fb3704378a0cd2b9c74cc9e6e20724838fc6a1e2f9"
-dependencies = [
- "byteorder",
- "zerocopy-derive",
-]
-
-[[package]]
-name = "zerocopy-derive"
-version = "0.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56097d5b91d711293a42be9289403896b68654625021732067eac7a4ca388a1f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.38",
-]
 
 [[package]]
 name = "zeroize"

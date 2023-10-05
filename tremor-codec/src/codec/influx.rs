@@ -304,7 +304,6 @@ mod tests {
             let mut bin = Vec::new();
             BInflux::encode(&expected, &mut bin)?;
             if got.0 != expected {
-                println!("{} fails while decoding", &case.2);
                 assert_eq!(got.0.encode(), expected.encode());
             }
 

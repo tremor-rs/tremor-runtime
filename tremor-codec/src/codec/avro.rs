@@ -48,7 +48,6 @@ use apache_avro::{
     schema::Name, types::Value as AvroValue, Codec as Compression, Decimal, Duration, Reader,
     Schema, Writer,
 };
-use futures::executor::block_on;
 use serde::Deserialize;
 use value_trait::TryTypeError;
 
@@ -62,7 +61,6 @@ struct AvroRegistry {
 }
 
 impl AvroRegistry {
-    #[allow(dead_code, clippy::unused_self)] // FIXME: use this
     fn get_schema_by_id(&self, id: u32) -> Option<&Schema> {
         self.by_id.get(&id)
     }
@@ -229,6 +227,8 @@ impl Avro {
             Schema::TimeMicros => AvroValue::TimeMicros(data.try_as_i64()?),
             Schema::TimestampMillis => AvroValue::TimestampMillis(data.try_as_i64()?),
             Schema::TimestampMicros => AvroValue::TimestampMicros(data.try_as_i64()?),
+            Schema::LocalTimestampMillis => AvroValue::LocalTimestampMillis(data.try_as_i64()?),
+            Schema::LocalTimestampMicros => AvroValue::LocalTimestampMicros(data.try_as_i64()?),
             Schema::Duration => {
                 let v: [u8; 12] = data
                     .as_bytes()
@@ -253,6 +253,8 @@ impl Avro {
             AvroValue::Long(v)
             | AvroValue::TimestampMicros(v)
             | AvroValue::TimestampMillis(v)
+            | AvroValue::LocalTimestampMillis(v)
+            | AvroValue::LocalTimestampMicros(v)
             | AvroValue::TimeMicros(v) => Value::from(v),
             AvroValue::Float(v) => Value::from(v),
             AvroValue::Double(v) => Value::from(v),
@@ -318,8 +320,7 @@ impl Codec for Avro {
 
     async fn encode(&mut self, data: &Value, meta: &Value) -> Result<Vec<u8>> {
         let schema = if let Some(schema_id) = meta.get_u32("schema_id") {
-            // FIXME: How do we want to handle async tasks is codecs, or how do we want to hand this in general
-            block_on(self.registry.maybe_fetch_id(schema_id))?;
+            self.registry.maybe_fetch_id(schema_id).await?;
             self.registry
                 .get_schema_by_id(schema_id)
                 .ok_or_else(|| format!("No schema found for id {schema_id} in registry"))?
@@ -378,7 +379,7 @@ mod test {
     async fn encode() -> Result<()> {
         let mut codec = test_codec(test_schema())?;
         let decoded = literal!({ "long": 27, "string": "string" });
-        let encoded = dbg!(codec.encode(&decoded, &Value::const_null()).await);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
         Ok(())
@@ -519,6 +520,118 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn uuid() -> Result<()> {
+        let mut codec = test_codec(literal!({
+            "name": "uuid",
+            "type": "string",
+            "logicalType": "uuid"
+        }))?;
+        let decoded = literal!("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn date() -> Result<()> {
+        let mut codec = test_codec(literal!({
+            "name": "date",
+            "type": "int",
+            "logicalType": "date"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn time_millis() -> Result<()> {
+        let mut codec = test_codec(literal!({
+            "name": "time_millis",
+            "type": "int",
+            "logicalType": "time-millis"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn time_micros() -> Result<()> {
+        let mut codec: Box<dyn Codec> = test_codec(literal!({
+            "name": "time_micros",
+            "type": "long",
+            "logicalType": "time-micros"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn timestamp_millis() -> Result<()> {
+        let mut codec: Box<dyn Codec> = test_codec(literal!({
+            "name": "timestamp_millis",
+            "type": "long",
+            "logicalType": "timestamp-millis"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn timestamp_micros() -> Result<()> {
+        let mut codec: Box<dyn Codec> = test_codec(literal!({
+            "name": "timestamp_micros",
+            "type": "long",
+            "logicalType": "timestamp-micros"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn local_timestamp_millis() -> Result<()> {
+        let mut codec: Box<dyn Codec> = test_codec(literal!({
+            "name": "local_timestamp_millis",
+            "type": "long",
+            "logicalType": "local-timestamp-millis"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn local_timestamp_micros() -> Result<()> {
+        let mut codec: Box<dyn Codec> = test_codec(literal!({
+            "name": "local_timestamp_micros",
+            "type": "long",
+            "logicalType": "local-timestamp-micros"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn decode() -> Result<()> {
         let mut codec = test_codec(test_schema())?;
 
@@ -556,6 +669,7 @@ mod test {
                 "type": "record",
                 "name": "record",
                 "fields": [
+                    // primitive types
                     {"name": "null", "type": "null"},
                     {"name": "boolean", "type": "boolean"},
                     {"name": "int", "type": "int"},
@@ -564,6 +678,7 @@ mod test {
                     {"name": "double", "type": "double"},
                     {"name": "bytes", "type": "bytes"},
                     {"name": "string", "type": "string"},
+                    // complex types
                     {"name": "enum", "type": {
                         "type": "enum",
                         "name": "enumType",
@@ -577,6 +692,23 @@ mod test {
                         "type": "map",
                         "values": "string"}
                     },
+                    // logical types
+                    // {
+                    //     "type": "bytes",
+                    //     "logicalType": "decimal",
+                    //     "precision": 4,
+                    //     "scale": 2
+                    // }
+                    {"name": "uuid",                   "type": "string", "logicalType": "uuid"},
+                    {"name": "date",                   "type": "int",    "logicalType": "date"},
+                    {"name": "time_millis",            "type": "int",    "logicalType": "time-millis"},
+                    {"name": "time_micros",            "type": "long",   "logicalType": "time-micros"},
+                    {"name": "timestamp_millis",       "type": "long",   "logicalType": "timestamp-millis"},
+                    {"name": "timestamp_micros",       "type": "long",   "logicalType": "timestamp-micros"},
+                    {"name": "local_timestamp_millis", "type": "long",   "logicalType": "local-timestamp-millis"},
+                    {"name": "local_timestamp_micros", "type": "long",   "logicalType": "local-timestamp-micros"},
+                    // {"name": "duration",               "type": "int",    "logicalType": "duration"},
+
                 ]
             }
         ))?;
@@ -589,9 +721,21 @@ mod test {
             "double": 2.0,
             "bytes": Value::Bytes(vec![1u8, 2, 3].into()),
             "string": "foo",
+
             "enum": "SNOT",
             "array": ["SNOT", "BADGER"],
-            "map": {"SNOT": "BADGER"}
+            "map": {"SNOT": "BADGER"},
+
+
+            "uuid": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            "date": 1,
+            "time_millis": 2,
+            "time_micros": 3,
+            "timestamp_millis": 4,
+            "timestamp_micros": 5,
+            "local_timestamp_millis": 6,
+            "local_timestamp_micros": 7,
+            // "duration": 8,
         });
         let mut encoded = codec.encode(&decoded, &Value::const_null()).await?;
 

@@ -25,11 +25,8 @@ use crate::connectors::{
 };
 use crate::errors::{Error, Result};
 use crate::pipeline;
+use crate::pipeline::InputTarget;
 use crate::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors};
-use crate::{
-    codec::{self, Codec},
-    pipeline::InputTarget,
-};
 use crate::{
     config::{
         self, Codec as CodecConfig, Connector as ConnectorConfig, NameWithConfig,
@@ -38,12 +35,12 @@ use crate::{
     errors::empty_error,
 };
 pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
-use futures::executor::block_on;
 use hashbrown::HashSet;
 use simd_json::Mutable;
 use std::collections::{btree_map::Entry, BTreeMap};
 use std::fmt::Display;
 use tokio::task;
+use tremor_codec::{self as codec, Codec};
 use tremor_common::{
     ids::{Id, SinkId, SourceId},
     ports::{Port, ERR, OUT},
@@ -1021,7 +1018,8 @@ where
                 None,
                 meta.unwrap_or_else(Value::object),
                 self.is_transactional,
-            );
+            )
+            .await;
             if results.is_empty() {
                 let res = self
                     .source
@@ -1092,7 +1090,8 @@ where
                 data,
                 meta.unwrap_or_else(Value::object),
                 self.is_transactional,
-            );
+            )
+            .await;
             if results.is_empty() {
                 let expr = self.source.on_no_events(pull_id, stream, &self.ctx).await;
                 self.ctx.swallow_err(expr, "Error on no events callback");
@@ -1119,7 +1118,8 @@ where
                 data,
                 meta.clone(),
                 self.is_transactional,
-            );
+            )
+            .await;
             // finish up the stream immediately
             let mut last_events = build_last_events(
                 &self.ctx.alias,
@@ -1130,7 +1130,8 @@ where
                 None,
                 meta,
                 self.is_transactional,
-            );
+            )
+            .await;
             results.append(&mut last_events);
 
             if results.is_empty() {
@@ -1241,7 +1242,7 @@ where
 /// build any number of `Event`s from a given Source Transport Unit (`data`)
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
-fn build_events(
+async fn build_events(
     alias: &Alias,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
@@ -1261,28 +1262,27 @@ fn build_events(
     ) {
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());
+
             for (chunk, meta) in processed {
-                let line_value = EventPayload::try_new::<Option<Error>, _>(chunk, |mut_data| {
-                    // FIXME: making this function async is a pain I've failed so far
-                    match block_on(
-                        stream_state
-                            .codec
-                            .decode(mut_data, *ingest_ns, meta.clone()),
-                    ) {
-                        Ok(None) => Err(None),
-                        Err(e) => Err(Some(e)),
-                        Ok(Some((decoded, meta))) => {
-                            Ok(ValueAndMeta::from_parts(decoded, meta))
-                            // TODO: avoid clone on last iterator element
-                        }
-                    }
-                });
+                let line_value = EventPayload::from_codec(
+                    chunk,
+                    meta.clone(),
+                    ingest_ns,
+                    &mut stream_state.codec,
+                )
+                .await;
                 let (port, payload) = match line_value {
                     Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
                     Err(None) => continue,
                     Err(Some(e)) => (
                         ERR,
-                        make_error(alias, &e, stream_state.stream_id, pull_id, meta),
+                        make_error(
+                            alias,
+                            &Error::from(e),
+                            stream_state.stream_id,
+                            pull_id,
+                            meta,
+                        ),
                     ),
                 };
                 let event = build_event(
@@ -1293,6 +1293,7 @@ fn build_events(
                     origin_uri.clone(), // TODO: use split_last to avoid this clone for the last item
                     is_transactional,
                 );
+
                 res.push((port, event));
             }
             res
@@ -1316,7 +1317,7 @@ fn build_events(
 /// build any number of `Event`s from a given Source Transport Unit (`data`)
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
-fn build_last_events(
+async fn build_last_events(
     alias: &Alias,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
@@ -1330,27 +1331,25 @@ fn build_last_events(
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());
             for (chunk, meta) in processed {
-                let line_value = EventPayload::try_new::<Option<Error>, _>(chunk, |mut_data| {
-                    // FIXME: making this function async is a pain I've failed so far
-                    match block_on(
-                        stream_state
-                            .codec
-                            .decode(mut_data, *ingest_ns, meta.clone()),
-                    ) {
-                        Ok(None) => Err(None),
-                        Err(e) => Err(Some(e)),
-                        Ok(Some((decoded, meta))) => {
-                            Ok(ValueAndMeta::from_parts(decoded, meta))
-                            // TODO: avoid clone on last iterator element
-                        }
-                    }
-                });
+                let line_value = EventPayload::from_codec(
+                    chunk,
+                    meta.clone(),
+                    ingest_ns,
+                    &mut stream_state.codec,
+                )
+                .await;
                 let (port, payload) = match line_value {
                     Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
                     Err(None) => continue,
                     Err(Some(e)) => (
                         ERR,
-                        make_error(alias, &e, stream_state.stream_id, pull_id, meta),
+                        make_error(
+                            alias,
+                            &Error::from(e),
+                            stream_state.stream_id,
+                            pull_id,
+                            meta,
+                        ),
                     ),
                 };
                 let event = build_event(
