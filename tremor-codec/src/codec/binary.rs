@@ -12,25 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The `string` codec marshalls valid UTF-8 encoded data as a tremor string literal value.
+//! The `binary` codec marshalls raw binary data data as a tremor `bytes` literal value.
 //!
-//! ## Considerations
-//!
-//! If the data is not **valid UTF-8** marshalling will fail.
+//! When data isn't already represented as `bytes` it will be encoded as JSON document.
 
-use super::prelude::*;
+use crate::prelude::*;
 
 #[derive(Clone)]
-pub struct String {}
+pub struct Binary {}
 
 #[async_trait::async_trait]
-impl Codec for String {
+impl Codec for Binary {
     fn name(&self) -> &str {
-        "string"
+        "bytes"
     }
 
     fn mime_types(&self) -> Vec<&'static str> {
-        vec!["text/plain", "text/html"]
+        vec!["application/octet-stream"]
     }
 
     async fn decode<'input>(
@@ -39,15 +37,15 @@ impl Codec for String {
         _ingest_ns: u64,
         meta: Value<'input>,
     ) -> Result<Option<(Value<'input>, Value<'input>)>> {
-        std::str::from_utf8(data)
-            .map(Value::from)
-            .map(|v| Some((v, meta)))
-            .map_err(Error::from)
+        let data: &'input [u8] = data;
+        Ok(Some((Value::Bytes(data.into()), meta)))
     }
 
     async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if let Some(s) = data.as_str() {
             Ok(s.as_bytes().to_vec())
+        } else if let Value::Bytes(b) = data {
+            Ok(b.to_vec())
         } else {
             Ok(simd_json::to_vec(&data)?)
         }
@@ -61,29 +59,19 @@ impl Codec for String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use tremor_value::literal;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_string_codec() -> Result<()> {
-        let seed = literal!("snot badger");
+    async fn test_binary_codec() -> Result<()> {
+        let seed = Value::Bytes("snot badger".as_bytes().into());
 
-        let mut codec = String {};
+        let mut codec = Binary {};
         let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
-        let as_json = codec
+        assert_eq!(as_raw, b"snot badger");
+        let as_value = codec
             .decode(as_raw.as_mut_slice(), 0, Value::object())
-            .await;
-        assert!(as_json.is_ok());
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_string_codec2() -> Result<()> {
-        let seed = literal!(["snot badger"]);
-
-        let mut codec = String {};
-        let as_raw = codec.encode(&seed, &Value::const_null()).await?;
-        assert_eq!(as_raw, b"[\"snot badger\"]");
+            .await?
+            .unwrap_or_default();
+        assert_eq!(as_value.0, seed);
 
         Ok(())
     }

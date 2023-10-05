@@ -55,12 +55,14 @@ termcolor = "1.2"
 tremor-common = { version = "0.13.0-rc.15", path = "../tremor-common" }
 tremor-influx = { version = "0.13.0-rc.15", path = "../tremor-influx" }
 tremor-value = { version = "0.13.0-rc.15", path = "../tremor-value" }
+tremor-codec = { version = "0.13.0-rc.15", path = "../tremor-codec" }
 tremor-kv = "0.6"
 unicode-xid = "0.2"
 url = "2"
 value-trait = "0.6"
 xz2 = "0.1"
 async_fn_traits = "0.1"
+async-trait = "*"
 
 [build-dependencies]
 lalrpop = "0.20"

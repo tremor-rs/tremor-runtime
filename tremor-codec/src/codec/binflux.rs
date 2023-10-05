@@ -44,7 +44,7 @@
 //!
 //! The format originated with tremor as an efficient alternative to the [influx](./influx) codec.
 
-use super::prelude::*;
+use crate::prelude::*;
 use beef::Cow;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use simd_json::ObjectHasher;
@@ -185,7 +185,7 @@ impl BInflux {
                 TYPE_FALSE => {
                     fields.insert(key, Value::from(false));
                 }
-                o => error!("bad field type: {}", o),
+                o => return Err(format!("bad field type: {o}").into()),
             }
         }
         Ok(literal!({

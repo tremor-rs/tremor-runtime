@@ -78,7 +78,7 @@
 //! Malformed syslog messages are treated per `rfc3164` protocol semantics resulting in the entire string being
 //! dumped into the `msg` of the result record.
 
-use super::prelude::*;
+use crate::prelude::*;
 use chrono::{DateTime, Datelike, Offset, TimeZone, Utc};
 use syslog_loose::{IncompleteDate, ProcId, Protocol, SyslogFacility, SyslogSeverity, Variant};
 use tremor_value::Value;
@@ -479,8 +479,8 @@ mod test {
             "timestamp": 1_616_099_400_123_000_000_u64
         });
         assert_eq!(
-            tremor_script::utils::sorted_serialize(&expected)?,
-            tremor_script::utils::sorted_serialize(&decoded)?
+            crate::codec::json::sorted_serialize(&expected)?,
+            crate::codec::json::sorted_serialize(&decoded)?
         );
         Ok(())
     }
@@ -499,8 +499,8 @@ mod test {
             "protocol": "RFC3164",
         });
         assert_eq!(
-            tremor_script::utils::sorted_serialize(&expected)?,
-            tremor_script::utils::sorted_serialize(&decoded)?
+            crate::codec::json::sorted_serialize(&expected)?,
+            crate::codec::json::sorted_serialize(&decoded)?
         );
         Ok(())
     }
@@ -634,8 +634,8 @@ mod test {
             "timestamp": 1_616_099_400_123_000_000_u64
         });
         assert_eq!(
-            tremor_script::utils::sorted_serialize(&expected)?,
-            tremor_script::utils::sorted_serialize(&decoded)?
+            crate::codec::json::sorted_serialize(&expected)?,
+            crate::codec::json::sorted_serialize(&decoded)?
         );
         Ok(())
     }
@@ -664,8 +664,8 @@ mod test {
             "timestamp": timestamp.timestamp_nanos_opt().unwrap_or_default()
         });
         assert_eq!(
-            tremor_script::utils::sorted_serialize(&expected)?,
-            tremor_script::utils::sorted_serialize(&decoded)?
+            crate::codec::json::sorted_serialize(&expected)?,
+            crate::codec::json::sorted_serialize(&decoded)?
         );
         Ok(())
     }

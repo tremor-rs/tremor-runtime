@@ -12,33 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    config,
-    errors::{Kind as ErrorKind, Result},
-};
+pub mod errors;
+pub use crate::errors::Error;
+use crate::errors::{Kind as ErrorKind, Result};
 use std::fmt::{Debug, Display};
 use tremor_value::Value;
-pub(crate) mod avro;
-pub(crate) mod binary;
-pub(crate) mod binflux;
-pub(crate) mod csv;
-pub(crate) mod dogstatsd;
-pub(crate) mod influx;
-pub(crate) mod json;
-pub(crate) mod msgpack;
-pub(crate) mod null;
-pub(crate) mod statsd;
-pub(crate) mod string;
-pub(crate) mod syslog;
-/// Tremor to Tremor codec
-pub mod tremor;
-pub(crate) mod yaml;
+mod codec {
+    pub(crate) mod avro;
+    pub(crate) mod binary;
+    pub(crate) mod binflux;
+    pub(crate) mod csv;
+    pub(crate) mod dogstatsd;
+    pub(crate) mod influx;
+    /// JSON codec
+    pub mod json;
+    pub(crate) mod msgpack;
+    pub(crate) mod null;
+    pub(crate) mod statsd;
+    pub(crate) mod string;
+    pub(crate) mod syslog;
+    /// Tremor to Tremor codec
+    pub(crate) mod tremor;
+    pub(crate) mod yaml;
+}
+
+pub mod config;
+pub use codec::*;
 
 mod prelude {
     pub use super::Codec;
     pub use crate::errors::*;
-    pub use tremor_script::prelude::*;
-    pub use tremor_value::{Object, Value};
+    pub use simd_json::prelude::*;
+    pub use tremor_value::{literal, Object, Value};
 }
 
 #[async_trait::async_trait]

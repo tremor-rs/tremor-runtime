@@ -119,14 +119,12 @@ use crate::{
     channel::{bounded, Receiver, Sender},
     errors::already_created_error,
 };
-use crate::{
-    codec::{
-        json::{Json, Sorted},
-        Codec,
-    },
-    connectors::prelude::*,
-    errors::err_connector_def,
+use tremor_codec::{
+    json::{Json, Sorted},
+    Codec,
 };
+
+use crate::{connectors::prelude::*, errors::err_connector_def};
 use serde::Deserialize;
 use sled::{CompareAndSwapError, Db, IVec};
 use std::path::PathBuf;
@@ -390,7 +388,7 @@ impl KvSink {
         }
     }
     async fn encode<'v>(&mut self, v: &Value<'v>) -> Result<Vec<u8>> {
-        self.codec.encode(v, &Value::const_null()).await
+        Ok(self.codec.encode(v, &Value::const_null()).await?)
     }
     async fn execute<'v>(
         &mut self,

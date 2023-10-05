@@ -104,7 +104,7 @@
 
 use simd_json::ObjectHasher;
 
-use super::prelude::*;
+use crate::prelude::*;
 use std::io::Write;
 
 #[derive(Clone, Default, Debug)]

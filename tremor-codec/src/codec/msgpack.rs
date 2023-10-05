@@ -12,29 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The `null` codec drops data.
+//! The `msgpack` codec supports the [Msgpack](https://msgpack.org) binary format that.
+//!
+//! The format is structurally compatible with JSON.
+//!
+//! Message pack is typically significantly more compute efficient to process and requires less memory
+//! when compared to typical JSON processors.
 
-use super::prelude::*;
+use crate::prelude::*;
+use rmp_serde as rmps;
 
 #[derive(Clone)]
-pub struct Null {}
+pub struct MsgPack {}
 
 #[async_trait::async_trait]
-impl Codec for Null {
+impl Codec for MsgPack {
     fn name(&self) -> &str {
-        "null"
+        "msgpack"
+    }
+
+    fn mime_types(&self) -> Vec<&'static str> {
+        vec![
+            "application/msgpack",
+            "application/x-msgpack",
+            "application/vnd.msgpack",
+        ]
     }
 
     async fn decode<'input>(
         &mut self,
-        _data: &'input mut [u8],
+        data: &'input mut [u8],
         _ingest_ns: u64,
         meta: Value<'input>,
     ) -> Result<Option<(Value<'input>, Value<'input>)>> {
-        Ok(Some((Value::const_null(), meta)))
+        rmps::from_slice::<Value>(data)
+            .map(|v| Some((v, meta)))
+            .map_err(Error::from)
     }
-    async fn encode(&mut self, _data: &Value, _meta: &Value) -> Result<Vec<u8>> {
-        Ok(vec![])
+
+    async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
+        Ok(rmps::to_vec(&data)?)
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
@@ -45,20 +62,18 @@ impl Codec for Null {
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::OwnedValue;
+    use tremor_value::literal;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_null_codec() -> Result<()> {
-        let seed: OwnedValue = OwnedValue::null();
-        let seed: Value = seed.into();
+    async fn test_msgpack_codec() -> Result<()> {
+        let seed = literal!({ "snot": "badger" });
 
-        let mut codec = Null {};
+        let mut codec = MsgPack {};
         let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
-        let as_json = codec
+        assert!(codec
             .decode(as_raw.as_mut_slice(), 0, Value::object())
-            .await;
-        assert!(as_json.is_ok());
-        as_json?;
+            .await?
+            .is_some());
 
         Ok(())
     }

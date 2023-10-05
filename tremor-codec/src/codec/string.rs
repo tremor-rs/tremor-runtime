@@ -12,23 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The `yaml` codec supports marshalling the `YAML Ain't Markup Language` format.
+//! The `string` codec marshalls valid UTF-8 encoded data as a tremor string literal value.
 //!
-//! Specification: [YAML 1.2](https://yaml.org).
+//! ## Considerations
+//!
+//! If the data is not **valid UTF-8** marshalling will fail.
 
-use super::prelude::*;
+use crate::prelude::*;
 
 #[derive(Clone)]
-pub struct Yaml {}
+pub struct String {}
 
 #[async_trait::async_trait]
-impl Codec for Yaml {
+impl Codec for String {
     fn name(&self) -> &str {
-        "yaml"
+        "string"
     }
 
     fn mime_types(&self) -> Vec<&'static str> {
-        vec!["application/yaml"]
+        vec!["text/plain", "text/html"]
     }
 
     async fn decode<'input>(
@@ -37,13 +39,18 @@ impl Codec for Yaml {
         _ingest_ns: u64,
         meta: Value<'input>,
     ) -> Result<Option<(Value<'input>, Value<'input>)>> {
-        serde_yaml::from_slice::<simd_json::OwnedValue>(data)
+        std::str::from_utf8(data)
             .map(Value::from)
             .map(|v| Some((v, meta)))
             .map_err(Error::from)
     }
+
     async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
-        Ok(serde_yaml::to_string(data)?.into_bytes())
+        if let Some(s) = data.as_str() {
+            Ok(s.as_bytes().to_vec())
+        } else {
+            Ok(simd_json::to_vec(&data)?)
+        }
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
@@ -57,17 +64,26 @@ mod test {
     use tremor_value::literal;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_yaml_codec() -> Result<()> {
-        let seed = literal!({ "snot": "badger" });
+    async fn test_string_codec() -> Result<()> {
+        let seed = literal!("snot badger");
 
-        let mut codec = Yaml {};
+        let mut codec = String {};
         let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
         let as_json = codec
             .decode(as_raw.as_mut_slice(), 0, Value::object())
-            .await?
-            .expect("no data");
+            .await;
+        assert!(as_json.is_ok());
 
-        assert_eq!(seed, as_json.0);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_string_codec2() -> Result<()> {
+        let seed = literal!(["snot badger"]);
+
+        let mut codec = String {};
+        let as_raw = codec.encode(&seed, &Value::const_null()).await?;
+        assert_eq!(as_raw, b"[\"snot badger\"]");
 
         Ok(())
     }

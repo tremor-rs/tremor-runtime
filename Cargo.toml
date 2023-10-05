@@ -17,6 +17,7 @@ rust-version = "1.62"
 members = [
   "tremor-api",
   "tremor-cli",
+  "tremor-codec",
   "tremor-common",
   "tremor-influx",
   "tremor-pipeline",
@@ -62,7 +63,6 @@ chrono-tz = "0.8"
 #
 # [1]: https://crates.io/crates/clickhouse-rs/versions
 clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "73d39ba" }
-csv = "1.2"
 dashmap = "5.5"
 either = { version = "1.9", features = ["serde"] }
 error-chain = "0.12"
@@ -85,15 +85,14 @@ memchr = "2.6"
 pin-project-lite = "0.2"
 rand = "0.8.5"
 regex = "1.9"
-rmp-serde = "1.1"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 simd-json = { version = "0.11", features = ["known-key"] }
 simd-json-derive = "0.11"
 snap = "1"
 socket2 = { version = "0.5", features = ["all"] }
-syslog_loose = "0.19"
 tremor-common = { path = "tremor-common" }
+tremor-codec = { path = "tremor-codec" }
 tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
@@ -102,13 +101,6 @@ url = "2.4"
 value-trait = "0.6"
 zstd = "0.12"
 
-apache-avro = { version = "0.15", features = [
-  "snappy",
-  "bzip",
-  "xz",
-  "zstandard",
-  "bzip2",
-] }
 
 # blaster / blackhole# codecs
 hdrhistogram = "7"

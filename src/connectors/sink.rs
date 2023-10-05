@@ -19,34 +19,39 @@ pub(crate) mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
 
-use super::{utils::metrics::SinkReporter, CodecReq};
-use crate::config::{
-    Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
-};
-use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
-use crate::connectors::{Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
-use crate::errors::Result;
-use crate::pipeline;
-use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocessors};
-use crate::primerge::PriorityMerge;
 use crate::{
     channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
+    config::{
+        Codec as CodecConfig, Connector as ConnectorConfig, NameWithConfig,
+        Postprocessor as PostprocessorConfig,
+    },
+    connectors::{
+        utils::{
+            metrics::SinkReporter,
+            reconnect::{Attempt, ConnectionLostNotifier},
+        },
+        Alias, CodecReq, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
+    },
+    errors::Result,
+    pipeline,
+    postprocessor::{finish, make_postprocessors, postprocess, Postprocessors},
+    primerge::PriorityMerge,
     qsize,
 };
-use crate::{
-    codec::{self, Codec},
-    config::NameWithConfig,
-};
 use futures::StreamExt; // for .next() on PriorityMerge
-use std::collections::{btree_map::Entry, BTreeMap, HashSet};
-use std::fmt::Display;
-use std::{borrow::Borrow, sync::Arc};
+use std::{
+    borrow::Borrow,
+    collections::{btree_map::Entry, BTreeMap, HashSet},
+    fmt::Display,
+    sync::Arc,
+};
 use tokio::task;
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
-use tremor_common::time::nanotime;
+use tremor_codec::{self as codec, Codec};
 use tremor_common::{
     ids::{SinkId, SourceId},
     ports::Port,
+    time::nanotime,
 };
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};

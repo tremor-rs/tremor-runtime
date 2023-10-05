@@ -53,7 +53,7 @@ use std::io::Write;
 
 use simd_json::ObjectHasher;
 
-use super::prelude::*;
+use crate::prelude::*;
 
 #[derive(Clone, Default, Debug)]
 pub struct StatsD {

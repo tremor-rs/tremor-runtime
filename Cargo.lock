@@ -6067,12 +6067,49 @@ dependencies = [
  "termcolor",
  "tokio",
  "tremor-api",
+ "tremor-codec",
  "tremor-common",
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
  "tremor-value",
  "url",
+]
+
+[[package]]
+name = "tremor-codec"
+version = "0.13.0-rc.15"
+dependencies = [
+ "apache-avro",
+ "async-trait",
+ "beef",
+ "byteorder",
+ "chrono",
+ "chrono-tz",
+ "csv",
+ "error-chain",
+ "futures",
+ "hdrhistogram",
+ "itoa 1.0.9",
+ "lexical",
+ "matches",
+ "proptest",
+ "reqwest",
+ "rmp-serde",
+ "ryu",
+ "serde",
+ "serde_yaml 0.9.25",
+ "simd-json 0.11.1",
+ "simd-json-derive",
+ "simdutf8",
+ "syslog_loose",
+ "test-case",
+ "tokio",
+ "tremor-common",
+ "tremor-influx",
+ "tremor-value",
+ "uuid",
+ "value-trait",
 ]
 
 [[package]]
@@ -6162,7 +6199,6 @@ name = "tremor-runtime"
 version = "0.13.0-rc.15"
 dependencies = [
  "anyhow",
- "apache-avro",
  "async-channel",
  "async-compression",
  "async-std",
@@ -6181,7 +6217,6 @@ dependencies = [
  "chrono-tz",
  "clickhouse-rs",
  "cron",
- "csv",
  "dashmap",
  "either",
  "elasticsearch",
@@ -6227,7 +6262,6 @@ dependencies = [
  "rdkafka-sys",
  "regex",
  "reqwest",
- "rmp-serde",
  "rustls 0.21.7",
  "rustls-native-certs",
  "rustls-pemfile",
@@ -6244,7 +6278,6 @@ dependencies = [
  "sled",
  "snap",
  "socket2 0.5.4",
- "syslog_loose",
  "tempfile",
  "test-case",
  "testcontainers",
@@ -6253,6 +6286,7 @@ dependencies = [
  "tokio-stream",
  "tokio-tungstenite",
  "tonic",
+ "tremor-codec",
  "tremor-common",
  "tremor-influx",
  "tremor-otelapis",
@@ -6271,6 +6305,7 @@ dependencies = [
 name = "tremor-script"
 version = "0.13.0-rc.15"
 dependencies = [
+ "async-trait",
  "async_fn_traits",
  "atty",
  "base64 0.21.4",
@@ -6310,6 +6345,7 @@ dependencies = [
  "tempfile",
  "termcolor",
  "test-case",
+ "tremor-codec",
  "tremor-common",
  "tremor-influx",
  "tremor-kv",

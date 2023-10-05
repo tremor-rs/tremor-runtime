@@ -21,7 +21,7 @@ use std::{
     io::{Cursor, Write},
 };
 
-use super::prelude::*;
+use crate::prelude::*;
 use beef::Cow;
 use byteorder::{ByteOrder, NetworkEndian, ReadBytesExt, WriteBytesExt};
 use simd_json::StaticNode;
