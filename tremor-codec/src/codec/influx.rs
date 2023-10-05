@@ -33,7 +33,7 @@
 //! }
 //! ```
 
-use super::prelude::*;
+use crate::prelude::*;
 use std::str;
 use tremor_influx as influx;
 

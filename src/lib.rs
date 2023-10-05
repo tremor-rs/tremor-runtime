@@ -45,8 +45,6 @@ extern crate test_case;
 
 #[macro_use]
 pub(crate) mod macros;
-/// Tremor codecs
-pub mod codec;
 /// Tremor runtime configuration
 pub mod config;
 /// Tremor runtime errors

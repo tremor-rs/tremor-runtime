@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The `binary` codec marshalls raw binary data data as a tremor `bytes` literal value.
+//! The `yaml` codec supports marshalling the `YAML Ain't Markup Language` format.
 //!
-//! When data isn't already represented as `bytes` it will be encoded as JSON document.
+//! Specification: [YAML 1.2](https://yaml.org).
 
-use super::prelude::*;
+use crate::prelude::*;
 
 #[derive(Clone)]
-pub struct Binary {}
+pub struct Yaml {}
 
 #[async_trait::async_trait]
-impl Codec for Binary {
+impl Codec for Yaml {
     fn name(&self) -> &str {
-        "bytes"
+        "yaml"
     }
 
     fn mime_types(&self) -> Vec<&'static str> {
-        vec!["application/octet-stream"]
+        vec!["application/yaml"]
     }
 
     async fn decode<'input>(
@@ -37,18 +37,13 @@ impl Codec for Binary {
         _ingest_ns: u64,
         meta: Value<'input>,
     ) -> Result<Option<(Value<'input>, Value<'input>)>> {
-        let data: &'input [u8] = data;
-        Ok(Some((Value::Bytes(data.into()), meta)))
+        serde_yaml::from_slice::<simd_json::OwnedValue>(data)
+            .map(Value::from)
+            .map(|v| Some((v, meta)))
+            .map_err(Error::from)
     }
-
     async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
-        if let Some(s) = data.as_str() {
-            Ok(s.as_bytes().to_vec())
-        } else if let Value::Bytes(b) = data {
-            Ok(b.to_vec())
-        } else {
-            Ok(simd_json::to_vec(&data)?)
-        }
+        Ok(serde_yaml::to_string(data)?.into_bytes())
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
@@ -59,19 +54,20 @@ impl Codec for Binary {
 #[cfg(test)]
 mod test {
     use super::*;
+    use tremor_value::literal;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_binary_codec() -> Result<()> {
-        let seed = Value::Bytes("snot badger".as_bytes().into());
+    async fn test_yaml_codec() -> Result<()> {
+        let seed = literal!({ "snot": "badger" });
 
-        let mut codec = Binary {};
+        let mut codec = Yaml {};
         let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
-        assert_eq!(as_raw, b"snot badger");
-        let as_value = codec
+        let as_json = codec
             .decode(as_raw.as_mut_slice(), 0, Value::object())
             .await?
-            .unwrap_or_default();
-        assert_eq!(as_value.0, seed);
+            .expect("no data");
+
+        assert_eq!(seed, as_json.0);
 
         Ok(())
     }

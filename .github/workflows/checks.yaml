@@ -45,6 +45,8 @@ jobs:
         run: ./.github/checks/deps.sh tremor-common
       - name: Check for unused dependencies (tremor-value)
         run: ./.github/checks/deps.sh tremor-value
+      - name: Check for unused dependencies (tremor-codec)
+        run: ./.github/checks/deps.sh tremor-codec
 
   format:
     runs-on: ubuntu-latest

@@ -19,7 +19,6 @@ use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
 use tokio::sync::broadcast;
 use tremor_common::ports::Port;
-use tremor_influx as influx;
 use value_trait::prelude::*;
 
 pub type Kind = ErrorKind;
@@ -151,6 +150,7 @@ error_chain! {
     links {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
+        Codec(tremor_codec::errors::Error, tremor_codec::errors::ErrorKind);
     }
     foreign_links {
         AddrParseError(std::net::AddrParseError);
@@ -162,8 +162,6 @@ error_chain! {
         Clickhouse(clickhouse_rs::errors::Error);
         Common(tremor_common::Error);
         CronError(cron::error::Error);
-        CsvError(csv::Error);
-        DateTimeParseError(chrono::ParseError);
         DnsError(trust_dns_resolver::error::ResolveError);
         InvalidTLSClientName(rustls::client::InvalidDnsNameError);
         ElasticError(elasticsearch::Error);
@@ -173,17 +171,13 @@ error_chain! {
         GrokError(grok::Error);
         Hex(hex::FromHexError);
         HttpHeaderError(http::header::InvalidHeaderValue);
-        InfluxEncoderError(influx::EncoderError);
         Io(std::io::Error);
         JsonAccessError(value_trait::AccessError);
         JsonError(simd_json::Error);
         KafkaError(rdkafka::error::KafkaError);
         ModeParseError(file_mode::ModeParseError);
-        MsgPackDecoderError(rmp_serde::decode::Error);
-        MsgPackEncoderError(rmp_serde::encode::Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
-        //Postgres(postgres::Error);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         InvalidHeaderName(reqwest::header::InvalidHeaderName);
@@ -202,12 +196,8 @@ error_chain! {
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         WalJson(qwal::Error<simd_json::Error>);
         WalInfailable(qwal::Error<std::convert::Infallible>);
-        Uuid(uuid::Error);
         Serenity(serenity::Error);
         InvalidMetadataValue(tonic::metadata::errors::InvalidMetadataValue);
-        Lexical(lexical::Error);
-        SimdUtf8(simdutf8::basic::Utf8Error);
-        TremorCodec(crate::codec::tremor::Error);
         S3Endpoint(aws_smithy_http::endpoint::error::InvalidEndpointError);
         S3ByteStream(aws_smithy_http::byte_stream::error::Error);
         JoinError(tokio::task::JoinError);
@@ -219,7 +209,6 @@ error_chain! {
         HeaderToStringError(http::header::ToStrError);
         MimeParsingError(mime::FromStrError);
         InvalidStatusCode(http::status::InvalidStatusCode);
-        AvroError(apache_avro::Error);
     }
 
     errors {
@@ -242,16 +231,6 @@ error_chain! {
                 display("Unknown connector type {}", t)
         }
 
-        CodecNotFound(name: String) {
-            description("Codec not found")
-                display("Codec \"{}\" not found.", name)
-        }
-
-        NotCSVSerializableValue(value: String) {
-            description("The value cannot be serialized to CSV. Expected an array.")
-            display("The value {} cannot be serialized to CSV. Expected an array.", value)
-        }
-
         // TODO: Old errors, verify if needed
         BadOpConfig(e: String) {
             description("Operator config has a bad syntax")
@@ -268,26 +247,6 @@ error_chain! {
                 display("Invalid GELF header len: {}, prefix: {:?}", len, initial)
         }
 
-        InvalidStatsD {
-            description("Invalid statsd metric")
-                display("Invalid statsd metric")
-        }
-        InvalidDogStatsD {
-            description("Invalid dogstatsd metric")
-                display("Invalid dogstatsd metric")
-        }
-        InvalidInfluxData(s: String, e: influx::DecoderError) {
-            description("Invalid Influx Line Protocol data")
-                display("Invalid Influx Line Protocol data: {}\n{}", e, s)
-        }
-        InvalidBInfluxData(s: String) {
-            description("Invalid BInflux Line Protocol data")
-                display("Invalid BInflux Line Protocol data: {}", s)
-        }
-        InvalidSyslogData(s: &'static str) {
-            description("Invalid Syslog Protocol data")
-                display("Invalid Syslog Protocol data: {}", s)
-        }
         BadUtF8InString {
             description("Bad UTF8 in input string")
                 display("Bad UTF8 in input string")

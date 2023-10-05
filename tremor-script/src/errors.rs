@@ -238,10 +238,10 @@ impl ErrorKind {
             AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
-            CantSetWindowConst, Common, CyclicUse, DecreasingRange, DeployArtefactNotDefined,
-            DeployRequiredArgDoesNotResolve, DivisionByZero, DoubleConst, DoublePipelineCreate,
-            DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok,
-            InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
+            CantSetWindowConst, CodecError, Common, CyclicUse, DecreasingRange,
+            DeployArtefactNotDefined, DeployRequiredArgDoesNotResolve, DivisionByZero, DoubleConst,
+            DoublePipelineCreate, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken,
+            Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
             InvalidDefinitionalWithParam, InvalidDrop, InvalidEmit, InvalidExtractor,
             InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral, InvalidPP,
             InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io, JsonError,
@@ -339,6 +339,7 @@ impl ErrorKind {
             | CantSetArgsConst
             | CantSetGroupConst
             | CantSetWindowConst
+            | CodecError(_)
             | Common(_)
             | Grok(_)
             | Io(_)
@@ -560,6 +561,7 @@ error_chain! {
         Utf8Error(std::str::Utf8Error);
         NoObjectError(tremor_value::KnownKeyError);
         AccessError(value_trait::AccessError);
+        CodecError(tremor_codec::Error);
         Common(tremor_common::Error);
     }
     errors {

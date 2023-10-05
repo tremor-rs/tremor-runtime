@@ -43,7 +43,7 @@
 
 use std::collections::HashMap;
 
-use super::prelude::*;
+use crate::prelude::*;
 use apache_avro::{
     schema::Name, types::Value as AvroValue, Codec as Compression, Decimal, Duration, Reader,
     Schema, Writer,

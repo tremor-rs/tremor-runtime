@@ -19,6 +19,7 @@ use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use futures::executor::block_on;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
+use tremor_codec::Codec;
 use tremor_common::{
     file,
     ids::OperatorIdGen,
@@ -27,7 +28,6 @@ use tremor_common::{
 };
 use tremor_pipeline::{Event, EventId};
 use tremor_runtime::{
-    codec::Codec,
     config,
     postprocessor::Postprocessor,
     preprocessor::Preprocessor,
@@ -65,7 +65,7 @@ impl Ingress {
             Box::new(BufReader::new(crate::open_file(&cmd.infile, None)?))
         };
 
-        let codec = tremor_runtime::codec::resolve(&config::Codec::from(&cmd.decoder));
+        let codec = tremor_codec::resolve(&config::Codec::from(&cmd.decoder));
         if let Err(_e) = codec {
             eprintln!("Error Codec {} not found error.", cmd.decoder);
             // ALLOW: main.rs
@@ -154,7 +154,7 @@ impl Egress {
             Box::new(BufWriter::new(file::create(&cmd.outfile)?))
         };
 
-        let codec = tremor_runtime::codec::resolve(&config::Codec::from(&cmd.encoder));
+        let codec = tremor_codec::resolve(&config::Codec::from(&cmd.encoder));
         if let Err(_e) = codec {
             eprintln!("Error Codec {} not found error.", cmd.encoder);
             // ALLOW: main.rs

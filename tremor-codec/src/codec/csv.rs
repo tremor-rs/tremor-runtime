@@ -37,7 +37,7 @@
 //! ]    
 //! ```
 
-use crate::codec::prelude::*;
+use crate::prelude::*;
 use beef::Cow;
 
 #[derive(Clone)]
