@@ -16,10 +16,13 @@ use crate::errors::Result;
 use serde::Deserialize;
 use tremor_value::prelude::*;
 
+/// Named key value pair with optional config
 #[derive(Clone, Debug, Default)]
 #[allow(clippy::module_name_repetitions)]
 pub struct NameWithConfig {
+    /// Name
     pub name: String,
+    /// Config (optional)
     pub config: Option<Value<'static>>,
 }
 

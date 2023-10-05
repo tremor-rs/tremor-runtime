@@ -12,6 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Tremor codecs for decoding and encoding data from wire format to tremor's internal representation
+
+#![deny(warnings)]
+#![deny(missing_docs)]
+#![recursion_limit = "1024"]
+#![deny(
+    clippy::all,
+    clippy::unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic,
+    clippy::mod_module_files
+)]
+
 pub mod errors;
 pub use crate::errors::Error;
 use crate::errors::{Kind as ErrorKind, Result};
@@ -36,6 +49,7 @@ mod codec {
     pub(crate) mod yaml;
 }
 
+/// Codec configuration
 pub mod config;
 pub use codec::*;
 

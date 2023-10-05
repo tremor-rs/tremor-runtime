@@ -87,6 +87,7 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
 
 /// Sorting for JSON
 pub trait Sorting: Sync + Send + Copy + Clone + 'static {
+    /// Is this codec sorted
     const SORTED: bool;
 }
 
@@ -104,6 +105,7 @@ impl Sorting for Unsorted {
     const SORTED: bool = false;
 }
 
+/// JSON codec
 pub struct Json<S: Sorting> {
     _phantom: PhantomData<S>,
     input_buffer: AlignedBuf,

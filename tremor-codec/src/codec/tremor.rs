@@ -122,10 +122,9 @@ impl Tremor {
         //ALLOW: `total` is the data we've already read so we know they exist
         data = unsafe { data.get_unchecked(total..) };
         let mut v = Value::object_with_capacity(len);
-        let o = match v.as_object_mut() {
-            Some(o) => o,
+        let Some(o) = v.as_object_mut() else {
             // ALLOW: We knowm tis is an object
-            None => unreachable!(),
+            unreachable!()
         };
         for _ in 0..len {
             let mut cursor = Cursor::new(data);
