@@ -190,7 +190,7 @@ mod tests {
         common::v1::{any_value, AnyValue, InstrumentationLibrary},
         resource::v1::Resource,
     };
-    use tremor_script::utils::sorted_serialize;
+    use tremor_value::utils::sorted_serialize;
 
     use super::*;
 

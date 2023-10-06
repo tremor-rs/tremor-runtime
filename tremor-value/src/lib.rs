@@ -42,6 +42,8 @@ mod macros;
 /// Prelude module
 pub mod prelude;
 mod serde;
+/// Utility function
+pub mod utils;
 /// The value modules defines a structural module of tremor supported types
 pub mod value;
 pub use crate::serde::structurize;

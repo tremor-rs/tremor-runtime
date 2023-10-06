@@ -27,6 +27,7 @@ use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
 use tremor_script::module::Manager;
 use tremor_script::utils::*;
+use tremor_value::utils::sorted_serialize;
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
@@ -110,9 +111,10 @@ macro_rules! test_cases {
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");
                 for (_, result) in results {
                     for value in result.value_iter() {
-                        let serialized = sorted_serialize(value)?;
+                        let serialized = String::from_utf8(sorted_serialize(value)?)?;
                         if let Some(expected) = out_json.pop() {
-                            assert_eq!(serialized, sorted_serialize(&expected)?);
+                            let expected = String::from_utf8(sorted_serialize(&expected)?)?;
+                            assert_eq!(serialized, expected);
                         }
                     }
                 }

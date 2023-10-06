@@ -23,6 +23,7 @@ use tremor_script::utils::*;
 use tremor_script::{
     highlighter::Dumb, module::Manager, AggrType, EventContext, Return, Script, FN_REGISTRY,
 };
+use tremor_value::utils::sorted_serialize;
 use tremor_value::{Object, Value};
 
 macro_rules! test_cases {
@@ -78,9 +79,11 @@ macro_rules! test_cases {
                     };
                 }
                 assert_eq!(results.len(), out_json.len());
-                for (i, value) in results.iter().enumerate() {
+                for (_, value) in results.iter().enumerate() {
+                    let serialized = String::from_utf8(sorted_serialize(value)?)?;
                     if let Some(expected) = out_json.pop() {
-                        assert_eq!(sorted_serialize(&value)?, sorted_serialize(&expected)?, "Input event #{} Expected `{}`, but got `{}`", i, sorted_serialize(&expected)?, sorted_serialize(&value)?);
+                        let expected = String::from_utf8(sorted_serialize(&expected)?)?;
+                        assert_eq!(serialized, expected);
                     }
                 }
                 Ok(())

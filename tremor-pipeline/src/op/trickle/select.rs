@@ -18,23 +18,21 @@
 mod test;
 
 use super::window::{self, Group, Window};
-use crate::op::prelude::trickle::window::{GroupWindow, SelectCtx, Trait};
 use crate::op::prelude::*;
+use crate::op::trickle::window::{GroupWindow, SelectCtx, Trait};
 use crate::{errors::Result, SignalKind};
 use crate::{Event, Operator};
 use halfbrown::Entry;
 use tremor_common::stry;
-
 use tremor_script::{
     self,
     ast::{self, ImutExpr, RunConsts, SelectStmt},
     errors::{err_generic, Result as TSResult},
     interpreter::{Env, LocalStack},
     prelude::*,
-    utils::sorted_serialize,
     NO_AGGRS,
 };
-use tremor_value::Value;
+use tremor_value::{utils::sorted_serialize, Value};
 
 #[derive(Debug)]
 pub(crate) struct Select {
@@ -252,7 +250,7 @@ impl Operator for Select {
             // with the `each` grouping an event could be in more then one group, so we
             // iterate over all groups we found
             for group_value in group_values {
-                let group_str = stry!(sorted_serialize(&group_value));
+                let group_str = String::from_utf8(sorted_serialize(&group_value)?)?;
 
                 ctx.cardinality = groups.len();
 
