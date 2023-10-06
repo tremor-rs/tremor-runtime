@@ -770,7 +770,8 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
 
 #[cfg(test)]
 mod test {
-    #![allow(clippy::float_cmp)]
+    #![allow(clippy::float_cmp, clippy::ignored_unit_patterns)]
+
     use super::*;
     use crate::registry::FResult as Result;
     use float_cmp::approx_eq;

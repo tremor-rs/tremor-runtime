@@ -253,8 +253,7 @@
 //! end;
 //! deploy flow main;
 //! ```
-
-use rand::Rng;
+use tremor_common::rand;
 use tremor_script::{tremor_fn, Registry};
 use tremor_value::Value;
 
@@ -265,21 +264,11 @@ pub(crate) mod writer;
 //  uses: a 16-character hexadecimal encoding of an 8-byte array,
 // such as 000000000000004a
 fn random_span_id_value(ingest_ns_seed: u64) -> Value<'static> {
-    let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
-    let span_id: String = (0..8)
-        .map(|_| rng.gen::<u8>())
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    Value::from(span_id)
+    Value::from(tremor_common::rand::octet_string(8, ingest_ns_seed))
 }
 
 fn random_trace_id_value(ingest_ns_seed: u64) -> Value<'static> {
-    let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
-    let span_id: String = (0..16)
-        .map(|_| rng.gen::<u8>())
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    Value::from(span_id)
+    Value::from(rand::octet_string(16, ingest_ns_seed))
 }
 
 /// Extend function registry with `GCP Cloud Logging` support

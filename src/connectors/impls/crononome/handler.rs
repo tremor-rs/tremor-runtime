@@ -99,7 +99,7 @@ impl<I> PartialEq for TemporalItem<I> {
 
 impl<I> PartialOrd for TemporalItem<I> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.at.partial_cmp(&other.at)
+        Some(self.at.cmp(&other.at))
     }
 }
 

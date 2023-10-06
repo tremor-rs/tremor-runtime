@@ -185,12 +185,11 @@ pub(crate) fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Str
 
 #[cfg(test)]
 mod test {
-    use std::f64;
-
+    #![allow(clippy::ignored_unit_patterns)]
     use super::*;
-
     use proptest::proptest;
     use proptest::{bits::u64, prelude::*};
+    use std::f64;
     use tremor_value::literal;
 
     #[test]

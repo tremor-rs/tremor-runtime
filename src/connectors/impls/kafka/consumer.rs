@@ -385,7 +385,7 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
         offsets: &rdkafka::TopicPartitionList,
     ) {
         match result {
-            Ok(_) => {
+            Ok(()) => {
                 if offsets.count() > 0 {
                     debug!("{} Offsets committed successfully", &self.ctx);
                     if log_enabled!(Debug) {
@@ -995,7 +995,7 @@ impl TopicResolver {
 
 #[cfg(test)]
 mod test {
-
+    #![allow(clippy::ignored_unit_patterns)]
     use super::{Config, Offset, TopicResolver};
     use crate::errors::Result;
     use proptest::prelude::*;

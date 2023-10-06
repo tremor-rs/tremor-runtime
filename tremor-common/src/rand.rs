@@ -12,10 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use rand::{rngs::SmallRng, SeedableRng};
+use rand::{rngs::SmallRng, Rng, SeedableRng};
+use std::fmt::Write;
 
 /// Create a new random number generator - seed with `ingest_ns` from event context ( where appropriate )
 #[must_use]
 pub fn make_prng(ingest_ns_seed: u64) -> SmallRng {
     SmallRng::seed_from_u64(ingest_ns_seed)
+}
+
+/// Generates a random octet string of `octet` * 2 ( an octet contains 2 characters) length
+#[must_use]
+pub fn octet_string(octets: usize, seed: u64) -> String {
+    let mut rng = crate::rand::make_prng(seed);
+    (0..octets).fold(String::new(), |mut o, _| {
+        // ALLOW: if we can't allocate it's worse, we'd have the same problem with format
+        let _ = write!(o, "{:02x}", rng.gen::<u8>());
+        o
+    })
 }

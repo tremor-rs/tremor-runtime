@@ -684,7 +684,7 @@ where
             #[cfg(test)]
             SourceMsg::Synchronize(sender) => {
                 self.ctx.swallow_err(
-                    sender.send(()).map_err(|_| "send err"),
+                    sender.send(()).map_err(|()| "send err"),
                     "Error synchronizing with source ",
                 );
                 Ok(Control::Continue)

@@ -167,6 +167,7 @@ pub fn finish(preprocessors: &mut [Box<dyn Preprocessor>], alias: &Alias) -> Res
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::ignored_unit_patterns)]
     use super::*;
     use crate::postprocessor::{self as post, separate::Separate as SeparatePost, Postprocessor};
     use crate::Result;

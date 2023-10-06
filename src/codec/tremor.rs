@@ -420,6 +420,8 @@ mod test {
     }
     proptest! {
         #[test]
+        #[allow(clippy::ignored_unit_patterns)]
+
         fn prop_round_trip(v1 in arb_tremor_value()) {
             let mut v: Vec<u8> = Vec::new();
             Tremor::encode(&v1, &mut v).expect("failed to encode");

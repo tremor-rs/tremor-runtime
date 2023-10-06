@@ -241,9 +241,7 @@ where
 {
     match val.as_usize() {
         Some(n) => Ok(n),
-        None if val.is_integer() => {
-            error_bad_array_index(outer, inner, path, val.borrow(), array.len())
-        }
+        None if val.is_integer() => error_bad_array_index(outer, inner, path, val, array.len()),
         None => error_need_int(outer, inner, val.value_type()),
     }
 }

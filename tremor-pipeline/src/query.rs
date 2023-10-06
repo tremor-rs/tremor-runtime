@@ -270,7 +270,7 @@ impl Query {
                     let label = h
                         .highlight_range(e)
                         .ok()
-                        .map(|_| h.to_string().trim_end().to_string());
+                        .map(|()| h.to_string().trim_end().to_string());
 
                     let select_in = InputPort {
                         id: format!("select_{select_num}").into(),
@@ -474,7 +474,7 @@ impl Query {
                     let label = h
                         .highlight_range(e)
                         .ok()
-                        .map(|_| format!("{}\n", h.to_string().trim_end()));
+                        .map(|()| format!("{}\n", h.to_string().trim_end()));
                     let that_defn = Stmt::ScriptDefinition(Box::new(defn));
 
                     let node = NodeConfig {

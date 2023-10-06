@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::ignored_unit_patterns)]
+
 use super::*;
 use matches::assert_matches;
 use proptest::prelude::*;

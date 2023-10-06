@@ -15,10 +15,10 @@
 use crate::errors::{Error, ErrorKind, Result};
 use crate::util::slurp_string;
 use crate::{target_process, target_process::TargetProcess};
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{
     collections::HashMap,
+    fmt::Write,
     fs,
     time::{self, Duration},
 };
@@ -93,10 +93,11 @@ impl Before {
     fn cmdline(&self) -> String {
         format!(
             "{}{} {}",
-            self.env
-                .iter()
-                .map(|(k, v)| format!("{k}={v} "))
-                .collect::<String>(),
+            self.env.iter().fold(String::new(), |mut o, (k, v)| {
+                // ALLOW: if we can't allocate it's worse, we'd have the same problem with format
+                let _ = write!(o, "{k}={v} ");
+                o
+            }),
             self.cmd,
             self.args.join(" ")
         )

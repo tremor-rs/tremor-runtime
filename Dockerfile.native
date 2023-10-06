@@ -1,4 +1,4 @@
-FROM rust:1.72-bullseye as builder
+FROM rust:1.73-bullseye as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive

@@ -16,7 +16,7 @@ use crate::errors::{Error, Result};
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsStr;
-use std::fmt::Display;
+use std::fmt::{Display, Write};
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
@@ -140,9 +140,11 @@ impl TargetProcess {
             .collect::<Vec<_>>();
         let cmdline = format!(
             "{}{} {}",
-            env.iter()
-                .map(|(k, v)| format!("{k}={v} "))
-                .collect::<String>(),
+            env.iter().fold(String::new(), |mut o, (k, v)| {
+                // ALLOW: if we can't allocate it's worse, we'd have the same problem with format
+                let _ = write!(o, "{k}={v} ");
+                o
+            }),
             cmd.to_string_lossy(),
             args.join(" ")
         );

@@ -58,8 +58,8 @@ fn log_record_to_json(log: LogRecord) -> Result<Value<'static>> {
         "severity_number": affirm_severity_number_valid(log.severity_number)?,
         "severity_text": log.severity_text.to_string(),
         "flags": affirm_traceflags_valid(log.flags)?,
-        "span_id": id::hex_span_id_to_json(&log.span_id),
-        "trace_id": id::hex_trace_id_to_json(&log.trace_id),
+        "span_id": id::hex_id_to_json(&log.span_id),
+        "trace_id": id::hex_id_to_json(&log.trace_id),
         "attributes": common::key_value_list_to_json(log.attributes),
         "dropped_attributes_count": log.dropped_attributes_count,
         "body": common::maybe_any_value_to_json(log.body),
@@ -198,9 +198,9 @@ mod tests {
     fn instrumentation_library_logs() -> Result<()> {
         let nanos = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanos);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let span_id_json = id::hex_id_to_json(&span_id_pb);
         let trace_id_json = id::random_trace_id_value(nanos);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+        let trace_id_pb = id::hex_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![InstrumentationLibraryLogs {
             schema_url: "schema_url".into(),
@@ -253,9 +253,9 @@ mod tests {
     fn resource_logs() -> Result<()> {
         let nanos = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanos);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let span_id_json = id::hex_id_to_json(&span_id_pb);
         let trace_id_json = id::random_trace_id_value(nanos);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+        let trace_id_pb = id::hex_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = ExportLogsServiceRequest {
             resource_logs: vec![ResourceLogs {
@@ -326,9 +326,9 @@ mod tests {
     fn resource_logs_severity_unspecified_regression() -> Result<()> {
         let nanos = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanos);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let span_id_json = id::hex_id_to_json(&span_id_pb);
         let trace_id_json = id::random_trace_id_value(nanos);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+        let trace_id_pb = id::hex_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = ExportLogsServiceRequest {
             resource_logs: vec![ResourceLogs {
