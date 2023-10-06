@@ -22,7 +22,7 @@ use value_trait::Mutable;
 pub(crate) struct SchemaRegistryPrefix {}
 impl Preprocessor for SchemaRegistryPrefix {
     fn name(&self) -> &str {
-        "schema-refistry"
+        "schema-registry"
     }
 
     fn process(
@@ -44,7 +44,7 @@ impl Preprocessor for SchemaRegistryPrefix {
             meta.insert("schema_id", schema)?;
             Ok(vec![(d.to_vec(), meta)])
         } else {
-            Err("Extract Ingest Ts Preprocessor: < 8 byte".into())
+            Err("Kafka schema registry Preprocessor: < 8 byte".into())
         }
     }
 }
