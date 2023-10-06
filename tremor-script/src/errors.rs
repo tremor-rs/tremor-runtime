@@ -17,6 +17,7 @@
 #![allow(deprecated)]
 #![allow(missing_docs)]
 
+use crate::errors::ErrorKind::InvalidBinaryBoolean;
 pub use crate::prelude::ValueType;
 use crate::{
     arena,
@@ -29,13 +30,12 @@ use crate::{
 use error_chain::error_chain;
 use lalrpop_util::ParseError as LalrpopError;
 use simd_json::{ExtendedValueType, TryTypeError};
-
-use crate::errors::ErrorKind::InvalidBinaryBoolean;
+use std::fmt::Write;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
 use std::{fmt::Display, num};
 
 #[derive(Debug)]
-//// An error with a associated arena index
+/// An error with a associated arena index
 pub struct ErrorWithIndex(pub arena::Index, pub Error);
 
 impl std::fmt::Display for ErrorWithIndex {
@@ -737,7 +737,13 @@ error_chain! {
             description("Module not found")
                 display("Module `{}` not found or not readable error in module path: {}",
                 resolved_relative_file_path.trim(),
-                expected.iter().map(|x| format!("\n                         - {x}")).collect::<String>())
+                expected.iter().fold(String::new(), |mut output, x|
+                {
+                    // ALLOW: if we can't allocate it's worse, we'd have the same problem with format
+let _ = write!(output, "\n                         - {x}");
+                    output
+
+            }))
         }
 
 

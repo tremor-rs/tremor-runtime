@@ -195,6 +195,8 @@ pub fn load(registry: &mut Registry) {
 
 #[cfg(test)]
 mod test {
+    #![allow(clippy::ignored_unit_patterns)]
+
     use crate::registry::fun;
     use crate::Value;
     use proptest::prelude::*;

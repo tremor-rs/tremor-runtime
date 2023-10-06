@@ -40,8 +40,8 @@ pub(crate) fn int_exemplars_to_json(data: Vec<IntExemplar>) -> Value<'static> {
     data.into_iter()
         .map(|exemplar| {
             literal!({
-                "span_id": id::hex_span_id_to_json(&exemplar.span_id),
-                "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
+                "span_id": id::hex_id_to_json(&exemplar.span_id),
+                "trace_id": id::hex_id_to_json(&exemplar.trace_id),
                 "filtered_labels": common::string_key_value_to_json(exemplar.filtered_labels),
                 "time_unix_nano": exemplar.time_unix_nano,
                 "value": exemplar.value
@@ -83,8 +83,8 @@ pub(crate) fn double_exemplars_to_json(data: Vec<Exemplar>) -> Value<'static> {
             };
 
             let mut r = literal!({
-                "span_id": id::hex_span_id_to_json(&exemplar.span_id),
-                "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
+                "span_id": id::hex_id_to_json(&exemplar.span_id),
+                "trace_id": id::hex_id_to_json(&exemplar.trace_id),
                 "filtered_attributes": filtered_attributes,
                 "time_unix_nano": exemplar.time_unix_nano,
             });
@@ -583,9 +583,9 @@ mod tests {
     fn int_exemplars() -> Result<()> {
         let nanos = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanos);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let span_id_json = id::hex_id_to_json(&span_id_pb);
         let trace_id_json = id::random_trace_id_value(nanos);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+        let trace_id_pb = id::hex_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![IntExemplar {
             span_id: span_id_pb.clone(),
@@ -620,9 +620,9 @@ mod tests {
     fn double_exemplars() -> Result<()> {
         let nanos = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanos);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let span_id_json = id::hex_id_to_json(&span_id_pb);
         let trace_id_json = id::random_trace_id_value(nanos);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+        let trace_id_pb = id::hex_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![Exemplar {
             filtered_attributes: vec![],

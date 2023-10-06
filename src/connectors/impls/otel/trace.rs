@@ -85,8 +85,8 @@ pub(crate) fn span_links_to_json(pb: Vec<Link>) -> Value<'static> {
     pb.into_iter()
         .map(|data| {
             literal!({
-                "trace_id": id::hex_trace_id_to_json(&data.trace_id),
-                "span_id": id::hex_span_id_to_json(&data.span_id),
+                "trace_id": id::hex_id_to_json(&data.trace_id),
+                "span_id": id::hex_id_to_json(&data.span_id),
                 "trace_state": data.trace_state,
                 "attributes": common::key_value_list_to_json(data.attributes),
                 "dropped_attributes_count" : data.dropped_attributes_count
@@ -133,9 +133,9 @@ fn span_to_json(span: Span) -> Value<'static> {
         "attributes": common::key_value_list_to_json(span.attributes),
         "events": span_events_to_json(span.events),
         "links": span_links_to_json(span.links),
-        "span_id": id::hex_span_id_to_json(&span.span_id),
-        "parent_span_id": id::hex_span_id_to_json(&span.parent_span_id),
-        "trace_id": id::hex_trace_id_to_json(&span.trace_id),
+        "span_id": id::hex_id_to_json(&span.span_id),
+        "parent_span_id": id::hex_id_to_json(&span.parent_span_id),
+        "trace_id": id::hex_id_to_json(&span.trace_id),
         "start_time_unix_nano": span.start_time_unix_nano,
         "end_time_unix_nano": span.end_time_unix_nano,
         "trace_state": span.trace_state,
@@ -343,9 +343,9 @@ mod tests {
     fn span_link() -> Result<()> {
         let nanotime = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanotime);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let span_id_json = id::hex_id_to_json(&span_id_pb);
         let trace_id_json = id::random_trace_id_value(nanotime);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+        let trace_id_pb = id::hex_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![Link {
             attributes: vec![],
@@ -384,11 +384,11 @@ mod tests {
     fn instrument_library_spans() -> Result<()> {
         let nanotime = tremor_common::time::nanotime();
         let parent_span_id_json = id::random_span_id_value(nanotime);
-        let parent_span_id_pb = id::test::json_span_id_to_pb(Some(&parent_span_id_json))?;
+        let parent_span_id_pb = id::hex_span_id_to_pb(Some(&parent_span_id_json))?;
         let span_id_pb = id::random_span_id_bytes(nanotime);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let span_id_json = id::hex_id_to_json(&span_id_pb);
         let trace_id_json = id::random_trace_id_value(nanotime);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+        let trace_id_pb = id::hex_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![InstrumentationLibrarySpans {
             schema_url: "schema_url".into(),
@@ -460,11 +460,11 @@ mod tests {
     fn resource_spans() -> Result<()> {
         let nanotime = tremor_common::time::nanotime();
         let parent_span_id_json = id::random_span_id_value(nanotime);
-        let parent_span_id_pb = id::test::json_span_id_to_pb(Some(&parent_span_id_json))?;
+        let parent_span_id_pb = id::hex_span_id_to_pb(Some(&parent_span_id_json))?;
         let span_id_pb = id::random_span_id_bytes(nanotime);
-        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let span_id_json = id::hex_id_to_json(&span_id_pb);
         let trace_id_json = id::random_trace_id_value(nanotime);
-        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+        let trace_id_pb = id::hex_trace_id_to_pb(Some(&trace_id_json))?;
 
         #[allow(deprecated)]
         let pb = ExportTraceServiceRequest {

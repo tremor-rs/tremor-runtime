@@ -52,7 +52,7 @@ where
 
     for (key, value) in tag_collection {
         output.write_all(&[b','])?;
-        write_escaped_key(&mut output, key.borrow().as_bytes())?;
+        write_escaped_key(&mut output, key.as_bytes())?;
         output.write_all(&[b'='])?;
         // For the fields we escape differently then for values ...
         write_escaped_key(&mut output, value.as_bytes())?;
@@ -75,7 +75,7 @@ where
         } else {
             output.write_all(&[b','])?;
         }
-        write_escaped_key(&mut output, key.borrow().as_bytes())?;
+        write_escaped_key(&mut output, key.as_bytes())?;
         output.write_all(&[b'='])?;
 
         if let Some(s) = value.as_str() {

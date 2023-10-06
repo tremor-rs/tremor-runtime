@@ -165,6 +165,7 @@ impl Chunk {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::ignored_unit_patterns)]
     use super::*;
     use proptest::prelude::*;
     use proptest::{collection, num, option};

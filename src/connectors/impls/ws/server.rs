@@ -186,7 +186,7 @@ impl Connector for WsServer {
             self.config
                 .url
                 .set_port(Some(port))
-                .map_err(|_| "Invalid URL")?;
+                .map_err(|()| "Invalid URL")?;
         }
         let listener = tcp_server_socket(
             &self.config.url,
