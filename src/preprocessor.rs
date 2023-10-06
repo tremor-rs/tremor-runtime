@@ -83,7 +83,7 @@ pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preproc
         "gelf-chunking" => Ok(Box::<gelf_chunking::GelfChunking>::default()),
         "ingest-ns" => Ok(Box::<ingest_ns::ExtractIngestTs>::default()),
         "length-prefixed" => Ok(Box::<length_prefixed::LengthPrefixed>::default()),
-        "schema-refistry" => {
+        "schema-registry" => {
             Ok(Box::<kafka_schema_registry_prefix::SchemaRegistryPrefix>::default())
         }
         "textual-length-prefixed" => {
