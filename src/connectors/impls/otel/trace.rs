@@ -266,7 +266,7 @@ mod tests {
     use tremor_otelapis::opentelemetry::proto::{
         common::v1::InstrumentationLibrary, resource::v1::Resource,
     };
-    use tremor_script::utils::sorted_serialize;
+    use tremor_value::utils::sorted_serialize;
 
     use super::*;
 

@@ -23,67 +23,9 @@
 //! The codec can be configured with a mode, either `sorted` or `unsorted`. The default is `unsorted` as it is singnificantly faster, `sorted` json is only needed in testing situations where the key order in maps matters for compairson.
 
 use crate::prelude::*;
-use std::{cmp::max, io::Write, marker::PhantomData};
+use std::{cmp::max, marker::PhantomData};
+use tremor_value::utils::sorted_serialize;
 use tremor_value::AlignedBuf;
-
-// TODO: this is a copy from tremor script, it's not nice
-
-/// Serialize a Value in a sorted fashion to allow equality comparing the result
-///
-/// # Errors
-/// on IO errors
-pub fn sorted_serialize(j: &Value) -> Result<String> {
-    // ballpark size of a 'sensible' message
-    let mut w = Vec::with_capacity(512);
-    sorted_serialize_(j, &mut w)?;
-    Ok(std::str::from_utf8(&w)?.to_string())
-}
-
-fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
-    match j {
-        Value::Static(_) | Value::String(_) | Value::Bytes(_) => {
-            write!(w, "{}", j.encode())?;
-        }
-        Value::Array(a) => {
-            let mut iter = a.iter();
-            write!(w, "[")?;
-
-            if let Some(e) = iter.next() {
-                sorted_serialize_(e, w)?;
-            }
-
-            for e in iter {
-                write!(w, ",")?;
-                sorted_serialize_(e, w)?;
-            }
-            write!(w, "]")?;
-        }
-        Value::Object(o) => {
-            let mut v: Vec<(String, Value<'v>)> =
-                o.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
-
-            v.sort_by_key(|(k, _)| k.to_string());
-            let mut iter = v.into_iter();
-
-            write!(w, "{{")?;
-
-            if let Some((k, v)) = iter.next() {
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-
-            for (k, v) in iter {
-                write!(w, ",")?;
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-            write!(w, "}}")?;
-        }
-    }
-    Ok(())
-}
 
 /// Sorting for JSON
 pub trait Sorting: Sync + Send + Copy + Clone + 'static {
@@ -176,7 +118,7 @@ impl<S: Sorting> Codec for Json<S> {
     }
     async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if S::SORTED {
-            Ok(sorted_serialize(data)?.into_bytes())
+            Ok(sorted_serialize(data)?)
         } else {
             data.write(&mut self.data_buf)?;
             let v = self.data_buf.clone();

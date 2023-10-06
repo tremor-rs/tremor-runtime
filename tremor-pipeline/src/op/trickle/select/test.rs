@@ -297,7 +297,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
     eis = select.on_event(uid, &Port::In, &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
-    assert_eq!("1", sorted_serialize(eis.events[0].1.data.parts().0)?);
+    assert_eq!(&b"1"[..], sorted_serialize(eis.events[0].1.data.parts().0)?);
     Ok(())
 }
 
@@ -356,7 +356,7 @@ fn select_single_win_on_signal() -> Result<()> {
         event_id.get_min_by_stream(uid.id(), 0)
     );
     assert_eq!(
-        r#"[{"g":"group"}]"#,
+        br#"[{"g":"group"}]"#[..],
         sorted_serialize(eis.events[0].1.data.parts().0)?
     );
     assert!(!eis.events[0].1.transactional);
@@ -418,7 +418,10 @@ fn select_multiple_wins_on_signal() -> Result<()> {
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
     let (_port, event) = eis.events.remove(0);
-    assert_eq!(r#"[{"cat":42}]"#, sorted_serialize(event.data.parts().0)?);
+    assert_eq!(
+        br#"[{"cat":42}]"#[..],
+        sorted_serialize(event.data.parts().0)?
+    );
     assert!(
         event.id.is_tracking(&event_id1),
         "Select result event {:?} is not tracking input event {:?}",

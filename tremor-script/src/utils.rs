@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, Kind as ErrorKind, Result};
-use crate::prelude::*;
+use crate::errors::{Error, Kind as ErrorKind};
 use crate::Value;
 use std::{io::prelude::*, path::Path};
 
@@ -28,63 +27,6 @@ pub fn hostname() -> String {
             })
         })
         .unwrap_or_else(|_| "tremor_host.local".to_string())
-}
-
-/// Serialize a Value in a sorted fashion to allow equality comparing the result
-///
-/// # Errors
-/// on IO errors
-pub fn sorted_serialize(j: &Value) -> Result<String> {
-    // ballpark size of a 'sensible' message
-    let mut w = Vec::with_capacity(512);
-    sorted_serialize_(j, &mut w)?;
-    Ok(std::str::from_utf8(&w)?.to_string())
-}
-
-fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
-    match j {
-        Value::Static(_) | Value::String(_) | Value::Bytes(_) => {
-            write!(w, "{}", j.encode())?;
-        }
-        Value::Array(a) => {
-            let mut iter = a.iter();
-            write!(w, "[")?;
-
-            if let Some(e) = iter.next() {
-                sorted_serialize_(e, w)?;
-            }
-
-            for e in iter {
-                write!(w, ",")?;
-                sorted_serialize_(e, w)?;
-            }
-            write!(w, "]")?;
-        }
-        Value::Object(o) => {
-            let mut v: Vec<(String, Value<'v>)> =
-                o.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
-
-            v.sort_by_key(|(k, _)| k.to_string());
-            let mut iter = v.into_iter();
-
-            write!(w, "{{")?;
-
-            if let Some((k, v)) = iter.next() {
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-
-            for (k, v) in iter {
-                write!(w, ",")?;
-                sorted_serialize_(&Value::from(k), w)?;
-                write!(w, ":")?;
-                sorted_serialize_(&v, w)?;
-            }
-            write!(w, "}}")?;
-        }
-    }
-    Ok(())
 }
 
 fn is_xz_file(filename: &str) -> bool {

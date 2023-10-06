@@ -256,7 +256,7 @@ use std::time::Duration;
 use std::{fmt::Display, sync::atomic::AtomicBool};
 use tokio::task;
 use tremor_common::time::nanotime;
-use tremor_script::utils::sorted_serialize;
+use tremor_value::utils::sorted_serialize;
 use tremor_value::value::StaticValue;
 use value_trait::Mutable;
 
@@ -813,7 +813,7 @@ async fn handle_response(
     } else {
         return Err(Error::from(format!(
             "Invalid Response from ES: No \"items\" or not an array: {}",
-            sorted_serialize(&response)?
+            String::from_utf8(sorted_serialize(&response)?)?
         )));
     }
     // ack the event

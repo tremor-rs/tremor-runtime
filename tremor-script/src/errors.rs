@@ -241,8 +241,8 @@ impl ErrorKind {
             CantSetWindowConst, CodecError, Common, CyclicUse, DecreasingRange,
             DeployArtefactNotDefined, DeployRequiredArgDoesNotResolve, DivisionByZero, DoubleConst,
             DoublePipelineCreate, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken,
-            Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
-            InvalidDefinitionalWithParam, InvalidDrop, InvalidEmit, InvalidExtractor,
+            FromUtf8Error, Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift,
+            InvalidConst, InvalidDefinitionalWithParam, InvalidDrop, InvalidEmit, InvalidExtractor,
             InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral, InvalidPP,
             InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io, JsonError,
             MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule, ModuleNotFound,
@@ -351,6 +351,7 @@ impl ErrorKind {
             | ParserError(_)
             | Self::__Nonexhaustive { .. }
             | Utf8Error(_)
+            | FromUtf8Error(_)
             | ValueError(_) => (Some(Span::yolo()), None),
         }
     }
@@ -559,6 +560,7 @@ error_chain! {
         ValueError(tremor_value::Error);
         ParseIntError(num::ParseIntError);
         Utf8Error(std::str::Utf8Error);
+        FromUtf8Error(std::string::FromUtf8Error);
         NoObjectError(tremor_value::KnownKeyError);
         AccessError(value_trait::AccessError);
         CodecError(tremor_codec::Error);
