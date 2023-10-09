@@ -860,7 +860,7 @@ impl<'script> StringLit<'script> {
                     } else if let Some(_f) = r.as_f64() {
                         "42".to_string()
                     } else {
-                        crate::utils::sorted_serialize(&r)?
+                        String::from_utf8(tremor_value::utils::sorted_serialize(&r)?)?
                     }
                 }
             };
@@ -888,7 +888,9 @@ impl<'script> StringLit<'script> {
                         } else if let Some(_f) = r.as_f64() {
                             res.push_str("42");
                         } else {
-                            res.push_str(&crate::utils::sorted_serialize(&r)?);
+                            res.push_str(&String::from_utf8(
+                                tremor_value::utils::sorted_serialize(&r)?,
+                            )?);
                         }
                     }
                 };
