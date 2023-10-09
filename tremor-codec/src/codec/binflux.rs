@@ -263,4 +263,35 @@ mod test {
             "Invalid BInflux Line Protocol data: Unknown type as influx line value: Array"
         );
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn encode_decode() {
+        let mut c = BInflux::default();
+
+        let value = literal!({
+            "measurement": "m",
+            "tags": {
+                "t1": "v1",
+                "t2": "v2"
+            },
+            "fields": {
+                "f1": 42,
+                "f2": 42.0,
+                "f3": true,
+                "f4": false,
+                "f5": "snot"
+            },
+            "timestamp": 42
+        });
+        let mut e = c
+            .encode(&value, &Value::const_null())
+            .await
+            .expect("encode");
+        let (d, _meta) = c
+            .decode(e.as_mut_slice(), 42, Value::const_null())
+            .await
+            .expect("decode")
+            .expect("decode");
+        assert_eq!(value, d);
+    }
 }
