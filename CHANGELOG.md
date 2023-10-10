@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## Unreleased
+
+## [0.13.0-rc.16]
 
 ### New features
 
