@@ -32,20 +32,19 @@ impl Preprocessor for SchemaRegistryPrefix {
         mut meta: Value<'static>,
     ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
         use std::io::Cursor;
-        if let Some(d) = data.get(8..) {
+        if let Some(d) = data.get(5..) {
             let mut c = Cursor::new(data);
-            let magic = c.read_u32::<BigEndian>()?;
+            let magic = c.read_u8()?;
             if magic != 0 {
-                return Err(format!(
-                    "Invalid magic bytes (0x00000000) for kafka wire format: {magic}"
-                )
-                .into());
+                return Err(
+                    format!("Invalid magic bytes (0x00) for kafka wire format: {magic}").into(),
+                );
             }
             let schema = c.read_u32::<BigEndian>()?;
             meta.insert("schema_id", schema)?;
             Ok(vec![(d.to_vec(), meta)])
         } else {
-            Err("Kafka schema registry Preprocessor: < 8 byte".into())
+            Err("Kafka schema registry Preprocessor: < 5 byte".into())
         }
     }
 }
@@ -55,12 +54,12 @@ mod test {
     use super::*;
     use value_trait::ValueAccess;
 
-    /// Tests if the preprocessor errors on data that's less then 8 bytes
+    /// Tests if the preprocessor errors on data that's less then 5 bytes
     #[test]
-    fn test_preprocessor_less_then_8_bytes() {
+    fn test_preprocessor_less_then_5_bytes() {
         let mut pp = SchemaRegistryPrefix::default();
         let mut ingest_ns = 0;
-        let data = vec![0, 0, 0, 0, 0, 0, 0];
+        let data = vec![0, 0, 0, 0];
         let meta = Value::object();
         let res = pp.process(&mut ingest_ns, &data, meta);
         assert!(res.is_err());
@@ -71,7 +70,7 @@ mod test {
     fn test_preprocessor_schema_id() -> Result<()> {
         let mut pp = SchemaRegistryPrefix::default();
         let mut ingest_ns = 0;
-        let data = vec![0, 0, 0, 0, 0, 0, 0, 1, 42];
+        let data = vec![0, 0, 0, 0, 1, 42];
         let meta = Value::object();
         let mut res = pp.process(&mut ingest_ns, &data, meta)?;
         let (rest, meta) = res.pop().expect("no result");
@@ -85,7 +84,7 @@ mod test {
     fn test_preprocessor_invalid_magic_bytes() {
         let mut pp = SchemaRegistryPrefix::default();
         let mut ingest_ns = 0;
-        let data = vec![0, 0, 0, 1, 0, 0, 0, 1];
+        let data = vec![1, 0, 0, 0, 1];
         let meta = Value::object();
         let res = pp.process(&mut ingest_ns, &data, meta);
         assert!(res.is_err());
