@@ -18,7 +18,6 @@ use crate::connectors::prelude::{
     SinkManagerBuilder, SinkReply, Url,
 };
 use crate::connectors::sink::Sink;
-use crate::connectors::utils::url::HttpsDefaults;
 use crate::connectors::{
     CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorContext, ConnectorType,
     Context,
@@ -33,6 +32,7 @@ use tokio::time::timeout;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Code;
+use tremor_common::url::HttpsDefaults;
 use tremor_pipeline::{ConfigImpl, Event};
 use tremor_value::Value;
 use value_trait::ValueAccess;

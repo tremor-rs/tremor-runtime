@@ -16,10 +16,7 @@ use crate::{
     connectors::{
         google::TokenSrc,
         prelude::{Result, Url},
-        utils::{
-            object_storage::{BufferPart, ObjectId},
-            url::HttpsDefaults,
-        },
+        utils::object_storage::{BufferPart, ObjectId},
     },
     errors::err_gcs,
 };
@@ -30,6 +27,7 @@ use hyper::{header, Body, Method, Request, Response, StatusCode};
 use hyper_rustls::HttpsConnectorBuilder;
 use std::time::Duration;
 use tokio::time::sleep;
+use tremor_common::url::HttpsDefaults;
 
 pub(crate) type GcsHttpClient =
     hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>;

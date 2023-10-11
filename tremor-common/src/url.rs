@@ -12,17 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
+pub use url::ParseError;
 
 lazy_static! {
     // ALLOW: we know this regex is valid
     static ref URL_SCHEME_REGEX: Regex = Regex::new("^[A-Za-z-]+://").expect("Invalid Regex");
 }
 
-pub(crate) trait Defaults {
+/// Default values for a URL
+pub trait Defaults {
     /// Default scheme
     const SCHEME: &'static str;
     /// Default host
@@ -32,13 +34,14 @@ pub(crate) trait Defaults {
 }
 
 /// Default HTTP
-pub(crate) struct HttpDefaults;
+pub struct HttpDefaults;
 impl Defaults for HttpDefaults {
     const HOST: &'static str = "localhost";
     const SCHEME: &'static str = "http";
     const PORT: u16 = 80;
 }
-pub(crate) struct HttpsDefaults;
+/// Default HTTPS
+pub struct HttpsDefaults;
 impl Defaults for HttpsDefaults {
     const SCHEME: &'static str = "http";
     const HOST: &'static str = "localhost";
@@ -47,7 +50,7 @@ impl Defaults for HttpsDefaults {
 
 /// Endpoint URL
 #[derive(Serialize)]
-pub(crate) struct Url<D: Defaults = HttpDefaults> {
+pub struct Url<D: Defaults = HttpDefaults> {
     url: url::Url,
     #[serde(skip)]
     _marker: PhantomData<D>,
@@ -132,25 +135,30 @@ impl<D: Defaults> Default for Url<D> {
 }
 
 impl<D: Defaults> Url<D> {
-    pub(crate) fn parse(input: &str) -> Result<Self> {
-        let parsed = if URL_SCHEME_REGEX.is_match(input) {
-            url::Url::parse(input)
+    /// Parse a URL
+    /// # Errors
+    /// if the URL is invalid
+    pub fn parse(input: &str) -> Result<Self, ParseError> {
+        let url = if URL_SCHEME_REGEX.is_match(input) {
+            url::Url::parse(input)?
         } else {
-            url::Url::parse(&format!("{}://{input}", D::SCHEME))
+            url::Url::parse(&format!("{}://{input}", D::SCHEME))?
         };
-        match parsed {
-            Ok(url) => Ok(Self {
-                url,
-                ..Self::default()
-            }),
-            Err(e) => Err(e.into()),
-        }
+        Ok(Self {
+            url,
+            ..Self::default()
+        })
     }
 
-    pub(crate) fn port_or_dflt(&self) -> u16 {
+    /// fetches the port, if provided, or the default if not
+    #[must_use]
+    pub fn port_or_dflt(&self) -> u16 {
         self.url.port().unwrap_or(D::PORT)
     }
-    pub(crate) fn host_or_local(&self) -> &str {
+
+    /// fetches the host, if provided, or the default if not
+    #[must_use]
+    pub fn host_or_local(&self) -> &str {
         if let Some(host) = self.url.host_str() {
             // the url lib is shit in that it prints ipv6 addresses with the brackets (e.g. [::1])
             // but e.g. the socket handling libs want those addresses without, so we strip them here
@@ -165,7 +173,9 @@ impl<D: Defaults> Url<D> {
         }
     }
 
-    pub(crate) fn url(&self) -> &url::Url {
+    /// fetches the underlying raw URL
+    #[must_use]
+    pub fn url(&self) -> &url::Url {
         &self.url
     }
 }
@@ -184,7 +194,10 @@ mod test {
     #[test_case("127.0.0.1", "http://127.0.0.1/"; "ensure scheme without port")]
     #[test_case("localhost:42", "http://localhost:42/"; "ensure scheme")]
     #[test_case("scheme://host:42/path?query=1&query=2#fragment", "scheme://host:42/path?query=1&query=2#fragment"; "all the url features")]
-    fn serialize_deserialize(input: &str, expected: &str) -> Result<()> {
+    fn serialize_deserialize(
+        input: &str,
+        expected: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut input = format!("\"{input}\""); // prepare for json compat
         let url: Url = unsafe { simd_json::from_str(&mut input)? };
 
