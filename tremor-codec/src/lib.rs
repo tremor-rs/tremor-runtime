@@ -39,6 +39,7 @@ mod codec {
     pub(crate) mod influx;
     /// JSON codec
     pub mod json;
+    pub(crate) mod kafka_schema_registry;
     pub(crate) mod msgpack;
     pub(crate) mod null;
     pub(crate) mod statsd;
@@ -120,6 +121,7 @@ impl Debug for dyn Codec {
 pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
     match config.name.as_str() {
         "avro" => avro::Avro::from_config(config.config.as_ref()),
+        "kafka-schema-registry" => kafka_schema_registry::Ksr::from_config(config.config.as_ref()),
         "binary" => Ok(Box::new(binary::Binary {})),
         "binflux" => Ok(Box::<binflux::BInflux>::default()),
         "csv" => Ok(Box::new(csv::Csv {})),

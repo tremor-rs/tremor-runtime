@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use crate::connectors::utils::url::{Defaults, Url};
 use crate::errors::{Error, Result};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::{lookup_host, UdpSocket};
 use tokio::net::{TcpListener, TcpStream};
+use tremor_common::url::{Defaults, Url};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "UPPERCASE")]

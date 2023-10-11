@@ -31,8 +31,6 @@ pub(crate) mod reconnect;
 pub(crate) mod socket;
 /// Transport Level Security facilities
 pub(crate) mod tls;
-/// URL untils
-pub(crate) mod url;
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub(crate) struct ConnectionMeta {
     pub(crate) host: String,

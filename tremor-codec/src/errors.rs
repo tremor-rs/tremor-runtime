@@ -56,6 +56,8 @@ error_chain! {
         SimdUtf8(simdutf8::basic::Utf8Error);
         TremorCodec(crate::codec::tremor::Error);
         AvroError(apache_avro::Error);
+        UrlParseError(tremor_common::url::ParseError);
+        SRCError(schema_registry_converter::error::SRCError);
     }
 
     errors {

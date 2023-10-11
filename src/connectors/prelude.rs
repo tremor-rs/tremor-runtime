@@ -26,10 +26,7 @@ pub(crate) use crate::{
             SourceManagerBuilder, SourceReply, StreamReader,
         },
         spawn_task,
-        utils::{
-            reconnect::Attempt,
-            url::{Defaults, HttpsDefaults, Url},
-        },
+        utils::reconnect::Attempt,
         Alias, CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context,
         StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
     },
@@ -39,8 +36,12 @@ pub(crate) use crate::{
     utils::hostname,
     Event,
 };
+
 pub(crate) use std::sync::atomic::Ordering;
-pub(crate) use tremor_common::ports::{Port, ERR, IN, OUT};
+pub(crate) use tremor_common::{
+    ports::{Port, ERR, IN, OUT},
+    url::{Defaults, HttpsDefaults, Url},
+};
 pub use tremor_pipeline::{
     CbAction, ConfigImpl, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };

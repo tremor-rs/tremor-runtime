@@ -48,6 +48,9 @@ pub mod ports;
 /// Base64 engine
 pub mod base64;
 
+/// URL with defaults
+pub mod url;
+
 pub use errors::Error;
 
 #[cfg(test)]

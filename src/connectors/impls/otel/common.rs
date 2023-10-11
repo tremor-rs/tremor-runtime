@@ -14,9 +14,10 @@
 
 #![allow(dead_code)]
 
-use crate::connectors::utils::{pb, url};
+use crate::connectors::utils::pb;
 use crate::errors::Result;
 use simd_json::Builder;
+use tremor_common::url;
 use tremor_otelapis::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, InstrumentationLibrary, KeyValue, KeyValueList, StringKeyValue,
 };

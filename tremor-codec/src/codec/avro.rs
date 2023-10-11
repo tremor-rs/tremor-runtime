@@ -19,6 +19,7 @@
 //! ## Mappings
 //!
 //! | avro | tremor (to) | tremor (from) |
+//! |------|-------------|---------------|
 //! | null | null | null |
 //! | boolean | bool | bool |
 //! | int | i64 | i64, u64|
@@ -41,13 +42,14 @@
 //! | timestamp-micros | i64 | i64, u64 |
 //! | duration | bytes[12] | bytes[12] |
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::prelude::*;
 use apache_avro::{
     schema::Name, types::Value as AvroValue, Codec as Compression, Decimal, Duration, Reader,
     Schema, Writer,
 };
+use schema_registry_converter::avro_common::AvroSchema;
 use serde::Deserialize;
 use value_trait::TryTypeError;
 
@@ -63,9 +65,6 @@ struct AvroRegistry {
 impl AvroRegistry {
     fn get_schema_by_id(&self, id: u32) -> Option<&Schema> {
         self.by_id.get(&id)
-    }
-    fn get_schema_by_name(&self, name: &Name) -> Option<&Schema> {
-        self.by_name.get(name)
     }
 
     async fn maybe_fetch_id(&mut self, id: u32) -> Result<()> {
@@ -129,170 +128,215 @@ impl Avro {
             None => Err("Missing avro schema".into()),
         }
     }
-    #[allow(clippy::too_many_lines)]
-    fn to_avro_value(&self, data: &Value, schema: &Schema) -> Result<AvroValue> {
-        Ok(match schema {
-            Schema::Null => {
-                let got = data.value_type();
-                if got == ValueType::Null {
-                    AvroValue::Null
-                } else {
-                    return Err(TryTypeError {
-                        expected: ValueType::Null,
-                        got,
-                    }
-                    .into());
-                }
-            }
-            Schema::Boolean => AvroValue::Boolean(data.try_as_bool()?),
-            Schema::Int => AvroValue::Int(data.try_as_i32()?),
-            Schema::Long => AvroValue::Long(data.try_as_i64()?),
-            Schema::Float => AvroValue::Float(data.try_as_f32()?),
-            Schema::Double => AvroValue::Double(data.try_as_f64()?),
-            Schema::Bytes => AvroValue::Bytes(data.try_as_bytes()?.to_vec()),
-            Schema::String => AvroValue::String(data.try_as_str()?.to_string()),
-            Schema::Array(s) => AvroValue::Array(
-                data.try_as_array()?
-                    .iter()
-                    .map(|d| self.to_avro_value(d, s))
-                    .collect::<Result<_>>()?,
-            ),
-            Schema::Map(s) => AvroValue::Map(
-                data.try_as_object()?
-                    .iter()
-                    .map(|(k, v)| Ok((k.to_string(), self.to_avro_value(v, s)?)))
-                    .collect::<Result<_>>()?,
-            ),
-            Schema::Union(s) => {
-                for (i, variant) in s.variants().iter().enumerate() {
-                    if let Ok(v) = self.to_avro_value(data, variant) {
-                        return Ok(AvroValue::Union(u32::try_from(i)?, Box::new(v)));
-                    }
-                }
-                return Err(format!("No variant matched for {}", data.value_type()).into());
-            }
-            Schema::Record(r) => {
-                let mut res: Vec<(String, AvroValue)> = Vec::with_capacity(r.fields.len());
-                for f in &r.fields {
-                    let d = data.get(f.name.as_str());
 
-                    if d.is_none() && f.default.is_some() {
-                        // from_value(f.default.clone().ok_or("unreachable")?)?;
-                        let val =
-                            Value::<'static>::deserialize(f.default.clone().ok_or("unreachable")?)
-                                .map_err(|e| format!("Failed to deserialize default value: {e}"))?;
-                        res.push((f.name.clone(), self.to_avro_value(&val, &f.schema)?));
-                        continue;
-                    } else if d.is_none() && f.is_nullable() {
-                        res.push((f.name.clone(), AvroValue::Null));
-                    } else if let Some(d) = d {
-                        res.push((f.name.clone(), self.to_avro_value(d, &f.schema)?));
-                    } else {
-                        return Err(format!("Missing field {}", f.name).into());
-                    }
-                }
-                AvroValue::Record(res)
-            }
-            Schema::Enum(e) => {
-                let this = data.try_as_str()?;
-                for (i, variant) in e.symbols.iter().enumerate() {
-                    if variant == this {
-                        return Ok(AvroValue::Enum(u32::try_from(i)?, variant.clone()));
-                    }
-                }
-                return Err(format!("No variant matched for {this}").into());
-            }
-            Schema::Fixed(f) => {
-                // TODO: possibly allow other types here
-                let b = data.try_as_bytes()?;
-                if b.len() != f.size {
-                    return Err(format!(
-                        "Invalid size for fixed type, expected {} got {}",
-                        f.size,
-                        b.len()
-                    )
-                    .into());
-                }
-                AvroValue::Fixed(b.len(), b.to_vec())
-            }
-            Schema::Decimal(_s) => {
-                // TODO: possibly allow other types here
-                let d = data.try_as_bytes()?;
-                let d = Decimal::try_from(d).map_err(|e| format!("Invalid decimal: {e}"))?;
-                AvroValue::Decimal(d)
-            }
-            Schema::Uuid => AvroValue::Uuid(data.try_as_str()?.parse()?), // TODO: allow bytes and eventually 128 bit numbers
-            Schema::Date => AvroValue::Date(data.try_as_i32()?), // TODO: allow strings and other date types?
-            Schema::TimeMillis => AvroValue::TimeMillis(data.try_as_i32()?),
-            Schema::TimeMicros => AvroValue::TimeMicros(data.try_as_i64()?),
-            Schema::TimestampMillis => AvroValue::TimestampMillis(data.try_as_i64()?),
-            Schema::TimestampMicros => AvroValue::TimestampMicros(data.try_as_i64()?),
-            Schema::LocalTimestampMillis => AvroValue::LocalTimestampMillis(data.try_as_i64()?),
-            Schema::LocalTimestampMicros => AvroValue::LocalTimestampMicros(data.try_as_i64()?),
-            Schema::Duration => {
-                let v: [u8; 12] = data
-                    .as_bytes()
-                    .and_then(|v| v.try_into().ok())
-                    .ok_or("Invalid duration")?;
-
-                AvroValue::Duration(Duration::from(v))
-            }
-            Schema::Ref { name } => {
-                let schema = self.registry.get_schema_by_name(name).ok_or_else(|| {
-                    format!("Schema refferences are not supported, asking for {name}")
-                })?;
-                self.to_avro_value(data, schema)?
-            }
-        })
-    }
-    fn convert_avro_value(val: AvroValue) -> Result<Value<'static>> {
-        Ok(match val {
-            AvroValue::Null => Value::const_null(),
-            AvroValue::Boolean(v) => Value::from(v),
-            AvroValue::Int(v) | AvroValue::TimeMillis(v) | AvroValue::Date(v) => Value::from(v),
-            AvroValue::Long(v)
-            | AvroValue::TimestampMicros(v)
-            | AvroValue::TimestampMillis(v)
-            | AvroValue::LocalTimestampMillis(v)
-            | AvroValue::LocalTimestampMicros(v)
-            | AvroValue::TimeMicros(v) => Value::from(v),
-            AvroValue::Float(v) => Value::from(v),
-            AvroValue::Double(v) => Value::from(v),
-            AvroValue::Bytes(v) | AvroValue::Fixed(_, v) => Value::Bytes(v.into()),
-            AvroValue::String(v) | AvroValue::Enum(_, v) => Value::from(v),
-            AvroValue::Union(_, v) => Self::convert_avro_value(*v)?,
-            AvroValue::Array(v) => Value::Array(
-                v.into_iter()
-                    .map(Self::convert_avro_value)
-                    .collect::<Result<_>>()?,
-            ),
-            AvroValue::Map(v) => Value::from(
-                v.into_iter()
-                    .map(|(k, v)| Ok((k.into(), Self::convert_avro_value(v)?)))
-                    .collect::<Result<Object>>()?,
-            ),
-            AvroValue::Record(r) => Value::from(
-                r.into_iter()
-                    .map(|(k, v)| Ok((k.into(), Self::convert_avro_value(v)?)))
-                    .collect::<Result<Object>>()?,
-            ),
-            AvroValue::Decimal(v) => {
-                let d = <Vec<u8>>::try_from(&v)?;
-                Value::Bytes(d.into())
-            }
-            AvroValue::Duration(v) => {
-                let d: [u8; 12] = v.into();
-                Value::Bytes(d.to_vec().into())
-            }
-            AvroValue::Uuid(v) => Value::from(v.to_string()),
-        })
-    }
-    fn write_value<'a>(&self, data: &'a Value, writer: &mut Writer<'a, Vec<u8>>) -> Result<()> {
-        let v = self.to_avro_value(data, writer.schema())?;
+    async fn write_value<'a, 'v>(
+        &self,
+        data: &'a Value<'v>,
+        writer: &mut Writer<'a, Vec<u8>>,
+    ) -> Result<()> {
+        let v = value_to_avro(data, writer.schema(), &self.registry).await?;
         writer.append(v)?;
 
         Ok(())
     }
+}
+
+pub(crate) enum SchemaWrapper<'a> {
+    Schema(Arc<AvroSchema>),
+    Ref(&'a Schema),
+}
+
+impl<'a> SchemaWrapper<'a> {
+    fn schema(&self) -> &Schema {
+        match self {
+            SchemaWrapper::Schema(s) => &s.parsed,
+            SchemaWrapper::Ref(s) => s,
+        }
+    }
+}
+#[async_trait::async_trait]
+pub(crate) trait SchemaResover {
+    async fn by_name(&self, name: &Name) -> Option<SchemaWrapper>;
+}
+
+#[async_trait::async_trait]
+impl SchemaResover for AvroRegistry {
+    async fn by_name(&self, name: &Name) -> Option<SchemaWrapper> {
+        self.by_name.get(name).map(SchemaWrapper::Ref)
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+#[async_recursion::async_recursion]
+pub(crate) async fn value_to_avro<'v, R>(
+    data: &Value<'v>,
+    schema: &Schema,
+    resolver: &R,
+) -> Result<AvroValue>
+where
+    R: SchemaResover + Sync,
+{
+    Ok(match schema {
+        Schema::Null => {
+            let got = data.value_type();
+            if got == ValueType::Null {
+                AvroValue::Null
+            } else {
+                return Err(TryTypeError {
+                    expected: ValueType::Null,
+                    got,
+                }
+                .into());
+            }
+        }
+        Schema::Boolean => AvroValue::Boolean(data.try_as_bool()?),
+        Schema::Int => AvroValue::Int(data.try_as_i32()?),
+        Schema::Long => AvroValue::Long(data.try_as_i64()?),
+        Schema::Float => AvroValue::Float(data.try_as_f32()?),
+        Schema::Double => AvroValue::Double(data.try_as_f64()?),
+        Schema::Bytes => AvroValue::Bytes(data.try_as_bytes()?.to_vec()),
+        Schema::String => AvroValue::String(data.try_as_str()?.to_string()),
+        Schema::Array(s) => {
+            let data = data.try_as_array()?;
+            let mut res = Vec::with_capacity(data.len());
+            for d in data {
+                res.push(value_to_avro(d, s, resolver).await?);
+            }
+            AvroValue::Array(res)
+        }
+        Schema::Map(s) => {
+            let obj = data.try_as_object()?;
+            let mut res = HashMap::with_capacity(obj.len());
+            for (k, v) in obj {
+                res.insert(k.to_string(), value_to_avro(v, s, resolver).await?);
+            }
+            AvroValue::Map(res)
+        }
+        Schema::Union(s) => {
+            for (i, variant) in s.variants().iter().enumerate() {
+                if let Ok(v) = value_to_avro(data, variant, resolver).await {
+                    return Ok(AvroValue::Union(u32::try_from(i)?, Box::new(v)));
+                }
+            }
+            return Err(format!("No variant matched for {}", data.value_type()).into());
+        }
+        Schema::Record(r) => {
+            let mut res: Vec<(String, AvroValue)> = Vec::with_capacity(r.fields.len());
+            for f in &r.fields {
+                let d = data.get(f.name.as_str());
+
+                if d.is_none() && f.default.is_some() {
+                    // from_value(f.default.clone().ok_or("unreachable")?)?;
+                    let val =
+                        Value::<'static>::deserialize(f.default.clone().ok_or("unreachable")?)
+                            .map_err(|e| format!("Failed to deserialize default value: {e}"))?;
+                    res.push((
+                        f.name.clone(),
+                        value_to_avro(&val, &f.schema, resolver).await?,
+                    ));
+                    continue;
+                } else if d.is_none() && f.is_nullable() {
+                    res.push((f.name.clone(), AvroValue::Null));
+                } else if let Some(d) = d {
+                    res.push((f.name.clone(), value_to_avro(d, &f.schema, resolver).await?));
+                } else {
+                    return Err(format!("Missing field {}", f.name).into());
+                }
+            }
+            AvroValue::Record(res)
+        }
+        Schema::Enum(e) => {
+            let this = data.try_as_str()?;
+            for (i, variant) in e.symbols.iter().enumerate() {
+                if variant == this {
+                    return Ok(AvroValue::Enum(u32::try_from(i)?, variant.clone()));
+                }
+            }
+            return Err(format!("No variant matched for {this}").into());
+        }
+        Schema::Fixed(f) => {
+            // TODO: possibly allow other types here
+            let b = data.try_as_bytes()?;
+            if b.len() != f.size {
+                return Err(format!(
+                    "Invalid size for fixed type, expected {} got {}",
+                    f.size,
+                    b.len()
+                )
+                .into());
+            }
+            AvroValue::Fixed(b.len(), b.to_vec())
+        }
+        Schema::Decimal(_s) => {
+            // TODO: possibly allow other types here
+            let d = data.try_as_bytes()?;
+            let d = Decimal::try_from(d).map_err(|e| format!("Invalid decimal: {e}"))?;
+            AvroValue::Decimal(d)
+        }
+        Schema::Uuid => AvroValue::Uuid(data.try_as_str()?.parse()?), // TODO: allow bytes and eventually 128 bit numbers
+        Schema::Date => AvroValue::Date(data.try_as_i32()?), // TODO: allow strings and other date types?
+        Schema::TimeMillis => AvroValue::TimeMillis(data.try_as_i32()?),
+        Schema::TimeMicros => AvroValue::TimeMicros(data.try_as_i64()?),
+        Schema::TimestampMillis => AvroValue::TimestampMillis(data.try_as_i64()?),
+        Schema::TimestampMicros => AvroValue::TimestampMicros(data.try_as_i64()?),
+        Schema::LocalTimestampMillis => AvroValue::LocalTimestampMillis(data.try_as_i64()?),
+        Schema::LocalTimestampMicros => AvroValue::LocalTimestampMicros(data.try_as_i64()?),
+        Schema::Duration => {
+            let v: [u8; 12] = data
+                .as_bytes()
+                .and_then(|v| v.try_into().ok())
+                .ok_or("Invalid duration")?;
+
+            AvroValue::Duration(Duration::from(v))
+        }
+        Schema::Ref { name } => {
+            let schema = resolver.by_name(name).await.ok_or_else(|| {
+                format!("Schema refferences are not supported, asking for {name}")
+            })?;
+            value_to_avro(data, schema.schema(), resolver).await?
+        }
+    })
+}
+
+pub(crate) fn avro_to_value(val: AvroValue) -> Result<Value<'static>> {
+    Ok(match val {
+        AvroValue::Null => Value::const_null(),
+        AvroValue::Boolean(v) => Value::from(v),
+        AvroValue::Int(v) | AvroValue::TimeMillis(v) | AvroValue::Date(v) => Value::from(v),
+        AvroValue::Long(v)
+        | AvroValue::TimestampMicros(v)
+        | AvroValue::TimestampMillis(v)
+        | AvroValue::LocalTimestampMillis(v)
+        | AvroValue::LocalTimestampMicros(v)
+        | AvroValue::TimeMicros(v) => Value::from(v),
+        AvroValue::Float(v) => Value::from(v),
+        AvroValue::Double(v) => Value::from(v),
+        AvroValue::Bytes(v) | AvroValue::Fixed(_, v) => Value::Bytes(v.into()),
+        AvroValue::String(v) | AvroValue::Enum(_, v) => Value::from(v),
+        AvroValue::Union(_, v) => avro_to_value(*v)?,
+        AvroValue::Array(v) => {
+            Value::Array(v.into_iter().map(avro_to_value).collect::<Result<_>>()?)
+        }
+        AvroValue::Map(v) => Value::from(
+            v.into_iter()
+                .map(|(k, v)| Ok((k.into(), avro_to_value(v)?)))
+                .collect::<Result<Object>>()?,
+        ),
+        AvroValue::Record(r) => Value::from(
+            r.into_iter()
+                .map(|(k, v)| Ok((k.into(), avro_to_value(v)?)))
+                .collect::<Result<Object>>()?,
+        ),
+        AvroValue::Decimal(v) => {
+            let d = <Vec<u8>>::try_from(&v)?;
+            Value::Bytes(d.into())
+        }
+        AvroValue::Duration(v) => {
+            let d: [u8; 12] = v.into();
+            Value::Bytes(d.to_vec().into())
+        }
+        AvroValue::Uuid(v) => Value::from(v.to_string()),
+    })
 }
 
 #[async_trait::async_trait]
@@ -312,9 +356,18 @@ impl Codec for Avro {
         _ingest_ns: u64,
         meta: Value<'input>,
     ) -> Result<Option<(Value<'input>, Value<'input>)>> {
-        let reader = Reader::new(&*data)?;
+        let schema = if let Some(schema_id) = meta.get_u32("schema_id") {
+            self.registry.maybe_fetch_id(schema_id).await?;
+            self.registry
+                .get_schema_by_id(schema_id)
+                .ok_or_else(|| format!("No schema found for id {schema_id} in registry"))?
+        } else {
+            &self.schema
+        };
 
-        let mut vals = reader.map(|v| Self::convert_avro_value(v?));
+        let reader = Reader::with_schema(schema, &*data)?;
+
+        let mut vals = reader.map(|v| avro_to_value(v?));
         vals.next().map(|v| v.map(|v| (v, meta))).transpose()
     }
 
@@ -332,7 +385,7 @@ impl Codec for Avro {
             Vec::with_capacity(AVRO_BUFFER_CAP),
             self.compression,
         );
-        self.write_value(data, &mut writer)?;
+        self.write_value(data, &mut writer).await?;
 
         writer.into_inner().map_err(Error::from)
     }
@@ -660,6 +713,35 @@ mod test {
             .expect("no data");
 
         assert_eq!(decoded.0, expected);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn decode_smaple() -> Result<()> {
+        // [b'O', b'b', b'j', 1u8]
+        let from_kafka = vec![0_u8, 0, 0, 0, 1, 12, 115, 116, 114, 105, 110, 103];
+        // let from_kafka = vec![b'O', b'b', b'j', 1_u8, 12, 115, 116, 114, 105, 110, 103];
+        // let mut from_kafka = vec![12, 115, 116, 114, 105, 110, 103_u8];
+
+        let mut codec = test_codec(literal!(
+            {
+                "type": "record",
+                "name": "record",
+                "fields": [
+                    {"name": "one", "type": "string"},
+                ]
+            }
+        ))?;
+
+        let decoded = literal!({"one": "string"});
+
+        let mut encoded = codec.encode(&decoded, &Value::const_null()).await?;
+        assert_eq!(encoded, from_kafka);
+
+        codec
+            .decode(&mut encoded, 0, Value::object())
+            .await?
+            .expect("no data");
         Ok(())
     }
     #[tokio::test(flavor = "multi_thread")]
