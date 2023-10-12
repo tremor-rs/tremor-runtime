@@ -59,14 +59,14 @@
 //! ```
 
 use super::prelude::*;
-use crate::{
-    connectors::prelude::*,
-    errors::{Kind as ErrorKind, Result},
-};
+use crate::errors::{ErrorKind, Result};
+use log::trace;
 use memchr::memchr_iter;
+use serde::{Deserialize, Serialize};
 use std::num::NonZeroUsize;
-use tremor_pipeline::{ConfigImpl, ConfigMap};
+use tremor_config::{Impl as ConfigImpl, Map as ConfigMap};
 
+pub(crate) const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 pub(crate) const DEFAULT_SEPARATOR: u8 = b'\n';
 const INITIAL_PARTS_PER_CHUNK: usize = 64;
 
@@ -85,7 +85,7 @@ pub(crate) fn default_separator() -> String {
     String::from_utf8_lossy(&[DEFAULT_SEPARATOR]).into_owned()
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Clone)]
 pub struct Separate {
@@ -314,7 +314,7 @@ mod test {
     use tremor_value::literal;
 
     use super::*;
-    use crate::Result;
+    use crate::errors::Result;
 
     #[test]
     fn from_config() -> Result<()> {

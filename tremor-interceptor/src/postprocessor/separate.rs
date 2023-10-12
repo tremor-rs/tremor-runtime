@@ -19,9 +19,10 @@
 //! | `separator` | The separator to append after each event's byte stream | no       | `\n`          |
 
 use super::Postprocessor;
-use crate::errors::{Kind as ErrorKind, Result};
+use crate::errors::{ErrorKind, Result};
 use crate::preprocessor::separate::{default_separator, DEFAULT_SEPARATOR};
-use tremor_pipeline::{ConfigImpl, ConfigMap};
+use serde::Deserialize;
+use tremor_config::{Impl as ConfigImpl, Map as ConfigMap};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -30,7 +31,7 @@ pub struct Config {
     separator: String,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 pub(crate) struct Separate {
     separator: u8,

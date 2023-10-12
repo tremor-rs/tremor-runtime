@@ -31,8 +31,7 @@
 //! ## Output: 🌊 snot badger
 //! ```
 use super::{Error, Result, StdResult};
-use base64::Engine;
-use tremor_common::base64::BASE64;
+use tremor_common::base64::{Engine, BASE64};
 use tremor_value::Value;
 
 pub(crate) fn execute(s: &str, result_needed: bool) -> Result<'static> {

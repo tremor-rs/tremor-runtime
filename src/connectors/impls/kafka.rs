@@ -308,7 +308,7 @@ use tremor_value::Value;
 const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// verify broker host:port pairs in kafka connector configs
-fn verify_brokers(alias: &Alias, brokers: &[String]) -> Result<(String, Option<u16>)> {
+fn verify_brokers(alias: &alias::Connector, brokers: &[String]) -> Result<(String, Option<u16>)> {
     let mut first_broker: Option<(String, Option<u16>)> = None;
     for broker in brokers {
         match broker.split(':').collect::<Vec<_>>().as_slice() {

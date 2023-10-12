@@ -37,7 +37,7 @@ pub(crate) struct Config {
     pub(crate) metrics: bool,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 /// The `OpenTelemetry` client connector
 pub(crate) struct Server {
@@ -68,7 +68,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &Alias,
+        id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
@@ -200,7 +200,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn otel_client_builder() -> Result<()> {
-        let alias = Alias::new("test", "my_otel_server");
+        let alias = alias::Connector::new("test", "my_otel_server");
         let with_processors = literal!({
             "config": {
                 "url": "localhost:4317",
@@ -211,7 +211,7 @@ mod tests {
             ConnectorType("otel_server".into()),
             &with_processors,
         )?;
-        let alias = Alias::new("flow", "my_otel_server");
+        let alias = alias::Connector::new("flow", "my_otel_server");
 
         let builder = super::Builder::default();
         let kill_switch = KillSwitch::dummy();

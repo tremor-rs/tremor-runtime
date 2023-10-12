@@ -196,7 +196,7 @@ pub(crate) struct Config {
     pub(crate) chunk_size: usize,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 /// file connector
 pub(crate) struct File {
@@ -217,7 +217,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &Alias,
+        _: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,

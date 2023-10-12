@@ -12,21 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Encodes raw data into base64 encoded bytes.
+//! Prefixes the data with the length of the event data in bytes as an unsigned 64 bit big-endian integer.
 
 use super::Postprocessor;
-use crate::Result;
-use base64::Engine;
-use tremor_common::base64::BASE64;
+use crate::errors::Result;
+use std::io::Write;
 
-#[derive(Default)]
-pub(crate) struct Base64 {}
-impl Postprocessor for Base64 {
+#[derive(Clone, Default)]
+pub(crate) struct TextualLengthPrefixed {}
+impl Postprocessor for TextualLengthPrefixed {
     fn name(&self) -> &str {
-        "base64"
+        "textual-length-prefixed"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(vec![BASE64.encode(data).as_bytes().to_vec()])
+        let size = data.len();
+        let mut digits: Vec<u8> = size.to_string().into_bytes();
+        let mut res = Vec::with_capacity(digits.len() + 1 + size);
+        res.append(&mut digits);
+        res.push(32);
+        res.write_all(data)?;
+        Ok(vec![res])
     }
 }

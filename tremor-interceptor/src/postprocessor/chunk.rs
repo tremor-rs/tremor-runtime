@@ -47,7 +47,9 @@
 //! ```
 
 use super::Postprocessor;
-use crate::errors::{Error, Kind as ErrorKind, Result};
+use crate::errors::{Error, ErrorKind, Result};
+use log::warn;
+use serde::Deserialize;
 use tremor_value::Value;
 
 #[derive(Deserialize, Debug, Clone)]

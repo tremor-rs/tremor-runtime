@@ -245,7 +245,7 @@ pub(crate) struct Config {
     test_options: HashMap<String, String>,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 fn default_commit_interval() -> u64 {
     5_000_000_000 // 5 seconds, the default from librdkafka
@@ -262,7 +262,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        alias: &Alias,
+        alias: &alias::Connector,
         config: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,

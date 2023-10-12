@@ -202,7 +202,6 @@ use crate::{
     connectors::prelude::*,
     system::{KillSwitch, ShutdownMode},
 };
-use base64::Engine;
 use hdrhistogram::Histogram;
 use std::{
     cmp::min,
@@ -210,7 +209,11 @@ use std::{
     io::{stdout, BufRead as StdBufRead, BufReader, Read, Write},
     time::Duration,
 };
-use tremor_common::{base64::BASE64, file, time::nanotime};
+use tremor_common::{
+    base64::{Engine, BASE64},
+    file,
+    time::nanotime,
+};
 use xz2::read::XzDecoder;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -252,7 +255,7 @@ fn default_significant_figures() -> u8 {
     2
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -270,7 +273,7 @@ fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
 impl ConnectorBuilder for Builder {
     async fn build_cfg(
         &self,
-        id: &Alias,
+        id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         kill_switch: &KillSwitch,

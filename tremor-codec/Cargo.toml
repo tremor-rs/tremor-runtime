@@ -13,6 +13,7 @@ version = "0.13.0-rc.16"
 [dependencies]
 tremor-value = { version = "0.13.0-rc.16", path = "../tremor-value" }
 tremor-common = { version = "0.13.0-rc.16", path = "../tremor-common" }
+tremor-config = { version = "0.13.0-rc.16", path = "../tremor-config" }
 tokio = { version = "1.32", features = ["full"] }
 async-trait = "0.1"
 error-chain = "0.12"
@@ -21,7 +22,6 @@ simd-json-derive = "0.11"
 value-trait = "0.6"
 beef = "0.5"
 test-case = "3.1"
-proptest = "1.1"
 byteorder = "1.5"
 itoa = "1"
 ryu = "1"
@@ -61,3 +61,6 @@ serde = "1"
 rmp-serde = "1.1"
 syslog_loose = "0.19"
 serde_yaml = "0.9"
+
+[dev-dependencies]
+proptest = "1.1"

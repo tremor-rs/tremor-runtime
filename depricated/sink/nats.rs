@@ -110,7 +110,7 @@ impl Config {
     }
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 pub(crate) struct Nats {
     sink_url: TremorUrl,

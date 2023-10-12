@@ -55,7 +55,7 @@ pub(crate) enum Key {
     InsertKey(String),
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

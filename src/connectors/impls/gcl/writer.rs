@@ -18,7 +18,6 @@ mod sink;
 use crate::connectors::google::{GouthTokenProvider, TokenSrc};
 use crate::connectors::impls::gcl::writer::sink::{GclSink, TonicChannelFactory};
 use crate::connectors::prelude::*;
-use crate::connectors::{Alias, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
 use crate::errors::Error;
 use googapis::google::api::MonitoredResource;
 use googapis::google::logging::r#type::LogSeverity;
@@ -26,7 +25,7 @@ use serde::Deserialize;
 use simd_json::OwnedValue;
 use std::collections::HashMap;
 use tonic::transport::Channel;
-use tremor_pipeline::ConfigImpl;
+use tremor_common::alias;
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -185,7 +184,7 @@ impl Config {
     }
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 fn value_to_monitored_resource(
     from: Option<&simd_json::OwnedValue>,
@@ -268,7 +267,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _id: &Alias,
+        _id: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,

@@ -6077,6 +6077,7 @@ dependencies = [
  "tremor-api",
  "tremor-codec",
  "tremor-common",
+ "tremor-interceptor",
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
@@ -6114,6 +6115,7 @@ dependencies = [
  "test-case",
  "tokio",
  "tremor-common",
+ "tremor-config",
  "tremor-influx",
  "tremor-value",
  "uuid",
@@ -6138,6 +6140,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tremor-config"
+version = "0.13.0-rc.16"
+dependencies = [
+ "serde",
+ "simd-json",
+ "tremor-value",
+]
+
+[[package]]
 name = "tremor-influx"
 version = "0.13.0-rc.16"
 dependencies = [
@@ -6147,6 +6158,30 @@ dependencies = [
  "simd-json",
  "snmalloc-rs",
  "value-trait",
+]
+
+[[package]]
+name = "tremor-interceptor"
+version = "0.13.0-rc.16"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "error-chain",
+ "libflate",
+ "log",
+ "lz4",
+ "memchr",
+ "proptest",
+ "rand 0.8.5",
+ "serde",
+ "simd-json",
+ "snap",
+ "tremor-common",
+ "tremor-config",
+ "tremor-value",
+ "value-trait",
+ "xz2",
+ "zstd 0.13.0",
 ]
 
 [[package]]
@@ -6175,7 +6210,6 @@ dependencies = [
 name = "tremor-pipeline"
 version = "0.13.0-rc.16"
 dependencies = [
- "base64 0.21.4",
  "beef",
  "criterion",
  "either",
@@ -6197,6 +6231,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tremor-common",
+ "tremor-config",
  "tremor-script",
  "tremor-value",
  "url",
@@ -6222,8 +6257,6 @@ dependencies = [
  "base64 0.21.4",
  "beef",
  "bimap",
- "byteorder",
- "bytes",
  "chrono",
  "chrono-tz",
  "clickhouse-rs",
@@ -6254,11 +6287,8 @@ dependencies = [
  "itoa 1.0.9",
  "lazy_static",
  "lexical",
- "libflate",
  "log",
- "lz4",
  "matches",
- "memchr",
  "mime",
  "num_cpus",
  "pin-project-lite 0.2.13",
@@ -6287,7 +6317,6 @@ dependencies = [
  "simd-json-derive",
  "simdutf8",
  "sled",
- "snap",
  "socket2 0.5.4",
  "tempfile",
  "test-case",
@@ -6299,7 +6328,9 @@ dependencies = [
  "tonic",
  "tremor-codec",
  "tremor-common",
+ "tremor-config",
  "tremor-influx",
+ "tremor-interceptor",
  "tremor-otelapis",
  "tremor-pipeline",
  "tremor-script",
@@ -6309,7 +6340,6 @@ dependencies = [
  "uuid",
  "value-trait",
  "xz2",
- "zstd 0.12.4",
 ]
 
 [[package]]
@@ -6317,7 +6347,6 @@ name = "tremor-script"
 version = "0.13.0-rc.16"
 dependencies = [
  "atty",
- "base64 0.21.4",
  "beef",
  "byteorder",
  "chrono",
@@ -7243,6 +7272,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zstd"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bffb3309596d527cfcba7dfc6ed6052f1d39dfbd7c867aa2e865e4a449c10110"
+dependencies = [
+ "zstd-safe 7.0.0",
+]
+
+[[package]]
 name = "zstd-safe"
 version = "5.0.2+zstd.1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7259,6 +7297,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee98ffd0b48ee95e6c5168188e44a54550b1564d9d530ee21d5f0eaed1069581"
 dependencies = [
  "libc",
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43747c7422e2924c11144d5229878b98180ef8b06cca4ab5af37afc8a8d8ea3e"
+dependencies = [
  "zstd-sys",
 ]
 

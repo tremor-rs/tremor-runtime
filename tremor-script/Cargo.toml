@@ -22,7 +22,6 @@ name = "tremor_script"
 
 [dependencies]
 atty = "0.2"
-base64 = "0.21"
 beef = { version = "0.5", features = ["impl_serde"] }
 byteorder = "1"
 chrono = "0.4"

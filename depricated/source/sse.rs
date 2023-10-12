@@ -27,7 +27,7 @@ pub(crate) struct Config {
     #[serde(default)]
     pub(crate) headers: HashMap<String, String>,
 }
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 struct MiddlewareHeader {
     header: HashMap<String, String>,

@@ -20,13 +20,12 @@ use crate::{
     errors::{pipe_send_e, Result},
     instance::State,
     primerge::PriorityMerge,
-    system::flow,
 };
 use futures::StreamExt;
 use std::{fmt, time::Duration};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
-use tremor_common::{ids::OperatorIdGen, ports::Port, time::nanotime};
+use tremor_common::{alias, ids::OperatorIdGen, ports::Port, time::nanotime};
 use tremor_pipeline::{
     errors::ErrorKind as PipelineErrorKind, CbAction, Event, ExecutableGraph, SignalKind,
 };
@@ -37,41 +36,13 @@ type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
 type Dests = halfbrown::HashMap<Port<'static>, Vec<(DeployEndpoint, OutputTarget)>>;
 type EventSet = Vec<(Port<'static>, Event)>;
 
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
-pub(crate) struct Alias {
-    flow_alias: flow::Alias,
-    pipeline_alias: String,
-}
-
-impl Alias {
-    pub(crate) fn new(
-        flow_alias: impl Into<flow::Alias>,
-        pipeline_alias: impl Into<String>,
-    ) -> Self {
-        Self {
-            flow_alias: flow_alias.into(),
-            pipeline_alias: pipeline_alias.into(),
-        }
-    }
-
-    pub(crate) fn pipeline_alias(&self) -> &str {
-        self.pipeline_alias.as_str()
-    }
-}
-
-impl std::fmt::Display for Alias {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.flow_alias, self.pipeline_alias)
-    }
-}
-
 /// Address for a pipeline
 #[derive(Clone)]
 pub struct Addr {
     addr: Sender<Box<Msg>>,
     cf_addr: UnboundedSender<CfMsg>,
     mgmt_addr: Sender<MgmtMsg>,
-    alias: Alias,
+    alias: alias::Pipeline,
 }
 
 impl Addr {
@@ -81,7 +52,7 @@ impl Addr {
         addr: Sender<Box<Msg>>,
         cf_addr: UnboundedSender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
-        alias: Alias,
+        alias: alias::Pipeline,
     ) -> Self {
         Self {
             addr,
@@ -175,7 +146,7 @@ impl TryFrom<connectors::Addr> for OutputTarget {
 }
 
 pub(crate) fn spawn(
-    pipeline_alias: Alias,
+    pipeline_alias: alias::Pipeline,
     config: &tremor_pipeline::query::Query,
     operator_id_gen: &mut OperatorIdGen,
 ) -> Result<Addr> {
@@ -415,7 +386,7 @@ async fn send_events(eventset: &mut EventSet, dests: &mut Dests) -> Result<()> {
 }
 
 #[inline]
-async fn send_signal(own_id: &Alias, signal: Event, dests: &mut Dests) -> Result<()> {
+async fn send_signal(own_id: &alias::Pipeline, signal: Event, dests: &mut Dests) -> Result<()> {
     let mut destinations = dests.values_mut().flatten();
     let first = destinations.next();
     for (id, dest) in destinations {
@@ -503,7 +474,7 @@ fn maybe_send(r: Result<()>) {
 ///
 /// currently only used for printing
 struct PipelineContext {
-    alias: Alias,
+    alias: alias::Pipeline,
 }
 
 impl std::fmt::Display for PipelineContext {
@@ -512,23 +483,23 @@ impl std::fmt::Display for PipelineContext {
     }
 }
 
-impl From<&Alias> for PipelineContext {
-    fn from(alias: &Alias) -> Self {
+impl From<&alias::Pipeline> for PipelineContext {
+    fn from(alias: &alias::Pipeline) -> Self {
         Self {
             alias: alias.clone(),
         }
     }
 }
 
-impl From<Alias> for PipelineContext {
-    fn from(alias: Alias) -> Self {
+impl From<alias::Pipeline> for PipelineContext {
+    fn from(alias: alias::Pipeline) -> Self {
         Self { alias }
     }
 }
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn pipeline_task(
-    id: Alias,
+    id: alias::Pipeline,
     mut pipeline: ExecutableGraph,
     rx: Receiver<Box<Msg>>,
     cf_rx: UnboundedReceiver<CfMsg>,
@@ -734,17 +705,17 @@ mod tests {
         let query =
             tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(
-            Alias::new("report", "test-pipe1"),
+            alias::Pipeline::new("report", "test-pipe1"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr2 = spawn(
-            Alias::new("report", "test-pipe2"),
+            alias::Pipeline::new("report", "test-pipe2"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr3 = spawn(
-            Alias::new("report", "test-pipe3"),
+            alias::Pipeline::new("report", "test-pipe3"),
             &query,
             &mut operator_id_gen,
         )?;
@@ -837,7 +808,7 @@ mod tests {
         let mut operator_id_gen = OperatorIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
-        let pipeline_id = Alias::new("flow", "test-pipe");
+        let pipeline_id = alias::Pipeline::new("flow", "test-pipe");
         let query =
             tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(pipeline_id, &query, &mut operator_id_gen)?;

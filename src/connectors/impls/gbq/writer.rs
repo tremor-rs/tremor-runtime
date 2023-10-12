@@ -19,7 +19,6 @@ use crate::connectors::impls::gbq::writer::sink::{GbqSink, TonicChannelFactory};
 use crate::connectors::prelude::*;
 use crate::connectors::{Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
 use serde::Deserialize;
-use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
 pub(crate) struct Config {
@@ -31,7 +30,7 @@ pub(crate) struct Config {
     #[serde(default = "default_request_size_limit")]
     pub request_size_limit: usize,
 }
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 fn default_request_size_limit() -> usize {
     // 10MB
@@ -73,7 +72,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &Alias,
+        _: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
@@ -109,7 +108,7 @@ mod tests {
             .create_sink(
                 SinkContext::new(
                     SinkId::default(),
-                    Alias::new("a", "b"),
+                    alias::Connector::new("a", "b"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(crate::channel::bounded(128).0),
@@ -117,8 +116,12 @@ mod tests {
                 builder(
                     &ConnectorConfig::default(),
                     CodecReq::Structured,
-                    &Alias::new("a", "b"),
-                    SinkReporter::new(Alias::new("a", "b"), broadcast::channel(1).0, None),
+                    &alias::Connector::new("a", "b"),
+                    SinkReporter::new(
+                        alias::Connector::new("a", "b"),
+                        broadcast::channel(1).0,
+                        None,
+                    ),
                 )?,
             )
             .await?;

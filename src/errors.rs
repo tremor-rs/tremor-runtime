@@ -151,64 +151,65 @@ error_chain! {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
         Codec(tremor_codec::errors::Error, tremor_codec::errors::ErrorKind);
+        Interceptor(tremor_interceptor::errors::Error, tremor_interceptor::errors::ErrorKind);
     }
     foreign_links {
         AddrParseError(std::net::AddrParseError);
         AnyhowError(anyhow::Error);
         AsyncChannelRecvError(async_std::channel::RecvError);
         AsyncChannelTryRecvError(async_std::channel::TryRecvError);
-        Base64Error(base64::DecodeError);
+        Base64Error(tremor_common::base64::DecodeError);
         ChannelReceiveError(std::sync::mpsc::RecvError);
         Clickhouse(clickhouse_rs::errors::Error);
         Common(tremor_common::Error);
+        Config(tremor_config::Error);
         CronError(cron::error::Error);
         DnsError(trust_dns_resolver::error::ResolveError);
-        InvalidTLSClientName(rustls::client::InvalidDnsNameError);
         ElasticError(elasticsearch::Error);
         ElasticTransportBuildError(elasticsearch::http::transport::BuildError);
+        EnvVarError(std::env::VarError);
         FromUtf8Error(std::string::FromUtf8Error);
         GoogleAuthError(gouth::Error);
         GrokError(grok::Error);
+        HeaderToStringError(http::header::ToStrError);
         Hex(hex::FromHexError);
+        Http(http::Error);
         HttpHeaderError(http::header::InvalidHeaderValue);
+        Hyper(hyper::Error);
+        InvalidHeaderName(reqwest::header::InvalidHeaderName);
+        InvalidMetadataValue(tonic::metadata::errors::InvalidMetadataValue);
+        InvalidMethod(http::method::InvalidMethod);
+        InvalidStatusCode(http::status::InvalidStatusCode);
+        InvalidTLSClientName(rustls::client::InvalidDnsNameError);
         Io(std::io::Error);
+        JoinError(tokio::task::JoinError);
         JsonAccessError(value_trait::AccessError);
         JsonError(simd_json::Error);
         KafkaError(rdkafka::error::KafkaError);
+        MimeParsingError(mime::FromStrError);
         ModeParseError(file_mode::ModeParseError);
-        ParseIntError(std::num::ParseIntError);
+        OneShotRecv(tokio::sync::oneshot::error::RecvError);
         ParseFloatError(std::num::ParseFloatError);
+        ParseIntError(std::num::ParseIntError);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
-        InvalidHeaderName(reqwest::header::InvalidHeaderName);
         RustlsError(rustls::Error);
+        S3ByteStream(aws_smithy_http::byte_stream::error::Error);
+        S3Endpoint(aws_smithy_http::endpoint::error::InvalidEndpointError);
+        Serenity(serenity::Error);
         Sled(sled::Error);
-        SnappyError(snap::Error);
+        Timeout(tokio::time::error::Elapsed);
         TonicStatusError(tonic::Status);
         TonicTransportError(tonic::transport::Error);
-        Ws(tokio_tungstenite::tungstenite::Error);
         TryFromIntError(std::num::TryFromIntError);
-        ValueError(tremor_value::Error);
-        UrlParserError(url::ParseError);
         UriParserError(http::uri::InvalidUri);
+        UrlParserError(url::ParseError);
         Utf8Error(std::str::Utf8Error);
-        EnvVarError(std::env::VarError);
-        YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
-        WalJson(qwal::Error<simd_json::Error>);
+        ValueError(tremor_value::Error);
         WalInfailable(qwal::Error<std::convert::Infallible>);
-        Serenity(serenity::Error);
-        InvalidMetadataValue(tonic::metadata::errors::InvalidMetadataValue);
-        S3Endpoint(aws_smithy_http::endpoint::error::InvalidEndpointError);
-        S3ByteStream(aws_smithy_http::byte_stream::error::Error);
-        JoinError(tokio::task::JoinError);
-        Timeout(tokio::time::error::Elapsed);
-        OneShotRecv(tokio::sync::oneshot::error::RecvError);
-        InvalidMethod(http::method::InvalidMethod);
-        Http(http::Error);
-        Hyper(hyper::Error);
-        HeaderToStringError(http::header::ToStrError);
-        MimeParsingError(mime::FromStrError);
-        InvalidStatusCode(http::status::InvalidStatusCode);
+        WalJson(qwal::Error<simd_json::Error>);
+        Ws(tokio_tungstenite::tungstenite::Error);
+        YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
     }
 
     errors {
@@ -240,11 +241,6 @@ error_chain! {
         UnknownNamespace(n: String) {
             description("Unknown namespace")
                 display("Unknown namespace: {}", n)
-        }
-
-        InvalidGelfHeader(len: usize, initial: Option<[u8; 2]>) {
-            description("Invalid GELF header")
-                display("Invalid GELF header len: {}, prefix: {:?}", len, initial)
         }
 
         BadUtF8InString {
@@ -317,10 +313,7 @@ error_chain! {
             description("Connector not found")
                 display("Connector \"{}\" not found in Flow \"{}\"", alias, flow_id)
         }
-        InvalidInputData(msg: &'static str) {
-            description("Invalid Input data")
-                display("Invalid Input data: {}", msg)
-        }
+
         GbqSinkFailed(msg: &'static str) {
             description("GBQ Sink failed")
                 display("GBQ Sink failed: {}", msg)

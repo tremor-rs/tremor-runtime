@@ -31,7 +31,7 @@ pub(crate) struct Config {
     pub(crate) options: ConnectOptions,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 impl Config {
     async fn connection(&self) -> Result<NatsConnection> {

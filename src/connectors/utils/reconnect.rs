@@ -16,8 +16,8 @@
 use crate::{
     config::Reconnect,
     connectors::{
-        sink::SinkMsg, source::SourceMsg, Addr, Alias, Connectivity, Connector, ConnectorContext,
-        Context, Msg,
+        sink::SinkMsg, source::SourceMsg, Addr, Connectivity, Connector, ConnectorContext, Context,
+        Msg,
     },
     errors::{empty_error, Result},
 };
@@ -28,6 +28,7 @@ use tokio::{
     sync::mpsc::{channel as bounded, Sender},
     task::{self, JoinHandle},
 };
+use tremor_common::alias;
 
 #[derive(Debug, PartialEq, Clone)]
 enum ShouldRetry {
@@ -190,7 +191,7 @@ pub(crate) struct ReconnectRuntime {
     addr: Addr,
     notifier: ConnectionLostNotifier,
     retry_task: Option<JoinHandle<()>>,
-    alias: Alias,
+    alias: alias::Connector,
 }
 
 /// Notifier that connector implementations
@@ -231,7 +232,7 @@ impl ReconnectRuntime {
     }
     fn inner(
         addr: Addr,
-        alias: Alias,
+        alias: alias::Connector,
         notifier: ConnectionLostNotifier,
         config: &Reconnect,
     ) -> Self {
@@ -446,7 +447,7 @@ mod tests {
     async fn failfast_runtime() -> Result<()> {
         let (tx, _rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = Alias::new("flow", "test");
+        let alias = alias::Connector::new("flow", "test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -478,7 +479,7 @@ mod tests {
     async fn backoff_runtime() -> Result<()> {
         let (tx, mut rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = Alias::new("flow", "test");
+        let alias = alias::Connector::new("flow", "test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,

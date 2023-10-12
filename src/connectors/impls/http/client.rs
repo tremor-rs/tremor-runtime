@@ -15,13 +15,13 @@
 use super::auth::Auth;
 use super::meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder};
 use super::utils::{Header, RequestId};
+use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::mime::MimeCodecMap;
 use crate::connectors::utils::tls::TLSClientConfig;
 use crate::{
     channel::{bounded, Receiver, Sender},
     errors::empty_error,
 };
-use crate::{config::NameWithConfig, connectors::sink::concurrency_cap::ConcurrencyCap};
 use crate::{connectors::prelude::*, errors::err_connector_def};
 use either::Either;
 use halfbrown::HashMap;
@@ -36,6 +36,7 @@ use std::sync::Arc;
 use std::{sync::atomic::AtomicBool, time::Duration};
 use tokio::time::timeout;
 use tremor_common::time::nanotime;
+use tremor_config::NameWithConfig;
 
 //  pipeline -> Sink -> http client
 //                          |
@@ -97,7 +98,7 @@ fn default_method() -> SerdeishMethod {
 }
 
 // for new
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -110,7 +111,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &Alias,
+        id: &alias::Connector,
         _connector_config: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,

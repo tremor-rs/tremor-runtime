@@ -14,13 +14,14 @@
 
 use beef::Cow;
 use simd_json::ObjectHasher;
-use tremor_common::ports::{Port, ERR, IN, OUT};
+use tremor_common::{
+    alias,
+    ports::{Port, ERR, IN, OUT},
+};
 use tremor_pipeline::metrics::{value, value_count};
 use tremor_pipeline::MetricsSender;
 use tremor_script::EventPayload;
 use tremor_value::prelude::*;
-
-use crate::connectors::Alias;
 
 const FLOW: Cow<'static, str> = Cow::const_str("flow");
 const CONNECTOR: Cow<'static, str> = Cow::const_str("connector");
@@ -29,7 +30,7 @@ const CONNECTOR_EVENTS: Cow<'static, str> = Cow::const_str("connector_events");
 
 /// metrics reporter for connector sources
 pub(crate) struct SourceReporter {
-    alias: Alias,
+    alias: alias::Connector,
     metrics_out: u64,
     metrics_err: u64,
     tx: MetricsSender,
@@ -38,7 +39,11 @@ pub(crate) struct SourceReporter {
 }
 
 impl SourceReporter {
-    pub(crate) fn new(alias: Alias, tx: MetricsSender, flush_interval_s: Option<u64>) -> Self {
+    pub(crate) fn new(
+        alias: alias::Connector,
+        tx: MetricsSender,
+        flush_interval_s: Option<u64>,
+    ) -> Self {
         Self {
             alias,
             metrics_out: 0,
@@ -85,7 +90,7 @@ impl SourceReporter {
 
 /// metrics reporter for connector sinks
 pub(crate) struct SinkReporter {
-    alias: Alias,
+    alias: alias::Connector,
     metrics_in: u64,
     tx: MetricsSender,
     flush_interval_ns: Option<u64>,
@@ -93,7 +98,11 @@ pub(crate) struct SinkReporter {
 }
 
 impl SinkReporter {
-    pub(crate) fn new(alias: Alias, tx: MetricsSender, flush_interval_s: Option<u64>) -> Self {
+    pub(crate) fn new(
+        alias: alias::Connector,
+        tx: MetricsSender,
+        flush_interval_s: Option<u64>,
+    ) -> Self {
         Self {
             alias,
             metrics_in: 0,
@@ -128,7 +137,7 @@ impl SinkReporter {
     }
 }
 
-pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &Alias) {
+pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &alias::Connector) {
     use tremor_pipeline::MetricsMsg;
 
     if let Err(_e) = tx.send(MetricsMsg::new(metric, None)) {
@@ -144,7 +153,7 @@ pub(crate) fn make_event_count_metrics_payload(
     timestamp: u64,
     port: Port<'static>,
     count: u64,
-    connector_id: &Alias,
+    connector_id: &alias::Connector,
 ) -> EventPayload {
     let mut tags = Object::with_capacity_and_hasher(2, ObjectHasher::default());
     tags.insert_nocheck(FLOW, Value::from(connector_id.flow_alias().to_string()));

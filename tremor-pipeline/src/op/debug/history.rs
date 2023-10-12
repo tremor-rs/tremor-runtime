@@ -44,7 +44,6 @@
 //! ```
 
 use crate::op::prelude::*;
-use crate::ConfigImpl;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -56,7 +55,7 @@ pub struct Config {
     pub name: String,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 op!(EventHistoryFactory(_uid, node) {
 if let Some(map) = &node.config {

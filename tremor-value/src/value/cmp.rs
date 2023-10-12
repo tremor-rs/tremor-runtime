@@ -13,9 +13,8 @@
 // limitations under the License.
 
 use super::Value;
-use base64::Engine;
 use simd_json::{prelude::*, BorrowedValue, OwnedValue};
-use tremor_common::base64::BASE64;
+use tremor_common::base64::{Engine, BASE64};
 
 #[allow(clippy::cast_sign_loss, clippy::default_trait_access)]
 impl<'value> PartialEq for Value<'value> {

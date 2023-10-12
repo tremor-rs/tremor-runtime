@@ -150,18 +150,3 @@ pub trait InitializableOperator {
     //// if no operator con be instanciated from the provided NodeConfig
     fn node_to_operator(&self, uid: OperatorId, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }
-
-/// Trait for detecting errors in config and the key names are included in errors
-pub trait ConfigImpl {
-    /// deserialises the config into a struct and returns nice errors
-    /// this doesn't need to be overwritten in most cases.
-    ///
-    /// # Errors
-    /// if the Configuration is invalid
-    fn new(config: &tremor_value::Value) -> Result<Self>
-    where
-        Self: serde::de::Deserialize<'static>,
-    {
-        Ok(tremor_value::structurize(config.clone_static())?)
-    }
-}

@@ -139,7 +139,7 @@ fn default_timeout() -> u64 {
     10_000_000_000
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -152,7 +152,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &Alias,
+        _: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
         kill_switch: &KillSwitch,
@@ -332,7 +332,11 @@ impl CbSource {
         };
         self.finished && all_received
     }
-    async fn new(config: &Config, _alias: &Alias, kill_switch: KillSwitch) -> Result<Self> {
+    async fn new(
+        config: &Config,
+        _alias: &alias::Connector,
+        kill_switch: KillSwitch,
+    ) -> Result<Self> {
         let mut files = vec![];
         for path in &config.paths {
             let file = open(path).await?;

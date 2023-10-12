@@ -137,7 +137,7 @@ where
 {
     wrapped_stream: S,
     buffer: Vec<u8>,
-    alias: Alias,
+    alias: alias::Connector,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
     // notify the writer when the connection is done,
@@ -149,7 +149,7 @@ impl TcpReader<ReadHalf<TcpStream>> {
     fn new(
         wrapped_stream: ReadHalf<TcpStream>,
         buffer: Vec<u8>,
-        alias: Alias,
+        alias: alias::Connector,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
         sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
@@ -169,7 +169,7 @@ impl TcpReader<ReadHalf<tokio_rustls::server::TlsStream<TcpStream>>> {
     fn tls_server(
         stream: ReadHalf<tokio_rustls::server::TlsStream<TcpStream>>,
         buffer: Vec<u8>,
-        alias: Alias,
+        alias: alias::Connector,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
         sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
@@ -189,7 +189,7 @@ impl TcpReader<ReadHalf<tokio_rustls::client::TlsStream<TcpStream>>> {
     fn tls_client(
         stream: ReadHalf<tokio_rustls::client::TlsStream<TcpStream>>,
         buffer: Vec<u8>,
-        alias: Alias,
+        alias: alias::Connector,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {

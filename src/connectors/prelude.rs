@@ -27,7 +27,7 @@ pub(crate) use crate::{
         },
         spawn_task,
         utils::reconnect::Attempt,
-        Alias, CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context,
+        CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context,
         StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
     },
     errors::{err_connector_def, Error, Kind as ErrorKind, Result},
@@ -36,15 +36,15 @@ pub(crate) use crate::{
     utils::hostname,
     Event,
 };
-
 pub(crate) use std::sync::atomic::Ordering;
+pub use tremor_common::alias;
 pub(crate) use tremor_common::{
     ports::{Port, ERR, IN, OUT},
     url::{Defaults, HttpsDefaults, Url},
 };
-pub use tremor_pipeline::{
-    CbAction, ConfigImpl, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
-};
+pub(crate) use tremor_config::Impl;
+pub use tremor_config::NameWithConfig;
+pub use tremor_pipeline::{CbAction, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID};
 pub(crate) use tremor_script::prelude::*;
 /// default buf size used for reading from files and streams (sockets etc)
 ///
@@ -68,9 +68,4 @@ pub(crate) fn default_backlog() -> i32 {
 /// Encapsulates connector configuration
 pub(crate) use crate::connectors::ConnectorConfig;
 
-pub(crate) fn default_true() -> bool {
-    true
-}
-pub(crate) fn default_false() -> bool {
-    false
-}
+pub(crate) use tremor_common::{default_false, default_true};

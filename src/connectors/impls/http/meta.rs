@@ -16,10 +16,7 @@ use std::convert::Infallible;
 
 use super::{client, utils::RequestId};
 use crate::channel::{bounded, Sender};
-use crate::{
-    config::NameWithConfig,
-    connectors::{prelude::*, utils::mime::MimeCodecMap},
-};
+use crate::connectors::{prelude::*, utils::mime::MimeCodecMap};
 use either::Either;
 use http::{
     header::{self, HeaderName},
@@ -319,7 +316,7 @@ mod test {
             CodecReq::Optional("json"),
             vec![],
             &ConnectorType("http".into()),
-            &Alias::new("flow", "http"),
+            &alias::Connector::new("flow", "http"),
         )?;
         let config = client::Config::new(&c)?;
 

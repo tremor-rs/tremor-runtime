@@ -53,7 +53,7 @@ pub(crate) struct Config {
     socket_options: TcpSocketOptions,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[allow(clippy::module_name_repetitions)]
 pub(crate) struct TcpServer {
@@ -75,7 +75,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn build_cfg(
         &self,
-        id: &Alias,
+        id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,

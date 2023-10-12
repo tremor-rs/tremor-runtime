@@ -41,7 +41,7 @@ pub(crate) struct Config {
     exchange: String,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 pub(crate) struct Amqp {
     pub(crate) config: Config,

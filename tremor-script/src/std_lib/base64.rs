@@ -14,8 +14,7 @@
 
 use crate::registry::Registry;
 use crate::{tremor_const_fn, tremor_fn_};
-use base64::Engine;
-use tremor_common::base64::BASE64;
+use tremor_common::base64::{Engine, BASE64};
 
 pub fn load(registry: &mut Registry) {
     registry

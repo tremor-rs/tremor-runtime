@@ -27,7 +27,7 @@ pub(crate) mod prelude {
     pub use value_trait::Builder;
 }
 use self::prelude::*;
-use crate::{config::Preprocessor as PreprocessorConfig, connectors::Alias, errors::Result};
+use crate::{alias::Connector, config::Preprocessor as PreprocessorConfig, errors::Result};
 
 //pub type Lines = lines::Lines;
 
@@ -669,8 +669,8 @@ mod test {
     #[test]
     fn single_pre_process_head_ok() {
         let pre = Box::new(BadPreprocessor {});
-        let alias = crate::connectors::Alias::new(
-            crate::system::flow::Alias::new("chucky"),
+        let alias = tremor_common::alias::Connector::new(
+            tremor_common::alias::Flow::new("chucky"),
             "chucky".to_string(),
         );
         let mut ingest_ns = 0_u64;
@@ -689,8 +689,8 @@ mod test {
         let noop = Box::new(NoOp {});
         assert_eq!("nily", noop.name());
         let pre = Box::new(BadPreprocessor {});
-        let alias = crate::connectors::Alias::new(
-            crate::system::flow::Alias::new("chucky"),
+        let alias = tremor_common::alias::Connector::new(
+            tremor_common::alias::Flow::new("chucky"),
             "chucky".to_string(),
         );
         let mut ingest_ns = 0_u64;
@@ -707,8 +707,8 @@ mod test {
     #[test]
     fn single_pre_finish_ok() {
         let pre = Box::new(BadPreprocessor {});
-        let alias = crate::connectors::Alias::new(
-            crate::system::flow::Alias::new("chucky"),
+        let alias = tremor_common::alias::Connector::new(
+            tremor_common::alias::Flow::new("chucky"),
             "chucky".to_string(),
         );
         let r = finish(&mut [pre], &alias);
@@ -724,8 +724,8 @@ mod test {
 
     #[test]
     fn preprocess_finish_head_fail() {
-        let alias = crate::connectors::Alias::new(
-            crate::system::flow::Alias::new("chucky"),
+        let alias = tremor_common::alias::Connector::new(
+            tremor_common::alias::Flow::new("chucky"),
             "chucky".to_string(),
         );
         let pre = Box::new(BadFinisher {});
@@ -735,8 +735,8 @@ mod test {
 
     #[test]
     fn preprocess_finish_tail_fail() {
-        let alias = crate::connectors::Alias::new(
-            crate::system::flow::Alias::new("chucky"),
+        let alias = tremor_common::alias::Connector::new(
+            tremor_common::alias::Flow::new("chucky"),
             "chucky".to_string(),
         );
         let noop = Box::new(NoOp {});
@@ -747,8 +747,8 @@ mod test {
 
     #[test]
     fn preprocess_finish_multi_ok() {
-        let alias = crate::connectors::Alias::new(
-            crate::system::flow::Alias::new("xyz"),
+        let alias = tremor_common::alias::Connector::new(
+            tremor_common::alias::Flow::new("xyz"),
             "xyz".to_string(),
         );
         let noop1 = Box::new(NoOp {});

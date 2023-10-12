@@ -66,7 +66,7 @@ impl Config {
         MORE_THEN_FIVEMBS
     }
 
-    fn normalize(&mut self, alias: &Alias) {
+    fn normalize(&mut self, alias: &alias::Connector) {
         if self.buffer_size < MORE_THEN_FIVEMBS {
             warn!("[Connector::{alias}] Setting `buffer_size` up to minimum of 5MB.");
             self.buffer_size = MORE_THEN_FIVEMBS;
@@ -74,7 +74,7 @@ impl Config {
     }
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -87,7 +87,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &Alias,
+        id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,

@@ -18,7 +18,7 @@ use crate::errors::Result;
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use futures::executor::block_on;
 use std::io::prelude::*;
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, BufWriter};
 use tremor_codec::Codec;
 use tremor_common::{
     file,
@@ -26,22 +26,16 @@ use tremor_common::{
     ports::{Port, IN},
     time::nanotime,
 };
+use tremor_interceptor::{postprocessor, preprocessor};
 use tremor_pipeline::{Event, EventId};
-use tremor_runtime::{
-    config,
-    postprocessor::Postprocessor,
-    preprocessor::Preprocessor,
-    system::{World, WorldConfig},
-};
+use tremor_runtime::system::{World, WorldConfig};
 use tremor_script::{
     arena::Arena,
-    ctx::EventContext,
     highlighter::{Error as HighlighterError, Highlighter, Term as TermHighlighter},
     lexer::Lexer,
     prelude::*,
     query::Query,
     script::{AggrType, Return, Script},
-    EventPayload, ValueAndMeta,
 };
 use tremor_value::Value;
 
@@ -50,7 +44,7 @@ struct Ingress {
     is_pretty: bool,
     buf: [u8; 4096],
     buffer: Box<dyn BufRead>,
-    preprocessor: Box<dyn Preprocessor>,
+    preprocessor: Box<dyn preprocessor::Preprocessor>,
     codec: Box<dyn Codec>,
 }
 
@@ -65,14 +59,14 @@ impl Ingress {
             Box::new(BufReader::new(crate::open_file(&cmd.infile, None)?))
         };
 
-        let codec = tremor_codec::resolve(&config::Codec::from(&cmd.decoder));
+        let codec = tremor_codec::resolve(&tremor_codec::Config::from(&cmd.decoder));
         if let Err(_e) = codec {
             eprintln!("Error Codec {} not found error.", cmd.decoder);
             // ALLOW: main.rs
             std::process::exit(1);
         }
         let codec = codec?;
-        let preprocessor = tremor_runtime::preprocessor::lookup(&cmd.preprocessor);
+        let preprocessor = preprocessor::lookup(&cmd.preprocessor);
         if let Err(_e) = preprocessor {
             eprintln!("Error Preprocessor {} not found error.", cmd.preprocessor);
             // ALLOW: main.rs
@@ -143,7 +137,7 @@ struct Egress {
     is_pretty: bool,
     buffer: Box<dyn Write>,
     codec: Box<dyn Codec>,
-    postprocessor: Box<dyn Postprocessor>,
+    postprocessor: Box<dyn postprocessor::Postprocessor>,
 }
 
 impl Egress {
@@ -154,7 +148,7 @@ impl Egress {
             Box::new(BufWriter::new(file::create(&cmd.outfile)?))
         };
 
-        let codec = tremor_codec::resolve(&config::Codec::from(&cmd.encoder));
+        let codec = tremor_codec::resolve(&tremor_codec::Config::from(&cmd.encoder));
         if let Err(_e) = codec {
             eprintln!("Error Codec {} not found error.", cmd.encoder);
             // ALLOW: main.rs
@@ -162,7 +156,7 @@ impl Egress {
         }
         let codec = codec?;
 
-        let postprocessor = tremor_runtime::postprocessor::lookup(&cmd.postprocessor);
+        let postprocessor = postprocessor::lookup(&cmd.postprocessor);
         if let Err(_e) = postprocessor {
             eprintln!("Error Postprocessor {} not found error.", cmd.postprocessor);
             // ALLOW: main.rs

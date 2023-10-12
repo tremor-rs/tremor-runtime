@@ -72,12 +72,9 @@ pub mod query;
 pub use crate::event::{Event, ValueIter, ValueMetaIter};
 pub use crate::executable_graph::{ExecutableGraph, OperatorNode};
 pub(crate) use crate::executable_graph::{NodeMetrics, State};
-pub use op::{ConfigImpl, InitializableOperator, Operator};
+pub use op::{InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
 pub(crate) type ExecPortIndexMap = HashMap<(usize, Port<'static>), Vec<(usize, Port<'static>)>>;
-
-/// A configuration map
-pub type ConfigMap = Option<tremor_value::Value<'static>>;
 
 /// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(

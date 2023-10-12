@@ -754,7 +754,7 @@ mod test {
             }],
             &SinkContext::new(
                 SinkId::default(),
-                Alias::new("flow", "connector"),
+                alias::Connector::new("flow", "connector"),
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
@@ -783,7 +783,7 @@ mod test {
             }],
             &SinkContext::new(
                 SinkId::default(),
-                Alias::new("flow", "connector"),
+                alias::Connector::new("flow", "connector"),
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
@@ -821,7 +821,7 @@ mod test {
                 }],
                 &SinkContext::new(
                     SinkId::default(),
-                    Alias::new("flow", "connector"),
+                    alias::Connector::new("flow", "connector"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
@@ -861,7 +861,7 @@ mod test {
             }],
             &SinkContext::new(
                 SinkId::default(),
-                Alias::new("flow", "connector"),
+                alias::Connector::new("flow", "connector"),
                 ConnectorType::default(),
                 QuiescenceBeacon::default(),
                 ConnectionLostNotifier::new(rx),
@@ -1084,7 +1084,7 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkId::default(),
-            Alias::new("flow", "connector"),
+            alias::Connector::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
@@ -1133,7 +1133,7 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkId::default(),
-            Alias::new("flow", "connector"),
+            alias::Connector::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
@@ -1178,7 +1178,7 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkId::default(),
-            Alias::new("flow", "connector"),
+            alias::Connector::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
@@ -1224,7 +1224,7 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkId::default(),
-            Alias::new("flow", "connector"),
+            alias::Connector::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
@@ -1268,7 +1268,7 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkId::default(),
-            Alias::new("flow", "connector"),
+            alias::Connector::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
@@ -1303,7 +1303,7 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkId::default(),
-            Alias::new("flow", "connector"),
+            alias::Connector::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(rx),
@@ -1364,7 +1364,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext::new(
                     SinkId::default(),
-                    Alias::new("flow", "connector"),
+                    alias::Connector::new("flow", "connector"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
@@ -1374,7 +1374,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
+                    &alias::Connector::new("flow", "connector"),
                 )?,
                 0,
             )
@@ -1407,7 +1407,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext::new(
                     SinkId::default(),
-                    Alias::new("flow", "connector"),
+                    alias::Connector::new("flow", "connector"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
@@ -1417,7 +1417,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
+                    &alias::Connector::new("flow", "connector"),
                 )?,
                 0,
             )
@@ -1493,7 +1493,7 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkId::default(),
-            Alias::new("flow", "connector"),
+            alias::Connector::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
@@ -1519,7 +1519,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
+                    &alias::Connector::new("flow", "connector"),
                 )?,
                 0,
             )
@@ -1583,7 +1583,7 @@ mod test {
 
         let ctx = SinkContext::new(
             SinkId::default(),
-            Alias::new("flow", "connector"),
+            alias::Connector::new("flow", "connector"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
@@ -1626,7 +1626,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("flow", "connector"),
+                    &alias::Connector::new("flow", "connector"),
                 )?,
                 0,
             )

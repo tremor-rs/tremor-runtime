@@ -32,7 +32,7 @@ pub(crate) struct Config {
     socket_options: UdpSocketOptions,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 struct UdpClient {
     config: Config,
@@ -48,7 +48,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn build_cfg(
         &self,
-        _id: &Alias,
+        _id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,

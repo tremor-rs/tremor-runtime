@@ -66,7 +66,7 @@ pub(crate) struct Config {
     rdkafka_options: Option<HashMap<String, String>>,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
@@ -79,7 +79,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        alias: &Alias,
+        alias: &alias::Connector,
         config: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,

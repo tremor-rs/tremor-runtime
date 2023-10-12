@@ -68,7 +68,7 @@ pub struct Config {
     pub step_up: f64,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 fn default_step_up() -> f64 {
     0.001

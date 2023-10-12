@@ -162,7 +162,8 @@ mod test {
     use crate::connectors::impls::gcl::writer::default_log_severity;
     use googapis::google::logging::r#type::LogSeverity;
     use std::collections::HashMap as StdHashMap;
-    use tremor_pipeline::ConfigImpl;
+    use tremor_config::Impl;
+
     use tremor_value::literal;
     use tremor_value::structurize;
 
@@ -357,11 +358,10 @@ mod test {
         ))?;
         assert_eq!(1, ok_config.labels.len());
 
-        let ko_config: std::result::Result<Config, tremor_pipeline::errors::Error> =
-            Config::new(&literal!({
-                "token": {"file": file!().to_string()},
-                "labels": "snot"
-            }));
+        let ko_config: std::result::Result<Config, _> = Config::new(&literal!({
+            "token": {"file": file!().to_string()},
+            "labels": "snot"
+        }));
         assert!(ko_config.is_err());
 
         Ok(())

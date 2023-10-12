@@ -56,10 +56,6 @@ pub(crate) mod primerge;
 
 /// pipelines
 pub mod pipeline;
-/// Onramp Preprocessors
-pub mod postprocessor;
-/// Offramp Postprocessors
-pub mod preprocessor;
 
 /// Tremor connector extensions
 pub mod connectors;

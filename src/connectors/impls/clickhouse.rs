@@ -303,7 +303,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _alias: &Alias,
+        _alias: &alias::Connector,
         _config: &ConnectorConfig,
         connector_config: &Value,
         _kill_switch: &KillSwitch,
@@ -378,7 +378,7 @@ impl Defaults for ClickHouseDefaults {
     const PORT: u16 = 9000;
 }
 
-impl ConfigImpl for ClickhouseConfig {}
+impl tremor_config::Impl for ClickhouseConfig {}
 
 #[derive(Clone, Copy, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]

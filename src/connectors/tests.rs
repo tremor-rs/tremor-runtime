@@ -63,20 +63,16 @@ use crate::{
 };
 use crate::{
     config,
-    connectors::{
-        self, builtin_connector_types, source::SourceMsg, Alias as ConnectorAlias, Connectivity,
-        StatusReport,
-    },
+    connectors::{self, builtin_connector_types, source::SourceMsg, Connectivity, StatusReport},
     errors::Result,
     instance::State,
-    pipeline, qsize,
-    system::flow::Alias as FlowAlias,
-    Event,
+    pipeline, qsize, Event,
 };
 use log::{debug, info};
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 use tokio::{sync::oneshot, task, time::timeout};
+use tremor_common::alias::{self};
 use tremor_common::{
     ids::{ConnectorIdGen, Id, SourceId},
     ports::{Port, ERR, IN, OUT},
@@ -99,7 +95,7 @@ impl ConnectorHarness {
         input_ports: Vec<Port<'static>>,
         output_ports: Vec<Port<'static>>,
     ) -> Result<Self> {
-        let alias = ConnectorAlias::new("test", alias);
+        let alias = alias::Connector::new("test", alias);
         let mut connector_id_gen = ConnectorIdGen::new();
         let mut known_connectors = HashMap::new();
 
@@ -378,12 +374,12 @@ impl TestPipeline {
         self.addr.send_mgmt(pipeline::MgmtMsg::Stop).await
     }
     pub(crate) fn new(alias: String) -> Self {
-        let flow_id = FlowAlias::new("test");
+        let flow_id = alias::Flow::new("test");
         let qsize = qsize();
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = unbounded();
         let (tx_mgmt, mut rx_mgmt) = bounded(qsize);
-        let pipeline_id = pipeline::Alias::new(flow_id, alias);
+        let pipeline_id = alias::Pipeline::new(flow_id, alias);
         let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, pipeline_id);
 
         task::spawn(async move {

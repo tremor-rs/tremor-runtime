@@ -14,7 +14,7 @@
 
 use halfbrown::HashMap;
 
-use crate::config::NameWithConfig;
+use tremor_config::NameWithConfig;
 
 const MIME_TYPES: [(&str, &str); 10] = [
     ("application/json", "json"),

@@ -13,6 +13,7 @@
 // limitations under the License.
 use base64::alphabet::STANDARD as STANDARD_ALPHABET;
 use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
+pub use base64::{DecodeError, Engine};
 
 /**
  * Our very own base64 engine, that produces base64 with padding, but accepts base64 with and without padding.

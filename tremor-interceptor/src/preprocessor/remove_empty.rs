@@ -12,26 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Prefixes the data with the length of the event data in bytes as an unsigned 64 bit big-endian integer.
+//! Removes empty messages (aka zero len). This one is best used in a chain after a splitting preprocessor, like [`separate`](./separate.md)
 
-use std::io::Write;
+use super::prelude::*;
+use crate::errors::Result;
 
-use byteorder::{BigEndian, WriteBytesExt};
+#[derive(Default, Debug, Clone)]
+pub(crate) struct RemoveEmpty {}
 
-use super::Postprocessor;
-use crate::Result;
-
-#[derive(Clone, Default)]
-pub(crate) struct LengthPrefixed {}
-impl Postprocessor for LengthPrefixed {
+impl Preprocessor for RemoveEmpty {
     fn name(&self) -> &str {
-        "length-prefix"
+        "remove-empty"
     }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        let mut res = Vec::with_capacity(data.len() + 8);
-        res.write_u64::<BigEndian>(data.len() as u64)?;
-        res.write_all(data)?;
-        Ok(vec![res])
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+        if data.is_empty() {
+            Ok(vec![])
+        } else {
+            Ok(vec![(data.to_vec(), meta)])
+        }
     }
 }

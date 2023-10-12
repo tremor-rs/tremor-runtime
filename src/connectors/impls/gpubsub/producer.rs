@@ -13,15 +13,7 @@
 // limitations under the License.
 
 use crate::connectors::google::{AuthInterceptor, TokenProvider, TokenSrc};
-use crate::connectors::prelude::{
-    Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
-    SinkManagerBuilder, SinkReply, Url,
-};
-use crate::connectors::sink::Sink;
-use crate::connectors::{
-    CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorContext, ConnectorType,
-    Context,
-};
+use crate::connectors::prelude::*;
 use crate::errors::Result;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
@@ -33,7 +25,7 @@ use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Code;
 use tremor_common::url::HttpsDefaults;
-use tremor_pipeline::{ConfigImpl, Event};
+use tremor_pipeline::Event;
 use tremor_value::Value;
 use value_trait::ValueAccess;
 
@@ -50,7 +42,7 @@ pub(crate) struct Config {
     pub topic: String,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
@@ -70,7 +62,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _alias: &Alias,
+        _alias: &alias::Connector,
         _config: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,

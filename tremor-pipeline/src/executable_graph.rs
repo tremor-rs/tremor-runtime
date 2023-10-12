@@ -17,13 +17,14 @@ use crate::{
     errors::Result,
     errors::{Error, ErrorKind},
     metrics::value_count,
-    ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
+    ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use halfbrown::HashMap;
 use simd_json::ObjectHasher;
 use std::{fmt, fmt::Display};
 use tremor_common::{ids::OperatorId, ports::Port, stry};
+use tremor_config::Map as ConfigMap;
 use tremor_script::{ast::Helper, ast::Stmt};
 use tremor_value::{Object, Value};
 

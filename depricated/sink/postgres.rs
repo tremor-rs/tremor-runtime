@@ -42,7 +42,7 @@ pub(crate) struct Config {
     pub(crate) table: String,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 pub(crate) struct Builder {}
 impl offramp::Builder for Builder {
