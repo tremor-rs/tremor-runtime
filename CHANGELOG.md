@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### New features
+* kafka schema registry codec
+
+### Breaking Changes
+* remove schema_registry preprocessor
+* remove defunct schema_registry support for avro codec
+
 ## [0.13.0-rc.16]
 
 ### New features

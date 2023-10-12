@@ -22,7 +22,6 @@ pretty_assertions = "1.4"
 
 [dependencies]
 tokio = { version = "1.32", features = ["full"] }
-# tokio-metrics = { version = "0.1.0", default-features = true }
 anyhow = "1"
 clap = { version = "4", features = ["color", "derive"] }
 clap_complete = "4"
@@ -31,7 +30,6 @@ env_logger = "0.10"
 futures = "0.3"
 halfbrown = "0.2"
 http-types = "2"
-# jemallocator = {version = "0.3", optional = false}
 log = "0.4"
 log4rs = "1"
 serde = "1"
@@ -56,8 +54,6 @@ tremor-runtime = { version = "0.13.0-rc.16", path = "../" }
 tremor-script = { version = "0.13.0-rc.16", path = "../tremor-script" }
 tremor-value = { version = "0.13.0-rc.16", path = "../tremor-value" }
 url = "2"
-# mimalloc-rs = { version = "0.1", default-features = true, optional = true }
-# allocator_api = "0.6.0"
 error-chain = "0.12"
 globwalk = "0.8"
 port_scanner = "0.1"

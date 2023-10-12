@@ -141,12 +141,6 @@ cron = "0.12"
 # logstash grok patterns
 grok = "2"
 
-# sse-onramp
-#surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0", default-features = false }
-
-# nats
-#async-nats = "0.10.1"
-
 # discord
 serenity = { version = "0.11", default-features = false, features = [
   "client",
@@ -203,7 +197,6 @@ simdutf8 = "0.1"
 [dev-dependencies]
 port_scanner = "0.1"
 serial_test = { version = "2.0", features = ["logging"] }
-# path = "../serial_test/serial_test" 
 env_logger = "0.10"
 matches = "0.1"
 pretty_assertions = "1.4"
@@ -217,7 +210,7 @@ tempfile = { version = "3.8" }
 test-case = "3.1"
 testcontainers = { version = "0.14", features = ["watchdog"] }
 num_cpus = "1"
-
+bytes = "1"
 
 [features]
 default = []

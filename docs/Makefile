@@ -4,10 +4,10 @@ operator-docs:
 	scripts/operators.sh
 
 preprocessor-docs: 
-	scripts/gen.sh src/preprocessor preprocessors
+	scripts/gen.sh tremor-interceptor/src/preprocessor preprocessors
 
 postprocessor-docs: 
-	scripts/gen.sh src/postprocessor postprocessors
+	scripts/gen.sh tremor-interceptor/src/postprocessor postprocessors
 
 codec-docs: 
 	scripts/gen.sh tremor-codec/src/codec codecs

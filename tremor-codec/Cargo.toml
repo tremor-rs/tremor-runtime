@@ -39,8 +39,6 @@ schema_registry_converter = { version = "3", default-features = false, features 
     "easy",
 ], git = "https://github.com/tremor-rs/schema_registry_converter.git", branch = "housekeeping" }
 
-# path = "schema_registry_converter" 
-
 # codecs
 reqwest = { version = "0.11", default-features = false, features = [
     "rustls-tls",

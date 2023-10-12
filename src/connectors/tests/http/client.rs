@@ -17,7 +17,6 @@ use crate::{
         impls::http::{self as http_impl, meta::content_type},
         prelude::Url,
         tests::{free_port::find_free_tcp_port, ConnectorHarness},
-        utils::url::HttpDefaults,
     },
     errors::Result,
 };
@@ -34,6 +33,7 @@ use std::{
 };
 use tokio::task::{spawn, JoinHandle};
 use tremor_common::ports::IN;
+use tremor_common::url::HttpDefaults;
 use tremor_pipeline::Event;
 use tremor_script::ValueAndMeta;
 use tremor_value::{literal, Value};
