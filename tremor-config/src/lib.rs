@@ -12,6 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Tremor shared configuration
+
+#![deny(warnings)]
+#![deny(missing_docs)]
+#![recursion_limit = "1024"]
+#![deny(
+    clippy::all,
+    clippy::unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic,
+    clippy::mod_module_files
+)]
+
 use serde::Deserialize;
 use tremor_value::prelude::*;
 
@@ -78,6 +91,7 @@ impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
 /// Error for confdig
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
+    /// malformed configuration
     InvalidConfig(String),
 }
 
@@ -179,5 +193,29 @@ mod test {
         let nac = Config::deserialize(data).expect("could structurize two element struct");
 
         assert_eq!(nac.mime_mapping.map(|h| h.len()).unwrap_or_default(), 3);
+    }
+
+    // Test if the invlaid configs give errors
+    #[test]
+    fn name_with_config_invalid() {
+        let v = literal!({"name": "json", "config": {"mode": "sorted"}});
+        let nac = NameWithConfig::try_from(&v).expect("could structurize two element struct");
+        assert_eq!(nac.name, "json");
+        assert!(nac.config.as_object().is_some());
+        let v = literal!({"name": "yaml"});
+        let nac = NameWithConfig::try_from(&v).expect("could structurize one element struct");
+        assert_eq!(nac.name, "yaml");
+        assert_eq!(nac.config, None);
+        let v = literal!("name");
+        let nac = NameWithConfig::try_from(&v).expect("could structurize string");
+        assert_eq!(nac.name, "name");
+        assert_eq!(nac.config, None);
+        let v = literal!({"snot": "yaml"});
+        let nac = NameWithConfig::try_from(&v);
+        assert!(nac.is_err());
+        assert_eq!(
+            nac.err().map(|e| e.to_string()).expect("err"),
+            r#"Invalid config: {"snot":"yaml"}"#
+        );
     }
 }

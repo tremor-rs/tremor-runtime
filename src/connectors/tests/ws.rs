@@ -14,8 +14,8 @@
 
 use super::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness};
 use crate::channel::{bounded, Receiver, Sender, TryRecvError};
+use crate::connectors::impls::ws::WsDefaults;
 use crate::connectors::{impls::ws, utils::tls::TLSClientConfig};
-use crate::connectors::{impls::ws::WsDefaults, utils::url::Url};
 use crate::errors::{Result, ResultExt};
 use futures::SinkExt;
 use futures::StreamExt;
@@ -46,6 +46,7 @@ use tokio_tungstenite::{
     WebSocketStream,
 };
 use tremor_common::ports::IN;
+use tremor_common::url::Url;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 

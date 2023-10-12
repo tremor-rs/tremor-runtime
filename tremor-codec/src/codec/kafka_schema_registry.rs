@@ -16,9 +16,13 @@
 //!
 //! The codec is configured with a codec following the avro json codec specification
 //!
+//! ## Configuration
+//!
+//!  - `url`: the `url` configuration is used to point to the root of the schema registry server
+//!
 //! ## Mappings
 //!
-//! The same as the [`avro` codec](../avro)
+//! The same as the [`avro` codec](./avro)
 
 use crate::{
     avro::{avro_to_value, value_to_avro, SchemaResover, SchemaWrapper},
@@ -101,7 +105,7 @@ impl SchemaResover for RecordResolver<'_> {
 #[async_trait::async_trait()]
 impl Codec for Ksr {
     fn name(&self) -> &str {
-        todo!()
+        "kafka-schema-registry"
     }
 
     async fn decode<'input>(
@@ -146,5 +150,31 @@ impl Codec for Ksr {
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    // Test if the codec can be created from config
+    #[test]
+    fn test_codec_creation() {
+        let config = literal!({"url":"http://localhost:8081"});
+        let codec = Ksr::from_config(Some(&config)).expect("invalid config");
+        assert_eq!(codec.name(), "kafka-schema-registry");
+    }
+
+    #[test]
+    fn invalid_config() {
+        let config = literal!({});
+        let codec = Ksr::from_config(Some(&config));
+        assert!(codec.is_err());
+    }
+    #[test]
+    fn invalid_url() {
+        let config = literal!({"url":"loc alhost:8081"});
+        let codec = Ksr::from_config(Some(&config));
+        assert!(codec.is_err());
     }
 }

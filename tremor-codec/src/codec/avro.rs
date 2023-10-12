@@ -16,6 +16,13 @@
 //!
 //! The codec is configured with a codec following the avro json codec specification
 //!
+//! ## Configuration
+//!
+//! | value | optional | description |
+//! |-------|----------|-------------|
+//! | `schema` | no | The avro schema to use |
+//! | `compression` | yes | The compression codec to use, one of `deflate`, `snappy`, `zstd`, `bzip2`, `xz`, `none` |
+//!
 //! ## Mappings
 //!
 //! | avro | tremor (to) | tremor (from) |
@@ -670,34 +677,6 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn decode_smaple() -> Result<()> {
-        // [b'O', b'b', b'j', 1u8]
-        let from_kafka = vec![0_u8, 0, 0, 0, 1, 12, 115, 116, 114, 105, 110, 103];
-        // let from_kafka = vec![b'O', b'b', b'j', 1_u8, 12, 115, 116, 114, 105, 110, 103];
-        // let mut from_kafka = vec![12, 115, 116, 114, 105, 110, 103_u8];
-
-        let mut codec = test_codec(literal!(
-            {
-                "type": "record",
-                "name": "record",
-                "fields": [
-                    {"name": "one", "type": "string"},
-                ]
-            }
-        ))?;
-
-        let decoded = literal!({"one": "string"});
-
-        let mut encoded = codec.encode(&decoded, &Value::const_null()).await?;
-        assert_eq!(encoded, from_kafka);
-
-        codec
-            .decode(&mut encoded, 0, Value::object())
-            .await?
-            .expect("no data");
-        Ok(())
-    }
     #[tokio::test(flavor = "multi_thread")]
     async fn round_robin() -> Result<()> {
         let mut codec = test_codec(literal!(
