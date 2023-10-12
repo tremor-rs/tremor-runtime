@@ -34,8 +34,8 @@ pub(crate) trait ChannelFactory<
 }
 
 /// Token Source
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all(serialize = "lowercase", deserialize = "lowercase"))]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum TokenSrc {
     /// Enmbedded JSON
     Json(OwnedValue),
