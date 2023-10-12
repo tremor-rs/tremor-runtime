@@ -362,7 +362,7 @@ mod test {
         );
         let ctx = SinkContext::new(
             SinkId::default(),
-            Alias::new("a", "b"),
+            alias::Connector::new("a", "b"),
             ConnectorType::default(),
             QuiescenceBeacon::default(),
             ConnectionLostNotifier::new(connection_lost_tx),
@@ -391,7 +391,7 @@ mod test {
                 CodecReq::Structured,
                 vec![],
                 &"a".into(),
-                &Alias::new("a", "b"),
+                &alias::Connector::new("a", "b"),
             )?,
             0,
         )
@@ -458,7 +458,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext::new(
                     SinkId::default(),
-                    Alias::new("", ""),
+                    alias::Connector::new("", ""),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(rx),
@@ -468,7 +468,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &Alias::new("", ""),
+                    &alias::Connector::new("", ""),
                 )?,
                 0,
             )

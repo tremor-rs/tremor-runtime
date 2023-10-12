@@ -50,8 +50,6 @@ mod codec {
     pub(crate) mod yaml;
 }
 
-/// Codec configuration
-pub mod config;
 pub use codec::*;
 
 mod prelude {
@@ -60,6 +58,9 @@ mod prelude {
     pub use simd_json::prelude::*;
     pub use tremor_value::{literal, Object, Value};
 }
+
+/// A Codec
+pub type Config = tremor_config::NameWithConfig;
 
 #[async_trait::async_trait]
 /// The codec trait, to encode and decode data
@@ -118,7 +119,7 @@ impl Debug for dyn Codec {
 ///
 /// # Errors
 ///  * if the codec doesn't exist
-pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
+pub fn resolve(config: &Config) -> Result<Box<dyn Codec>> {
     match config.name.as_str() {
         "avro" => avro::Avro::from_config(config.config.as_ref()),
         "kafka-schema-registry" => kafka_schema_registry::Ksr::from_config(config.config.as_ref()),
@@ -141,7 +142,7 @@ pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
 
 #[cfg(test)]
 mod test {
-    use crate::config::NameWithConfig;
+    use tremor_config::NameWithConfig;
     use tremor_value::literal;
 
     #[test]

@@ -43,7 +43,7 @@ pub struct Config {
     pub outputs: Vec<String>,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 fn default_outputs() -> Vec<String> {
     vec![OUT.to_string()]

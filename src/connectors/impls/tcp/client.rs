@@ -54,7 +54,7 @@ pub(crate) struct Config {
     socket_options: TcpSocketOptions,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 pub(crate) struct TcpClient {
     config: Config,
@@ -78,7 +78,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn build_cfg(
         &self,
-        id: &Alias,
+        id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,

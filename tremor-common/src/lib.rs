@@ -51,7 +51,21 @@ pub mod base64;
 /// URL with defaults
 pub mod url;
 
+/// Aliases for naming tremor elements
+pub mod alias;
+
 pub use errors::Error;
+
+/// function that always returns true
+#[must_use]
+pub fn default_true() -> bool {
+    true
+}
+/// function that always returns false
+#[must_use]
+pub fn default_false() -> bool {
+    false
+}
 
 #[cfg(test)]
 mod tests {

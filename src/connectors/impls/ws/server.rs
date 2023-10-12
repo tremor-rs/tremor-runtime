@@ -47,7 +47,7 @@ pub(crate) struct Config {
     tls: Option<TLSServerConfig>,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[allow(clippy::module_name_repetitions)]
 pub(crate) struct WsServer {
@@ -70,7 +70,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn build_cfg(
         &self,
-        _id: &Alias,
+        _id: &alias::Connector,
         _: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,

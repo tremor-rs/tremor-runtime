@@ -51,7 +51,7 @@ impl Config {
     }
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 /// Amqp offramp connector
 pub(crate) struct Amqp {

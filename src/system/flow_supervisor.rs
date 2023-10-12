@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::flow::{Alias, Flow};
+use super::flow::Flow;
 use super::KillSwitch;
 use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
 use crate::{
@@ -33,7 +33,10 @@ use tokio::{
     task::{self, JoinHandle},
     time::timeout,
 };
-use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
+use tremor_common::{
+    alias,
+    ids::{ConnectorIdGen, OperatorIdGen},
+};
 use tremor_script::ast::DeployFlow;
 
 pub(crate) type Channel = Sender<Msg>;
@@ -55,7 +58,7 @@ pub(crate) enum Msg {
         builder: Box<dyn ConnectorBuilder>,
     },
     GetFlows(oneshot::Sender<Result<Vec<Flow>>>),
-    GetFlow(Alias, oneshot::Sender<Result<Flow>>),
+    GetFlow(alias::Flow, oneshot::Sender<Result<Flow>>),
     /// Initiate the Quiescence process
     Drain(oneshot::Sender<Result<()>>),
     /// stop this manager
@@ -64,7 +67,7 @@ pub(crate) enum Msg {
 
 #[derive(Debug)]
 pub(crate) struct FlowSupervisor {
-    flows: HashMap<Alias, Flow>,
+    flows: HashMap<alias::Flow, Flow>,
     operator_id_gen: OperatorIdGen,
     connector_id_gen: ConnectorIdGen,
     known_connectors: connectors::Known,
@@ -96,7 +99,7 @@ impl FlowSupervisor {
         sender: oneshot::Sender<Result<()>>,
         kill_switch: &KillSwitch,
     ) {
-        let id = Alias::from(&flow);
+        let id = alias::Flow::from(&flow);
         let res = match self.flows.entry(id.clone()) {
             Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
             Entry::Vacant(vacant) => Flow::start(
@@ -123,7 +126,7 @@ impl FlowSupervisor {
             "Error sending ListFlows response: {e}"
         );
     }
-    fn handle_get_flow(&self, id: &Alias, reply_tx: oneshot::Sender<Result<Flow>>) {
+    fn handle_get_flow(&self, id: &alias::Flow, reply_tx: oneshot::Sender<Result<Flow>>) {
         log_error!(
             reply_tx
                 .send(

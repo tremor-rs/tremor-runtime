@@ -21,13 +21,16 @@ pub(crate) mod length_prefixed;
 pub(crate) mod separate;
 pub(crate) mod textual_length_prefixed;
 
-use crate::config::Postprocessor as PostprocessorConfig;
 use crate::errors::Result;
+use log::error;
 use std::default::Default;
 use tremor_common::time::nanotime;
 /// Set of Postprocessors
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
 use std::{mem, str};
+
+/// Configuration for a postprocessor
+pub type Config = tremor_config::NameWithConfig;
 
 trait PostprocessorState {}
 /// Postprocessor trait
@@ -59,7 +62,7 @@ pub trait Postprocessor: Send + Sync {
 ///
 ///   * Errors if the postprocessor is not known
 
-pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
+pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
         "chunk" => Ok(Box::new(chunk::Chunk::from_config(config.config.as_ref())?)),
         "compress" => Ok(Box::new(compress::Compress::from_config(
@@ -83,7 +86,7 @@ pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postpr
 /// # Errors
 ///   * if the postprocessor with `name` is not known
 pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
-    lookup_with_config(&PostprocessorConfig::from(name))
+    lookup_with_config(&Config::from(name))
 }
 
 /// Given the slice of postprocessor names: Lookup each of them and return them as `Postprocessors`
@@ -91,7 +94,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
 /// # Errors
 ///
 ///   * If any postprocessor is not known.
-pub fn make_postprocessors(postprocessors: &[PostprocessorConfig]) -> Result<Postprocessors> {
+pub fn make_postprocessors(postprocessors: &[Config]) -> Result<Postprocessors> {
     postprocessors.iter().map(lookup_with_config).collect()
 }
 
@@ -167,7 +170,7 @@ pub fn finish(postprocessors: &mut [Box<dyn Postprocessor>], alias: &str) -> Res
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::config::NameWithConfig;
+    use tremor_config::NameWithConfig;
     use tremor_value::literal;
 
     const LOOKUP_TABLE: [&str; 6] = [

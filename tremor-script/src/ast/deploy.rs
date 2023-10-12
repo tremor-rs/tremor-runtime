@@ -15,7 +15,7 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use tremor_common::ports::Port;
+use tremor_common::{alias, ports::Port};
 
 use super::{
     docs::Docs, helper::Scope, node_id::BaseRef, raw::BaseExpr, CreationalWith, DefinitionalArgs,
@@ -300,6 +300,12 @@ impl_expr!(DeployFlow);
 impl crate::ast::node_id::BaseRef for DeployFlow<'_> {
     fn fqn(&self) -> String {
         self.instance_alias.clone()
+    }
+}
+
+impl From<&DeployFlow<'_>> for alias::Flow {
+    fn from(val: &DeployFlow<'_>) -> Self {
+        alias::Flow::from(val.instance_alias.clone())
     }
 }
 

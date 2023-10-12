@@ -21,20 +21,9 @@ pub(crate) mod concurrency_cap;
 
 use crate::{
     channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
-    config::{
-        Codec as CodecConfig, Connector as ConnectorConfig, NameWithConfig,
-        Postprocessor as PostprocessorConfig,
-    },
-    connectors::{
-        utils::{
-            metrics::SinkReporter,
-            reconnect::{Attempt, ConnectionLostNotifier},
-        },
-        Alias, CodecReq, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
-    },
-    errors::Result,
+    config::Connector as ConnectorConfig,
+    connectors::prelude::*,
     pipeline,
-    postprocessor::{finish, make_postprocessors, postprocess, Postprocessors},
     primerge::PriorityMerge,
     qsize,
 };
@@ -53,9 +42,14 @@ use tremor_common::{
     ports::Port,
     time::nanotime,
 };
+use tremor_interceptor::postprocessor::{
+    self, finish, make_postprocessors, postprocess, Postprocessors,
+};
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
 use tremor_value::Value;
+
+use super::{metrics::SinkReporter, ConnectionLostNotifier, Msg, QuiescenceBeacon};
 
 pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
 
@@ -263,7 +257,7 @@ pub(crate) struct SinkContextInner {
     /// the connector unique identifier
     pub(crate) uid: SinkId,
     /// the connector alias
-    pub(crate) alias: Alias,
+    pub(crate) alias: alias::Connector,
     /// the connector type
     pub(crate) connector_type: ConnectorType,
 
@@ -284,7 +278,7 @@ impl SinkContext {
     }
     pub(crate) fn new(
         uid: SinkId,
-        alias: Alias,
+        alias: alias::Connector,
         connector_type: ConnectorType,
         quiescence_beacon: QuiescenceBeacon,
         notifier: ConnectionLostNotifier,
@@ -309,7 +303,7 @@ impl Context for SinkContext {
     // fn uid(&self) -> &SinkId {
     //     &self.0.uid
     // }
-    fn alias(&self) -> &Alias {
+    fn alias(&self) -> &alias::Connector {
         &self.0.alias
     }
 
@@ -418,7 +412,7 @@ impl SinkManagerBuilder {
 pub(crate) fn builder(
     config: &ConnectorConfig,
     connector_codec_requirement: CodecReq,
-    alias: &Alias,
+    alias: &alias::Connector,
 
     metrics_reporter: SinkReporter,
 ) -> Result<SinkManagerBuilder> {
@@ -452,8 +446,8 @@ pub(crate) struct EventSerializer {
     pub(crate) codec: Box<dyn Codec>,
     postprocessors: Postprocessors,
     // creation templates for stream handling
-    codec_config: CodecConfig,
-    postprocessor_configs: Vec<PostprocessorConfig>,
+    codec_config: tremor_codec::Config,
+    postprocessor_configs: Vec<postprocessor::Config>,
     // stream data
     // TODO: clear out state from codec, postprocessors and enable reuse
     streams: BTreeMap<u64, (Box<dyn Codec>, Postprocessors)>,
@@ -461,11 +455,11 @@ pub(crate) struct EventSerializer {
 
 impl EventSerializer {
     pub(crate) fn new(
-        codec_config: Option<CodecConfig>,
+        codec_config: Option<tremor_codec::Config>,
         default_codec: CodecReq,
-        postprocessor_configs: Vec<PostprocessorConfig>,
+        postprocessor_configs: Vec<postprocessor::Config>,
         connector_type: &ConnectorType,
-        alias: &Alias,
+        alias: &alias::Connector,
     ) -> Result<Self> {
         let codec_config = match default_codec {
             CodecReq::Structured => {
@@ -475,11 +469,13 @@ impl EventSerializer {
                     )
                     .into());
                 }
-                CodecConfig::from("null")
+                tremor_codec::Config::from("null")
             }
             CodecReq::Required => codec_config
                 .ok_or_else(|| format!("Missing codec for {connector_type} connector {alias}"))?,
-            CodecReq::Optional(opt) => codec_config.unwrap_or_else(|| CodecConfig::from(opt)),
+            CodecReq::Optional(opt) => {
+                codec_config.unwrap_or_else(|| tremor_codec::Config::from(opt))
+            }
         };
 
         let codec = codec::resolve(&codec_config)?;
@@ -552,22 +548,22 @@ impl EventSerializer {
     ) -> Result<Vec<Vec<u8>>> {
         if stream_id == DEFAULT_STREAM_ID {
             // no codec_overwrite for the default stream
-            postprocess(
+            Ok(postprocess(
                 &mut self.postprocessors,
                 ingest_ns,
                 self.codec.encode(value, meta).await?,
                 &self.alias,
-            )
+            )?)
         } else {
             match self.streams.entry(stream_id) {
                 Entry::Occupied(mut entry) => {
                     let (codec, pps) = entry.get_mut();
-                    postprocess(
+                    Ok(postprocess(
                         pps,
                         ingest_ns,
                         codec.encode(value, meta).await?,
                         &self.alias,
-                    )
+                    )?)
                 }
                 Entry::Vacant(entry) => {
                     // codec overwrite only considered for new streams
@@ -578,7 +574,12 @@ impl EventSerializer {
                     let pps = make_postprocessors(self.postprocessor_configs.as_slice())?;
                     // insert data for a new stream
                     let (c, pps2) = entry.insert((codec, pps));
-                    postprocess(pps2, ingest_ns, c.encode(value, meta).await?, &self.alias)
+                    Ok(postprocess(
+                        pps2,
+                        ingest_ns,
+                        c.encode(value, meta).await?,
+                        &self.alias,
+                    )?)
                 }
             }
         }
@@ -587,7 +588,7 @@ impl EventSerializer {
     /// remove and flush out any pending data from the stream identified by the given `stream_id`
     pub(crate) fn finish_stream(&mut self, stream_id: u64) -> Result<Vec<Vec<u8>>> {
         if let Some((mut _codec, mut postprocessors)) = self.streams.remove(&stream_id) {
-            finish(&mut postprocessors, &self.alias)
+            Ok(finish(&mut postprocessors, &self.alias)?)
         } else {
             Ok(vec![])
         }

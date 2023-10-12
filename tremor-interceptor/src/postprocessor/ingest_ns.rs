@@ -12,28 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Removes empty messages (aka zero len). This one is best used in a chain after a splitting preprocessor, like [`separate`](./separate.md)
+//! Prepends the event ingest timestamp as an unsigned 64 bit big-endian integer before the evetn payload.
 
-use super::prelude::*;
-use crate::Result;
+use super::Postprocessor;
+use crate::errors::Result;
+use byteorder::{BigEndian, WriteBytesExt};
+use std::io::Write;
 
-#[derive(Default, Debug, Clone)]
-pub(crate) struct RemoveEmpty {}
-
-impl Preprocessor for RemoveEmpty {
+#[derive(Default)]
+pub(crate) struct IngestNs {}
+impl Postprocessor for IngestNs {
     fn name(&self) -> &str {
-        "remove-empty"
+        "attach-ingress-ts"
     }
-    fn process(
-        &mut self,
-        _ingest_ns: &mut u64,
-        data: &[u8],
-        meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
-        if data.is_empty() {
-            Ok(vec![])
-        } else {
-            Ok(vec![(data.to_vec(), meta)])
-        }
+
+    fn process(&mut self, ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        let mut res = Vec::with_capacity(data.len() + 8);
+        res.write_u64::<BigEndian>(ingres_ns)?;
+        res.write_all(data)?;
+
+        Ok(vec![res])
     }
 }

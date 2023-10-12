@@ -20,6 +20,7 @@ members = [
   "tremor-codec",
   "tremor-common",
   "tremor-influx",
+  "tremor-interceptor",
   "tremor-pipeline",
   "tremor-script",
   "tremor-value",
@@ -46,8 +47,6 @@ async-trait = "0.1"
 base64 = "0.21"
 beef = { version = "0.5", features = ["impl_serde"] }
 bimap = { version = "0.6", features = ["serde"] }
-byteorder = "1"
-bytes = "1.5"
 chrono = "0.4"
 chrono-tz = "0.8"
 
@@ -78,10 +77,7 @@ http-types = "2.12"
 http-body = "0.4"
 indexmap = "2"
 lazy_static = "1"
-libflate = "2"
 log = { version = "0.4", features = ["kv_unstable"] }
-lz4 = "1.24.0"
-memchr = "2.6"
 pin-project-lite = "0.2"
 rand = "0.8.5"
 regex = "1.9"
@@ -89,17 +85,17 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 simd-json = { version = "0.11", features = ["known-key"] }
 simd-json-derive = "0.11"
-snap = "1"
 socket2 = { version = "0.5", features = ["all"] }
 tremor-common = { path = "tremor-common" }
+tremor-config = { path = "tremor-config" }
 tremor-codec = { path = "tremor-codec" }
 tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
+tremor-interceptor = { path = "tremor-interceptor" }
 url = "2.4"
 value-trait = "0.6"
-zstd = "0.12"
 
 
 # blaster / blackhole# codecs

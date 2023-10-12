@@ -32,52 +32,14 @@ use std::collections::HashSet;
 use std::time::Duration;
 use tokio::{task, time::timeout};
 use tokio_stream::wrappers::ReceiverStream;
-use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
+use tremor_common::{
+    alias,
+    ids::{ConnectorIdGen, OperatorIdGen},
+};
 use tremor_script::{
-    ast::{self, ConnectStmt, DeployFlow, Helper},
+    ast::{self, ConnectStmt, Helper},
     errors::{error_generic, not_defined_err},
 };
-
-/// unique identifier of a flow instance within a tremor instance
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct Alias(String);
-
-impl Alias {
-    /// construct a new flow if from some stringy thingy
-    pub fn new(alias: impl Into<String>) -> Self {
-        Self(alias.into())
-    }
-
-    /// reference this id as a stringy thing again
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl From<&DeployFlow<'_>> for Alias {
-    fn from(f: &DeployFlow) -> Self {
-        Self(f.instance_alias.to_string())
-    }
-}
-
-impl From<&str> for Alias {
-    fn from(e: &str) -> Self {
-        Self(e.to_string())
-    }
-}
-
-impl From<String> for Alias {
-    fn from(alias: String) -> Self {
-        Self(alias)
-    }
-}
-
-impl std::fmt::Display for Alias {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 #[derive(Debug)]
 /// Control Plane message accepted by each binding control plane handler
@@ -97,7 +59,7 @@ pub(crate) enum Msg {
     /// The sender expects a Result, which makes it easier to signal errors on the message handling path to the sender
     Report(Sender<Result<StatusReport>>),
     /// Get the addr for a single connector
-    GetConnector(connectors::Alias, Sender<Result<connectors::Addr>>),
+    GetConnector(alias::Connector, Sender<Result<connectors::Addr>>),
     /// Get the addresses for all connectors of this flow
     GetConnectors(Sender<Result<Vec<connectors::Addr>>>),
 }
@@ -106,7 +68,7 @@ type Addr = Sender<Msg>;
 /// A deployed Flow instance
 #[derive(Debug, Clone)]
 pub struct Flow {
-    alias: Alias,
+    alias: alias::Flow,
     addr: Addr,
 }
 
@@ -114,15 +76,15 @@ pub struct Flow {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StatusReport {
     /// the id of the instance this report describes
-    pub alias: Alias,
+    pub alias: alias::Flow,
     /// the current state
     pub status: State,
     /// the crated connectors
-    pub connectors: Vec<connectors::Alias>,
+    pub connectors: Vec<alias::Connector>,
 }
 
 impl Flow {
-    pub(crate) fn id(&self) -> &Alias {
+    pub(crate) fn id(&self) -> &alias::Flow {
         &self.alias
     }
     pub(crate) async fn stop(&self, tx: Sender<Result<()>>) -> Result<()> {
@@ -147,7 +109,7 @@ impl Flow {
     /// # Errors
     /// if the flow is not running anymore and can't be reached or if the connector is not part of the flow
     pub async fn get_connector(&self, connector_alias: String) -> Result<connectors::Addr> {
-        let connector_alias = connectors::Alias::new(self.id().clone(), connector_alias);
+        let connector_alias = alias::Connector::new(self.id().clone(), connector_alias);
         let (tx, mut rx) = bounded(1);
         self.addr
             .send(Msg::GetConnector(connector_alias, tx))
@@ -192,7 +154,7 @@ impl Flow {
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
         let mut connectors = HashMap::new();
-        let flow_alias = Alias::from(&flow);
+        let flow_alias = alias::Flow::from(&flow);
 
         for create in &flow.defn.creates {
             let alias: &str = &create.instance_alias;
@@ -200,7 +162,7 @@ impl Flow {
                 ast::CreateTargetDefinition::Connector(defn) => {
                     let mut defn = defn.clone();
                     defn.params.ingest_creational_with(&create.with)?;
-                    let connector_alias = connectors::Alias::new(flow_alias.clone(), alias);
+                    let connector_alias = alias::Connector::new(flow_alias.clone(), alias);
                     let config = crate::Connector::from_defn(&connector_alias, &defn)?;
                     let builder =
                         known_connectors
@@ -228,7 +190,7 @@ impl Flow {
 
                         defn.to_query(&create.with, &mut helper)?
                     };
-                    let pipeline_alias = pipeline::Alias::new(flow_alias.clone(), alias);
+                    let pipeline_alias = alias::Pipeline::new(flow_alias.clone(), alias);
                     let pipeline = tremor_pipeline::query::Query(
                         tremor_script::query::Query::from_query(query),
                     );
@@ -394,7 +356,7 @@ async fn link(
 /// task handling flow instance control plane
 #[allow(clippy::too_many_lines)]
 fn spawn_task(
-    id: Alias,
+    id: alias::Flow,
     pipelines: &HashMap<String, pipeline::Addr>,
     connectors: HashMap<String, connectors::Addr>,
     links: &[ConnectStmt],
@@ -603,7 +565,7 @@ fn spawn_task(
                     // TODO: aggregate states of all containing instances
                     let connectors = connectors
                         .keys()
-                        .map(|c| connectors::Alias::new(id.clone(), c))
+                        .map(|c| alias::Connector::new(id.clone(), c))
                         .collect();
                     let report = StatusReport {
                         alias: id.clone(),
@@ -824,7 +786,7 @@ mod tests {
             }
             async fn build(
                 &self,
-                _alias: &Alias,
+                _alias: &alias::Connector,
                 _config: &ConnectorConfig,
                 _kill_switch: &KillSwitch,
             ) -> Result<Box<dyn Connector>> {

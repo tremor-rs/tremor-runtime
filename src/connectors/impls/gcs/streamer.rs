@@ -33,7 +33,7 @@ use crate::{
 };
 use std::time::Duration;
 use tremor_common::time::nanotime;
-use tremor_pipeline::{ConfigImpl, EventId, OpMeta};
+use tremor_pipeline::{EventId, OpMeta};
 use tremor_value::Value;
 
 const CONNECTOR_TYPE: &str = "gcs_streamer";
@@ -82,10 +82,10 @@ fn default_backoff_base_time() -> u64 {
     25_000_000
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 impl Config {
-    fn normalize(&mut self, alias: &Alias) {
+    fn normalize(&mut self, alias: &alias::Connector) {
         let buffer_size = next_multiple_of(self.buffer_size, 256 * 1024);
 
         if self.buffer_size < buffer_size {
@@ -117,7 +117,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        alias: &Alias,
+        alias: &alias::Connector,
         _config: &ConnectorConfig,
         connector_config: &Value,
         _kill_switch: &KillSwitch,
@@ -404,7 +404,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::{
         channel::{bounded, unbounded},
-        config::{Codec as CodecConfig, Reconnect},
+        config::Reconnect,
         connectors::{
             impls::gcs::{resumable_upload_client::ResumableUploadClient, streamer::Mode},
             reconnect::ConnectionLostNotifier,
@@ -529,7 +529,7 @@ pub(crate) mod tests {
         });
 
         let mut config = Config::new(&raw_config).expect("config should be valid");
-        let alias = Alias::new("flow", "conn");
+        let alias = alias::Connector::new("flow", "conn");
         config.normalize(&alias);
         assert_eq!(256 * 1024, config.buffer_size);
     }
@@ -570,7 +570,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = alias::Connector::new("a", "b");
         let context = SinkContext::new(
             SinkId::default(),
             alias.clone(),
@@ -579,7 +579,7 @@ pub(crate) mod tests {
             ConnectionLostNotifier::new(connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
-            Some(CodecConfig::from("json")),
+            Some(tremor_codec::Config::from("json")),
             CodecReq::Required,
             vec![],
             &"gcs_streamer".into(),
@@ -756,7 +756,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = alias::Connector::new("a", "b");
         let context = SinkContext::new(
             SinkId::default(),
             alias.clone(),
@@ -765,7 +765,7 @@ pub(crate) mod tests {
             ConnectionLostNotifier::new(connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
-            Some(CodecConfig::from("json")),
+            Some(tremor_codec::Config::from("json")),
             CodecReq::Required,
             vec![],
             &"gcs_streamer".into(),
@@ -930,7 +930,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = alias::Connector::new("a", "b");
         let context = SinkContext::new(
             SinkId::default(),
             alias.clone(),
@@ -939,7 +939,7 @@ pub(crate) mod tests {
             ConnectionLostNotifier::new(connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
-            Some(CodecConfig::from("json")),
+            Some(tremor_codec::Config::from("json")),
             CodecReq::Required,
             vec![],
             &"gcs_streamer".into(),
@@ -1025,7 +1025,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = alias::Connector::new("a", "b");
         let context = SinkContext::new(
             SinkId::default(),
             alias.clone(),
@@ -1079,7 +1079,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = alias::Connector::new("a", "b");
         let context = SinkContext::new(
             SinkId::default(),
             alias.clone(),
@@ -1088,7 +1088,7 @@ pub(crate) mod tests {
             ConnectionLostNotifier::new(connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
-            Some(CodecConfig::from("json")),
+            Some(tremor_codec::Config::from("json")),
             CodecReq::Required,
             vec![],
             &"gcs_streamer".into(),
@@ -1304,7 +1304,7 @@ pub(crate) mod tests {
 
         let (connection_lost_tx, _) = bounded(10);
 
-        let alias = Alias::new("a", "b");
+        let alias = alias::Connector::new("a", "b");
         let context = SinkContext::new(
             SinkId::default(),
             alias.clone(),
@@ -1313,7 +1313,7 @@ pub(crate) mod tests {
             ConnectionLostNotifier::new(connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
-            Some(CodecConfig::from("json")),
+            Some(tremor_codec::Config::from("json")),
             CodecReq::Required,
             vec![],
             &"gcs_streamer".into(),
@@ -1453,7 +1453,7 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new("snot", "badger");
+        let alias = alias::Connector::new("snot", "badger");
         let mut connector_id_gen = ConnectorIdGen::default();
 
         // lets cover create-sink here
@@ -1484,7 +1484,7 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = Alias::new("snot", "badger");
+        let alias = alias::Connector::new("snot", "badger");
         let mut connector_id_gen = ConnectorIdGen::default();
 
         // lets cover create-sink here

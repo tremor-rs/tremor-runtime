@@ -30,7 +30,7 @@ struct Config {
     file: String, // just a stupid placeholder
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 struct Summerization {
     model: Mutex<SummarizationModel>,

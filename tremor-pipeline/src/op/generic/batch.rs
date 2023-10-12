@@ -53,7 +53,7 @@ pub struct Config {
     pub timeout: Option<u64>,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Debug, Clone)]
 struct Batch {

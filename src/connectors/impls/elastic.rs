@@ -293,7 +293,7 @@ pub(crate) struct Config {
     #[serde(default = "Default::default")]
     timeout: Option<u64>,
 }
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 const DEFAULT_CONCURRENCY: usize = 4;
 
@@ -311,7 +311,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &Alias,
+        id: &alias::Connector,
         _: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,
@@ -1172,10 +1172,9 @@ impl CertValidation {
 }
 #[cfg(test)]
 mod tests {
-    use elasticsearch::http::request::Body;
-
     use super::*;
     use crate::config::Connector as ConnectorConfig;
+    use elasticsearch::http::request::Body;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn connector_builder_empty_nodes() -> Result<()> {
@@ -1184,7 +1183,7 @@ mod tests {
                 "nodes": []
             }
         });
-        let alias = Alias::new("flow", "my_elastic");
+        let alias = alias::Connector::new("flow", "my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
@@ -1213,7 +1212,7 @@ mod tests {
                 ]
             }
         });
-        let alias = Alias::new("snot", "my_elastic");
+        let alias = alias::Connector::new("snot", "my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;

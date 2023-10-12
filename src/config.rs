@@ -14,8 +14,8 @@
 
 use crate::connectors::prelude::*;
 use simd_json::ValueType;
-#[allow(clippy::module_name_repetitions)]
-pub use tremor_codec::config::{Codec, NameWithConfig, Postprocessor, Preprocessor};
+use tremor_common::alias;
+use tremor_interceptor::{postprocessor, preprocessor};
 use tremor_script::{
     ast::deploy::ConnectorDefinition,
     ast::{self, Helper},
@@ -87,18 +87,18 @@ pub(crate) struct Connector {
     pub connector_type: ConnectorType,
 
     /// Codec in force for connector
-    pub codec: Option<Codec>,
+    pub codec: Option<tremor_codec::Config>,
 
     /// Configuration map
-    pub config: tremor_pipeline::ConfigMap,
+    pub config: tremor_config::Map,
 
     // TODO: interceptors or configurable processors
     /// Preprocessor chain configuration
-    pub preprocessors: Option<Vec<Preprocessor>>,
+    pub preprocessors: Option<Vec<preprocessor::Config>>,
 
     // TODO: interceptors or configurable processors
     /// Postprocessor chain configuration
-    pub postprocessors: Option<Vec<Postprocessor>>,
+    pub postprocessors: Option<Vec<postprocessor::Config>>,
 
     pub(crate) reconnect: Reconnect,
 
@@ -109,7 +109,7 @@ pub(crate) struct Connector {
 impl Connector {
     /// Spawns a connector from a definition
     pub(crate) fn from_defn(
-        alias: &Alias,
+        alias: &alias::Connector,
         defn: &ast::ConnectorDefinition<'static>,
     ) -> crate::Result<Self> {
         let aggr_reg = tremor_script::registry::aggr();
@@ -125,11 +125,16 @@ impl Connector {
     /// Creates a connector from it's definition (aka config + settings)
     #[allow(clippy::too_many_lines)]
     pub(crate) fn from_config(
-        connector_alias: &Alias,
+        connector_alias: &alias::Connector,
         connector_type: ConnectorType,
         connector_config: &Value<'static>,
     ) -> crate::Result<Self> {
-        fn validate_type(v: &Value, k: &str, t: ValueType, connector_alias: &Alias) -> Result<()> {
+        fn validate_type(
+            v: &Value,
+            k: &str,
+            t: ValueType,
+            connector_alias: &alias::Connector,
+        ) -> Result<()> {
             if v.get(k).is_some() && v.get(k).map(Value::value_type) != Some(t) {
                 return Err(ErrorKind::InvalidConnectorDefinition(
                     connector_alias.to_string(),
@@ -206,7 +211,7 @@ impl Connector {
                 .get_array(ConnectorDefinition::PREPROCESSORS)
                 .map(|o| {
                     o.iter()
-                        .map(Preprocessor::try_from)
+                        .map(preprocessor::Config::try_from)
                         .collect::<std::result::Result<_, _>>()
                 })
                 .transpose()?,
@@ -214,7 +219,7 @@ impl Connector {
                 .get_array(ConnectorDefinition::POSTPROCESSORS)
                 .map(|o| {
                     o.iter()
-                        .map(Preprocessor::try_from)
+                        .map(preprocessor::Config::try_from)
                         .collect::<std::result::Result<_, _>>()
                 })
                 .transpose()?,
@@ -227,7 +232,7 @@ impl Connector {
             metrics_interval_s: connector_config.get_u64(ConnectorDefinition::METRICS_INTERVAL_S),
             codec: connector_config
                 .get(ConnectorDefinition::CODEC)
-                .map(Codec::try_from)
+                .map(tremor_codec::Config::try_from)
                 .transpose()?,
         })
     }
@@ -247,7 +252,7 @@ pub struct Binding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{errors::Result, system::flow};
+    use crate::errors::Result;
 
     #[test]
     fn test_reconnect_serde() -> Result<()> {
@@ -276,7 +281,7 @@ mod tests {
     #[test]
     fn test_config_builtin_preproc_with_config() -> Result<()> {
         let c = Connector::from_config(
-            &Alias::new("flow", "my_otel_client"),
+            &alias::Connector::new("flow", "my_otel_client"),
             ConnectorType::from("otel_client".to_string()),
             &literal!({
                 "preprocessors": [ {"name": "snot", "config": { "separator": "\n" }}],
@@ -307,7 +312,7 @@ mod tests {
             "reconnect": {},
             "metrics_interval_s": "wrong_type"
         });
-        let id = Alias::new(flow::Alias::new("flow"), "my_id");
+        let id = alias::Connector::new(tremor_common::alias::Flow::new("flow"), "my_id");
         let res = Connector::from_config(&id, "fancy_schmancy".into(), &config);
         assert!(res.is_err());
         assert_eq!(String::from("Invalid Definition for connector \"flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());

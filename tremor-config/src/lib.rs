@@ -1,7 +1,7 @@
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
+// you may not use this file except in compliance with the.
 // You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
 use serde::Deserialize;
 use tremor_value::prelude::*;
 
@@ -60,9 +59,9 @@ impl<'v> serde::Deserialize<'v> for NameWithConfig {
 }
 
 impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
-    type Error = crate::errors::Error;
+    type Error = Error;
 
-    fn try_from(value: &Value) -> Result<Self> {
+    fn try_from(value: &Value) -> Result<Self, Error> {
         if let Some(name) = value.as_str() {
             Ok(Self::from(name))
         } else if let Some(name) = value.get_str("name") {
@@ -71,10 +70,26 @@ impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
                 config: value.get("config").map(Value::clone_static),
             })
         } else {
-            Err(format!("Invalid codec: {value}").into())
+            Err(Error::InvalidConfig(value.encode()))
         }
     }
 }
+
+/// Error for confdig
+#[derive(Debug, Clone, PartialEq)]
+pub enum Error {
+    InvalidConfig(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Self::InvalidConfig(v) => write!(f, "Invalid config: {v}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 impl From<&str> for NameWithConfig {
     fn from(name: &str) -> Self {
@@ -95,12 +110,23 @@ impl From<String> for NameWithConfig {
     }
 }
 
-/// A Codec
-pub type Codec = NameWithConfig;
-/// A Preprocessor
-pub type Preprocessor = NameWithConfig;
-/// A Postprocessor
-pub type Postprocessor = NameWithConfig;
+/// Trait for detecting errors in config and the key names are included in errors
+pub trait Impl {
+    /// deserialises the config into a struct and returns nice errors
+    /// this doesn't need to be overwritten in most cases.
+    ///
+    /// # Errors
+    /// if the Configuration is invalid
+    fn new(config: &tremor_value::Value) -> Result<Self, tremor_value::Error>
+    where
+        Self: serde::de::Deserialize<'static>,
+    {
+        tremor_value::structurize(config.clone_static())
+    }
+}
+
+/// A configuration map
+pub type Map = Option<tremor_value::Value<'static>>;
 
 #[cfg(test)]
 mod test {

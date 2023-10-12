@@ -51,7 +51,7 @@ pub(crate) struct Config {
     buf_size: usize,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 //struct ConnectionMeta {}
 
@@ -65,7 +65,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &Alias,
+        _: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,

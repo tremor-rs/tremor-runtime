@@ -53,9 +53,10 @@
 //! ```
 
 use super::prelude::*;
-use crate::errors::{Kind as ErrorKind, Result};
-use hashbrown::{hash_map::Entry, HashMap};
+use crate::errors::{ErrorKind, Result};
+use log::{error, warn};
 use rand::{self, RngCore};
+use std::collections::{hash_map::Entry, HashMap};
 
 const FIVE_SEC: u64 = 5_000_000_000;
 
@@ -264,7 +265,7 @@ fn assemble(key: u64, m: GelfMsgs) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::Result;
+    use crate::errors::Result;
 
     #[test]
     fn gelf_chunking_default() -> Result<()> {

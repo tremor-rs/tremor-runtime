@@ -22,10 +22,8 @@ use crate::{
     errors::empty_error,
 };
 use crate::{
-    config::NameWithConfig,
     connectors::{
         prelude::*,
-        spawn_task,
         utils::{mime::MimeCodecMap, tls::TLSServerConfig},
     },
     errors::err_connector_def,
@@ -63,7 +61,7 @@ pub(crate) struct Config {
     mime_mapping: Option<HashMap<String, NameWithConfig>>,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -81,7 +79,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &Alias,
+        id: &alias::Connector,
         _raw_config: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,

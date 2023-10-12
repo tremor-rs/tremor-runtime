@@ -52,7 +52,7 @@ fn dflt_vocabulary() -> String {
 }
 type Resource = Box<dyn ResourceProvider + Send>;
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 struct SequenceClassification {
     model: Mutex<SequenceClassificationModel>,

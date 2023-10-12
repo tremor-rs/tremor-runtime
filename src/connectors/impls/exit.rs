@@ -106,13 +106,13 @@ pub(crate) struct Config {
     graceful: bool,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             delay: None,
-            graceful: default_true(),
+            graceful: true,
         }
     }
 }
@@ -128,7 +128,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build(
         &self,
-        _id: &Alias,
+        _id: &alias::Connector,
         config: &ConnectorConfig,
         kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {

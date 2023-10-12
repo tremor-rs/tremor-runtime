@@ -111,7 +111,7 @@ pub(crate) struct Config {
     pub interval: u64,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -124,7 +124,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &Alias,
+        _: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,
@@ -228,7 +228,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn missing_config() -> Result<()> {
-        let alias = Alias::new("flow", "connector");
+        let alias = alias::Connector::new("flow", "connector");
         let builder = super::Builder::default();
         let connector_config = super::ConnectorConfig {
             connector_type: builder.connector_type(),

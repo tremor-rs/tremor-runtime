@@ -15,10 +15,9 @@
 #![allow(dead_code)]
 
 use crate::errors::{Error, ErrorKind, Result};
-use base64::Engine;
 use simd_json::StaticNode;
 use std::collections::BTreeMap;
-use tremor_common::base64::BASE64;
+use tremor_common::base64::{Engine, BASE64};
 use tremor_otelapis::opentelemetry::proto::metrics::v1;
 use tremor_value::Value;
 use value_trait::ValueAccess;

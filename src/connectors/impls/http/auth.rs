@@ -13,9 +13,8 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use base64::Engine;
 use std::io::Write;
-use tremor_common::base64::BASE64;
+use tremor_common::base64::{Engine, BASE64};
 
 /// Authorization methods
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

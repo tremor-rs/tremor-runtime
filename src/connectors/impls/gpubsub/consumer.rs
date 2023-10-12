@@ -36,7 +36,6 @@ use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::{Code, Status};
 use tremor_common::blue_green_hashmap::BlueGreenHashMap;
-use tremor_pipeline::ConfigImpl;
 
 // controlling retries upon gpubsub returning `Unavailable` from StreamingPull
 // this in on purpose not exposed via config as this should remain an internal thing
@@ -59,7 +58,7 @@ struct Config {
     #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
     pub url: Url<HttpsDefaults>,
 }
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 fn default_ack_deadline() -> u64 {
     10_000_000_000u64 // 10 seconds
@@ -91,7 +90,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        alias: &Alias,
+        alias: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,

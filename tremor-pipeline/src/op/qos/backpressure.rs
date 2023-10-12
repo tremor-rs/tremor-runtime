@@ -80,7 +80,7 @@ pub struct Config {
     pub method: Method,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 fn default_steps() -> Vec<u64> {
     vec![50, 100, 250, 500, 1000, 5000, 10000]

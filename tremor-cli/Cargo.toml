@@ -49,6 +49,7 @@ surf = { version = "=2.3.2", default-features = false, features = [
 ] }
 tremor-api = { version = "0.13.0-rc.16", path = "../tremor-api" }
 tremor-codec = { version = "0.13.0-rc.16", path = "../tremor-codec" }
+tremor-interceptor = { version = "0.13.0-rc.16", path = "../tremor-interceptor" }
 tremor-common = { version = "0.13.0-rc.16", path = "../tremor-common" }
 tremor-pipeline = { version = "0.13.0-rc.16", path = "../tremor-pipeline" }
 tremor-runtime = { version = "0.13.0-rc.16", path = "../" }

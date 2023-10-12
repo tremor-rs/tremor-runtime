@@ -20,7 +20,7 @@ use std::io;
 use std::io::Write;
 use std::ops::DerefMut;
 use std::path::Path;
-use tremor_pipeline::ConfigImpl;
+
 use tremor_script::prelude::*;
 
 pub(crate) trait Kv {
@@ -115,7 +115,7 @@ impl Kv for Anon {
     }
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 #[derive(Deserialize, Debug, Clone)]
 pub(crate) struct Config {

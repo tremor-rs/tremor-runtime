@@ -52,7 +52,7 @@ pub(crate) struct Config {
     max_chunks: usize,
 }
 
-impl ConfigImpl for Config {}
+impl tremor_config::Impl for Config {}
 
 struct Wal {
     event_origin_uri: EventOriginUri,
@@ -69,7 +69,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn build_cfg(
         &self,
-        _: &Alias,
+        _: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,

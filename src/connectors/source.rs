@@ -21,19 +21,12 @@ use crate::channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender};
 use crate::connectors::{
     metrics::SourceReporter,
     utils::reconnect::{Attempt, ConnectionLostNotifier},
-    Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
+    ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
 };
+use crate::errors::empty_error;
 use crate::errors::{Error, Result};
 use crate::pipeline;
 use crate::pipeline::InputTarget;
-use crate::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors};
-use crate::{
-    config::{
-        self, Codec as CodecConfig, Connector as ConnectorConfig, NameWithConfig,
-        Preprocessor as PreprocessorConfig,
-    },
-    errors::empty_error,
-};
 pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
 use hashbrown::HashSet;
 use simd_json::Mutable;
@@ -42,10 +35,14 @@ use std::fmt::Display;
 use tokio::task;
 use tremor_codec::{self as codec, Codec};
 use tremor_common::{
+    alias,
     ids::{Id, SinkId, SourceId},
     ports::{Port, ERR, OUT},
     time::nanotime,
 };
+use tremor_config::NameWithConfig;
+use tremor_interceptor::preprocessor;
+use tremor_interceptor::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors};
 use tremor_pipeline::{
     CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };
@@ -281,7 +278,7 @@ pub(crate) struct SourceContext {
     /// connector uid
     pub uid: SourceId,
     /// connector alias
-    pub(crate) alias: Alias,
+    pub(crate) alias: alias::Connector,
 
     /// connector type
     pub(crate) connector_type: ConnectorType,
@@ -299,7 +296,7 @@ impl Display for SourceContext {
 }
 
 impl Context for SourceContext {
-    fn alias(&self) -> &Alias {
+    fn alias(&self) -> &alias::Connector {
         &self.alias
     }
 
@@ -387,7 +384,7 @@ impl SourceManagerBuilder {
 /// - on invalid connector configuration
 pub(crate) fn builder(
     source_uid: SourceId,
-    config: &ConnectorConfig,
+    config: &super::ConnectorConfig,
     connector_default_codec: CodecReq,
     source_metrics_reporter: SourceReporter,
 ) -> Result<SourceManagerBuilder> {
@@ -401,7 +398,7 @@ pub(crate) fn builder(
                 )
                 .into());
             }
-            CodecConfig::from("null")
+            tremor_codec::Config::from("null")
         }
         CodecReq::Required => config
             .codec
@@ -410,7 +407,7 @@ pub(crate) fn builder(
         CodecReq::Optional(opt) => config
             .codec
             .clone()
-            .unwrap_or_else(|| CodecConfig::from(opt)),
+            .unwrap_or_else(|| tremor_codec::Config::from(opt)),
     };
     let streams = Streams::new(source_uid, codec_config, preprocessor_configs);
 
@@ -424,8 +421,8 @@ pub(crate) fn builder(
 // TODO: there is optimization potential here for reusing codec and preprocessors after a stream got ended
 struct Streams {
     uid: SourceId,
-    codec_config: CodecConfig,
-    preprocessor_configs: Vec<PreprocessorConfig>,
+    codec_config: tremor_codec::Config,
+    preprocessor_configs: Vec<preprocessor::Config>,
     states: BTreeMap<u64, StreamState>,
 }
 
@@ -436,8 +433,8 @@ impl Streams {
     /// constructor
     fn new(
         uid: SourceId,
-        codec_config: config::Codec,
-        preprocessor_configs: Vec<PreprocessorConfig>,
+        codec_config: tremor_codec::Config,
+        preprocessor_configs: Vec<preprocessor::Config>,
     ) -> Self {
         let states = BTreeMap::new();
         // We used to initialize the default stream here,
@@ -494,9 +491,9 @@ impl Streams {
     fn build_stream(
         source_uid: SourceId,
         stream_id: u64,
-        codec_config: &CodecConfig,
+        codec_config: &tremor_codec::Config,
         codec_overwrite: Option<NameWithConfig>,
-        preprocessor_configs: &[PreprocessorConfig],
+        preprocessor_configs: &[preprocessor::Config],
     ) -> Result<StreamState> {
         let codec = if let Some(codec_overwrite) = codec_overwrite {
             codec::resolve(&codec_overwrite)?
@@ -1243,7 +1240,7 @@ where
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
 async fn build_events(
-    alias: &Alias,
+    alias: &alias::Connector,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
@@ -1300,7 +1297,13 @@ async fn build_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id, meta);
+            let err_payload = make_error(
+                alias,
+                &Error::from(e),
+                stream_state.stream_id,
+                pull_id,
+                meta,
+            );
             let event = build_event(
                 stream_state,
                 pull_id,
@@ -1318,7 +1321,7 @@ async fn build_events(
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
 async fn build_last_events(
-    alias: &Alias,
+    alias: &alias::Connector,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
@@ -1366,7 +1369,13 @@ async fn build_last_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id, meta);
+            let err_payload = make_error(
+                alias,
+                &Error::from(e),
+                stream_state.stream_id,
+                pull_id,
+                meta,
+            );
             let event = build_event(
                 stream_state,
                 pull_id,
@@ -1382,7 +1391,7 @@ async fn build_last_events(
 
 /// create an error payload
 fn make_error(
-    connector_alias: &Alias,
+    connector_alias: &alias::Connector,
     error: &Error,
     stream_id: u64,
     pull_id: u64,
