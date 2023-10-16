@@ -2,7 +2,7 @@
 name = "tremor-interceptor"
 edition = "2021"
 authors = ["The Tremor Team"]
-description = "Tremor Runtime"
+description = "Tremor Preprocessors, Postprocessors, and maybe soon: Interceptors"
 documentation = "https://docs.tremor.rs"
 homepage = "https://www.tremor.rs"
 license = "Apache-2.0"
