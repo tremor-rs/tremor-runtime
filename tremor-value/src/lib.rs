@@ -49,7 +49,7 @@ pub mod value;
 pub use crate::serde::structurize;
 pub use error::*;
 pub use known_key::{Error as KnownKeyError, KnownKey};
-pub use simd_json::{json, json_typed, AlignedBuf, StaticNode};
+pub use simd_json::{json, json_typed, Buffers, StaticNode};
 pub use value::from::*;
 pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, Value};
 
@@ -102,8 +102,8 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
         match self.0.next() {
             Some(Node::Static(s)) => Ok(Value::Static(s)),
             Some(Node::String(s)) => Ok(Value::from(s)),
-            Some(Node::Array(len, _)) => Ok(self.parse_array(len)),
-            Some(Node::Object(len, _)) => Ok(self.parse_map(len)),
+            Some(Node::Array { len, .. }) => Ok(self.parse_array(len)),
+            Some(Node::Object { len, .. }) => Ok(self.parse_map(len)),
             None => Err(simd_json::Error::generic(simd_json::ErrorType::Eof)),
         }
     }

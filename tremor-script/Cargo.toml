@@ -46,8 +46,8 @@ percent-encoding = "2"
 rand = { version = "0.8", features = ["small_rng"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
-simd-json = { version = "0.11", features = ["known-key"] }
-simd-json-derive = "0.11"
+simd-json = { version = "0.12", features = ["known-key"] }
+simd-json-derive = "0.12"
 sketches-ddsketch = "0.2"
 strip-ansi-escapes = "0.2"
 termcolor = "1.2"
@@ -79,8 +79,6 @@ test-case = "3"
 erlang-float-testing = []
 # This is required for the language server to prevent unbounded growth of the area
 arena-delete = []
-# This is required for the language server as w3e want to allow the use of it without platfor specific flags
-allow-non-simd = ["simd-json/allow-non-simd"]
 
 [[bench]]
 name = "array_flatten"
