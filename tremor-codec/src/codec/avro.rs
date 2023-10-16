@@ -130,12 +130,12 @@ impl<'a> SchemaWrapper<'a> {
     }
 }
 #[async_trait::async_trait]
-pub(crate) trait SchemaResover {
+pub(crate) trait SchemaResolver {
     async fn by_name(&self, name: &Name) -> Option<SchemaWrapper>;
 }
 
 #[async_trait::async_trait]
-impl SchemaResover for AvroRegistry {
+impl SchemaResolver for AvroRegistry {
     async fn by_name(&self, name: &Name) -> Option<SchemaWrapper> {
         self.by_name.get(name).map(SchemaWrapper::Ref)
     }
@@ -149,7 +149,7 @@ pub(crate) async fn value_to_avro<'v, R>(
     resolver: &R,
 ) -> Result<AvroValue>
 where
-    R: SchemaResover + Sync,
+    R: SchemaResolver + Sync,
 {
     Ok(match schema {
         Schema::Null => {

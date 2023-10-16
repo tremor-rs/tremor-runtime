@@ -59,7 +59,7 @@ mod prelude {
     pub use tremor_value::{literal, Object, Value};
 }
 
-/// A Codec
+/// Configuration, commonly used for codecs
 pub type Config = tremor_config::NameWithConfig;
 
 #[async_trait::async_trait]

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The `avro` codec supports Apache Avro binary encoding.
+//! The `kafka-schema-registry` codec supports Apache Avro binary encoding.
 //!
 //! The codec is configured with a codec following the avro json codec specification
 //!
@@ -89,7 +89,7 @@ struct RecordResolver<'a> {
 }
 
 #[async_trait::async_trait]
-impl SchemaResover for RecordResolver<'_> {
+impl SchemaResolver for RecordResolver<'_> {
     async fn by_name(&self, name: &Name) -> Option<SchemaWrapper> {
         self.encoder
             .get_schema_and_id(
