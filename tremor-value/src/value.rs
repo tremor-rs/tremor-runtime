@@ -25,8 +25,8 @@ use crate::{Error, Result};
 use beef::Cow;
 use halfbrown::HashMap;
 pub use r#static::StaticValue;
-use simd_json::{prelude::*, ObjectHasher};
-use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
+use simd_json::{prelude::*, Buffers, ObjectHasher};
+use simd_json::{Deserializer, Node, StaticNode};
 use std::{borrow::Borrow, convert::TryInto, fmt};
 use std::{cmp::Ord, hash::Hash};
 use std::{
@@ -64,10 +64,9 @@ pub fn parse_to_value(s: &mut [u8]) -> Result<Value> {
 /// Will return `Err` if `s` is invalid JSON.
 pub fn parse_to_value_with_buffers<'value>(
     s: &'value mut [u8],
-    input_buffer: &mut AlignedBuf,
-    string_buffer: &mut [u8],
+    buffer: &mut Buffers,
 ) -> Result<Value<'value>> {
-    match Deserializer::from_slice_with_buffers(s, input_buffer, string_buffer) {
+    match Deserializer::from_slice_with_buffers(s, buffer) {
         Ok(de) => Ok(ValueDeserializer::from_deserializer(de).parse()),
         Err(e) => Err(Error::SimdJson(e)),
     }
@@ -600,8 +599,8 @@ impl<'de> ValueDeserializer<'de> {
         match unsafe { self.0.next_() } {
             Node::Static(s) => Value::Static(s),
             Node::String(s) => Value::from(s),
-            Node::Array(len, _) => self.parse_array(len),
-            Node::Object(len, _) => self.parse_map(len),
+            Node::Array { len, .. } => self.parse_array(len),
+            Node::Object { len, .. } => self.parse_map(len),
         }
     }
 
