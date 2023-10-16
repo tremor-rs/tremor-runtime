@@ -14,8 +14,8 @@ rand = { version = "0.8", features = ["small_rng"] }
 beef = { version = "0.5", features = ["impl_serde"] }
 serde = "1"
 url = { version = "2", features = ["serde"] }
-simd-json = { version = "0.11", features = ["known-key"] }
-simd-json-derive = "0.11"
+simd-json = { version = "0.12", features = ["known-key"] }
+simd-json-derive = "0.12"
 base64 = "0.21"
 regex = "*"
 lazy_static = "*"

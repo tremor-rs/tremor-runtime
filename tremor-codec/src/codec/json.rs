@@ -23,9 +23,9 @@
 //! The codec can be configured with a mode, either `sorted` or `unsorted`. The default is `unsorted` as it is singnificantly faster, `sorted` json is only needed in testing situations where the key order in maps matters for compairson.
 
 use crate::prelude::*;
-use std::{cmp::max, marker::PhantomData};
+use simd_json::Buffers;
+use std::marker::PhantomData;
 use tremor_value::utils::sorted_serialize;
-use tremor_value::AlignedBuf;
 
 /// Sorting for JSON
 pub trait Sorting: Sync + Send + Copy + Clone + 'static {
@@ -50,8 +50,7 @@ impl Sorting for Unsorted {
 /// JSON codec
 pub struct Json<S: Sorting> {
     _phantom: PhantomData<S>,
-    input_buffer: AlignedBuf,
-    string_buffer: Vec<u8>,
+    buffers: Buffers,
     data_buf: Vec<u8>,
 }
 
@@ -65,8 +64,7 @@ impl<S: Sorting> Default for Json<S> {
     fn default() -> Self {
         Self {
             _phantom: PhantomData,
-            input_buffer: AlignedBuf::with_capacity(1024),
-            string_buffer: vec![0u8; 1024],
+            buffers: Buffers::new(1024),
             data_buf: Vec::new(),
         }
     }
@@ -103,18 +101,9 @@ impl<S: Sorting> Codec for Json<S> {
         _ingest_ns: u64,
         meta: Value<'input>,
     ) -> Result<Option<(Value<'input>, Value<'input>)>> {
-        // The input buffer will be automatically grown if required
-        if self.string_buffer.capacity() < data.len() {
-            let new_len = max(self.string_buffer.capacity(), data.len()) * 2;
-            self.string_buffer.resize(new_len, 0);
-        }
-        tremor_value::parse_to_value_with_buffers(
-            data,
-            &mut self.input_buffer,
-            &mut self.string_buffer,
-        )
-        .map(|v| Some((v, meta)))
-        .map_err(Error::from)
+        tremor_value::parse_to_value_with_buffers(data, &mut self.buffers)
+            .map(|v| Some((v, meta)))
+            .map_err(Error::from)
     }
     async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         if S::SORTED {
@@ -140,8 +129,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn decode() -> Result<()> {
         let mut codec: Json<Unsorted> = Json {
-            input_buffer: AlignedBuf::with_capacity(0),
-            string_buffer: Vec::new(),
+            buffers: Buffers::default(),
             ..Default::default()
         };
         let expected = literal!({ "snot": "badger" });
