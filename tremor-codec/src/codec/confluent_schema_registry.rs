@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The `kafka-schema-registry` codec supports Apache Avro binary encoding.
+//! The `confluent-schema-registry` codec allows using the [Confluent Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html)
+//! as a source for avro decoding information.
 //!
-//! The codec is configured with a codec following the avro json codec specification
+//! It can be used in combination with a kafka topic that encodes it's content in avro format and stores it's schema in the schema registry.
+//!
+//! For decoding avro data (from kafka or otherwise) that is manually encoded please use the [avro](./avro) codec.
 //!
 //! ## Configuration
 //!
@@ -25,7 +28,7 @@
 //! The same as the [`avro` codec](./avro)
 
 use crate::{
-    avro::{avro_to_value, value_to_avro, SchemaResover, SchemaWrapper},
+    avro::{avro_to_value, value_to_avro, SchemaResolver, SchemaWrapper},
     prelude::*,
 };
 use apache_avro::schema::Name;
@@ -36,7 +39,7 @@ use schema_registry_converter::{
 };
 use tremor_common::url::{HttpDefaults, Url};
 
-pub struct Ksr {
+pub struct Csr {
     registry: Url<HttpDefaults>,
     settings: SrSettings,
     decoder: AvroDecoder,
@@ -44,16 +47,16 @@ pub struct Ksr {
 }
 
 #[allow(clippy::missing_fields_in_debug)]
-impl std::fmt::Debug for Ksr {
+impl std::fmt::Debug for Csr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("KSR")
+        f.debug_struct("Csr")
             .field("registry", &self.registry)
             .field("settings", &self.settings)
             .finish()
     }
 }
 
-impl Clone for Ksr {
+impl Clone for Csr {
     fn clone(&self) -> Self {
         Self {
             registry: self.registry.clone(),
@@ -64,7 +67,7 @@ impl Clone for Ksr {
     }
 }
 
-impl Ksr {
+impl Csr {
     pub(crate) fn from_config(config: Option<&Value>) -> Result<Box<dyn Codec>> {
         let url = config
             .get_str("url")
@@ -75,7 +78,7 @@ impl Ksr {
         let settings = SrSettings::new(url.to_string());
         let decoder = AvroDecoder::new(settings.clone());
         let encoder = AvroEncoder::new(settings.clone());
-        Ok(Box::new(Ksr {
+        Ok(Box::new(Csr {
             registry,
             settings,
             decoder,
@@ -103,9 +106,9 @@ impl SchemaResolver for RecordResolver<'_> {
 }
 
 #[async_trait::async_trait()]
-impl Codec for Ksr {
+impl Codec for Csr {
     fn name(&self) -> &str {
-        "kafka-schema-registry"
+        "confluent-schema-registry"
     }
 
     async fn decode<'input>(
@@ -161,20 +164,20 @@ mod test {
     #[test]
     fn test_codec_creation() {
         let config = literal!({"url":"http://localhost:8081"});
-        let codec = Ksr::from_config(Some(&config)).expect("invalid config");
-        assert_eq!(codec.name(), "kafka-schema-registry");
+        let codec = Csr::from_config(Some(&config)).expect("invalid config");
+        assert_eq!(codec.name(), "confluent-schema-registry");
     }
 
     #[test]
     fn invalid_config() {
         let config = literal!({});
-        let codec = Ksr::from_config(Some(&config));
+        let codec = Csr::from_config(Some(&config));
         assert!(codec.is_err());
     }
     #[test]
     fn invalid_url() {
         let config = literal!({"url":"loc alhost:8081"});
-        let codec = Ksr::from_config(Some(&config));
+        let codec = Csr::from_config(Some(&config));
         assert!(codec.is_err());
     }
 }

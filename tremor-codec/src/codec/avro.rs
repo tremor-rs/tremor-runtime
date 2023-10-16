@@ -14,7 +14,7 @@
 
 //! The `avro` codec supports Apache Avro binary encoding.
 //!
-//! The codec is configured with a codec following the avro json codec specification
+//! The codec is configured with a schema following the avro schema specification
 //!
 //! ## Configuration
 //!
