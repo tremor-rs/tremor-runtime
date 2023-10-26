@@ -15,11 +15,9 @@
 #![allow(dead_code)]
 
 use super::common;
+use crate::connectors::prelude::*;
 use crate::connectors::utils::pb;
-use crate::errors::Result;
-use simd_json::ValueAccess;
 use tremor_otelapis::opentelemetry::proto::resource::v1::Resource;
-use tremor_value::{literal, Value};
 
 pub(crate) fn resource_to_json(pb: Resource) -> Value<'static> {
     literal!({

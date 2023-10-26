@@ -22,7 +22,7 @@ use std::{
     sync::Arc,
 };
 use tremor_common::file;
-use value_trait::{Builder, Mutable};
+use value_trait::prelude::*;
 
 const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
 pub(crate) const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";

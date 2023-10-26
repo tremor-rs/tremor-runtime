@@ -25,7 +25,6 @@ use http::{
 use hyper::{header::HeaderValue, Body, Method, Request, Response};
 use mime::Mime;
 use tremor_value::Value;
-use value_trait::{Builder, ValueAccess};
 
 /// Utility for building an HTTP request from a possibly batched event
 /// and some configuration values

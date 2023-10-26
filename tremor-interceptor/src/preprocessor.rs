@@ -25,7 +25,7 @@ pub(crate) mod prelude {
     pub use crate::errors::Result;
     pub use tremor_common::{default_false, default_true};
     pub use tremor_value::Value;
-    pub use value_trait::Builder;
+    pub use value_trait::prelude::*;
 }
 use self::prelude::*;
 use crate::errors::Result;

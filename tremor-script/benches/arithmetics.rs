@@ -14,13 +14,12 @@
 
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion};
-use simd_json::ValueAccess;
 use std::path::PathBuf;
 use tremor_script::ast::{Expr, ImutExpr};
 use tremor_script::interpreter::{Env, LocalStack};
 use tremor_script::module::Manager;
 use tremor_script::prelude::ExecOpts;
-use tremor_value::Value;
+use tremor_value::prelude::*;
 
 fn do_run<'script>(bencher: &mut Bencher, invoke_event: &(ImutExpr<'script>, Value<'script>)) {
     let (invoke, event) = invoke_event;

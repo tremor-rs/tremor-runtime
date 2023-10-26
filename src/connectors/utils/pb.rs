@@ -14,13 +14,12 @@
 
 #![allow(dead_code)]
 
+use crate::connectors::prelude::*;
 use crate::errors::{Error, ErrorKind, Result};
 use simd_json::StaticNode;
 use std::collections::BTreeMap;
 use tremor_common::base64::{Engine, BASE64};
 use tremor_otelapis::opentelemetry::proto::metrics::v1;
-use tremor_value::Value;
-use value_trait::ValueAccess;
 
 pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
     if let Some(s) = data.as_str() {
@@ -166,7 +165,6 @@ pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value> {
 
 pub(crate) fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Struct> {
     use prost_types::value::Kind;
-    use simd_json::Value as SimdValue; // for value_type()
 
     if json.is_object() {
         if let prost_types::Value {

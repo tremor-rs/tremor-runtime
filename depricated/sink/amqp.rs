@@ -156,7 +156,7 @@ impl Sink for Amqp {
                         for (key, val) in
                             headers.iter().filter_map(|(k, v)| Some((k, v.as_array()?)))
                         {
-                            for ele in val.iter().filter_map(value_trait::ValueAccess::as_str) {
+                            for ele in val.iter().filter_map(value_trait::ValueAsScalar::as_str) {
                                 key_val.push((key, ele));
                             }
                         }

@@ -319,7 +319,7 @@ macro_rules! literal_internal {
 
     ({}) => {
         {
-            use $crate::prelude::BuilderTrait;
+            use value_trait::ValueBuilder;
             $crate::Value::object()
         }
     };

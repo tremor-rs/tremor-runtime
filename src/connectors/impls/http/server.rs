@@ -38,7 +38,6 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request,
 };
-use simd_json::ValueAccess;
 use std::{
     convert::Infallible,
     net::{SocketAddr, ToSocketAddrs},

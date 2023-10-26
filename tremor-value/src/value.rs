@@ -368,9 +368,18 @@ impl<'value> Value<'value> {
     {
         self.get(k).and_then(Self::as_char)
     }
+    /// Tries to get the value as a static node
+    #[inline]
+    #[must_use]
+    fn as_static(&self) -> Option<StaticNode> {
+        match self {
+            Self::Static(n) => Some(*n),
+            _ => None,
+        }
+    }
 }
 
-impl<'value> Builder<'value> for Value<'value> {
+impl<'value> ValueBuilder<'value> for Value<'value> {
     #[inline]
     #[must_use]
     fn null() -> Self {
@@ -391,7 +400,12 @@ impl<'value> Builder<'value> for Value<'value> {
     }
 }
 
-impl<'value> Mutable for Value<'value> {
+impl<'value> ValueAsMutContainer for Value<'value> {
+    /// The type for Arrays
+    type Array = Vec<Value<'value>>;
+    /// The type for Objects
+    type Object = Object<'value>;
+
     #[inline]
     #[must_use]
     fn as_array_mut(&mut self) -> Option<&mut Vec<Value<'value>>> {
@@ -402,21 +416,14 @@ impl<'value> Mutable for Value<'value> {
     }
     #[inline]
     #[must_use]
-    fn as_object_mut(
-        &mut self,
-    ) -> Option<&mut HashMap<<Self as ValueAccess>::Key, Self, ObjectHasher>> {
+    fn as_object_mut(&mut self) -> Option<&mut Object<'value>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
         }
     }
 }
-impl<'value> ValueAccess for Value<'value> {
-    type Target = Self;
-    type Key = Cow<'value, str>;
-    type Array = Vec<Self>;
-    type Object = HashMap<Self::Key, Self, ObjectHasher>;
-
+impl<'value> TypedValue for Value<'value> {
     #[inline]
     #[must_use]
     fn value_type(&self) -> ValueType {
@@ -428,61 +435,53 @@ impl<'value> ValueAccess for Value<'value> {
             Self::Bytes(_) => ValueType::Custom("bytes"),
         }
     }
-
+}
+impl<'value> ValueAsScalar for Value<'value> {
+    #[inline]
+    #[must_use]
+    fn as_null(&self) -> Option<()> {
+        self.as_static()?.as_null()
+    }
     #[inline]
     #[must_use]
     fn as_bool(&self) -> Option<bool> {
-        match self {
-            Self::Static(StaticNode::Bool(b)) => Some(*b),
-            _ => None,
-        }
+        self.as_static()?.as_bool()
     }
 
     #[inline]
     #[must_use]
     fn as_i64(&self) -> Option<i64> {
-        match self {
-            Self::Static(s) => s.as_i64(),
-            _ => None,
-        }
+        self.as_static()?.as_i64()
     }
 
     #[inline]
     #[must_use]
     fn as_i128(&self) -> Option<i128> {
-        match self {
-            Self::Static(s) => s.as_i128(),
-            _ => None,
-        }
+        self.as_static()?.as_i128()
     }
 
     #[inline]
     #[must_use]
     #[allow(clippy::cast_sign_loss)]
     fn as_u64(&self) -> Option<u64> {
-        match self {
-            Self::Static(s) => s.as_u64(),
-            _ => None,
-        }
+        self.as_static()?.as_u64()
     }
-
+    #[inline]
+    #[must_use]
+    fn as_u128(&self) -> Option<u128> {
+        self.as_static()?.as_u128()
+    }
     #[inline]
     #[must_use]
     fn as_f64(&self) -> Option<f64> {
-        match self {
-            Self::Static(s) => s.as_f64(),
-            _ => None,
-        }
+        self.as_static()?.as_f64()
     }
 
     #[inline]
     #[must_use]
     #[allow(clippy::cast_precision_loss)]
     fn cast_f64(&self) -> Option<f64> {
-        match self {
-            Self::Static(s) => s.cast_f64(),
-            _ => None,
-        }
+        self.as_static()?.cast_f64()
     }
 
     #[inline]
@@ -493,7 +492,10 @@ impl<'value> ValueAccess for Value<'value> {
             _ => None,
         }
     }
-
+}
+impl<'value> ValueAsContainer for Value<'value> {
+    type Array = Vec<Value<'value>>;
+    type Object = Object<'value>;
     #[inline]
     #[must_use]
     fn as_array(&self) -> Option<&Vec<Value<'value>>> {
@@ -505,7 +507,7 @@ impl<'value> ValueAccess for Value<'value> {
 
     #[inline]
     #[must_use]
-    fn as_object(&self) -> Option<&HashMap<Self::Key, Self, ObjectHasher>> {
+    fn as_object(&self) -> Option<&Object<'value>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
@@ -513,17 +515,11 @@ impl<'value> ValueAccess for Value<'value> {
     }
 }
 
-impl<'value> ValueTrait for Value<'value> {
+impl<'value> TypedCustomValue for Value<'value> {
     #[inline]
     #[must_use]
     fn is_custom(&self) -> bool {
         matches!(self, Value::Bytes(_))
-    }
-
-    #[inline]
-    #[must_use]
-    fn is_null(&self) -> bool {
-        matches!(self, Self::Static(StaticNode::Null))
     }
 }
 

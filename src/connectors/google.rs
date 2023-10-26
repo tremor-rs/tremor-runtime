@@ -62,7 +62,7 @@ impl TokenSrc {
     }
 }
 
-pub trait TokenProvider: Clone + Send + From<TokenSrc> {
+pub trait TokenProvider: Clone + Send + Sync + From<TokenSrc> {
     fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status>;
 }
 

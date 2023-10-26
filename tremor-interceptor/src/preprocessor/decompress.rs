@@ -47,7 +47,6 @@
 //!Decompress Zlib (deflate) compressed payload.
 
 use super::prelude::*;
-use simd_json::ValueAccess;
 use std::io::{self, Read};
 
 #[derive(Clone, Default, Debug)]

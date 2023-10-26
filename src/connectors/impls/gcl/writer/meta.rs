@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::connectors::prelude::*;
 use googapis::google::logging::{
     r#type::HttpRequest,
     v2::{LogEntryOperation, LogEntrySourceLocation},
 };
 use prost_types::Timestamp;
-use tremor_value::Value;
-use value_trait::ValueAccess;
 
 pub(crate) fn get_or_default(meta: Option<&Value>, key: &str) -> String {
     meta.get_str(key).unwrap_or_default().to_string()

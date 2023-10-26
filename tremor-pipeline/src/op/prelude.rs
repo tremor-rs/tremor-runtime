@@ -21,4 +21,4 @@ pub use serde_yaml;
 pub use simd_json::OwnedValue;
 pub use tremor_common::ports::{Port, ERR, IN, OUT, OVERFLOW};
 pub use tremor_config::Impl as ConfigImpl;
-pub use value_trait::Value as ValueTrait;
+pub use value_trait::prelude::*;

@@ -18,7 +18,6 @@ use std::hash::Hash;
 use std::io::Write;
 use std::{borrow::Borrow, slice::SliceIndex};
 use value_trait::prelude::*;
-use value_trait::ValueType;
 /// Tries to compile a value to a influx line value
 ///
 /// # Errors
@@ -26,16 +25,28 @@ use value_trait::ValueType;
 ///  * if the input doesn't follow the expected schema
 pub fn encode<'input, V>(v: &V) -> Result<Vec<u8>>
 where
-    V: Value + ValueAccess<Target = V> + Writable + 'input,
-    <V as ValueAccess>::Key: Borrow<str> + Hash + Eq + Ord + ToString + AsRef<str>,
+    V: Writable
+        + ValueObjectAccess<Target = V>
+        + ValueTryAsScalar
+        + ValueTryAsContainer
+        + ValueObjectAccessTryAsContainer<Target = V>
+        + TypedValue
+        + ValueAsScalar
+        + 'input,
+    <V as ValueObjectAccess>::Key: Hash + Eq + Ord + Borrow<str>,
+    <<V as ValueTryAsContainer>::Object as ObjectTrait>::Element: ValueAsScalar,
+    <<V as ValueTryAsContainer>::Object as ObjectTrait>::Key: Borrow<str>,
+    <<V as ValueObjectAccessTryAsContainer>::Object as ObjectTrait>::Key: Borrow<str>,
+    <V as ValueObjectAccessTryAsContainer>::Key: Hash + Eq + Ord + Borrow<str>,
+    <<V as ValueObjectAccessTryAsContainer>::Object as ObjectTrait>::Element:
+        ValueAsScalar + TypedValue + Writable,
 {
     let mut output: Vec<u8> = Vec::with_capacity(512);
     write_escaped_key(
         &mut output,
         v.get("measurement")
             .ok_or(Error::MissingField("measurement"))?
-            .as_str()
-            .ok_or(Error::MissingField("measurement"))?
+            .try_as_str()?
             .as_bytes(),
     )?;
     //let mut output: String = v.get("measurement")?.as_str()?.escape();
@@ -43,8 +54,7 @@ where
     let mut tag_collection: Vec<(&str, &str)> = v
         .get("tags")
         .ok_or(Error::MissingField("tags"))?
-        .as_object()
-        .ok_or(Error::InvalidField("tags"))?
+        .try_as_object()?
         .iter()
         .filter_map(|(key, value)| Some((key.borrow(), value.as_str()?)))
         .collect();
@@ -61,8 +71,8 @@ where
     output.write_all(&[b' '])?;
 
     let fields = v
-        .get_object("fields")
-        .ok_or(Error::InvalidField("fields"))?;
+        .try_get_object("fields")?
+        .ok_or(Error::MissingField("fields"))?;
     let mut field_collection: Vec<_> = fields
         .iter()
         .map(|(k, v)| -> (&str, _) { (k.borrow(), v) })

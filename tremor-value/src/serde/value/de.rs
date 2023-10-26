@@ -549,7 +549,7 @@ where
 #[cfg(test)]
 mod test {
     use serde::Deserialize;
-    use simd_json::ValueAccess;
+    use simd_json::prelude::*;
 
     use crate::{error::Result, Value};
     use crate::{literal, structurize};

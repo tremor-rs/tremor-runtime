@@ -21,9 +21,9 @@ use std::{
 use chrono_tz::Tz;
 pub(super) use clickhouse_rs::types::Value as CValue;
 use either::Either;
-use simd_json::{Value, ValueAccess};
 use tremor_value::Value as TValue;
 use uuid::Uuid;
+use value_trait::prelude::*;
 
 use super::DummySqlType;
 use crate::errors::{Error, ErrorKind, Result};
@@ -46,7 +46,7 @@ pub(super) fn convert_value(
             // We don't check that all elements of the array have the same type.
             // Instead, we check that every element can be converted to the expected
             // array type.
-            wrap_getter_error(context, ValueAccess::as_array)?
+            wrap_getter_error(context, ValueAsContainer::as_array)?
                 .iter()
                 .map(|value| convert_value(column_name, value, expected_inner_type))
                 .collect::<Result<Vec<_>>>()
@@ -72,23 +72,23 @@ pub(super) fn convert_value(
             Ok(CValue::Nullable(Either::Right(Box::new(inner_value))))
         }
 
-        DummySqlType::UInt8 => get_and_wrap(context, ValueAccess::as_u8, CValue::UInt8),
+        DummySqlType::UInt8 => get_and_wrap(context, ValueAsScalar::as_u8, CValue::UInt8),
 
-        DummySqlType::UInt16 => get_and_wrap(context, ValueAccess::as_u16, CValue::UInt16),
+        DummySqlType::UInt16 => get_and_wrap(context, ValueAsScalar::as_u16, CValue::UInt16),
 
-        DummySqlType::UInt32 => get_and_wrap(context, ValueAccess::as_u32, CValue::UInt32),
+        DummySqlType::UInt32 => get_and_wrap(context, ValueAsScalar::as_u32, CValue::UInt32),
 
-        DummySqlType::UInt64 => get_and_wrap(context, ValueAccess::as_u64, CValue::UInt64),
+        DummySqlType::UInt64 => get_and_wrap(context, ValueAsScalar::as_u64, CValue::UInt64),
 
-        DummySqlType::Int8 => get_and_wrap(context, ValueAccess::as_i8, CValue::Int8),
+        DummySqlType::Int8 => get_and_wrap(context, ValueAsScalar::as_i8, CValue::Int8),
 
-        DummySqlType::Int16 => get_and_wrap(context, ValueAccess::as_i16, CValue::Int16),
+        DummySqlType::Int16 => get_and_wrap(context, ValueAsScalar::as_i16, CValue::Int16),
 
-        DummySqlType::Int32 => get_and_wrap(context, ValueAccess::as_i32, CValue::Int32),
+        DummySqlType::Int32 => get_and_wrap(context, ValueAsScalar::as_i32, CValue::Int32),
 
-        DummySqlType::Int64 => get_and_wrap(context, ValueAccess::as_i64, CValue::Int64),
+        DummySqlType::Int64 => get_and_wrap(context, ValueAsScalar::as_i64, CValue::Int64),
 
-        DummySqlType::String => get_and_wrap(context, ValueAccess::as_str, |s| {
+        DummySqlType::String => get_and_wrap(context, ValueAsScalar::as_str, |s| {
             CValue::String(Arc::new(s.as_bytes().to_vec()))
         }),
 
@@ -116,25 +116,31 @@ pub(super) fn convert_value(
             ErrorKind::MalformedUuid,
         ),
 
-        DummySqlType::DateTime => get_and_wrap(context, ValueAccess::as_u32, |timestamp| {
+        DummySqlType::DateTime => get_and_wrap(context, ValueAsScalar::as_u32, |timestamp| {
             CValue::DateTime(timestamp, UTC)
         }),
 
-        DummySqlType::DateTime64Secs => get_and_wrap(context, ValueAccess::as_i64, |timestamp| {
+        DummySqlType::DateTime64Secs => get_and_wrap(context, ValueAsScalar::as_i64, |timestamp| {
             CValue::DateTime64(timestamp, (0, UTC))
         }),
 
-        DummySqlType::DateTime64Millis => get_and_wrap(context, ValueAccess::as_i64, |timestamp| {
-            CValue::DateTime64(timestamp, (3, UTC))
-        }),
+        DummySqlType::DateTime64Millis => {
+            get_and_wrap(context, ValueAsScalar::as_i64, |timestamp| {
+                CValue::DateTime64(timestamp, (3, UTC))
+            })
+        }
 
-        DummySqlType::DateTime64Micros => get_and_wrap(context, ValueAccess::as_i64, |timestamp| {
-            CValue::DateTime64(timestamp, (6, UTC))
-        }),
+        DummySqlType::DateTime64Micros => {
+            get_and_wrap(context, ValueAsScalar::as_i64, |timestamp| {
+                CValue::DateTime64(timestamp, (6, UTC))
+            })
+        }
 
-        DummySqlType::DateTime64Nanos => get_and_wrap(context, ValueAccess::as_i64, |timestamp| {
-            CValue::DateTime64(timestamp, (9, UTC))
-        }),
+        DummySqlType::DateTime64Nanos => {
+            get_and_wrap(context, ValueAsScalar::as_i64, |timestamp| {
+                CValue::DateTime64(timestamp, (9, UTC))
+            })
+        }
     }
 }
 

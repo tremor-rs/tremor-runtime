@@ -23,7 +23,6 @@ use crate::connectors::{
 };
 use futures::StreamExt;
 use rustls::ServerConfig;
-use simd_json::ValueAccess;
 use std::{
     net::SocketAddr,
     sync::{atomic::AtomicBool, Arc},

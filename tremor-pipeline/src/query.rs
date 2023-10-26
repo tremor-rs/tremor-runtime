@@ -149,7 +149,11 @@ pub struct Query(pub tremor_script::query::Query);
 impl Query {
     /// Fetches the ID of the query if it was provided
     pub fn id(&self) -> Option<&str> {
-        self.0.query.config.get("id").and_then(ValueAccess::as_str)
+        self.0
+            .query
+            .config
+            .get("id")
+            .and_then(ValueAsScalar::as_str)
     }
 
     /// Parse a query

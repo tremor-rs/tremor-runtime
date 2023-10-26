@@ -211,7 +211,6 @@ pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
 #[cfg(test)]
 mod tests {
     use http_types::Url;
-    use simd_json::ValueAccess;
     use std::time::Instant;
     use tokio::net::TcpListener;
     use tremor_runtime::{
@@ -220,7 +219,7 @@ mod tests {
         system::{ShutdownMode, WorldConfig},
     };
     use tremor_script::{aggr_registry, ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
-    use tremor_value::{literal, value::StaticValue};
+    use tremor_value::{prelude::*, value::StaticValue};
 
     use crate::api::model::{ApiFlowStatusReport, PatchStatus};
 

@@ -83,8 +83,8 @@ rand = "0.8.5"
 regex = "1.9"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
-simd-json = { version = "0.12", features = ["known-key"] }
-simd-json-derive = "0.12"
+simd-json = { version = "0.13", features = ["known-key"] }
+simd-json-derive = "0.13"
 socket2 = { version = "0.5", features = ["all"] }
 tremor-common = { path = "tremor-common" }
 tremor-config = { path = "tremor-config" }
@@ -95,7 +95,7 @@ tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
 tremor-interceptor = { path = "tremor-interceptor" }
 url = "2.4"
-value-trait = "0.6"
+value-trait = "0.8"
 
 
 # blaster / blackhole# codecs

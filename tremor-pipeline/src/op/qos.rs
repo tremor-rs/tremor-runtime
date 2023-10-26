@@ -21,7 +21,6 @@ pub use percentile::PercentileFactory;
 pub use roundrobin::RoundRobinFactory;
 
 use crate::op::prelude::*;
-use tremor_script::prelude::*;
 
 /// Returns true if the given `insight` signals a downstream error
 ///
