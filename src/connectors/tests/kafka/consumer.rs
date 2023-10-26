@@ -40,7 +40,7 @@ use testcontainers::clients::Cli as DockerCli;
 use tokio::time::timeout;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
-use value_trait::Builder;
+use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
@@ -225,7 +225,7 @@ async fn transactional_retry() -> Result<()> {
     let e5 = harness.err()?.get_event().await?;
     assert_eq!(
         &literal!({
-            "error": "SIMD JSON error: InternalError at character 0 ('}')",
+            "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
             "source": "test::transactional_retry",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
@@ -234,7 +234,7 @@ async fn transactional_retry() -> Result<()> {
     );
     assert_eq!(
         &literal!({
-            "error": "SIMD JSON error: InternalError at character 0 ('}')",
+            "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
             "kafka_consumer": {
                 "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())),
                 "headers": null,
@@ -442,7 +442,7 @@ async fn custom_no_retry() -> Result<()> {
     let e5 = harness.err()?.get_event().await?;
     assert_eq!(
         &literal!({
-            "error": "SIMD JSON error: InternalError at character 0 ('}')",
+            "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
             "source": "test::custom_no_retry",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
@@ -451,7 +451,7 @@ async fn custom_no_retry() -> Result<()> {
     );
     assert_eq!(
         &literal!({
-            "error": "SIMD JSON error: InternalError at character 0 ('}')",
+            "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
             "kafka_consumer": {
                 "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())),
                 "headers": null,
@@ -648,7 +648,7 @@ async fn performance() -> Result<()> {
     let e5 = harness.err()?.get_event().await?;
     assert_eq!(
         &literal!({
-            "error": "SIMD JSON error: InternalError at character 0 ('}')",
+            "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
             "source": "test::performance",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
@@ -657,7 +657,7 @@ async fn performance() -> Result<()> {
     );
     assert_eq!(
         &literal!({
-            "error": "SIMD JSON error: InternalError at character 0 ('}')",
+            "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
             "kafka_consumer": {
                 "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())),
                 "headers": null,

@@ -24,7 +24,7 @@ pub(crate) mod prelude {
     pub use super::Preprocessor;
     pub use crate::errors::Result;
     pub use tremor_value::Value;
-    pub use value_trait::Builder;
+    use value_trait::prelude::*;
 }
 use self::prelude::*;
 use crate::{alias::Connector, config::Preprocessor as PreprocessorConfig, errors::Result};

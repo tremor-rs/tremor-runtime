@@ -25,7 +25,6 @@ use tokio::{
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
-use value_trait::Builder;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn server_event_routing() -> Result<()> {

@@ -408,7 +408,6 @@ mod tests {
 
     use super::*;
     use beef::Cow;
-    use value_trait::ValueBuilder;
 
     #[test]
     fn known_key() {
