@@ -37,7 +37,7 @@ use tremor_common::url::HttpDefaults;
 use tremor_pipeline::Event;
 use tremor_script::ValueAndMeta;
 use tremor_value::{literal, Value};
-use value_trait::{Mutable, ValueAccess};
+use value_trait::prelude::*;
 
 /// Find free TCP host:port for use in test server endpoints
 pub(crate) async fn find_free_tcp_endpoint_str() -> Result<String> {

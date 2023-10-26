@@ -24,7 +24,6 @@ use http::StatusCode;
 use http_body::Body as BodyTrait;
 use hyper::{body::to_bytes, Body, Request, Response};
 use hyper_rustls::HttpsConnectorBuilder;
-use simd_json::Mutable;
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
@@ -34,7 +33,7 @@ use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_script::ValueAndMeta;
 use tremor_value::{literal, Value};
-use value_trait::ValueAccess;
+use value_trait::prelude::*;
 
 /// This function takes a harness and connects it the following way:
 ///

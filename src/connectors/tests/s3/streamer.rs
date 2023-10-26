@@ -32,7 +32,7 @@ use tokio::time::timeout;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value};
-use value_trait::{Builder, Mutable, ValueAccess};
+use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]

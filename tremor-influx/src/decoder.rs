@@ -15,7 +15,7 @@
 
 use crate::{DecoderError as Error, DecoderResult as Result};
 use std::{borrow::Cow, hash::Hash};
-use value_trait::prelude::{MutableObject, *};
+use value_trait::prelude::*;
 
 macro_rules! cant_error {
     ($e:expr) => {

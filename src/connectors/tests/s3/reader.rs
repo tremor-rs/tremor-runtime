@@ -25,7 +25,7 @@ use aws_sdk_s3::{primitives::ByteStream, Client};
 use serial_test::serial;
 use testcontainers::clients;
 use tremor_value::{literal, Value};
-use value_trait::ValueAccess;
+use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]

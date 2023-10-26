@@ -16,7 +16,7 @@ use super::ConnectorHarness;
 use crate::{connectors::impls::file, errors::Result};
 use std::path::Path;
 use tremor_value::literal;
-use value_trait::ValueAccess;
+use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn file_connector() -> Result<()> {

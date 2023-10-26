@@ -24,7 +24,7 @@ use tokio::net::lookup_host;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, Value};
-use value_trait::{Builder, ValueAccess};
+use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn tls_client() -> Result<()> {

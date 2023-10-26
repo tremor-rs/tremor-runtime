@@ -34,7 +34,7 @@ use tokio::process;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value::StaticValue};
-use value_trait::{Mutable, Value, ValueAccess};
+use value_trait::prelude::*;
 
 const IMAGE: &str = "elasticsearch";
 const VERSION: &str = "8.6.2";

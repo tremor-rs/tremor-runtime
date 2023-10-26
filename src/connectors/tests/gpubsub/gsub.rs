@@ -27,7 +27,7 @@ use testcontainers::RunnableImage;
 use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
-use value_trait::ValueAccess;
+use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
