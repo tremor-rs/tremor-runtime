@@ -44,8 +44,8 @@ use crate::{
     module::Manager,
 };
 use beef::Cow;
-use simd_json::ValueAccess;
 use tremor_common::ports::Port;
+use value_trait::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]

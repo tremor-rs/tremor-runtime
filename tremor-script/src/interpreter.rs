@@ -1012,10 +1012,7 @@ fn patch_value<'event>(
     Ok(())
 }
 
-fn apply_default<'event>(
-    target: &mut <Value<'event> as ValueAccess>::Object,
-    dflt: &<Value<'event> as ValueAccess>::Object,
-) {
+fn apply_default<'event>(target: &mut Object<'event>, dflt: &Object<'event>) {
     for (k, v) in dflt {
         if !target.contains_key(k) {
             target.insert(k.clone(), v.clone());

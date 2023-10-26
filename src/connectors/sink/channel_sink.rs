@@ -38,7 +38,6 @@ use tokio::{
 use tremor_common::{ids::Id, time::nanotime};
 use tremor_pipeline::{CbAction, Event, SignalKind};
 use tremor_value::Value;
-use value_trait::ValueAccess;
 
 /// Behavioral trait for defining if a Channel Sink needs metadata or not
 pub(crate) trait SinkMetaBehaviour: Send + Sync {

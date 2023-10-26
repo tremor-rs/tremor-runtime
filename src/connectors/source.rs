@@ -17,9 +17,11 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
+use super::{CodecReq, Connectivity};
 use crate::channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender};
 use crate::connectors::{
     metrics::SourceReporter,
+    prelude::*,
     utils::reconnect::{Attempt, ConnectionLostNotifier},
     ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
 };
@@ -29,7 +31,6 @@ use crate::pipeline;
 use crate::pipeline::InputTarget;
 pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
 use hashbrown::HashSet;
-use simd_json::Mutable;
 use std::collections::{btree_map::Entry, BTreeMap};
 use std::fmt::Display;
 use tokio::task;
@@ -48,9 +49,6 @@ use tremor_pipeline::{
 };
 use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
 use tremor_value::{literal, Value};
-use value_trait::Builder;
-
-use super::{CodecReq, Connectivity};
 
 #[derive(Debug)]
 /// Messages a Source can receive
@@ -343,7 +341,7 @@ impl SourceManagerBuilder {
     /// if the source can not be spawned into a own process
     pub(crate) fn spawn<S>(self, source: S, ctx: SourceContext) -> SourceAddr
     where
-        S: Source + Send + 'static,
+        S: Source + Send + Sync + 'static,
     {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
@@ -855,8 +853,20 @@ where
     }
 
     /// send a signal to all connected pipelines
-    async fn send_signal(&mut self, signal: Event) -> Result<()> {
-        for (_url, addr) in self.pipelines_out.iter().chain(self.pipelines_err.iter()) {
+    async fn send_signal(&self, signal: Event) -> Result<()> {
+        for (_url, addr) in self
+            .pipelines_out
+            .as_slice()
+            .iter()
+            .chain(self.pipelines_err.as_slice().iter())
+        /* */
+        {
+            addr.send(Box::new(pipeline::Msg::Signal(signal.clone())))
+                .await?;
+        }
+        for (_url, addr) in &self.pipelines_out
+        /*.chain(self.pipelines_err.iter()) */
+        {
             addr.send(Box::new(pipeline::Msg::Signal(signal.clone())))
                 .await?;
         }

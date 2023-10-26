@@ -164,7 +164,7 @@ fn encode_metric(value: &Value, r: &mut impl Write) -> Result<()> {
     let values = value
         .get_array("values")
         .ok_or(ErrorKind::InvalidDogStatsD)?;
-    let mut values = values.iter().filter_map(simd_json::ValueAccess::as_f64);
+    let mut values = values.iter().filter_map(ValueAsScalar::as_f64);
 
     r.write_all(b":")?;
     if let Some(x) = values.next() {
@@ -301,7 +301,7 @@ fn encode_service_check(value: &Value, r: &mut impl Write) -> Result<()> {
 fn write_tags(value: &Value, r: &mut impl Write) -> Result<()> {
     if let Some(tags) = value.get_array("tags") {
         r.write_all(b"|#")?;
-        let mut tags = tags.iter().filter_map(simd_json::ValueAccess::as_str);
+        let mut tags = tags.iter().filter_map(ValueAsScalar::as_str);
         if let Some(t) = tags.next() {
             r.write_all(t.as_bytes())?;
         }

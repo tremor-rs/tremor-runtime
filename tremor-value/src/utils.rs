@@ -14,7 +14,7 @@
 
 use std::io::Write;
 
-use value_trait::Writable;
+use value_trait::base::Writable;
 
 use crate::Value;
 

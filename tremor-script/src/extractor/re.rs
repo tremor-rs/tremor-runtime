@@ -134,8 +134,8 @@ use super::Result;
 pub(crate) use ::regex::Regex;
 use beef::Cow;
 use halfbrown::HashMap;
-use simd_json::{Builder, Mutable};
 use tremor_value::Value;
+use value_trait::prelude::*;
 
 pub(crate) fn execute(s: &str, result_needed: bool, compiled: &Regex) -> Result<'static> {
     compiled.captures(s).map_or(Result::NoMatch, |caps| {

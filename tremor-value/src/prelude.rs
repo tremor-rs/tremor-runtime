@@ -14,7 +14,4 @@
 
 pub use super::{KnownKey, Object, Value};
 pub use crate::{literal, literal_internal};
-pub use value_trait::{
-    Builder as BuilderTrait, Mutable as MutableTrait, Value as ValueTrait,
-    ValueAccess as ValueAccessTrait, Writable as WritableTrait,
-};
+pub use value_trait::prelude::*;

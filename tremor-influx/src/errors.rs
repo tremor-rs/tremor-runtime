@@ -30,6 +30,14 @@ pub enum EncoderError {
     Io(io::Error),
     /// a required field is missing
     MissingField(&'static str),
+    /// InvalidType
+    TypeError(value_trait::TryTypeError),
+}
+
+impl From<value_trait::TryTypeError> for EncoderError {
+    fn from(e: value_trait::TryTypeError) -> Self {
+        Self::TypeError(e)
+    }
 }
 
 impl PartialEq for EncoderError {
@@ -42,6 +50,7 @@ impl PartialEq for EncoderError {
                 k1 == k2 && v1 == v2
             }
             (EncoderError::Io(_), EncoderError::Io(_)) => true,
+            (EncoderError::TypeError(e1), EncoderError::TypeError(e2)) => e1 == e2,
 
             (_, _) => false,
         }

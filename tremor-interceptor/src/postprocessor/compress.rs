@@ -60,12 +60,12 @@
 
 use super::Postprocessor;
 use crate::errors::Result;
-use simd_json::ValueAccess;
 use std::{
     io::Write,
     str::{self, FromStr},
 };
 use tremor_value::Value;
+use value_trait::prelude::*;
 
 #[derive(Debug, PartialEq)]
 enum Algorithm {

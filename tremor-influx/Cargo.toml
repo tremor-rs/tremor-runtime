@@ -18,12 +18,12 @@ rustc-args = ["-C target-feature=+avx,+avx2,+sse4.2"]
 
 [dependencies]
 lexical = "6.1.1"
-value-trait = "0.6"
+value-trait = "0.8"
 
 [dev-dependencies]
 criterion = "0.5"
 pretty_assertions = "1.4"
-simd-json = "0.12"
+simd-json = "0.13"
 snmalloc-rs = "0.3"
 
 [[bench]]

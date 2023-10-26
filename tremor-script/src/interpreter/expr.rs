@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use tremor_common::ports::Port;
-use value_trait::ValueInto;
-
 use super::{
     resolve, resolve_value, set_local_shadow, test_guard, test_predicate_expr, Env, ExecOpts,
     LocalStack, NULL,
@@ -45,6 +42,7 @@ use std::{
     borrow::{Borrow, Cow},
     iter,
 };
+use tremor_common::ports::Port;
 
 pub(crate) type ComprehensionIter<'event, 'run> =
     Box<dyn Iterator<Item = (Value<'event>, Value<'event>)> + 'run>;

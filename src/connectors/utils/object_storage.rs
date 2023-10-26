@@ -14,9 +14,6 @@
 
 use crate::connectors::prelude::*;
 use crate::errors::{err_object_storage, Result};
-use tremor_pipeline::Event;
-use tremor_value::Value;
-use value_trait::ValueAccess;
 
 /// mode of operation for object storage connectors
 #[derive(Debug, Default, Deserialize, Clone, Copy, PartialEq)]

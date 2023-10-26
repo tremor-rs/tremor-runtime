@@ -94,7 +94,6 @@
 use crate::connectors::prelude::*;
 use crate::system::{KillSwitch, ShutdownMode};
 use std::time::Duration;
-use value_trait::ValueAccess;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]

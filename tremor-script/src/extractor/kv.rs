@@ -60,7 +60,7 @@
 //!
 //! Field and value separators can not overlap, even partially.
 //!
-//! Complex patterns can be given by using multiple key value pairs with different separators, their order does not matter and they will not be required to be present.
+//! Container patterns can be given by using multiple key value pairs with different separators, their order does not matter and they will not be required to be present.
 //!
 //! ## Example
 //!

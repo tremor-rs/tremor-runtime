@@ -633,9 +633,9 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::prelude::*;
-
     use beef::Cow;
     use serde_ext::Serialize;
+
     #[derive(Serialize)]
     enum Snot {
         Struct { badger: String, snot: Option<u64> },
@@ -667,7 +667,7 @@ mod tests {
             if let Some(&Value::Array(values)) = map.get("TupleStruct").as_ref() {
                 let first_field = values
                     .first()
-                    .and_then(ValueAccessTrait::as_array)
+                    .and_then(ValueAsContainer::as_array)
                     .ok_or("Vec<u8> not serialized as array")?;
                 assert_eq!(
                     Some(&Value::Static(StaticNode::I64(1))),
@@ -798,7 +798,7 @@ mod tests {
         assert_eq!(Some("key"), key.as_str());
         assert!(values
             .get("number")
-            .map(ValueTrait::is_null)
+            .map(TypedScalarValue::is_null)
             .unwrap_or_default());
         let array = values
             .get_array("tuple")
@@ -825,7 +825,7 @@ mod tests {
         assert_eq!(Some("key"), key.as_str());
         assert!(values
             .get("number")
-            .map(ValueTrait::is_null)
+            .map(TypedScalarValue::is_null)
             .unwrap_or_default());
 
         let array = values
@@ -867,10 +867,7 @@ mod tests {
         assert!(values.get_idx(0).unwrap().is_null());
         let vec = values.get_idx(1).unwrap();
         assert!(vec.get_idx(0).unwrap().is_null());
-        assert_eq!(
-            Some("ABC"),
-            vec.get_idx(1).and_then(ValueAccessTrait::as_str)
-        );
+        assert_eq!(Some("ABC"), vec.get_idx(1).and_then(ValueAsScalar::as_str));
 
         Ok(())
     }

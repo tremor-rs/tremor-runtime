@@ -14,12 +14,10 @@
 
 #![allow(dead_code)]
 
-use crate::errors::Result;
+use crate::connectors::prelude::*;
 use ::rand::Rng;
-use simd_json::ValueAccess;
 use std::fmt::Write;
 use tremor_common::rand;
-use tremor_value::Value;
 
 pub(crate) fn random_span_id_bytes(ingest_ns_seed: u64) -> Vec<u8> {
     let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);

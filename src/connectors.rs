@@ -57,7 +57,7 @@ use tremor_value::Value;
 use utils::reconnect::{Attempt, ConnectionLostNotifier, ReconnectRuntime};
 /// quiescence stuff
 pub(crate) use utils::{metrics, reconnect};
-use value_trait::{Builder, Mutable, ValueAccess};
+use value_trait::prelude::*;
 
 /// Accept timeout
 pub(crate) const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);

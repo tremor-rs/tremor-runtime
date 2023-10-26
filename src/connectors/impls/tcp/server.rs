@@ -29,7 +29,6 @@ use crate::{
     errors::err_connector_def,
 };
 use rustls::ServerConfig;
-use simd_json::ValueAccess;
 use std::sync::{atomic::AtomicBool, Arc};
 use tokio::{task::JoinHandle, time::timeout};
 use tokio_rustls::TlsAcceptor;

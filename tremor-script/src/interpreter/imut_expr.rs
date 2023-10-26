@@ -42,7 +42,6 @@ use std::{
     borrow::{Borrow, Cow},
     iter, mem,
 };
-use value_trait::ValueInto;
 
 use super::expr::{ComprehensionItem, ComprehensionIter};
 

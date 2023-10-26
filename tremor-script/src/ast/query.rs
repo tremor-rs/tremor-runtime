@@ -28,8 +28,8 @@ use crate::ast::optimizer::Optimizer;
 use crate::ast::Literal;
 use crate::{errors::error_generic, impl_expr};
 use raw::WindowName;
-use simd_json::{Builder, Mutable, ValueAccess};
 use tremor_common::ports::Port;
+use value_trait::prelude::*;
 
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]

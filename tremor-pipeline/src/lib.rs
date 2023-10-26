@@ -563,9 +563,14 @@ impl EventId {
                     .into_iter(),
             )
         } else {
-            Either::Right(self.tracked_pull_ids.iter().filter_map(move |teid| {
-                (teid.source_id == source_id).then_some((teid.stream_id, teid.min_pull_id))
-            }))
+            Either::Right(
+                self.tracked_pull_ids
+                    .as_slice()
+                    .iter()
+                    .filter_map(move |teid| {
+                        (teid.source_id == source_id).then_some((teid.stream_id, teid.min_pull_id))
+                    }),
+            )
         }
     }
 
@@ -583,9 +588,14 @@ impl EventId {
                     .into_iter(),
             )
         } else {
-            Either::Right(self.tracked_pull_ids.iter().filter_map(move |teid| {
-                (teid.source_id == source_id).then_some((teid.stream_id, teid.max_pull_id))
-            }))
+            Either::Right(
+                self.tracked_pull_ids
+                    .as_slice()
+                    .iter()
+                    .filter_map(move |teid| {
+                        (teid.source_id == source_id).then_some((teid.stream_id, teid.max_pull_id))
+                    }),
+            )
         }
     }
 

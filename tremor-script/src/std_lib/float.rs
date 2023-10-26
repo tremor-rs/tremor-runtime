@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use simd_json::ValueAccess;
-
 use crate::registry::Registry;
 use crate::tremor_const_fn;
+use value_trait::prelude::ValueTryAsScalar;
 
 pub fn load(registry: &mut Registry) {
     registry

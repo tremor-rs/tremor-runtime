@@ -76,9 +76,10 @@ pub fn value(
 
 #[cfg(test)]
 mod test {
-    use simd_json::{ObjectHasher, ValueAccess};
-
     use super::*;
+    use simd_json::ObjectHasher;
+    use value_trait::prelude::*;
+
     #[test]
     fn value_test() {
         let mut t = Object::with_hasher(ObjectHasher::default());

@@ -27,7 +27,6 @@ use tonic::Code;
 use tremor_common::url::HttpsDefaults;
 use tremor_pipeline::Event;
 use tremor_value::Value;
-use value_trait::ValueAccess;
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]

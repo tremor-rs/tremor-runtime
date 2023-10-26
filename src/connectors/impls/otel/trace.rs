@@ -19,13 +19,10 @@ use super::{
     id,
     resource::{self, resource_to_pb},
 };
+use crate::connectors::prelude::*;
 use crate::connectors::utils::pb::{
     maybe_int_to_pbi32, maybe_int_to_pbu32, maybe_int_to_pbu64, maybe_string_to_pb,
 };
-use crate::errors::Result;
-use simd_json::Mutable;
-use tremor_value::literal;
-
 use tremor_otelapis::opentelemetry::proto::{
     collector::trace::v1::ExportTraceServiceRequest,
     trace::v1::{
@@ -33,9 +30,6 @@ use tremor_otelapis::opentelemetry::proto::{
         InstrumentationLibrarySpans, ResourceSpans, Span, Status,
     },
 };
-
-use tremor_value::Value;
-use value_trait::ValueAccess;
 
 #[allow(deprecated)]
 pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {

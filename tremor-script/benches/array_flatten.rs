@@ -16,13 +16,11 @@ use std::path::PathBuf;
 
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion};
-use simd_json::ValueAccess;
 use tremor_script::ast::ImutExpr;
 use tremor_script::interpreter::{Env, LocalStack};
-
 use tremor_script::module::Manager;
 use tremor_script::prelude::ExecOpts;
-use tremor_value::Value;
+use tremor_value::prelude::*;
 
 fn do_array_flatten<'script>(
     bencher: &mut Bencher,

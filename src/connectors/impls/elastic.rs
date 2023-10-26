@@ -258,7 +258,6 @@ use tokio::task;
 use tremor_common::time::nanotime;
 use tremor_value::utils::sorted_serialize;
 use tremor_value::value::StaticValue;
-use value_trait::Mutable;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -746,7 +745,10 @@ async fn handle_response(
 ) -> Result<()> {
     let correlation_values = event.correlation_metas();
     let payload_iter = event.value_iter();
-    if let Some(items) = response.get_mut("items").and_then(Mutable::as_array_mut) {
+    if let Some(items) = response
+        .get_mut("items")
+        .and_then(ValueAsMutContainer::as_array_mut)
+    {
         for ((mut item, correlation), payload) in items
             .drain(..)
             .zip(correlation_values.into_iter())

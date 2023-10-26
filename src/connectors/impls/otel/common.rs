@@ -14,18 +14,14 @@
 
 #![allow(dead_code)]
 
+use crate::connectors::prelude::*;
 use crate::connectors::utils::pb;
-use crate::errors::Result;
-use simd_json::Builder;
-use tremor_common::url;
 use tremor_otelapis::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, InstrumentationLibrary, KeyValue, KeyValueList, StringKeyValue,
 };
-use tremor_value::{literal, StaticNode, Value};
-use value_trait::ValueAccess;
 
 pub(crate) struct OtelDefaults;
-impl url::Defaults for OtelDefaults {
+impl Defaults for OtelDefaults {
     // We do add the port here since it's different from http's default
 
     const SCHEME: &'static str = "https";

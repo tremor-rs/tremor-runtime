@@ -25,12 +25,12 @@ use crate::{
 };
 use crate::{errors::unexpected_character, pos};
 use beef::Cow;
-use simd_json::Writable;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
 use std::{collections::VecDeque, mem};
 use unicode_xid::UnicodeXID;
+use value_trait::prelude::Writable;
 
 /// Source for a parser
 pub trait ParserSource {

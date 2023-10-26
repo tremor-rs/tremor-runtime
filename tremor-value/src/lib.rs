@@ -46,6 +46,7 @@ mod serde;
 pub mod utils;
 /// The value modules defines a structural module of tremor supported types
 pub mod value;
+
 pub use crate::serde::structurize;
 pub use error::*;
 pub use known_key::{Error as KnownKeyError, KnownKey};
@@ -53,9 +54,9 @@ pub use simd_json::{json, json_typed, Buffers, StaticNode};
 pub use value::from::*;
 pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, Value};
 
-use simd_json::{Node, ObjectHasher};
+use beef::Cow;
+use simd_json::{prelude::*, Node, ObjectHasher};
 use simd_json_derive::{Deserialize, Serialize, Tape};
-use value_trait::{ValueAccess, ValueInto, Writable};
 
 /// Maximum size for a vector object
 pub const VEC_LIMIT_UPPER: usize = 32;
@@ -69,24 +70,27 @@ impl<'value> Serialize for Value<'value> {
     }
 }
 
-impl<'value> ValueInto for Value<'value> {
-    type String = String;
+impl<'value> ValueIntoString for Value<'value> {
+    type String = Cow<'value, str>;
 
-    fn into_string(self) -> Option<<Value<'value> as ValueInto>::String> {
+    fn into_string(self) -> Option<Cow<'value, str>> {
         match self {
-            Self::String(s) => Some(s.into_owned()),
+            Self::String(s) => Some(s),
             _ => None,
         }
     }
-
-    fn into_array(self) -> Option<<Value<'value> as ValueAccess>::Array> {
+}
+impl<'value> ValueIntoContainer for Value<'value> {
+    type Array = Vec<Value<'value>>;
+    type Object = Object<'value>;
+    fn into_array(self) -> Option<Vec<Value<'value>>> {
         match self {
             Self::Array(a) => Some(a),
             _ => None,
         }
     }
 
-    fn into_object(self) -> Option<<Value<'value> as ValueAccess>::Object> {
+    fn into_object(self) -> Option<Object<'value>> {
         match self {
             Self::Object(o) => Some(*o),
             _ => None,
