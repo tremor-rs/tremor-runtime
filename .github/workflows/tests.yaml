@@ -23,9 +23,8 @@ jobs:
       #     tool-cache: false
       - name: Install Docker Image
         run: ./.github/scripts/install-docker-images.sh
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov

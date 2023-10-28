@@ -52,9 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           components: rustfmt
       - name: Check Formating
         run: cargo fmt --all -- --check
@@ -65,9 +64,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           components: clippy
       - name: Check workflow permissions
         id: check_permissions
