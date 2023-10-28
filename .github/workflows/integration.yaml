@@ -45,7 +45,7 @@ jobs:
       #     # this might remove tools that are actually needed,
       #     # if set to "true" but frees about 6 GB
       #     tool-cache: false
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ructions/toolchain@v2
         with:
           components: llvm-tools-preview
 
