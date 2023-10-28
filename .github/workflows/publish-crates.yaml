@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ructions/toolchain@v2
         with:
           toolchain: stable
       - name: Publish tremor-common to crates.io
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ructions/toolchain@v2
         with:
           toolchain: stable
       - name: Publish tremor-value to crates.io
@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ructions/toolchain@v2
         with:
           toolchain: stable
       - name: Publish tremor-influx to crates.io
@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ructions/toolchain@v2
         with:
           toolchain: stable
       - name: Publish tremor-script to crates.io
@@ -78,7 +78,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ructions/toolchain@v2
         with:
           toolchain: stable
       - name: Find updated version

@@ -17,7 +17,7 @@ jobs:
       - name: Verify valid EQC_LICENSE
         run: test -n "${{secrets.EQC_LICENSE}}"
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ructions/toolchain@v2
         with:
       - uses: Swatinem/rust-cache@v2
       - uses: erlef/setup-beam@v1
@@ -45,7 +45,7 @@ jobs:
       - name: Verify valid EQC_LICENSE
         run: test -n "${{secrets.EQC_LICENSE}}"
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ructions/toolchain@v2
         with:
       - uses: Swatinem/rust-cache@v2
       - uses: erlef/setup-beam@v1

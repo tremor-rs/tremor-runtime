@@ -23,7 +23,7 @@ jobs:
       #     tool-cache: false
       - name: Install Docker Image
         run: ./.github/scripts/install-docker-images.sh
-      - uses: dtolnay/rust-toolchain@master
+      - uses: ructions/toolchain@v2
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
