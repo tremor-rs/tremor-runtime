@@ -45,9 +45,8 @@ jobs:
       #     # this might remove tools that are actually needed,
       #     # if set to "true" but frees about 6 GB
       #     tool-cache: false
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           components: llvm-tools-preview
 
       - uses: Swatinem/rust-cache@v2
