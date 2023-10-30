@@ -361,7 +361,7 @@ dependencies = [
  "async-signal",
  "blocking",
  "cfg-if",
- "event-listener 3.0.0",
+ "event-listener 3.0.1",
  "futures-lite",
  "rustix 0.38.20",
  "windows-sys 0.48.0",
@@ -2069,9 +2069,9 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 
 [[package]]
 name = "event-listener"
-version = "3.0.0"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29e56284f00d94c1bc7fd3c77027b4623c88c1f53d8d2394c6199f2921dea325"
+checksum = "01cec0252c2afff729ee6f00e903d479fba81784c8e2bd77447673471fdfaea1"
 dependencies = [
  "concurrent-queue",
  "parking",
@@ -6304,7 +6304,7 @@ dependencies = [
  "elasticsearch",
  "env_logger",
  "error-chain",
- "event-listener 3.0.0",
+ "event-listener 3.0.1",
  "file-mode",
  "futures",
  "glob",
