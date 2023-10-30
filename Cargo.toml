@@ -66,7 +66,7 @@ dashmap = "5.5"
 either = { version = "1.9", features = ["serde"] }
 error-chain = "0.12"
 file-mode = "0.1"
-futures = "0.3.28"
+futures = "0.3.29"
 event-listener = "3"
 glob = "0.3"
 halfbrown = "0.2"
