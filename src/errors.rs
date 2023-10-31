@@ -89,6 +89,12 @@ impl From<crate::channel::TryRecvError> for Error {
     }
 }
 
+impl<T> From<async_channel::SendError<T>> for Error {
+    fn from(e: async_channel::SendError<T>) -> Self {
+        Self::from(format!("{e:?}"))
+    }
+}
+
 impl<T> From<async_std::channel::SendError<T>> for Error {
     fn from(e: async_std::channel::SendError<T>) -> Self {
         Self::from(format!("{e:?}"))
@@ -461,5 +467,12 @@ mod test {
         let e: SdkError<()> = SdkError::timeout_error(Box::new(DemoError()));
         let r = Error::from(e);
         assert_matches!(r.0, ErrorKind::S3Error(_));
+    }
+
+    #[test]
+    fn send_error() {
+        let e = async_channel::SendError(0u8);
+        let error = Error::from(e);
+        assert_eq!(error.to_string(), "SendError(..)".to_string(),);
     }
 }
