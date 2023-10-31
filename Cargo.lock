@@ -252,6 +252,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-channel"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "336d835910fab747186c56586562cb46f42809c2843ef3a84f47509009522838"
+dependencies = [
+ "concurrent-queue",
+ "event-listener 3.0.1",
+ "event-listener-strategy",
+ "futures-core",
+ "pin-project-lite 0.2.13",
+]
+
+[[package]]
 name = "async-compression"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -295,7 +308,7 @@ version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1b6f5d7df27bd294849f8eec66ecfc63d11814df7a4f5d74168a2394467b776"
 dependencies = [
- "async-channel",
+ "async-channel 1.9.0",
  "async-executor",
  "async-io",
  "async-lock",
@@ -310,7 +323,7 @@ version = "2.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d1d1dae8cb2c4258a79d6ed088b7fb9b4763bf4e9b22d040779761e046a2971"
 dependencies = [
- "async-channel",
+ "async-channel 1.9.0",
  "async-dup",
  "async-global-executor",
  "async-io",
@@ -402,7 +415,7 @@ version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53bba003996b8fd22245cd0c59b869ba764188ed435392cf2796d03b805ade10"
 dependencies = [
- "async-channel",
+ "async-channel 1.9.0",
  "async-std",
  "http-types",
  "log",
@@ -416,7 +429,7 @@ version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62565bb4402e926b29953c785397c6dc0391b7b446e45008b0049eb43cec6f5d"
 dependencies = [
- "async-channel",
+ "async-channel 1.9.0",
  "async-global-executor",
  "async-io",
  "async-lock",
@@ -1076,7 +1089,7 @@ version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c36a4d0d48574b3dd360b4b7d95cc651d2b6557b6402848a27d4b228a473e2a"
 dependencies = [
- "async-channel",
+ "async-channel 1.9.0",
  "async-lock",
  "async-task",
  "fastrand 2.0.1",
@@ -2079,6 +2092,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-listener-strategy"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d96b852f1345da36d551b9473fa1e2b1eb5c5195585c6c018118bc92a8d91160"
+dependencies = [
+ "event-listener 3.0.1",
+ "pin-project-lite 0.2.13",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2657,7 +2680,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e9b187a72d63adbfba487f48095306ac823049cb504ee195541e91c7775f5ad"
 dependencies = [
  "anyhow",
- "async-channel",
+ "async-channel 1.9.0",
  "async-std",
  "base64 0.13.1",
  "cookie",
@@ -6237,7 +6260,7 @@ version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c6cfab2469df1b6c86199844e008f549cc6b19ca59ef0b43b68b8a62f21d63b"
 dependencies = [
- "async-channel",
+ "async-channel 1.9.0",
  "prost",
  "tonic",
  "tonic-build",
@@ -6282,7 +6305,7 @@ name = "tremor-runtime"
 version = "0.13.0-rc.16"
 dependencies = [
  "anyhow",
- "async-channel",
+ "async-channel 2.0.0",
  "async-compression",
  "async-std",
  "async-stream",
