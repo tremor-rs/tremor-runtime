@@ -12,21 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::{TcpDefaults, TcpReader, TcpWriter};
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    errors::{already_created_error, empty_error},
-};
-use crate::{
-    connectors::{
-        prelude::*,
-        sink::channel_sink::ChannelSinkMsg,
-        utils::{
-            socket::{tcp_server_socket, TcpSocketOptions},
-            tls::TLSServerConfig,
-            ConnectionMeta,
-        },
+use crate::channel::{bounded, empty_e, Receiver, Sender};
+use crate::connectors::{
+    prelude::*,
+    sink::channel_sink::ChannelSinkMsg,
+    utils::{
+        socket::{tcp_server_socket, TcpSocketOptions},
+        tls::TLSServerConfig,
+        ConnectionMeta,
     },
-    errors::err_connector_def,
 };
 use rustls::ServerConfig;
 use std::sync::{atomic::AtomicBool, Arc};
@@ -80,7 +74,7 @@ impl ConnectorBuilder for Builder {
     ) -> crate::errors::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         if config.url.port().is_none() {
-            return Err(err_connector_def(id, "Missing port for TCP server"));
+            return Err(error_connector_def(id, "Missing port for TCP server").into());
         }
         let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
             Some(tls_config.to_server_config()?)
@@ -137,7 +131,9 @@ impl Connector for TcpServer {
             resolve_connection_meta,
             builder.reply_tx(),
             self.sink_tx.clone(),
-            self.sink_rx.take().ok_or_else(already_created_error)?,
+            self.sink_rx
+                .take()
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
             self.sink_is_connected.clone(),
         );
         Ok(Some(builder.spawn(sink, ctx)))
@@ -181,7 +177,7 @@ impl TcpServerSource {
 #[async_trait::async_trait()]
 impl Source for TcpServerSource {
     #[allow(clippy::too_many_lines)]
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let path = vec![self.config.url.port_or_dflt().to_string()];
         let accept_ctx = ctx.clone();
         let buf_size = self.config.buf_size;
@@ -257,7 +253,7 @@ impl Source for TcpServerSource {
                             let tls_reader = TcpReader::tls_server(
                                 tls_read_stream,
                                 vec![0; buf_size],
-                                ctx.alias.clone(),
+                                ctx.alias().clone(),
                                 origin_uri.clone(),
                                 meta,
                                 reader_runtime,
@@ -293,7 +289,7 @@ impl Source for TcpServerSource {
                             let tcp_reader = TcpReader::new(
                                 read_stream,
                                 vec![0; buf_size],
-                                ctx.alias.clone(),
+                                ctx.alias().clone(),
                                 origin_uri.clone(),
                                 meta,
                                 reader_runtime,
@@ -316,11 +312,15 @@ impl Source for TcpServerSource {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.connection_rx.recv().await.ok_or_else(empty_error)?)
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        Ok(self.connection_rx.recv().await.ok_or_else(empty_e)?)
     }
 
-    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         if let Some(accept_task) = self.accept_task.take() {
             // stop acceptin' new connections
             accept_task.abort();

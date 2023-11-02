@@ -18,6 +18,25 @@ pub(crate) type UnboundedSender<T> = tokio::sync::mpsc::UnboundedSender<T>;
 pub(crate) type UnboundedReceiver<T> = tokio::sync::mpsc::UnboundedReceiver<T>;
 pub(crate) type OneShotSender<T> = tokio::sync::oneshot::Sender<T>;
 // pub(crate) type OneShotReceiver<T> = tokio::sync::oneshot::Receiver<T>;
-pub(crate) use tokio::sync::mpsc::error::{SendError, TryRecvError};
+pub(crate) use tokio::sync::mpsc::error::SendError;
 pub(crate) use tokio::sync::mpsc::{channel as bounded, unbounded_channel as unbounded};
 pub(crate) use tokio::sync::oneshot::channel as oneshot;
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ChannelError {
+    #[error("Could not send")]
+    Send,
+    #[error("Could not recv")]
+    Recv,
+    #[error("The channel is empty")]
+    Empty,
+}
+
+#[allow(clippy::needless_pass_by_value)]
+pub(crate) fn send_e<T>(_: crate::channel::SendError<T>) -> anyhow::Error {
+    ChannelError::Send.into()
+}
+
+pub(crate) fn empty_e() -> ChannelError {
+    ChannelError::Empty
+}

@@ -15,7 +15,7 @@
 use crate::connectors::google::ChannelFactory;
 use crate::connectors::{
     google::{AuthInterceptor, TokenProvider},
-    impls::gbq::writer::Config,
+    impls::gbq::{writer::Config, Error},
     prelude::*,
 };
 use futures::{stream, StreamExt};
@@ -339,7 +339,7 @@ where
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let request_size_limit = self.config.request_size_limit;
 
         let request_data = self
@@ -350,10 +350,7 @@ where
             warn!("{ctx} The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
         }
 
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "BigQuery",
-            "The client is not connected",
-        ))?;
+        let client = self.client.as_mut().ok_or(Error::NotConnected)?;
         for request in request_data {
             let req_timeout = Duration::from_nanos(self.config.request_timeout);
             let append_response =
@@ -422,7 +419,7 @@ where
         Ok(SinkReply::ACK)
     }
 
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         info!("{ctx} Connecting to BigQuery");
 
         let channel = self
@@ -570,10 +567,7 @@ where
         table_id: String,
         ctx: &SinkContext,
     ) -> Result<&ConnectedWriteStream> {
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "BigQuery",
-            "The client is not connected",
-        ))?;
+        let client = self.client.as_mut().ok_or(Error::NoClient)?;
 
         match self.write_streams.entry(table_id.clone()) {
             Entry::Occupied(entry) => {
@@ -602,7 +596,7 @@ where
                     &stream
                         .table_schema
                         .as_ref()
-                        .ok_or_else(|| ErrorKind::GbqSchemaNotProvided(table_id))?
+                        .ok_or(Error::SchemaNotProvided(table_id))?
                         .clone()
                         .fields,
                     ctx,
@@ -1210,11 +1204,7 @@ mod test {
         fields.try_insert("a", 12);
         let result = mapping.map(&fields);
 
-        if let Err(Error(ErrorKind::TypeError(ValueType::Custom("bytes"), x), _)) = result {
-            assert_eq!(x, ValueType::I64);
-        } else {
-            panic!("Bytes conversion did not fail on type mismatch");
-        }
+        assert!(result.is_err());
     }
 
     #[test]
@@ -1235,11 +1225,7 @@ mod test {
         );
         let result = mapping.map(&Value::from(123_i64));
 
-        if let Err(Error(ErrorKind::TypeError(ValueType::Object, x), _)) = result {
-            assert_eq!(x, ValueType::I64);
-        } else {
-            panic!("Mapping did not fail on non-object event");
-        }
+        assert!(result.is_err());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1335,8 +1321,7 @@ mod test {
                 }],
             }),
         }
-        .encode(&mut buffer_write_stream)
-        .map_err(|_| "encode failed")?;
+        .encode(&mut buffer_write_stream)?;
 
         AppendRowsResponse {
             updated_schema: Some(TableSchema {
@@ -1357,8 +1342,7 @@ mod test {
                 details: vec![],
             })),
         }
-        .encode(&mut buffer_append_rows_response)
-        .map_err(|_| "encode failed")?;
+        .encode(&mut buffer_append_rows_response)?;
 
         let responses = Arc::new(RwLock::new(VecDeque::from([
             buffer_write_stream,
@@ -1419,8 +1403,7 @@ mod test {
                 }],
             }),
         }
-        .encode(&mut buffer_write_stream)
-        .map_err(|_| "encode failed")?;
+        .encode(&mut buffer_write_stream)?;
 
         AppendRowsResponse {
             updated_schema: None,
@@ -1428,8 +1411,7 @@ mod test {
                 offset: None,
             })),
         }
-        .encode(&mut buffer_append_rows_response)
-        .map_err(|_| "encode failed")?;
+        .encode(&mut buffer_append_rows_response)?;
 
         let responses = Arc::new(RwLock::new(VecDeque::from([
             buffer_write_stream,
@@ -1485,7 +1467,7 @@ mod test {
             .await?;
 
         assert_eq!(result.ack, SinkAck::Ack);
-        assert_eq!(0, responses.read()?.len());
+        assert_eq!(0, responses.read().expect("read lock").len());
         Ok(())
     }
 

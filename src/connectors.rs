@@ -41,8 +41,8 @@ use self::{
 };
 pub(crate) use crate::config::Connector as ConnectorConfig;
 use crate::{
-    channel::{bounded, Sender},
-    errors::{connector_send_err, Error, Kind as ErrorKind, Result},
+    channel::{bounded, send_e, Sender},
+    errors::Result,
     instance::State,
     log_error, pipeline, qsize, raft,
     system::{flow::AppContext, KillSwitch, Runtime},
@@ -62,6 +62,50 @@ use tremor_value::Value;
 
 /// Accept timeout
 pub(crate) const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("{0} Invalid port '{1}'")]
+    InvalidPort(alias::Connector, Port<'static>),
+    #[error("{0} is a structured connector and can't be configured with a codec")]
+    UnsupportedCodec(alias::Connector),
+    #[error("{0} is missing a codec")]
+    MissingCodec(alias::Connector),
+    #[error("{0} Connection failed")]
+    ConnectionFailed(alias::Connector),
+    #[error("{0} Invalid configuration: {1}")]
+    InvalidConfiguration(alias::Connector, String),
+    #[error("[{0}] Invalid definition: {1}")]
+    InvalidDefinition(alias::Connector, String),
+    #[error("Conector was already created")]
+    AlreadyCreated(alias::Connector),
+    #[error("{0} Missing configuration")]
+    MissingConfiguration(alias::Connector),
+    #[error("{0} build_cfg is unimplemented")]
+    BuildCfg(alias::Connector),
+}
+
+impl Error {
+    /// the alias of the connector
+    #[must_use]
+    pub fn alias(&self) -> &alias::Connector {
+        match self {
+            Self::InvalidPort(alias, _)
+            | Self::UnsupportedCodec(alias)
+            | Self::MissingCodec(alias)
+            | Self::ConnectionFailed(alias)
+            | Self::InvalidConfiguration(alias, _)
+            | Self::InvalidDefinition(alias, _)
+            | Self::AlreadyCreated(alias)
+            | Self::MissingConfiguration(alias)
+            | Self::BuildCfg(alias) => alias,
+        }
+    }
+}
+
+pub(crate) fn error_connector_def<E: ToString + ?Sized>(c: &alias::Connector, e: &E) -> Error {
+    Error::InvalidDefinition(c.clone(), e.to_string())
+}
 
 /// connector address
 #[derive(Clone, Debug)]
@@ -85,7 +129,7 @@ impl Addr {
     /// # Errors
     ///  * If sending failed
     pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
-        self.sender.send(msg).await.map_err(connector_send_err)
+        self.sender.send(msg).await.map_err(send_e)
     }
 
     /// send a message to the sink part of the connector.
@@ -95,7 +139,7 @@ impl Addr {
     ///   * if sending failed
     pub(crate) async fn send_sink(&self, msg: SinkMsg) -> Result<()> {
         if let Some(sink) = self.sink.as_ref() {
-            sink.addr.send(msg).await.map_err(connector_send_err)?;
+            sink.addr.send(msg).await.map_err(send_e)?;
         }
         Ok(())
     }
@@ -107,7 +151,7 @@ impl Addr {
     ///   * if sending failed
     pub(crate) fn send_source(&self, msg: SourceMsg) -> Result<()> {
         if let Some(source) = self.source.as_ref() {
-            source.addr.send(msg).map_err(connector_send_err)?;
+            source.addr.send(msg).map_err(send_e)?;
         }
         Ok(())
     }
@@ -124,21 +168,21 @@ impl Addr {
     ///
     /// # Errors
     ///   * if sending failed
-    pub(crate) async fn stop(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
+    pub(crate) async fn stop(&self, sender: Sender<ConnectorResult>) -> Result<()> {
         self.send(Msg::Stop(sender)).await
     }
     /// starts the connector
     ///
     /// # Errors
     ///   * if sending failed
-    pub(crate) async fn start(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
+    pub(crate) async fn start(&self, sender: Sender<ConnectorResult>) -> Result<()> {
         self.send(Msg::Start(sender)).await
     }
     /// drains the connector
     ///
     /// # Errors
     ///   * if sending failed
-    pub(crate) async fn drain(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
+    pub(crate) async fn drain(&self, sender: Sender<ConnectorResult>) -> Result<()> {
         self.send(Msg::Drain(sender)).await
     }
     /// pauses the connector
@@ -195,7 +239,7 @@ pub(crate) enum Msg {
     Reconnect,
     // TODO: fill as needed
     /// start the connector
-    Start(Sender<ConnectorResult<()>>),
+    Start(Sender<ConnectorResult>),
     /// pause the connector
     ///
     /// source part is not polling for new data
@@ -209,39 +253,28 @@ pub(crate) enum Msg {
     /// - stop reading events from external connections
     /// - decline events received via the sink part
     /// - wait for drainage to be finished
-    Drain(Sender<ConnectorResult<()>>),
+    Drain(Sender<ConnectorResult>),
     /// notify this connector that its source part has been drained
     SourceDrained,
     /// notify this connector that its sink part has been drained
     SinkDrained,
     /// stop the connector
-    Stop(Sender<ConnectorResult<()>>),
+    Stop(Sender<ConnectorResult>),
     /// request a status report
     Report(tokio::sync::oneshot::Sender<StatusReport>),
 }
 
-#[derive(Debug)]
-/// result of an async operation of the connector.
-/// bears a `url` to identify the connector who finished the operation
-pub(crate) struct ConnectorResult<T: std::fmt::Debug> {
-    /// the connector alias
-    pub(crate) alias: alias::Connector,
-    /// the actual result
-    pub(crate) res: Result<T>,
+pub(crate) trait AliasableConnectorResult {
+    fn alias(&self) -> &alias::Connector;
 }
 
-impl ConnectorResult<()> {
-    fn ok(ctx: &ConnectorContext) -> Self {
-        Self {
-            alias: ctx.alias.clone(),
-            res: Ok(()),
-        }
-    }
+pub(crate) type ConnectorResult = std::result::Result<alias::Connector, Error>;
 
-    fn err(ctx: &ConnectorContext, err_msg: &'static str) -> Self {
-        Self {
-            alias: ctx.alias.clone(),
-            res: Err(Error::from(err_msg)),
+impl AliasableConnectorResult for ConnectorResult {
+    fn alias(&self) -> &alias::Connector {
+        match self {
+            Ok(alias) => alias,
+            Err(e) => e.alias(),
         }
     }
 }
@@ -261,7 +294,7 @@ pub(crate) trait Context: Display + Clone {
     fn connector_type(&self) -> &ConnectorType;
 
     /// gets the API sender
-    fn raft(&self) -> &raft::Cluster;
+    fn raft(&self) -> &raft::ClusterInterface;
 
     /// the application context
     fn app_ctx(&self) -> &AppContext;
@@ -286,7 +319,7 @@ pub(crate) trait Context: Display + Clone {
         msg: &M,
     ) -> std::result::Result<T, E>
     where
-        E: std::error::Error,
+        E: Display,
         M: Display + ?Sized,
     {
         if let Err(e) = &expr {
@@ -322,7 +355,7 @@ pub(crate) trait Context: Display + Clone {
 #[derive(Clone)]
 pub(crate) struct ConnectorContext {
     /// alias of the connector instance
-    pub(crate) alias: alias::Connector,
+    alias: alias::Connector,
     /// type of the connector
     connector_type: ConnectorType,
     /// The Quiescence Beacon
@@ -356,7 +389,7 @@ impl Context for ConnectorContext {
         &self.notifier
     }
 
-    fn raft(&self) -> &raft::Cluster {
+    fn raft(&self) -> &raft::ClusterInterface {
         &self.app_ctx.raft
     }
 
@@ -482,17 +515,24 @@ async fn connector_task(
         SourceReporter::new(app_ctx.clone(), alias.clone(), config.metrics_interval_s);
 
     let codec_requirement = connector.codec_requirements();
+
+    let ctx = ConnectorContext {
+        alias: alias.clone(),
+        connector_type: config.connector_type.clone(),
+        quiescence_beacon: quiescence_beacon.clone(),
+        notifier: notifier.clone(),
+        app_ctx: app_ctx.clone(),
+    };
+
     if connector.codec_requirements() == CodecReq::Structured && (config.codec.is_some()) {
-        return Err(format!(
-            "[Connector::{alias}] is a structured connector and can't be configured with a codec",
-        )
-        .into());
+        return Err(Error::UnsupportedCodec(ctx.alias().clone()).into());
     }
     let source_builder = source::builder(
         SourceUId::from(uid),
         &config,
         codec_requirement,
         source_metrics_reporter,
+        &alias,
     )?;
     let source_ctx = SourceContext::new(
         uid.into(),
@@ -529,21 +569,12 @@ async fn connector_task(
         sink: sink_addr,
     };
 
-    let mut reconnect = ReconnectRuntime::new(&connector_addr, notifier.clone(), &config.reconnect);
-    let notifier = reconnect.notifier();
-
-    let ctx = ConnectorContext {
-        alias: alias.clone(),
-        connector_type: config.connector_type.clone(),
-        quiescence_beacon: quiescence_beacon.clone(),
-        notifier,
-        app_ctx,
-    };
+    let mut reconnect = ReconnectRuntime::new(&connector_addr, &config.reconnect);
 
     let send_addr = connector_addr.clone();
     let mut connector_state = State::Initializing;
     let mut drainage = None;
-    let mut start_sender: Option<Sender<ConnectorResult<()>>> = None;
+    let mut start_sender: Option<Sender<ConnectorResult>> = None;
 
     // TODO: add connector metrics reporter (e.g. for reconnect attempts, cb's received, uptime, etc.)
     task::spawn(async move {
@@ -605,19 +636,11 @@ async fn connector_task(
                                 .await
                                 .map_err(Into::into)
                         } else {
-                            Err(ErrorKind::InvalidConnect(
-                                connector_addr.alias.to_string(),
-                                port.clone(),
-                            )
-                            .into())
+                            Err(Error::InvalidPort(ctx.alias().clone(), port.clone()).into())
                         }
                     } else {
                         error!("{ctx} Tried to connect to unsupported port: \"{port}\"");
-                        Err(ErrorKind::InvalidConnect(
-                            connector_addr.alias.to_string(),
-                            port.clone(),
-                        )
-                        .into())
+                        Err(Error::InvalidPort(ctx.alias().clone(), port.clone()).into())
                     };
                     // send back the connect result
                     if let Err(e) = result_tx.send(res).await {
@@ -649,19 +672,15 @@ async fn connector_task(
                             let res = source.addr.send(m);
                             log_error!(res, "{ctx} Error sending to source: {e}");
                         } else {
-                            let e = Err(ErrorKind::InvalidConnect(
-                                connector_addr.alias.to_string(),
-                                port.clone(),
-                            )
-                            .into());
+                            let e =
+                                Err(Error::InvalidPort(ctx.alias().clone(), port.clone()).into());
                             let res = result_tx.send(e).await;
                             log_error!(res, "{ctx} Error sending connect result: {e}");
                         }
                     } else {
                         error!("{ctx} Tried to connect to unsupported port: \"{port}\"");
                         // send back the connect result
-                        let addr = connector_addr.alias.to_string();
-                        let e = Err(ErrorKind::InvalidConnect(addr, port.clone()).into());
+                        let e = Err(Error::InvalidPort(ctx.alias().clone(), port.clone()).into());
                         let res = result_tx.send(e).await;
                         log_error!(res, "{ctx} Error sending connect result: {e}");
                     };
@@ -698,7 +717,7 @@ async fn connector_task(
                             connector_addr.send_source(SourceMsg::ConnectionEstablished)?;
                             if let Some(start_sender) = start_sender.take() {
                                 ctx.swallow_err(
-                                    start_sender.send(ConnectorResult::ok(&ctx)).await,
+                                    start_sender.send(Ok(ctx.alias().clone())).await,
                                     "Error sending start response.",
                                 );
                             }
@@ -719,7 +738,7 @@ async fn connector_task(
                         if let Some(start_sender) = start_sender.take() {
                             ctx.swallow_err(
                                 start_sender
-                                    .send(ConnectorResult::err(&ctx, "Connect failed."))
+                                    .send(Err(Error::ConnectionFailed(ctx.alias().clone())))
                                     .await,
                                 "Error sending start response",
                             );
@@ -753,7 +772,7 @@ async fn connector_task(
                     {
                         // sending an answer if we are connected
                         ctx.swallow_err(
-                            sender.send(ConnectorResult::ok(&ctx)).await,
+                            sender.send(Ok(ctx.alias().clone())).await,
                             "Error sending Start result",
                         );
                     }
@@ -895,7 +914,7 @@ async fn connector_task(
                         expect -= 1;
                     }
                     log_error!(
-                        sender.send(ConnectorResult::ok(&ctx)).await,
+                        sender.send(Ok(ctx.alias().clone())).await,
                         "{ctx} Error sending Stop result: {e}"
                     );
 
@@ -906,7 +925,7 @@ async fn connector_task(
         } // while
         info!("{ctx} Connector Stopped. Reason: {connector_state}");
         // TODO: inform registry that this instance is gone now
-        Result::Ok(())
+        Result::<(), anyhow::Error>::Ok(())
     });
     Ok(send_addr)
 }
@@ -919,14 +938,14 @@ enum DrainState {
 }
 
 struct Drainage {
-    tx: Sender<ConnectorResult<()>>,
+    tx: Sender<ConnectorResult>,
     alias: alias::Connector,
     source_drained: DrainState,
     sink_drained: DrainState,
 }
 
 impl Drainage {
-    fn new(addr: &Addr, tx: Sender<ConnectorResult<()>>) -> Self {
+    fn new(addr: &Addr, tx: Sender<ConnectorResult>) -> Self {
         Self {
             tx,
             alias: addr.alias.clone(),
@@ -957,12 +976,7 @@ impl Drainage {
     }
 
     async fn send_all_drained(&self) -> Result<()> {
-        self.tx
-            .send(ConnectorResult {
-                alias: self.alias.clone(),
-                res: Ok(()),
-            })
-            .await?;
+        self.tx.send(Ok(self.alias.clone())).await?;
         Ok(())
     }
 }
@@ -1169,7 +1183,7 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
         let cc = config
             .config
             .as_ref()
-            .ok_or_else(|| ErrorKind::MissingConfiguration(alias.to_string()))?;
+            .ok_or_else(|| Error::MissingConfiguration(alias.clone()))?;
         self.build_cfg(alias, config, cc).await
     }
 
@@ -1179,11 +1193,11 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
     ///  * If the config is invalid for the connector
     async fn build_cfg(
         &self,
-        _alias: &alias::Connector,
+        alias: &alias::Connector,
         _config: &ConnectorConfig,
         _connector_config: &Value,
     ) -> Result<Box<dyn Connector>> {
-        Err("build_cfg is unimplemented".into())
+        Err(Error::BuildCfg(alias.clone()).into())
     }
 }
 
@@ -1328,7 +1342,7 @@ pub(crate) mod unit_tests {
         fn connector_type(&self) -> &ConnectorType {
             &self.t
         }
-        fn raft(&self) -> &raft::Cluster {
+        fn raft(&self) -> &raft::ClusterInterface {
             &self.app_ctx.raft
         }
         fn app_ctx(&self) -> &AppContext {
@@ -1338,6 +1352,11 @@ pub(crate) mod unit_tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn spawn_task_error() -> Result<()> {
+        #[derive(Debug, thiserror::Error)]
+        enum Error {
+            #[error("snot")]
+            Snot,
+        }
         let (tx, mut rx) = bounded(1);
         let ctx = FakeContext::new(tx);
         // thanks coverage
@@ -1346,7 +1365,7 @@ pub(crate) mod unit_tests {
         ctx.connector_type();
         ctx.alias();
         // end
-        spawn_task(ctx.clone(), async move { Err("snot".into()) }).await?;
+        spawn_task(ctx.clone(), async move { Err(Error::Snot.into()) }).await?;
         assert!(matches!(rx.recv().await, Some(Msg::ConnectionLost)));
 
         spawn_task(ctx.clone(), async move { Ok(()) }).await?;
@@ -1354,7 +1373,7 @@ pub(crate) mod unit_tests {
         rx.close();
 
         // this one is just here for coverage for when the call to notify is failing
-        spawn_task(ctx, async move { Err("snot 2".into()) }).await?;
+        spawn_task(ctx, async move { Err(Error::Snot.into()) }).await?;
 
         Ok(())
     }

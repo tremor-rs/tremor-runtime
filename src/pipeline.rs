@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-    channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
+    channel::{bounded, send_e, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
     connectors::{self, sink::SinkMsg, source::SourceMsg},
-    errors::{pipe_send_e, Result},
     instance::State,
     primerge::PriorityMerge,
     qsize,
     system::flow::AppContext,
+    Result,
 };
 use futures::StreamExt;
 use std::{fmt, time::Duration};
@@ -39,6 +39,16 @@ const TICK_MS: u64 = 100;
 type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
 type Dests = halfbrown::HashMap<Port<'static>, Vec<(DeployEndpoint, OutputTarget)>>;
 type EventSet = Vec<(Port<'static>, Event)>;
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Connector has no sink")]
+    NoSink,
+    #[error("input port doesn't exist")]
+    BadInput,
+    #[error("output port doesn't exist")]
+    BadOutput,
+}
 
 /// Address for a pipeline
 #[derive(Clone)]
@@ -69,16 +79,16 @@ impl Addr {
     /// send a contraflow insight message back down the pipeline
     pub(crate) fn send_insight(&self, event: Event) -> Result<()> {
         use CfMsg::Insight;
-        self.cf_addr.send(Insight(event)).map_err(pipe_send_e)
+        self.cf_addr.send(Insight(event)).map_err(send_e)
     }
 
     /// send a data-plane message to the pipeline
     pub(crate) async fn send(&self, msg: Box<Msg>) -> Result<()> {
-        self.addr.send(msg).await.map_err(pipe_send_e)
+        self.addr.send(msg).await.map_err(send_e)
     }
 
     pub(crate) async fn send_mgmt(&self, msg: MgmtMsg) -> Result<()> {
-        self.mgmt_addr.send(msg).await.map_err(pipe_send_e)
+        self.mgmt_addr.send(msg).await.map_err(send_e)
     }
 
     pub(crate) async fn stop(&self) -> Result<()> {
@@ -145,7 +155,7 @@ impl TryFrom<connectors::Addr> for OutputTarget {
     type Error = crate::errors::Error;
 
     fn try_from(addr: connectors::Addr) -> Result<Self> {
-        Ok(Self::Sink(addr.sink.ok_or("Connector has no sink")?))
+        Ok(Self::Sink(addr.sink.ok_or(Error::NoSink)?))
     }
 }
 
@@ -235,7 +245,6 @@ pub(crate) enum MgmtMsg {
 }
 
 #[cfg(test)]
-#[allow(dead_code)]
 mod report {
     use tremor_common::ports::Port;
 
@@ -576,11 +585,7 @@ pub(crate) async fn pipeline_task(
                 info!("{ctx} Connecting '{endpoint}' to port '{port}'");
                 if !pipeline.input_exists(&port) {
                     error!("{ctx} Error connecting input pipeline '{port}' as it does not exist",);
-                    if tx
-                        .send(Err("input port doesn't exist".into()))
-                        .await
-                        .is_err()
-                    {
+                    if tx.send(Err(Error::BadInput.into())).await.is_err() {
                         error!("{ctx} Error sending status report.");
                     }
                     continue;
@@ -601,11 +606,7 @@ pub(crate) async fn pipeline_task(
                 // add error statement for port out in pipeline, currently no error messages
                 if !pipeline.output_exists(&port) {
                     error!("{ctx} Error connecting output pipeline {port}");
-                    if tx
-                        .send(Err("output port doesn't exist".into()))
-                        .await
-                        .is_err()
-                    {
+                    if tx.send(Err(Error::BadOutput.into())).await.is_err() {
                         error!("{ctx} Error sending status report.");
                     }
                     continue;
@@ -687,8 +688,9 @@ mod tests {
 
     use super::*;
     use crate::{
+        channel::empty_e,
         connectors::{prelude::SinkAddr, source::SourceAddr},
-        errors::empty_error,
+        errors::ErrorKind,
         pipeline::report::{InputReport, OutputReport},
     };
     use std::time::Instant;
@@ -701,6 +703,7 @@ mod tests {
     use tremor_script::{aggr_registry, lexer::Location, NodeMeta, FN_REGISTRY};
     use tremor_value::Value;
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread")]
     async fn report() -> Result<()> {
         let _: std::result::Result<_, _> = env_logger::try_init();
@@ -708,8 +711,11 @@ mod tests {
 
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
-        let query =
-            tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
+        let query = tremor_pipeline::query::Query::parse(
+            &trickle,
+            &*FN_REGISTRY.read().map_err(|_| ErrorKind::ReadLock)?,
+            &aggr_reg,
+        )?;
         let addr = spawn(
             AppContext::default(),
             alias::Pipeline::new("test-pipe1"),
@@ -739,7 +745,7 @@ mod tests {
             target: OutputTarget::Pipeline(Box::new(addr2.clone())),
         })
         .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv().await.ok_or_else(empty_e)??;
         let (tx, mut rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectInput {
@@ -750,7 +756,7 @@ mod tests {
                 is_transactional: true,
             })
             .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv().await.ok_or_else(empty_e)??;
         let (tx, mut rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectOutput {
@@ -760,7 +766,7 @@ mod tests {
                 target: OutputTarget::Pipeline(Box::new(addr3.clone())),
             })
             .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv().await.ok_or_else(empty_e)??;
         let (tx, mut rx) = bounded(1);
         addr3
             .send_mgmt(MgmtMsg::ConnectInput {
@@ -771,11 +777,11 @@ mod tests {
                 is_transactional: false,
             })
             .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv().await.ok_or_else(empty_e)??;
         // get a status report from every single one
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let mut report1 = rx.recv().await.ok_or_else(empty_error)?;
+        let mut report1 = rx.recv().await.ok_or_else(empty_e)?;
         assert!(report1.inputs.is_empty());
         let mut output1 = report1
             .outputs
@@ -783,10 +789,10 @@ mod tests {
             .expect("nothing at port `out`");
         assert!(report1.outputs.is_empty());
         assert_eq!(1, output1.len());
-        let output1 = output1.pop().ok_or("no data")?;
+        let output1 = output1.pop().expect("no data");
         assert_eq!(output1, OutputReport::pipeline("snot2", IN));
         addr2.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let mut report2 = rx.recv().await.ok_or_else(empty_error)?;
+        let mut report2 = rx.recv().await.ok_or_else(empty_e)?;
         let input2 = report2.inputs.pop().expect("no input at port in");
         assert_eq!(input2, InputReport::pipeline("snot", OUT));
         let mut output2 = report2
@@ -795,11 +801,11 @@ mod tests {
             .expect("no outputs on out port");
         assert!(report2.outputs.is_empty());
         assert_eq!(1, output2.len());
-        let output2 = output2.pop().ok_or("no data")?;
+        let output2 = output2.pop().expect("no data");
         assert_eq!(output2, OutputReport::pipeline("snot3", IN));
 
         addr3.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let mut report3 = rx.recv().await.ok_or_else(empty_error)?;
+        let mut report3 = rx.recv().await.ok_or_else(empty_e)?;
         assert!(report3.outputs.is_empty());
         let input3 = report3.inputs.pop().expect("no inputs");
         assert_eq!(input3, InputReport::pipeline("snot2", OUT));
@@ -818,8 +824,11 @@ mod tests {
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
         let pipeline_id = alias::Pipeline::new("test-pipe");
-        let query =
-            tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
+        let query = tremor_pipeline::query::Query::parse(
+            &trickle,
+            &*FN_REGISTRY.read().map_err(|_| ErrorKind::ReadLock)?,
+            &aggr_reg,
+        )?;
         let addr = spawn(
             AppContext::default(),
             pipeline_id,
@@ -829,14 +838,14 @@ mod tests {
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx.recv().await.ok_or_else(empty_e)?;
         assert_eq!(State::Initializing, report.state);
         assert!(report.inputs.is_empty());
         assert!(report.outputs.is_empty());
 
         addr.start().await?;
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx.recv().await.ok_or_else(empty_e)?;
         assert_eq!(State::Running, report.state);
         assert!(report.inputs.is_empty());
         assert!(report.outputs.is_empty());
@@ -855,11 +864,11 @@ mod tests {
             is_transactional: true,
         })
         .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv().await.ok_or_else(empty_e)??;
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx.recv().await.ok_or_else(empty_e)?;
         assert_eq!(1, report.inputs.len());
         assert_eq!(
             report::InputReport::source("source_01", OUT),
@@ -878,11 +887,11 @@ mod tests {
             target,
         })
         .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv().await.ok_or_else(empty_e)??;
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx.recv().await.ok_or_else(empty_e)?;
         assert_eq!(1, report.outputs.len());
         assert_eq!(
             Some(&vec![report::OutputReport::sink("sink_01", IN)]),
@@ -896,9 +905,9 @@ mod tests {
         };
         addr.send(Box::new(Msg::Event { event, input: IN })).await?;
 
-        let mut sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
+        let mut sink_msg = sink_rx.recv().await.ok_or_else(empty_e)?;
         while let SinkMsg::Signal { .. } = sink_msg {
-            sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
+            sink_msg = sink_rx.recv().await.ok_or_else(empty_e)?;
         }
         match sink_msg {
             SinkMsg::Event { event, port: _ } => {
@@ -915,7 +924,7 @@ mod tests {
         .await?;
 
         let start = Instant::now();
-        let mut sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
+        let mut sink_msg = sink_rx.recv().await.ok_or_else(empty_e)?;
 
         while !matches!(sink_msg, SinkMsg::Signal {
                 signal:
@@ -930,12 +939,12 @@ mod tests {
                 "Timed out waiting for drain signal on the sink"
             );
 
-            sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
+            sink_msg = sink_rx.recv().await.ok_or_else(empty_e)?;
         }
 
         let event_id = EventId::from_id(1, 1, 1);
         addr.send_insight(Event::cb_ack(0, event_id.clone(), OpMeta::default()))?;
-        let source_msg = source_rx.recv().await.ok_or_else(empty_error)?;
+        let source_msg = source_rx.recv().await.ok_or_else(empty_e)?;
         if let SourceMsg::Cb(cb_action, cb_id) = source_msg {
             assert_eq!(event_id, cb_id);
             assert_eq!(CbAction::Ack, cb_action);
@@ -946,14 +955,14 @@ mod tests {
         // test pause and resume
         addr.pause().await?;
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx.recv().await.ok_or_else(empty_e)?;
         assert_eq!(State::Paused, report.state);
         assert_eq!(1, report.inputs.len());
         assert_eq!(1, report.outputs.len());
 
         addr.resume().await?;
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx.recv().await.ok_or_else(empty_e)?;
         assert_eq!(State::Running, report.state);
         assert_eq!(1, report.inputs.len());
         assert_eq!(1, report.outputs.len());

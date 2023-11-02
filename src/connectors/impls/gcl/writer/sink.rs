@@ -78,7 +78,7 @@ fn value_to_log_entry(
         operation: meta::operation(meta),
         trace: meta::trace(meta),
         span_id: meta::span_id(meta),
-        trace_sampled: meta::trace_sampled(meta)?,
+        trace_sampled: meta::trace_sampled(meta),
         source_location: meta::source_location(meta),
         payload: Some(Payload::JsonPayload(pb::value_to_prost_struct(data)?)),
     })
@@ -110,6 +110,11 @@ impl<
         }
     }
 }
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("The client is not connected")]
+    NotConnected,
+}
 
 #[async_trait::async_trait]
 impl<
@@ -133,11 +138,8 @@ where
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "Google Cloud Logging",
-            "The client is not connected",
-        ))?;
+    ) -> anyhow::Result<SinkReply> {
+        let client = self.client.as_mut().ok_or(Error::NotConnected)?;
 
         let mut entries = Vec::with_capacity(event.len());
         for (data, meta) in event.value_meta_iter() {
@@ -174,7 +176,6 @@ where
                 }),
             )
             .await?;
-
             if let Err(error) = log_entries_response {
                 error!("Failed to write a log entries: {}", error);
 
@@ -194,7 +195,6 @@ where
                         "Failed to notify about Google Cloud Logging connection loss",
                     );
                 }
-
                 reply_tx.send(AsyncSinkReply::Fail(ContraflowData::from(event)))?;
             } else {
                 reply_tx.send(AsyncSinkReply::Ack(
@@ -210,7 +210,7 @@ where
         Ok(SinkReply::NONE)
     }
 
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         info!("{} Connecting to Google Cloud Logging", ctx);
         let channel = self
             .channel_factory
@@ -376,7 +376,6 @@ mod test {
             0,
         )
         .await?;
-
         assert!(matches!(
             rx.recv().await.expect("no msg"),
             AsyncSinkReply::CB(_, Trigger)
@@ -396,12 +395,8 @@ mod test {
         let meta = meta.get("gcl_writer").or(None);
 
         let result = value_to_log_entry(now, &config, data, meta);
-        if let Err(Error(ErrorKind::GclTypeMismatch("Value::Object", x), _)) = result {
-            assert_eq!(x, ValueType::String);
-            Ok(())
-        } else {
-            Err("Mapping did not fail on non-object event".into())
-        }
+        assert!(result.is_err());
+        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]

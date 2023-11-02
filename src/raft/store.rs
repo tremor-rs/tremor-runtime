@@ -22,9 +22,10 @@ use crate::{
         archive::TremorAppDef,
         node::Addr,
         store::statemachine::{SerializableTremorStateMachine, TremorStateMachine},
-        ClusterError, NodeId, TremorRaftConfig,
+        NodeId, TremorRaftConfig,
     },
     system::{flow::DeploymentType, Runtime},
+    Result,
 };
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use openraft::{
@@ -39,7 +40,6 @@ use redb::{
 use serde::{Deserialize, Serialize};
 use simd_json::OwnedValue;
 use std::{
-    error::Error as StdError,
     fmt::{Debug, Display, Formatter},
     io::Cursor,
     ops::RangeBounds,
@@ -49,6 +49,8 @@ use std::{
 };
 use tokio::sync::RwLock;
 use tremor_common::alias;
+
+use super::SillyError;
 
 /// Kv Operation
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -202,41 +204,60 @@ pub enum TremorResponse {
     AppFlowInstanceId(alias::Flow),
 }
 
+/// Error for a raft response
+#[derive(Debug, Clone, thiserror::Error, Serialize)]
+pub enum ResponseError {
+    /// Not a kv value
+    #[error("Not a kv value")]
+    NotKv,
+    /// Not an app id
+    #[error("Not an app id")]
+    NotAppId,
+    /// Not a node id
+    #[error("Not a node id")]
+    NotNodeId,
+    /// Not an app flow instance id
+    #[error("Not an app flow instance id")]
+    NotAppFlowInstanceId,
+}
+
+type ResponseResult<T> = std::result::Result<T, ResponseError>;
+
 impl TremorResponse {
-    pub(crate) fn into_kv_value(self) -> crate::Result<Vec<u8>> {
+    pub(crate) fn into_kv_value(self) -> ResponseResult<Vec<u8>> {
         match self {
             TremorResponse::KvValue(v) => Ok(v),
-            _ => Err(RuntimeError::from("Not a kv value")),
+            _ => Err(ResponseError::NotKv),
         }
     }
 }
 
 impl TryFrom<TremorResponse> for alias::App {
-    type Error = RuntimeError;
-    fn try_from(response: TremorResponse) -> crate::Result<Self> {
+    type Error = ResponseError;
+    fn try_from(response: TremorResponse) -> ResponseResult<Self> {
         match response {
             TremorResponse::AppId(id) => Ok(id),
-            _ => Err(RuntimeError::from("Not an app id")),
+            _ => Err(ResponseError::NotAppId),
         }
     }
 }
 
 impl TryFrom<TremorResponse> for NodeId {
-    type Error = RuntimeError;
-    fn try_from(response: TremorResponse) -> crate::Result<Self> {
+    type Error = ResponseError;
+    fn try_from(response: TremorResponse) -> ResponseResult<Self> {
         match response {
             TremorResponse::NodeId(id) => Ok(id),
-            _ => Err(RuntimeError::from("Not a node id")),
+            _ => Err(ResponseError::NotNodeId),
         }
     }
 }
 
 impl TryFrom<TremorResponse> for alias::Flow {
-    type Error = RuntimeError;
-    fn try_from(response: TremorResponse) -> crate::Result<Self> {
+    type Error = ResponseError;
+    fn try_from(response: TremorResponse) -> ResponseResult<Self> {
         match response {
             TremorResponse::AppFlowInstanceId(id) => Ok(id),
-            _ => Err(RuntimeError::from("Not an app flow instance id")),
+            _ => Err(ResponseError::NotAppFlowInstanceId),
         }
     }
 }
@@ -260,7 +281,7 @@ pub struct Store {
     db: Arc<Database>,
 }
 
-type StorageResult<T> = Result<T, StorageError<crate::raft::NodeId>>;
+type StorageResult<T> = anyhow::Result<T, StorageError<crate::raft::NodeId>>;
 
 /// converts an id to a byte vector for storing in the database.
 /// Note that we're using big endian encoding to ensure correct sorting of keys
@@ -278,10 +299,14 @@ fn bin_to_id(buf: &[u8]) -> Result<u64, Error> {
 }
 
 /// The Raft storage error
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// Missing column family
-    MissingCf(&'static str),
+    /// invalid cluster store, node_id missing
+    // #[error("invalid cluster store, node_id missing")]
+    MissingNodeId,
+    // #[error("invalid cluster store, node_addr missing")]
+    /// invalid cluster store, node_addr missing
+    MissingNodeAddr,
     /// Invalid utf8
     Utf8(FromUtf8Error),
     /// Invalid utf8
@@ -403,11 +428,11 @@ impl From<StorageError<crate::raft::NodeId>> for Error {
     }
 }
 
-impl StdError for Error {}
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::MissingCf(cf) => write!(f, "missing column family: `{cf}`"),
+            Error::MissingNodeId => write!(f, "missing node id"),
+            Error::MissingNodeAddr => write!(f, "missing node addr"),
             Error::Utf8(e) => write!(f, "invalid utf8: {e}"),
             Error::StrUtf8(e) => write!(f, "invalid utf8: {e}"),
 
@@ -438,17 +463,37 @@ impl Display for Error {
     }
 }
 
-fn w_err(e: impl StdError + 'static) -> StorageError<crate::raft::NodeId> {
-    StorageIOError::new(ErrorSubject::Store, ErrorVerb::Write, AnyError::new(&e)).into()
+fn w_err(e: impl Into<anyhow::Error>) -> StorageError<crate::raft::NodeId> {
+    StorageIOError::new(
+        ErrorSubject::Store,
+        ErrorVerb::Write,
+        AnyError::new(&SillyError(e.into())),
+    )
+    .into()
 }
-fn r_err(e: impl StdError + 'static) -> StorageError<crate::raft::NodeId> {
-    StorageIOError::new(ErrorSubject::Store, ErrorVerb::Read, AnyError::new(&e)).into()
+fn r_err(e: impl Into<anyhow::Error>) -> StorageError<crate::raft::NodeId> {
+    StorageIOError::new(
+        ErrorSubject::Store,
+        ErrorVerb::Read,
+        AnyError::new(&SillyError(e.into())),
+    )
+    .into()
 }
-fn logs_r_err(e: impl StdError + 'static) -> StorageError<crate::raft::NodeId> {
-    StorageIOError::new(ErrorSubject::Logs, ErrorVerb::Read, AnyError::new(&e)).into()
+fn logs_r_err(e: impl Into<anyhow::Error>) -> StorageError<crate::raft::NodeId> {
+    StorageIOError::new(
+        ErrorSubject::Logs,
+        ErrorVerb::Read,
+        AnyError::new(&SillyError(e.into())),
+    )
+    .into()
 }
-fn logs_w_err(e: impl StdError + 'static) -> StorageError<crate::raft::NodeId> {
-    StorageIOError::new(ErrorSubject::Logs, ErrorVerb::Read, AnyError::new(&e)).into()
+fn logs_w_err(e: impl Into<anyhow::Error>) -> StorageError<crate::raft::NodeId> {
+    StorageIOError::new(
+        ErrorSubject::Logs,
+        ErrorVerb::Read,
+        AnyError::new(&SillyError(e.into())),
+    )
+    .into()
 }
 
 impl From<Error> for StorageError<crate::raft::NodeId> {
@@ -477,6 +522,14 @@ impl Store {
     where
         T: for<'de> serde::Deserialize<'de>,
     {
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(STORE).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
         let read_txn = self.db.begin_read().map_err(r_err)?;
         let table = read_txn.open_table(STORE).map_err(r_err)?;
         let r = table.get(key).map_err(r_err)?;
@@ -528,6 +581,14 @@ impl RaftLogReader<TremorRaftConfig> for Store {
         &mut self,
         range: RB,
     ) -> StorageResult<Vec<Entry<TremorRaftConfig>>> {
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(LOGS).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
         let read_txn = self.db.begin_read().map_err(r_err)?;
 
         let table = read_txn.open_table(LOGS).map_err(r_err)?;
@@ -770,6 +831,15 @@ impl RaftStorage<TremorRaftConfig> for Store {
     }
 
     async fn get_log_state(&mut self) -> StorageResult<LogState<TremorRaftConfig>> {
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(LOGS).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
+
         let read_txn = self.db.begin_read().map_err(r_err)?;
         let table = read_txn.open_table(LOGS).map_err(r_err)?;
         let last = table
@@ -833,7 +903,7 @@ impl Store {
         addr: &Addr,
         db_path: P,
         world: Runtime,
-    ) -> Result<Store, ClusterError> {
+    ) -> Result<Store> {
         let db = Self::init_db(db_path)?;
         Self::set_self(&db, node_id, addr)?;
 
@@ -850,13 +920,13 @@ impl Store {
     ///
     /// This function is safe and never cleans up or resets the current state,
     /// but creates a new db if there is none.
-    pub(crate) fn init_db<P: AsRef<Path>>(db_path: P) -> Result<Database, ClusterError> {
-        let db = Database::create(db_path).map_err(ClusterError::Database)?;
+    pub(crate) fn init_db<P: AsRef<Path>>(db_path: P) -> Result<Database> {
+        let db = Database::create(db_path)?;
         Ok(db)
     }
 
     /// loading constructor - loading the given database
-    pub(crate) async fn load(db: Arc<Database>, world: Runtime) -> Result<Store, ClusterError> {
+    pub(crate) async fn load(db: Arc<Database>, world: Runtime) -> Result<Store> {
         let state_machine = Arc::new(RwLock::new(
             TremorStateMachine::new(db.clone(), world.clone())
                 .await
@@ -867,11 +937,7 @@ impl Store {
     }
 
     /// Store the information about the current node itself in the `db`
-    fn set_self(
-        db: &Database,
-        node_id: crate::raft::NodeId,
-        addr: &Addr,
-    ) -> Result<(), ClusterError> {
+    fn set_self(db: &Database, node_id: crate::raft::NodeId, addr: &Addr) -> Result<()> {
         let node_id_bytes = id_to_bin(node_id)?;
         let addr_bytes = rmp_serde::to_vec(addr)?;
         let write_txn = db.begin_write()?;
@@ -884,16 +950,25 @@ impl Store {
         Ok(())
     }
 
-    pub(crate) fn get_self(db: &Database) -> Result<(crate::raft::NodeId, Addr), ClusterError> {
-        let id = Self::get_self_node_id(db)?.ok_or("invalid cluster store, node_id missing")?;
-        let addr = Self::get_self_addr(db)?.ok_or("invalid cluster store, node_addr missing")?;
+    pub(crate) fn get_self(db: &Database) -> Result<(crate::raft::NodeId, Addr)> {
+        let id = Self::get_self_node_id(db)?.ok_or(Error::MissingNodeId)?;
+        let addr = Self::get_self_addr(db)?.ok_or(Error::MissingNodeAddr)?;
 
         Ok((id, addr))
     }
 
     /// # Errors
     /// if the store fails to read the RPC address
-    pub fn get_self_addr(db: &Database) -> Result<Option<Addr>, Error> {
+    pub fn get_self_addr(db: &Database) -> Result<Option<Addr>> {
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = db.begin_write()?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(SYSTEM).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
+
         let read_txn = db.begin_read().map_err(r_err)?;
 
         let table = read_txn.open_table(SYSTEM).map_err(r_err)?;
@@ -903,12 +978,21 @@ impl Store {
 
     /// # Errors
     /// if the store fails to read the node id
-    pub fn get_self_node_id(db: &Database) -> Result<Option<crate::raft::NodeId>, Error> {
+    pub fn get_self_node_id(db: &Database) -> Result<Option<crate::raft::NodeId>> {
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = db.begin_write()?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(SYSTEM).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
+
         let read_txn = db.begin_read().map_err(r_err)?;
 
         let table = read_txn.open_table(SYSTEM).map_err(r_err)?;
         let r = table.get(Store::NODE_ID).map_err(r_err)?;
-        r.map(|v| bin_to_id(&v.value())).transpose()
+        Ok(r.map(|v| bin_to_id(&v.value())).transpose()?)
     }
 }
 
@@ -922,13 +1006,13 @@ mod tests {
     // fn init_db_is_idempotent() -> ClusterResult<()> {
     //     let dir = tempfile::tempdir()?;
     //     let db = Store::init_db(dir.path())?;
-    //     let handle = db.cf_handle(Store::STORE).ok_or("no data")?;
+    //     let handle = db.cf_handle(Store::STORE).expect("no data");
     //     let data = vec![1_u8, 2_u8, 3_u8];
     //     db.put_cf(handle, "node_id", data.clone())?;
     //     drop(db);
 
     //     let db2 = Store::init_db(dir.path())?;
-    //     let handle2 = db2.cf_handle(Store::STORE).ok_or("no data")?;
+    //     let handle2 = db2.cf_handle(Store::STORE).expect("no data");
     //     let res2 = db2.get_cf(handle2, "node_id")?;
     //     assert_eq!(Some(data), res2);
     //     Ok(())

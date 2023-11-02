@@ -46,7 +46,7 @@ pub(crate) struct NodesStateMachine {
 }
 
 impl NodesStateMachine {
-    const NEXT_NODE_ID: &str = "next_node_id";
+    const NEXT_NODE_ID: &'static str = "next_node_id";
 }
 
 #[async_trait::async_trait]
@@ -56,6 +56,17 @@ impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
         Self: std::marker::Sized,
     {
         // load known nodes
+
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = db.begin_write().map_err(w_err)?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(SYSTEM).map_err(w_err)?;
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(NODES).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
         let read_txn = db.begin_read().map_err(r_err)?;
 
         let table = read_txn.open_table(SYSTEM).map_err(r_err)?;
@@ -66,6 +77,7 @@ impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
                 debug!("No next_node_id stored in db, starting from 0");
                 0
             };
+
         let table = read_txn.open_table(NODES).map_err(r_err)?;
 
         let known_nodes = table

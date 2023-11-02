@@ -70,7 +70,11 @@ struct OneshotSource {
 
 #[async_trait::async_trait]
 impl Source for OneshotSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         if let Some(value) = self.value.take() {
             Ok(SourceReply::Structured {
                 origin_uri: EventOriginUri {

@@ -12,22 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    convert::Into,
+};
 
 use super::{
     node::Addr,
     store::{StateApp, TremorRequest, TremorSet},
-    TremorRaftConfig, TremorRaftImpl,
+    ClusterError, TremorRaftConfig, TremorRaftImpl,
 };
-use crate::channel::{oneshot, Sender};
 use crate::raft::api::APIStoreReq;
+use crate::raft::NodeId;
 use crate::Result;
 use crate::{
-    errors::{Error, ErrorKind},
-    raft::NodeId,
+    channel::{bounded, oneshot, OneShotSender, Sender},
+    connectors::prelude::Receiver,
 };
 use openraft::{
-    error::{CheckIsLeaderError, ForwardToLeader, RaftError},
+    error::{CheckIsLeaderError, Fatal, ForwardToLeader, RaftError},
     raft::ClientWriteResponse,
 };
 use simd_json::OwnedValue;
@@ -38,6 +41,148 @@ pub(crate) struct Cluster {
     node_id: NodeId,
     raft: Option<TremorRaftImpl>,
     sender: Option<Sender<APIStoreReq>>,
+}
+#[derive(Clone, Default, Debug)]
+pub(crate) struct ClusterInterface {
+    node_id: NodeId,
+    store_sender: Option<Sender<APIStoreReq>>,
+    cluster_sender: Option<Sender<IFRequest>>,
+}
+
+type IsLeaderResult = std::result::Result<(), RaftError<u64, CheckIsLeaderError<u64, Addr>>>;
+enum IFRequest {
+    IsLeader(OneShotSender<IsLeaderResult>),
+    SetKeyLocal(TremorSet, OneShotSender<Result<Vec<u8>>>),
+}
+async fn cluster_interface(raft: TremorRaftImpl, mut rx: Receiver<IFRequest>) {
+    while let Some(msg) = rx.recv().await {
+        match msg {
+            IFRequest::IsLeader(tx) => {
+                let res = raft.is_leader().await;
+                if tx.send(res).is_err() {
+                    error!("Error sending response to API");
+                }
+            }
+            IFRequest::SetKeyLocal(set, tx) => {
+                let res = match raft.client_write(set.into()).await {
+                    Ok(v) => v.data.into_kv_value().map_err(anyhow::Error::from),
+                    Err(e) => Err(e.into()),
+                };
+                if tx.send(res).is_err() {
+                    error!("Error sending response to API");
+                }
+            }
+        }
+    }
+}
+
+impl ClusterInterface {
+    pub(crate) fn id(&self) -> NodeId {
+        self.node_id
+    }
+    async fn send_store(&self, command: APIStoreReq) -> Result<()> {
+        self.store_sender
+            .as_ref()
+            .ok_or(ClusterError::RaftNotRunning)?
+            .send(command)
+            .await?;
+        Ok(())
+    }
+    async fn send_cluster(&self, command: IFRequest) -> Result<()> {
+        self.cluster_sender
+            .as_ref()
+            .ok_or(ClusterError::RaftNotRunning)?
+            .send(command)
+            .await?;
+        Ok(())
+    }
+    pub(crate) async fn get_last_membership(&self) -> Result<BTreeSet<u64>> {
+        let (tx, rx) = oneshot();
+        let command = APIStoreReq::GetLastMembership(tx);
+        self.send_store(command).await?;
+        Ok(rx.await?)
+    }
+    pub(crate) async fn is_leader(&self) -> IsLeaderResult {
+        let (tx, rx) = oneshot();
+        let command = IFRequest::IsLeader(tx);
+        self.send_cluster(command)
+            .await
+            .map_err(|_| RaftError::Fatal(Fatal::Stopped))?;
+        rx.await.map_err(|_| RaftError::Fatal(Fatal::Stopped))?
+    }
+
+    // kv
+    pub(crate) async fn kv_set(&self, key: String, mut value: Vec<u8>) -> Result<Vec<u8>> {
+        match self.is_leader().await {
+            Ok(()) => self.kv_set_local(key, value).await,
+            Err(RaftError::APIError(CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                leader_node: Some(n),
+                ..
+            }))) => {
+                let client = crate::raft::api::client::Tremor::new(n.api())?;
+                // TODO: there should be a better way to forward then the client
+                Ok(simd_json::to_vec(
+                    &client
+                        .write(&crate::raft::api::kv::KVSet {
+                            key,
+                            value: simd_json::from_slice(&mut value)?,
+                        })
+                        .await?,
+                )?)
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub(crate) async fn kv_set_local(&self, key: String, value: Vec<u8>) -> Result<Vec<u8>> {
+        let (tx, rx) = oneshot();
+        let command = IFRequest::SetKeyLocal(TremorSet { key, value }, tx);
+        self.send_cluster(command).await?;
+        rx.await?
+    }
+
+    pub(crate) async fn kv_get(&self, key: String) -> Result<Option<OwnedValue>> {
+        match self.is_leader().await {
+            Ok(()) => self.kv_get_local(key).await,
+            Err(RaftError::APIError(CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                leader_node: Some(n),
+                ..
+            }))) => {
+                let client = crate::raft::api::client::Tremor::new(n.api())?;
+                let res = client.read(&key).await;
+                match res {
+                    Ok(v) => Ok(Some(v)),
+                    Err(e) if e.is_not_found() => Ok(None),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+    pub(crate) async fn kv_get_local(&self, key: String) -> Result<Option<OwnedValue>> {
+        let (tx, rx) = oneshot();
+        let command = APIStoreReq::KVGet(key, tx);
+        self.send_store(command).await?;
+        Ok(rx
+            .await?
+            .map(|mut v| simd_json::from_slice(&mut v))
+            .transpose()?)
+    }
+}
+
+impl From<Cluster> for ClusterInterface {
+    fn from(c: Cluster) -> Self {
+        let cluster_sender = c.raft.map(|r| {
+            let (tx, rx) = bounded(1042);
+            tokio::spawn(cluster_interface(r, rx));
+            tx
+        });
+        Self {
+            cluster_sender,
+            node_id: c.node_id,
+            store_sender: c.sender,
+        }
+    }
 }
 
 impl std::fmt::Debug for Cluster {
@@ -51,23 +196,17 @@ impl std::fmt::Debug for Cluster {
 }
 
 impl Cluster {
-    pub(crate) fn id(&self) -> NodeId {
-        self.node_id
-    }
     async fn send(&self, command: APIStoreReq) -> Result<()> {
         self.sender
             .as_ref()
-            .ok_or(crate::errors::ErrorKind::RaftNotRunning)?
+            .ok_or(ClusterError::RaftNotRunning)?
             .send(command)
             .await?;
         Ok(())
     }
 
     fn raft(&self) -> Result<&TremorRaftImpl> {
-        Ok(self
-            .raft
-            .as_ref()
-            .ok_or(crate::errors::ErrorKind::RaftNotRunning)?)
+        Ok(self.raft.as_ref().ok_or(ClusterError::RaftNotRunning)?)
     }
 
     async fn client_write<T>(&self, command: T) -> Result<ClientWriteResponse<TremorRaftConfig>>
@@ -77,8 +216,11 @@ impl Cluster {
         Ok(self.raft()?.client_write(command.into()).await?)
     }
 
-    pub(crate) async fn is_leader(&self) -> Result<()> {
-        Ok(self.raft()?.is_leader().await?)
+    pub(crate) async fn is_leader(&self) -> IsLeaderResult {
+        self.raft()
+            .map_err(|_| RaftError::Fatal(Fatal::Stopped))?
+            .is_leader()
+            .await
     }
 
     pub(crate) fn new(node_id: NodeId, sender: Sender<APIStoreReq>, raft: TremorRaftImpl) -> Self {
@@ -136,15 +278,10 @@ impl Cluster {
     pub(crate) async fn kv_set(&self, key: String, mut value: Vec<u8>) -> Result<Vec<u8>> {
         match self.is_leader().await {
             Ok(()) => self.kv_set_local(key, value).await,
-            Err(Error(
-                ErrorKind::CheckIsLeaderError(RaftError::APIError(
-                    CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
-                        leader_node: Some(n),
-                        ..
-                    }),
-                )),
-                _,
-            )) => {
+            Err(RaftError::APIError(CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                leader_node: Some(n),
+                ..
+            }))) => {
                 let client = crate::raft::api::client::Tremor::new(n.api())?;
                 // TODO: there should be a better way to forward then the client
                 Ok(simd_json::to_vec(
@@ -156,26 +293,21 @@ impl Cluster {
                         .await?,
                 )?)
             }
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     }
     pub(crate) async fn kv_set_local(&self, key: String, value: Vec<u8>) -> Result<Vec<u8>> {
         let tremor_res = self.client_write(TremorSet { key, value }).await?;
-        tremor_res.data.into_kv_value()
+        Ok(tremor_res.data.into_kv_value()?)
     }
 
     pub(crate) async fn kv_get(&self, key: String) -> Result<Option<OwnedValue>> {
         match self.is_leader().await {
             Ok(()) => self.kv_get_local(key).await,
-            Err(Error(
-                ErrorKind::CheckIsLeaderError(RaftError::APIError(
-                    CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
-                        leader_node: Some(n),
-                        ..
-                    }),
-                )),
-                _,
-            )) => {
+            Err(RaftError::APIError(CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                leader_node: Some(n),
+                ..
+            }))) => {
                 let client = crate::raft::api::client::Tremor::new(n.api())?;
                 let res = client.read(&key).await;
                 match res {
@@ -184,7 +316,7 @@ impl Cluster {
                     Err(e) => Err(e.into()),
                 }
             }
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     }
     pub(crate) async fn kv_get_local(&self, key: String) -> Result<Option<OwnedValue>> {

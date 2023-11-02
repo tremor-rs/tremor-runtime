@@ -1233,9 +1233,7 @@ async fn wait_for_es(elastic: &Elasticsearch) -> Result<()> {
         .await
     {
         if start.elapsed() > wait_for {
-            return Err(
-                Error::from(e).chain_err(|| "Waiting for elasticsearch container timed out.")
-            );
+            return Err(Error::from(e).context("Waiting for elasticsearch container timed out."));
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }

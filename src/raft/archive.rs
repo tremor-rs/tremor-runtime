@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::errors::{ErrorKind, Result};
 use sha2::{Digest, Sha256};
 use simd_json::OwnedValue;
 use std::{
@@ -35,6 +35,22 @@ use tremor_script::{
     prelude::Ranged,
     NodeMeta, FN_REGISTRY,
 };
+
+#[derive(thiserror::Error, Debug)]
+enum Error {
+    #[error("Failed to get parent dir")]
+    NoParentDir,
+    #[error("Failed to get name")]
+    NoName,
+    #[error("`app.json` missing")]
+    SpecMissing,
+    #[error("`main.troy` missing")]
+    NoEntrypoint,
+    #[error("Archive is empty")]
+    Empty,
+    #[error("No module name Specified")]
+    NoModuleName,
+}
 
 /// A tremor app flow with defaults and arguments
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -70,7 +86,7 @@ impl TremorAppDef {
 pub async fn package(target: &str, entrypoint: &str, name: Option<String>) -> Result<()> {
     let mut output = file::create(target).await?;
     let file = PathBuf::from(entrypoint);
-    let dir = file.parent().ok_or("Failed to get parent dir")?;
+    let dir = file.parent().ok_or(Error::NoParentDir)?;
     let path = dir.to_string_lossy();
     info!("Adding {path} to path");
     Manager::add_path(&path)?;
@@ -80,7 +96,7 @@ pub async fn package(target: &str, entrypoint: &str, name: Option<String>) -> Re
                 .and_then(std::ffi::OsStr::to_str)
                 .map(ToString::to_string)
         })
-        .ok_or("Failed to get name")?;
+        .ok_or(Error::NoName)?;
     info!("Building archive for {name}");
     output
         .write_all(&build_archive(&name, entrypoint).await?)
@@ -101,7 +117,11 @@ pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>
     let aggr_reg = tremor_script::registry::aggr();
     let mut hl = highlighter::Term::stderr();
 
-    let mut deploy = match Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg) {
+    let mut deploy = match Deploy::parse(
+        &src,
+        &*FN_REGISTRY.read().map_err(|_| ErrorKind::ReadLock)?,
+        &aggr_reg,
+    ) {
         Ok(deploy) => deploy,
         Err(e) => {
             hl.format_error(&e)?;
@@ -109,7 +129,7 @@ pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>
         }
     };
     let mut other_warnings = BTreeSet::new();
-    let reg = &*FN_REGISTRY.read()?;
+    let reg = &*FN_REGISTRY.read().map_err(|_| ErrorKind::ReadLock)?;
     let helper = Helper::new(reg, &aggr_reg);
 
     for stmt in &deploy.deploy.stmts {
@@ -175,7 +195,13 @@ pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>
     // first hash main.troy
     hasher.update(src.as_bytes());
     // then hash all the modules
-    for aid in MODULES.read()?.modules().iter().map(|m| m.arena_idx) {
+    for aid in MODULES
+        .read()
+        .map_err(|_| ErrorKind::ReadLock)?
+        .modules()
+        .iter()
+        .map(|m| m.arena_idx)
+    {
         if let Some(src) = Arena::get(aid)? {
             hasher.update(src.as_bytes());
         }
@@ -202,7 +228,8 @@ pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>
     ar.append_data(&mut header, "main.troy", src.as_bytes())?;
 
     for (id, paths) in MODULES
-        .read()?
+        .read()
+        .map_err(|_| ErrorKind::ReadLock)?
         .modules()
         .iter()
         .map(|m| (m.arena_idx, m.paths()))
@@ -231,10 +258,10 @@ pub fn get_app(src: &[u8]) -> Result<TremorAppDef> {
     let mut ar = Archive::new(src);
 
     let mut entries = ar.entries()?;
-    let mut app = entries.next().ok_or("Invalid archive: empty")??;
+    let mut app = entries.next().ok_or(Error::Empty)??;
 
     if app.path()?.to_string_lossy() != "app.json" {
-        return Err("Invalid archive: app.json missing".into());
+        return Err(Error::SpecMissing.into());
     }
     let mut content = String::new();
     app.read_to_string(&mut content)?;
@@ -250,19 +277,17 @@ pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> 
     let mut ar = Archive::new(src);
 
     let mut entries = ar.entries()?;
-    let mut app = entries.next().ok_or("Invalid archive: empty")??;
+    let mut app = entries.next().ok_or(Error::Empty)??;
 
     if app.path()?.to_string_lossy() != "app.json" {
-        return Err("Invalid archive: app.json missing".into());
+        return Err(Error::SpecMissing.into());
     }
     let mut content = String::new();
     app.read_to_string(&mut content)?;
 
     let app: TremorAppDef = serde_json::from_str(&content)?;
 
-    let mut main = entries
-        .next()
-        .ok_or("Invalid archive: main.troy missing")??;
+    let mut main = entries.next().ok_or(Error::NoEntrypoint)??;
 
     content.clear();
     main.read_to_string(&mut content)?;
@@ -277,7 +302,7 @@ pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> 
             .iter()
             .map(|p| p.to_string_lossy().to_string())
             .collect();
-        let id = module.pop().ok_or("No module name")?;
+        let id = module.pop().ok_or(Error::NoModuleName)?;
         let module = NodeId::new(id.clone(), module.clone(), NodeMeta::dummy());
 
         info!("included library: {}", entry.path()?.to_string_lossy());
@@ -287,7 +312,12 @@ pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> 
         modules.insert(module, aid);
     }
     let aggr_reg = tremor_script::registry::aggr();
-    let deploy = Deploy::parse_with_cache(&main, &*FN_REGISTRY.read()?, &aggr_reg, &modules)?;
+    let deploy = Deploy::parse_with_cache(
+        &main,
+        &*FN_REGISTRY.read().map_err(|_| ErrorKind::ReadLock)?,
+        &aggr_reg,
+        &modules,
+    )?;
     let mut aids = modules.values().collect::<Vec<_>>();
     aids.push(deploy.aid);
     Ok((app, deploy, aids))

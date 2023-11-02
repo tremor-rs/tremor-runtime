@@ -2474,15 +2474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "getopts"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14dbbfd5c71d70241ecf9e6f13737f7b5ce823821063188d7e46c41d371eebd5"
-dependencies = [
- "unicode-width",
-]
-
-[[package]]
 name = "getrandom"
 version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6400,19 +6391,15 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_complete",
- "criterion",
  "difference",
  "env_logger",
  "error-chain",
- "float-cmp",
  "futures",
  "globwalk",
  "halfbrown",
  "http-types",
- "lalrpop",
  "log",
  "log4rs",
- "matches",
  "port_scanner",
  "pretty_assertions",
  "serde",
@@ -6563,7 +6550,6 @@ name = "tremor-pipeline"
 version = "0.13.0-rc.16"
 dependencies = [
  "beef",
- "criterion",
  "either",
  "error-chain",
  "halfbrown",
@@ -6579,7 +6565,6 @@ dependencies = [
  "simd-json",
  "simd-json-derive",
  "sled",
- "tempfile",
  "tokio",
  "tremor-common",
  "tremor-config",
@@ -6588,7 +6573,6 @@ dependencies = [
  "url",
  "value-trait",
  "window",
- "xz2",
 ]
 
 [[package]]
@@ -6619,14 +6603,11 @@ dependencies = [
  "either",
  "elasticsearch",
  "env_logger",
- "error-chain",
  "event-listener 3.1.0",
  "file-mode",
  "futures",
- "glob",
  "googapis",
  "gouth",
- "grok",
  "halfbrown",
  "hashbrown 0.14.2",
  "hdrhistogram",
@@ -6643,10 +6624,8 @@ dependencies = [
  "log",
  "matches",
  "mime",
- "num_cpus",
  "openraft",
  "pin-project-lite",
- "port_scanner",
  "pretty_assertions",
  "proptest",
  "prost",
@@ -6668,8 +6647,6 @@ dependencies = [
  "serenity",
  "serial_test",
  "sha2 0.10.8",
- "signal-hook",
- "signal-hook-tokio",
  "simd-json",
  "simd-json-derive",
  "sled",
@@ -6679,6 +6656,7 @@ dependencies = [
  "tempfile",
  "test-case",
  "testcontainers",
+ "thiserror",
  "tokio",
  "tokio-rustls 0.24.1",
  "tokio-stream",
@@ -6757,8 +6735,6 @@ version = "0.13.0-rc.16"
 dependencies = [
  "base64 0.21.5",
  "beef",
- "float-cmp",
- "getopts",
  "halfbrown",
  "proptest",
  "serde",

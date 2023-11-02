@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(dead_code)]
-
 use crate::connectors::prelude::*;
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::Result;
 use simd_json::StaticNode;
 use std::collections::BTreeMap;
 use tremor_common::base64::encode;
 use tremor_otelapis::opentelemetry::proto::metrics::v1;
+
+#[derive(Debug, Clone, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("Invalid json to mapping for `{0}`")]
+    InvalidMapping(&'static str),
+}
 
 pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
     if let Some(s) = data.as_str() {
@@ -27,38 +31,28 @@ pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
     } else if data.is_none() {
         Ok(String::new())
     } else {
-        Err("Expected an json string to convert to pb string".into())
+        Err(Error::InvalidMapping("String").into())
     }
 }
 
 pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
-    data.map_or_else(
-        || Err("Expected an json u64 to convert to pb u64".into()),
-        |data| {
-            data.as_u64()
-                .ok_or_else(|| Error::from("not coercable to u64"))
-        },
-    )
+    Ok(data.try_as_u64()?)
 }
 
 pub(crate) fn maybe_int_to_pbi32(data: Option<&Value<'_>>) -> Result<i32> {
-    data.as_i32()
-        .ok_or_else(|| Error::from("not coercable to i32"))
+    Ok(data.try_as_i32()?)
 }
 
 pub(crate) fn maybe_int_to_pbi64(data: Option<&Value<'_>>) -> Result<i64> {
-    data.as_i64()
-        .ok_or_else(|| Error::from("not coercable to i64"))
+    Ok(data.try_as_i64()?)
 }
 
 pub(crate) fn maybe_int_to_pbu32(data: Option<&Value<'_>>) -> Result<u32> {
-    data.as_u32()
-        .ok_or_else(|| Error::from("not coercable to u32"))
+    Ok(data.try_as_u32()?)
 }
 
 pub(crate) fn maybe_double_to_pb(data: Option<&Value<'_>>) -> Result<f64> {
-    data.as_f64()
-        .ok_or_else(|| Error::from("not coercable to f64"))
+    Ok(data.try_as_f64()?)
 }
 
 pub(crate) trait FromValue: Sized {
@@ -70,25 +64,18 @@ pub(crate) trait FromValue: Sized {
 
 impl FromValue for v1::exemplar::Value {
     fn from_value(data: &Value<'_>) -> Result<Self> {
-        Ok(v1::exemplar::Value::AsDouble(
-            data.as_f64()
-                .ok_or_else(|| Error::from("not coercable to f64"))?,
-        ))
+        Ok(v1::exemplar::Value::AsDouble(data.try_as_f64()?))
     }
 }
 
 impl FromValue for v1::number_data_point::Value {
     fn from_value(data: &Value<'_>) -> Result<Self> {
-        Ok(v1::number_data_point::Value::AsDouble(
-            data.as_f64()
-                .ok_or_else(|| Error::from("not coercable to f64"))?,
-        ))
+        Ok(v1::number_data_point::Value::AsDouble(data.try_as_f64()?))
     }
 }
 
 pub(crate) fn maybe_bool_to_pb(data: Option<&Value<'_>>) -> Result<bool> {
-    data.as_bool()
-        .ok_or_else(|| Error::from("not coercable to bool"))
+    Ok(data.try_as_bool()?)
 }
 
 pub(crate) fn maybe_from_value<T: FromValue>(data: Option<&Value<'_>>) -> Result<Option<T>> {
@@ -96,8 +83,7 @@ pub(crate) fn maybe_from_value<T: FromValue>(data: Option<&Value<'_>>) -> Result
 }
 
 pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>> {
-    json.as_array()
-        .ok_or("Unable to map json value to repeated f64 pb")?
+    json.try_as_array()?
         .iter()
         .map(Some)
         .map(maybe_double_to_pb)
@@ -105,8 +91,7 @@ pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>> {
 }
 
 pub(crate) fn u64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<u64>> {
-    json.as_array()
-        .ok_or("Unable to map json value to repeated u64 pb")?
+    json.try_as_array()?
         .iter()
         .map(Some)
         .map(maybe_int_to_pbu64)
@@ -174,10 +159,7 @@ pub(crate) fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Str
             return Ok(s);
         }
     }
-    Err(Error::from(ErrorKind::GclTypeMismatch(
-        "Value::Object",
-        json.value_type(),
-    )))
+    Err(Error::InvalidMapping("Struct").into())
 }
 
 #[cfg(test)]
@@ -232,7 +214,7 @@ mod test {
         #[test]
         fn prop_string(arb_string in ".*") {
             let json = Value::from(arb_string.clone());
-            let pb = maybe_string_to_pb(Some(&json))?;
+            let pb = maybe_string_to_pb(Some(&json)).expect("failed to convert");
             prop_assert_eq!(&arb_string, &pb);
             prop_assert_eq!(pb.len(), arb_string.len());
         }
@@ -240,7 +222,7 @@ mod test {
         #[test]
         fn prop_pb_u64(arb_int in prop::num::u64::ANY) {
             let json = Value::from(arb_int);
-            let pb = maybe_int_to_pbu64(Some(&json))?;
+            let pb = maybe_int_to_pbu64(Some(&json)).expect("failed to convert");
             // TODO error on i64?
             prop_assert_eq!(arb_int, pb);
         }
@@ -248,7 +230,7 @@ mod test {
         #[test]
         fn prop_pb_i64(arb_int in prop::num::i64::ANY) {
             let json = Value::from(arb_int);
-            let pb = maybe_int_to_pbi64(Some(&json))?;
+            let pb = maybe_int_to_pbi64(Some(&json)).expect("failed to convert");
             // TODO error on i64?
             prop_assert_eq!(arb_int, pb);
         }
@@ -257,7 +239,7 @@ mod test {
         fn prop_pb_u32(arb_int in prop::num::u32::ANY) {
 
             let json = Value::from(arb_int);
-            let pb = maybe_int_to_pbu32(Some(&json))?;
+            let pb = maybe_int_to_pbu32(Some(&json)).expect("failed to convert");
             prop_assert_eq!(arb_int, pb);
 
         }
@@ -266,7 +248,7 @@ mod test {
         fn prop_pb_i32(arb_int in prop::num::i32::ANY) {
 
             let json = Value::from(arb_int);
-            let pb = maybe_int_to_pbi32(Some(&json))?;
+            let pb = maybe_int_to_pbi32(Some(&json)).expect("failed to convert");
             prop_assert_eq!(arb_int, pb);
         }
 
@@ -276,14 +258,14 @@ mod test {
             arb_int in prop::num::f64::POSITIVE | prop::num::f64::NEGATIVE,
         ) {
             let json = Value::from(arb_int);
-            let pb = maybe_double_to_pb(Some(&json))?;
+            let pb = maybe_double_to_pb(Some(&json)).expect("failed to convert");
             prop_assert_eq!(arb_int, pb);
         }
 
         #[test]
         fn prop_pb_f64_repeated((vec, _index) in fveci()) {
             let json: Value = literal!(vec.clone());
-            let pb = f64_repeated_to_pb(Some(&json))?;
+            let pb = f64_repeated_to_pb(Some(&json)).expect("failed to convert");
             prop_assert_eq!(&vec, &pb);
             prop_assert_eq!(pb.len(), vec.len());
         }
@@ -291,7 +273,7 @@ mod test {
         #[test]
         fn prop_pb_u64_repeated((vec, _index) in uveci()) {
             let json: Value = literal!(vec.clone());
-            let pb = u64_repeated_to_pb(Some(&json))?;
+            let pb = u64_repeated_to_pb(Some(&json)).expect("failed to convert");
             prop_assert_eq!(&vec, &pb);
             prop_assert_eq!(pb.len(), vec.len());
         }
@@ -308,7 +290,7 @@ mod test {
         assert!(maybe_string_to_pb(Some(&Value::from(false))).is_err());
 
         // NOTE We allow None for string and map to pb default of "" ( empty string )
-        assert_eq!(Ok(String::new()), maybe_string_to_pb(None));
+        assert_eq!(Some(String::new()), maybe_string_to_pb(None).ok());
     }
 
     #[test]

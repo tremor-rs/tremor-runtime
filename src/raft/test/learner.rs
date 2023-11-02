@@ -25,9 +25,9 @@ async fn add_learner_test() -> ClusterResult<()> {
     let dir1 = tempfile::tempdir()?;
     let dir2 = tempfile::tempdir()?;
     let dir3 = tempfile::tempdir()?;
-    let node0 = TestNode::bootstrap(dir0.path()).await?;
-    let node1 = TestNode::start_and_join(dir1.path(), &node0.addr).await?;
-    let node2 = TestNode::start_and_join(dir2.path(), &node1.addr).await?;
+    let node0 = TestNode::bootstrap(dir0.path().join("db")).await?;
+    let node1 = TestNode::start_and_join(dir1.path().join("db"), &node0.addr).await?;
+    let node2 = TestNode::start_and_join(dir2.path().join("db"), &node1.addr).await?;
     let client0 = node0.client();
     let metrics = client0.metrics().await?;
     let members = metrics
@@ -38,7 +38,7 @@ async fn add_learner_test() -> ClusterResult<()> {
         .expect("No nodes in membership config");
     assert_eq!(3, members.len());
 
-    let learner_node = TestNode::join_as_learner(dir3.path(), &node0.addr).await?;
+    let learner_node = TestNode::join_as_learner(dir3.path().join("db"), &node0.addr).await?;
     let (learner_node_id, learner_addr) = learner_node.running.node_data();
     // learner is known to the cluster
     let nodemap = client0.get_nodes().await?;
@@ -82,9 +82,9 @@ async fn learner_runs_app() -> ClusterResult<()> {
     let dir1 = tempfile::tempdir()?;
     let dir2 = tempfile::tempdir()?;
     let dir3 = tempfile::tempdir()?;
-    let node0 = TestNode::bootstrap(dir0.path()).await?;
-    let node1 = TestNode::start_and_join(dir1.path(), &node0.addr).await?;
-    let node2 = TestNode::start_and_join(dir2.path(), &node1.addr).await?;
+    let node0 = TestNode::bootstrap(dir0.path().join("db")).await?;
+    let node1 = TestNode::start_and_join(dir1.path().join("db"), &node0.addr).await?;
+    let node2 = TestNode::start_and_join(dir2.path().join("db"), &node1.addr).await?;
     let client0 = node0.client();
     let metrics = client0.metrics().await?;
     let members = metrics
@@ -95,7 +95,7 @@ async fn learner_runs_app() -> ClusterResult<()> {
         .expect("No nodes in membership config");
     assert_eq!(3, members.len());
 
-    let learner_node = TestNode::join_as_learner(dir3.path(), &node0.addr).await?;
+    let learner_node = TestNode::join_as_learner(dir3.path().join("db"), &node0.addr).await?;
     let (_learner_node_id, _learner_addr) = learner_node.running.node_data();
     let tmpfile = tempfile::NamedTempFile::new()?;
     let out_path = tmpfile.into_temp_path();

@@ -18,7 +18,7 @@ use crate::{
         ExprPath, ImutExpr, Invoke, InvokeAggr, Literal, LocalPath, Match, Merge, Patch, Path,
         Recur, ReservedPath, Segment, UnaryExpr,
     },
-    errors::Kind as ErrorKind,
+    errors::ErrorKind,
     errors::{
         err_invalid_fold, error_bad_key, error_decreasing_range, error_invalid_bool_op,
         error_invalid_unary, error_need_obj, error_need_str, error_no_clause_hit, error_oops,

@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::Error;
 use crate::connectors::utils::object_storage::{BufferPart, ObjectStorageBuffer};
-use crate::errors::{err_gcs, Result};
+use crate::errors::Result;
 
 /// This structure is similar to a Vec<u8>, but with some special methods.
 /// `write` will add data (any size of data is accepted)
@@ -55,16 +56,14 @@ impl ObjectStorageBuffer for ChunkedBuffer {
 
     fn mark_done_until(&mut self, position: usize) -> Result<()> {
         if position < self.buffer_start {
-            return Err(err_gcs(format!(
-                "Buffer was marked as done at index {position} which is not in memory anymore"
-            )));
+            return Err(Error::InvalidBuffer(position).into());
         }
 
         let bytes_to_remove = position - self.buffer_start;
         self.data = Vec::from(
             self.data
                 .get(bytes_to_remove..)
-                .ok_or_else(|| err_gcs("Not enough data in the buffer"))?,
+                .ok_or(Error::NotEnoughData)?,
         );
         self.buffer_start += bytes_to_remove;
 

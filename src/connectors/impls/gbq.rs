@@ -110,3 +110,13 @@
 //! [storage API]: https://cloud.google.com/bigquery/docs/reference/storage/rpc/google.cloud.bigquery.storage.v1
 
 pub(crate) mod writer;
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("No client available")]
+    NoClient,
+    #[error("The client is not connected")]
+    NotConnected,
+    #[error("The table '{0}' has no schema provided")]
+    SchemaNotProvided(String),
+}

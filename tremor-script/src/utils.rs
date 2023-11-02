@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, Kind as ErrorKind};
+use crate::errors::{Error, ErrorKind};
 use crate::Value;
 use std::{io::prelude::*, path::Path};
 

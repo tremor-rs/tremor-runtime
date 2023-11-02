@@ -52,6 +52,14 @@ impl KvStateMachine {
     /// try to obtain the value at the given `key`.
     /// Returns `Ok(None)` if there is no value for that key.
     pub(crate) fn get(&self, key: &str) -> StorageResult<Option<Vec<u8>>> {
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(DATA).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
         let read_txn = self.db.begin_read().map_err(r_err)?;
         let table = read_txn.open_table(DATA).map_err(r_err)?;
         table
@@ -85,6 +93,15 @@ impl RaftStateMachine<KvSnapshot, KvRequest> for KvStateMachine {
     }
 
     fn as_snapshot(&self) -> StorageResult<KvSnapshot> {
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(DATA).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
+
         let read_tnx = self.db.begin_read().map_err(w_err)?;
         let table = read_tnx.open_table(DATA).map_err(w_err)?;
         let data = table

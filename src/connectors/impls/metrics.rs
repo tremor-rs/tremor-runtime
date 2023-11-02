@@ -160,6 +160,12 @@ const TAGS: Cow<'static, str> = Cow::const_str("tags");
 const FIELDS: Cow<'static, str> = Cow::const_str("fields");
 const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Invalid metrics data")]
+    InvalidMetricsData,
+}
+
 /// This is a system connector to collect and forward metrics.
 /// System metrics are fed to this connector and can be received by binding this connector's `out` port to a pipeline to handle metrics events.
 /// It can also be used to send custom metrics and have them handled the same way as system metrics.
@@ -206,7 +212,7 @@ impl Connector for MetricsConnector {
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = MetricsSource::new(ctx.app_ctx.metrics.rx());
+        let source = MetricsSource::new(ctx.app_ctx().metrics.rx());
         info!("{ctx} Metrics connector id: {}", source.rx.id());
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -245,7 +251,11 @@ impl MetricsSource {
 
 #[async_trait::async_trait()]
 impl Source for MetricsSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         loop {
             match self.rx.recv().await {
                 Ok(msg) => {
@@ -313,7 +323,8 @@ pub(crate) fn verify_metrics_value(value: &Value<'_>) -> Result<()> {
                 None
             }
         })
-        .ok_or_else(|| ErrorKind::InvalidMetricsData.into())
+        .ok_or(Error::InvalidMetricsData)?;
+    Ok(())
 }
 
 /// passing events through to the source channel
@@ -331,7 +342,7 @@ impl Sink for MetricsSink {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         // verify event format
         for (value, _meta) in event.value_meta_iter() {
             verify_metrics_value(value)?;

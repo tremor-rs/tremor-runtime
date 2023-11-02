@@ -79,15 +79,18 @@ mod tests {
             password: "snot".to_string(),
         };
         assert_eq!(
-            Ok(Some("Basic YmFkZ2VyOnNub3Q=".to_string())),
-            auth.as_header_value()
+            Some("Basic YmFkZ2VyOnNub3Q=".to_string()),
+            auth.as_header_value().ok().flatten()
         );
     }
 
     #[test]
     fn header_value_bearer() {
         let auth = Auth::Bearer("token".to_string());
-        assert_eq!(Ok(Some("Bearer token".to_string())), auth.as_header_value());
+        assert_eq!(
+            Some("Bearer token".to_string()),
+            auth.as_header_value().ok().flatten()
+        );
     }
 
     #[test]
@@ -97,8 +100,8 @@ mod tests {
             api_key: "snot".to_string(),
         };
         assert_eq!(
-            Ok(Some("ApiKey YmFkZ2VyOnNub3Q=".to_string())),
-            auth.as_header_value()
+            Some("ApiKey YmFkZ2VyOnNub3Q=".to_string()),
+            auth.as_header_value().ok().flatten()
         );
     }
 }

@@ -62,7 +62,7 @@ async fn stop_after_events() -> Result<()> {
                 .send_sink(SinkMsg::Event { event, port: IN })
                 .await?;
         }
-        Result::Ok(())
+        Ok::<(), anyhow::Error>(())
     });
 
     // the bench connector should shut the world down

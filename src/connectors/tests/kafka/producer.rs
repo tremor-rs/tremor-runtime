@@ -143,7 +143,7 @@ async fn connector_kafka_producer() -> Result<()> {
             return Err(e.into());
         }
         None => {
-            return Err("Topic Stream unexpectedly finished.".into());
+            anyhow::bail!("Topic Stream unexpectedly finished.")
         }
     };
     assert!(harness.get_pipe(IN)?.get_contraflow_events().is_empty());
@@ -185,7 +185,7 @@ async fn connector_kafka_producer() -> Result<()> {
             return Err(e.into());
         }
         None => {
-            return Err("EOF on kafka topic".into());
+            anyhow::bail!("EOF on kafka topic")
         }
     }
 

@@ -26,6 +26,9 @@ impl PartialEq for Error {
     }
 }
 
+unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
+
 error_chain! {
     links {
     }

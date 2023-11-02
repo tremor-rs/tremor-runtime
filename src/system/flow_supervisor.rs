@@ -13,13 +13,13 @@
 // limitations under the License.
 
 use crate::{
-    channel::{bounded, OneShotSender, Sender},
+    channel::{bounded, ChannelError, OneShotSender, Sender},
     connectors::{self, ConnectorBuilder, ConnectorType},
-    errors::{Kind as ErrorKind, Result},
+    errors::Result,
     instance::IntendedState,
     log_error, qsize, raft,
     system::{
-        flow::{AppContext, Flow},
+        flow::{self, AppContext, Flow},
         KillSwitch, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
     },
 };
@@ -51,7 +51,7 @@ pub(crate) enum Msg {
         /// result sender
         sender: OneShotSender<Result<alias::Flow>>,
         /// API request sender
-        raft: raft::Cluster,
+        raft: raft::ClusterInterface,
         /// Type of the deployment
         deployment_type: DeploymentType,
     },
@@ -112,12 +112,12 @@ impl FlowSupervisor {
         flow: DeployFlow<'static>,
         sender: oneshot::Sender<Result<alias::Flow>>,
         kill_switch: &KillSwitch,
-        raft: raft::Cluster,
+        raft: raft::ClusterInterface,
         deployment_type: DeploymentType,
     ) {
         let id = alias::Flow::new(app_id, &flow.instance_alias);
         let res = match self.flows.entry(id.clone()) {
-            Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
+            Entry::Occupied(_occupied) => Err(flow::Error::Duplicate(id.clone()).into()),
             Entry::Vacant(vacant) => {
                 let ctx = AppContext {
                     id: id.clone(),
@@ -159,7 +159,7 @@ impl FlowSupervisor {
                     self.flows
                         .get(id)
                         .cloned()
-                        .ok_or_else(|| ErrorKind::FlowNotFound(id.to_string()).into()),
+                        .ok_or_else(|| flow::Error::NotFound(id.clone()).into()),
                 )
                 .map_err(|_| "send error"),
             "Error sending GetFlow response: {e}"
@@ -188,7 +188,7 @@ impl FlowSupervisor {
                     for rx in rxs.drain(..) {
                         log_error!(rx.await?, "Error during Stopping: {e}");
                     }
-                    Result::Ok(())
+                    Ok::<(), anyhow::Error>(())
                 }),
             )
             .await???;
@@ -226,8 +226,8 @@ impl FlowSupervisor {
                     };
                 }
                 info!("Flows drained.");
-                sender.send(Ok(())).map_err(|_| "Failed to send reply")?;
-                Result::Ok(())
+                sender.send(Ok(())).map_err(|_| ChannelError::Send)?;
+                Ok::<(), anyhow::Error>(())
             });
         }
     }
@@ -246,18 +246,18 @@ impl FlowSupervisor {
                 Ok(())
             } else {
                 reply_tx
-                    .send(Err(ErrorKind::FlowNotFound(id.to_string()).into()))
-                    .map_err(|_| "can't reply")?;
-                Err(ErrorKind::FlowNotFound(id.to_string()).into())
+                    .send(Err(flow::Error::NotFound(id.clone()).into()))
+                    .map_err(|_| ChannelError::Send)?;
+                Err(flow::Error::NotFound(id.clone()).into())
             }
         } else if let Some(flow) = self.flows.get(&id) {
             flow.change_state(intended_state, reply_tx).await?;
             Ok(())
         } else {
             reply_tx
-                .send(Err(ErrorKind::FlowNotFound(id.to_string()).into()))
-                .map_err(|_| "can't reply")?;
-            Err(ErrorKind::FlowNotFound(id.to_string()).into())
+                .send(Err(flow::Error::NotFound(id.clone()).into()))
+                .map_err(|_| ChannelError::Send)?;
+            Err(flow::Error::NotFound(id.clone()).into())
         }
     }
 

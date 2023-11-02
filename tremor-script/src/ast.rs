@@ -53,7 +53,7 @@ use crate::{
         eq::AstEq,
         raw::{BytesDataType, Endian},
     },
-    errors::{err_generic, error_no_locals, Kind as ErrorKind, Result},
+    errors::{err_generic, error_no_locals, ErrorKind, Result},
     extractor::Extractor,
     impl_expr, impl_expr_ex, impl_expr_no_lt,
     interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},

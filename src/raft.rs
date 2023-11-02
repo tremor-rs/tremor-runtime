@@ -28,25 +28,11 @@ pub mod store;
 #[cfg(test)]
 mod test;
 
-use crate::raft::node::Addr;
-
-pub(crate) use self::manager::Cluster;
-use api::client::Error;
+pub(crate) use self::manager::{Cluster, ClusterInterface};
 use network::raft_network_impl::Network;
-use openraft::{
-    error::{Fatal, InitializeError, RaftError},
-    metrics::WaitError,
-    storage::Adaptor,
-    Config, ConfigError, Raft, TokioRuntime,
-};
-use redb::{CommitError, DatabaseError, StorageError, TableError, TransactionError};
-use std::{
-    fmt::{Display, Formatter},
-    io::Cursor,
-    sync::Mutex,
-};
+use openraft::{storage::Adaptor, Config, Raft, TokioRuntime};
+use std::io::Cursor;
 use store::{TremorRequest, TremorResponse};
-use tokio::task::JoinError;
 
 /// A `NodeId`
 pub type NodeId = u64;
@@ -74,180 +60,38 @@ pub(crate) type StateMachineStore = Adaptor<TremorRaftConfig, store::Store>;
 pub(crate) type TremorRaftImpl = Raft<TremorRaftConfig, Network, LogStore, StateMachineStore>;
 
 /// A raft cluster error
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ClusterError {
-    /// Generic error
-    Other(String),
-    /// Database error
-    Database(DatabaseError),
-    /// Transaction error
-    Transaction(TransactionError),
-    /// Transaction error
-    Table(TableError),
-    /// StorageError
-    Storage(StorageError),
-    /// Commit Error
-    Commit(CommitError),
-    /// IO error
-    Io(std::io::Error),
-    /// Store error
-    Store(store::Error),
-    /// Raft error during initialization
-    Initialize(RaftError<NodeId, InitializeError<NodeId, Addr>>),
-    /// MsgPack encode error
-    MsgPackEncode(rmp_serde::encode::Error),
-    /// MsgPack decode error
-    MsgPackDecode(rmp_serde::decode::Error),
-    /// Config error
-    Config(ConfigError),
-    /// Client error
-    Client(Error),
-    /// Join error
-    JoinError(JoinError),
-    /// Fatal error
-    Fatal(Fatal<NodeId>),
-    /// Wait error
-    WaitError(WaitError),
-    // TODO: this is a horrible hack
-    /// Runtime error
-    Runtime(Mutex<crate::Error>),
+    /// The raft node isn't running
+    #[error("The raft node isn't running")]
+    RaftNotRunning,
+    /// Bad bind address
+    #[error("Bad bind address")]
+    BadAddr,
+    /// Error shutting down local raft node
+    #[error("Error shutting down local raft node")]
+    Shutdown,
+    /// No join endpoints provided
+    #[error("No join endpoints provided")]
+    NoEndpoints,
 }
 
-impl From<store::Error> for ClusterError {
-    fn from(e: store::Error) -> Self {
-        ClusterError::Store(e)
+type ClusterResult<T> = crate::Result<T>;
+
+/// We need this since openraft and anyhow hate eachother
+/// anyhow refuses to implement `std::error::Error` on it's error type
+/// and openraft requires the error type to implement `std::error::Error`
+/// so instead of forking we're doing the silly dance
+#[derive(Debug)]
+pub(crate) struct SillyError(anyhow::Error);
+
+impl std::fmt::Display for SillyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
-impl From<std::io::Error> for ClusterError {
-    fn from(e: std::io::Error) -> Self {
-        ClusterError::Io(e)
-    }
-}
-
-impl From<redb::DatabaseError> for ClusterError {
-    fn from(e: redb::DatabaseError) -> Self {
-        ClusterError::Database(e)
-    }
-}
-
-impl From<redb::TransactionError> for ClusterError {
-    fn from(e: redb::TransactionError) -> Self {
-        ClusterError::Transaction(e)
-    }
-}
-
-impl From<redb::TableError> for ClusterError {
-    fn from(e: redb::TableError) -> Self {
-        ClusterError::Table(e)
-    }
-}
-
-impl From<redb::StorageError> for ClusterError {
-    fn from(e: redb::StorageError) -> Self {
-        ClusterError::Storage(e)
-    }
-}
-
-impl From<redb::CommitError> for ClusterError {
-    fn from(e: redb::CommitError) -> Self {
-        ClusterError::Commit(e)
-    }
-}
-
-impl From<&str> for ClusterError {
-    fn from(e: &str) -> Self {
-        ClusterError::Other(e.to_string())
-    }
-}
-
-impl From<String> for ClusterError {
-    fn from(e: String) -> Self {
-        ClusterError::Other(e)
-    }
-}
-
-impl From<RaftError<NodeId, InitializeError<NodeId, Addr>>> for ClusterError {
-    fn from(e: RaftError<NodeId, InitializeError<NodeId, Addr>>) -> Self {
-        ClusterError::Initialize(e)
-    }
-}
-
-impl From<ConfigError> for ClusterError {
-    fn from(e: ConfigError) -> Self {
-        ClusterError::Config(e)
-    }
-}
-
-impl From<Error> for ClusterError {
-    fn from(e: Error) -> Self {
-        Self::Client(e)
-    }
-}
-
-impl From<crate::Error> for ClusterError {
-    fn from(e: crate::Error) -> Self {
-        ClusterError::Runtime(Mutex::new(e))
-    }
-}
-
-impl From<rmp_serde::encode::Error> for ClusterError {
-    fn from(e: rmp_serde::encode::Error) -> Self {
-        ClusterError::MsgPackEncode(e)
-    }
-}
-
-impl From<rmp_serde::decode::Error> for ClusterError {
-    fn from(e: rmp_serde::decode::Error) -> Self {
-        ClusterError::MsgPackDecode(e)
-    }
-}
-
-impl From<JoinError> for ClusterError {
-    fn from(e: JoinError) -> Self {
-        ClusterError::JoinError(e)
-    }
-}
-
-impl From<Fatal<NodeId>> for ClusterError {
-    fn from(e: Fatal<NodeId>) -> Self {
-        ClusterError::Fatal(e)
-    }
-}
-
-impl From<WaitError> for ClusterError {
-    fn from(e: WaitError) -> Self {
-        ClusterError::WaitError(e)
-    }
-}
-
-impl Display for ClusterError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ClusterError::Other(e) => e.fmt(f),
-            ClusterError::Database(e) => e.fmt(f),
-            ClusterError::Transaction(e) => e.fmt(f),
-            ClusterError::Table(e) => e.fmt(f),
-            ClusterError::Storage(e) => e.fmt(f),
-            ClusterError::Commit(e) => e.fmt(f),
-            ClusterError::Io(e) => e.fmt(f),
-            ClusterError::Store(e) => e.fmt(f),
-            ClusterError::Initialize(e) => e.fmt(f),
-            ClusterError::Config(e) => e.fmt(f),
-            ClusterError::Runtime(e) => write!(f, "{:?}", e.lock()),
-            ClusterError::MsgPackEncode(e) => e.fmt(f),
-            ClusterError::MsgPackDecode(e) => e.fmt(f),
-            ClusterError::Client(e) => e.fmt(f),
-            ClusterError::JoinError(e) => e.fmt(f),
-            ClusterError::Fatal(e) => e.fmt(f),
-            ClusterError::WaitError(e) => e.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for ClusterError {}
-
-type ClusterResult<T> = Result<T, ClusterError>;
+impl std::error::Error for SillyError {}
 
 /// Removes a node from a cluster
 /// # Errors

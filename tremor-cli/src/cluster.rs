@@ -33,7 +33,7 @@ use tremor_runtime::{
         node::{Addr, ClusterNodeKillSwitch, Node},
         remove_node,
         store::TremorInstanceState,
-        ClusterError, NodeId,
+        NodeId,
     },
     system::ShutdownMode,
 };
@@ -159,29 +159,28 @@ impl Cluster {
                 // start db and statemachine
                 // start raft
                 // node_id assigned during bootstrap or join
-                let running_node = if Path::new(&db_dir).exists()
-                    && !tremor_common::file::is_empty(&db_dir)?
-                {
-                    if !join.is_empty() {
-                        // TODO: check if join nodes are part of the known cluster, if so, don't error
-                        return Err(Error::from(
-                            "Cannot join another cluster with existing db directory",
-                        ));
-                    }
-                    info!("Loading existing Tremor node state from {db_dir}.");
-                    Node::load_from_store(&db_dir, tremor_runtime::raft::config()?).await?
-                } else {
-                    // db dir does not exist
-                    let rpc_addr = rpc.ok_or_else(|| ClusterError::from("missing rpc address"))?;
-                    let api_addr = api.ok_or_else(|| ClusterError::from("missing api address"))?;
-                    let addr = Addr::new(api_addr, rpc_addr);
+                let running_node =
+                    if Path::new(&db_dir).exists() && !tremor_common::file::is_empty(&db_dir)? {
+                        if !join.is_empty() {
+                            // TODO: check if join nodes are part of the known cluster, if so, don't error
+                            return Err(Error::from(
+                                "Cannot join another cluster with existing db directory",
+                            ));
+                        }
+                        info!("Loading existing Tremor node state from {db_dir}.");
+                        Node::load_from_store(&db_dir, tremor_runtime::raft::config()?).await?
+                    } else {
+                        // db dir does not exist
+                        let rpc_addr = rpc.ok_or_else(|| Error::from("missing rpc address"))?;
+                        let api_addr = api.ok_or_else(|| Error::from("missing api address"))?;
+                        let addr = Addr::new(api_addr, rpc_addr);
 
-                    info!("Bootstrapping cluster node with addr {addr} and db_dir {db_dir}");
-                    let mut node = Node::new(&db_dir, tremor_runtime::raft::config()?);
+                        info!("Bootstrapping cluster node with addr {addr} and db_dir {db_dir}");
+                        let mut node = Node::new(&db_dir, tremor_runtime::raft::config()?);
 
-                    // attempt to join any one of the given endpoints, stop once we joined one
-                    node.try_join(addr, join, !passive).await?
-                };
+                        // attempt to join any one of the given endpoints, stop once we joined one
+                        node.try_join(addr, join, !passive).await?
+                    };
 
                 // install signal handler
                 let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;

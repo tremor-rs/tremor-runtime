@@ -33,7 +33,7 @@ use crate::{
         raw::{IdentRaw, UseRaw},
         Deploy, DeployStmt, Helper, NodeMeta, Script, Upable,
     },
-    errors::{Kind as ErrorKind, Result},
+    errors::{ErrorKind, Result},
     impl_expr, AggrType, EventContext, Return,
 };
 use beef::Cow;

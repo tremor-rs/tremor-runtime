@@ -27,7 +27,7 @@
 
 pub mod errors;
 pub use crate::errors::Error;
-use crate::errors::{Kind as ErrorKind, Result};
+use crate::errors::{ErrorKind, Result};
 use std::fmt::{Debug, Display};
 use tremor_value::Value;
 mod codec {

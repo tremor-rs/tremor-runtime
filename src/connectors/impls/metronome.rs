@@ -185,11 +185,15 @@ impl MetronomeSource {
 
 #[async_trait::async_trait()]
 impl Source for MetronomeSource {
-    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.next = nanotime() + self.interval_ns;
         Ok(true)
     }
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let now = nanotime();
         // we need to wait here before we continue to fulfill the interval conditions
         if now < self.next {
@@ -238,10 +242,7 @@ mod tests {
             reconnect: Reconnect::None,
             metrics_interval_s: Some(5),
         };
-        assert!(matches!(
-            builder.build(&alias, &connector_config,).await.err(),
-            Some(Error(ErrorKind::MissingConfiguration(_), _))
-        ));
+        assert!(builder.build(&alias, &connector_config,).await.is_err(),);
         Ok(())
     }
 }

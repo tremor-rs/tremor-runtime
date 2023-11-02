@@ -12,10 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use event_listener::Event;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+
+#[derive(Debug, Clone, thiserror::Error)]
+enum Error {
+    #[error("Invalid state {0}")]
+    InvalidState(u32),
+}
 
 #[derive(Debug)]
 struct Inner {
@@ -97,14 +103,13 @@ impl QuiescenceBeacon {
             Ordering::Relaxed,
         ) {
             Ok(_) | Err(Inner::PAUSED | Inner::RUNNING | Inner::STOP_ALL | Inner::STOP_READING) => {
-                Ok(())
+                Ok::<(), anyhow::Error>(())
             }
             // TODO: should we error on those?
             // Err(Inner::STOP_ALL) => Err(Error::from("failed to pause from state STOP_ALL")),
             // Err(Inner::STOP_READING) => Err(Error::from("failed to pause from state STOP_READING")),
-            Err(e) => Err(Error::from(format!("Invalid state {e}"))),
-        }?;
-        Ok(())
+            Err(e) => Err(Error::InvalidState(e).into()),
+        }
     }
 
     /// Resume both reading and writing.
@@ -118,16 +123,16 @@ impl QuiescenceBeacon {
             Ordering::Relaxed,
         ) {
             Ok(_) | Err(Inner::PAUSED | Inner::RUNNING | Inner::STOP_ALL | Inner::STOP_READING) => {
-                Ok(())
+                Ok::<(), anyhow::Error>(())
             }
             // TODO: should we error on those?
             // Err(Inner::STOP_READING) => Err(Error::from("Can't resume from STOP_READING")),
             // Err(Inner::STOP_ALL) => Err(Error::from("Can't resume from STOP_ALL")),
-            Err(e) => Err(Error::from(format!("Invalid state {e}"))),
+            Err(e) => Err(Error::InvalidState(e).into()),
         }?;
 
         self.0.resume_event.notify(Self::MAX_LISTENERS); // we might have been paused, so notify here
-        Ok(())
+        Ok::<(), anyhow::Error>(())
     }
 
     /// notify consumers of this beacon that reading and writing should be stopped

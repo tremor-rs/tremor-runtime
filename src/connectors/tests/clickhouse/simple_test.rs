@@ -162,9 +162,7 @@ async fn simple_insertion() -> Result<()> {
         if start.elapsed() > wait_for {
             let max_time = wait_for.as_secs();
             error!("We waited for more than {max_time}");
-            return Err(Error::from(
-                "Timeout while waiting for all the data to be available",
-            ));
+            anyhow::bail!("Timeout while waiting for all the data to be available",);
         }
 
         tokio::time::sleep(delay).await;

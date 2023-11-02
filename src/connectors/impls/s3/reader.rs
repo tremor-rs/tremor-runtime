@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::auth;
+use super::Error;
 use crate::connectors::prelude::*;
+use anyhow::Context as ErrorContext;
 use aws_sdk_s3::{primitives::ByteStream, types::Object, Client as S3Client};
-use std::error::Error as StdError;
 use std::sync::Arc;
 use tokio::task::{self, JoinHandle};
 
@@ -146,17 +147,7 @@ impl Connector for S3Reader {
             .bucket(self.config.bucket.clone())
             .send()
             .await
-            .map_err(|e| {
-                let msg = if let Some(err) = e.source() {
-                    format!(
-                        "Failed to access Bucket \"{}\": {err}.",
-                        &self.config.bucket
-                    )
-                } else {
-                    format!("Failed to access Bucket \"{}\".", &self.config.bucket)
-                };
-                Error::from(ErrorKind::S3Error(msg))
-            })?;
+            .with_context(|| format!("Failed to access Bucket `{}`.", &self.config.bucket))?;
 
         let (tx_key, rx_key) = async_channel::bounded(qsize());
 
@@ -166,10 +157,7 @@ impl Connector for S3Reader {
             let rx = rx_key.clone();
             let bucket = self.config.bucket.clone();
 
-            let tx = self
-                .tx
-                .clone()
-                .ok_or_else(|| ErrorKind::S3Error("source sender not initialized".to_string()))?;
+            let tx = self.tx.clone().ok_or(Error::NoSource)?;
             let origin_uri = EventOriginUri {
                 scheme: URL_SCHEME.to_string(),
                 host: hostname(),

@@ -15,7 +15,6 @@
 // #![cfg_attr(coverage, no_coverage)]
 use crate::{
     channel::{bounded, Receiver, Sender},
-    errors::already_created_error,
     raft,
 };
 use crate::{connectors::prelude::*, system::flow::AppContext};
@@ -27,6 +26,14 @@ use tremor_codec::{
     Codec,
 };
 use tremor_common::alias::Generic;
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Missing `$kv` field for commands")]
+    MissingMeta,
+    #[error("Invalid command: {0}")]
+    InvalidCommand(String),
+}
 
 #[derive(Debug)]
 enum Command {
@@ -93,7 +100,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command {
     type Error = crate::Error;
 
     fn try_from(v: &'v Value<'v>) -> Result<Self> {
-        let v = v.get("kv").ok_or("Missing `$kv` field for commands")?;
+        let v = v.get("kv").ok_or(Error::MissingMeta)?;
         if let Some(key) = v.get_str("get").map(ToString::to_string) {
             Ok(Command::Get {
                 key,
@@ -116,7 +123,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command {
         //         end: v.get_bytes("end").map(<[u8]>::to_vec),
         //     })
         } else {
-            Err(format!("Invalid KV command: {v}").into())
+            Err(Error::InvalidCommand(v.to_string()).into())
         }
     }
 }
@@ -210,7 +217,9 @@ impl Connector for Kv {
     ) -> Result<Option<SourceAddr>> {
         let source = ChannelSource::from_channel(
             self.tx.clone(),
-            self.rx.take().ok_or_else(already_created_error)?,
+            self.rx
+                .take()
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
             self.source_is_connected.clone(),
         );
         Ok(Some(builder.spawn(source, ctx)))
@@ -248,7 +257,7 @@ impl Connector for Kv {
 struct KvSink {
     alias: alias::Connector,
     app_ctx: AppContext,
-    raft: raft::Cluster,
+    raft: raft::ClusterInterface,
     tx: Sender<SourceReply>,
     codec: Json<Sorted>,
     origin_uri: EventOriginUri,
@@ -349,7 +358,7 @@ impl Sink for KvSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let ingest_ns = tremor_common::time::nanotime();
         let send_replies = self.source_is_connected.load(Ordering::Acquire);
 

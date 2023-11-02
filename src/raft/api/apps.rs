@@ -14,7 +14,7 @@
 use crate::{
     instance::IntendedState,
     raft::{
-        api::{APIRequest, APIResult, AppError, ArgsError, ToAPIResult, API_WORKER_TIMEOUT},
+        api::{APIRequest, APIResult, AppError, ArgsError, API_WORKER_TIMEOUT},
         archive::{get_app, TremorAppDef},
         store::{
             AppsRequest as AppsCmd, FlowInstance, Instances, StateApp, TremorInstanceState,
@@ -32,6 +32,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use tokio::time::timeout;
 use tremor_common::alias;
+
+use super::to_api_result;
 
 pub(crate) fn endpoints() -> Router<APIRequest> {
     Router::<APIRequest>::new()
@@ -65,12 +67,7 @@ async fn install_app(
         app,
         file: file.clone(),
     });
-    state
-        .raft
-        .client_write(request)
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    to_api_result(state.raft.client_write(request).await, &uri, &state).await?;
     Ok(Json(app_id))
 }
 
@@ -102,11 +99,7 @@ async fn uninstall_app(
         app: app_id.clone(),
         force: false,
     });
-    state
-        .raft
-        .client_write(request)
-        .await
-        .to_api_result(&uri, &state)
+    to_api_result(state.raft.client_write(request).await, &uri, &state)
         .await
         .map(|d| d.data)
 }
@@ -226,12 +219,7 @@ async fn start(
             DeploymentType::AllNodes
         },
     });
-    state
-        .raft
-        .client_write(request)
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    to_api_result(state.raft.client_write(request).await, &uri, &state).await?;
     Ok(Json(instance_id))
 }
 
@@ -288,12 +276,7 @@ async fn manage_instance(
         instance: instance_id.clone(),
         state: body_state,
     });
-    state
-        .raft
-        .client_write(request)
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    to_api_result(state.raft.client_write(request).await, &uri, &state).await?;
     Ok(Json(instance_id))
 }
 
@@ -318,12 +301,7 @@ async fn stop_instance(
         return Err(AppError::AppNotFound(app_id).into());
     }
     let request = TremorRequest::Apps(AppsCmd::Undeploy(instance_id.clone()));
-    state
-        .raft
-        .client_write(request)
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    to_api_result(state.raft.client_write(request).await, &uri, &state).await?;
     Ok(Json(instance_id))
 }
 

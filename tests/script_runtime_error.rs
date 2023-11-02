@@ -43,7 +43,7 @@ macro_rules! test_cases {
                 Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
-                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read().map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;
@@ -96,7 +96,7 @@ macro_rules! ignore_cases {
                 Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
-                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read().map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;

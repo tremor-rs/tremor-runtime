@@ -115,21 +115,28 @@
 //! in the intervening time since we last read from the store for this key.
 //! :::
 
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    errors::already_created_error,
-};
+use crate::channel::{bounded, Receiver, Sender};
 use tremor_codec::{
     json::{Json, Sorted},
     Codec,
 };
 
-use crate::{connectors::prelude::*, errors::err_connector_def};
+use crate::connectors::prelude::*;
 use serde::Deserialize;
 use sled::{CompareAndSwapError, Db, IVec};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{boxed::Box, convert::TryFrom, sync::atomic::AtomicBool};
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("CAS error: expected {0} but found {1}.")]
+    Cas(Value<'static>, Value<'static>),
+    #[error("Missing `$kv` field for commands")]
+    MissingMeta,
+    #[error("Invalid command: {0}")]
+    InvalidCommand(String),
+}
 
 #[derive(Debug)]
 enum Command<'v> {
@@ -196,7 +203,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
     type Error = crate::Error;
 
     fn try_from(v: &'v Value<'v>) -> Result<Self> {
-        let v = v.get("kv").ok_or("Missing `$kv` field for commands")?;
+        let v = v.get("kv").ok_or(Error::MissingMeta)?;
         if let Some(key) = v.get_bytes("get").map(<[u8]>::to_vec) {
             Ok(Command::Get { key })
         } else if let Some(key) = v.get_bytes("put").map(<[u8]>::to_vec) {
@@ -216,7 +223,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
                 end: v.get_bytes("end").map(<[u8]>::to_vec),
             })
         } else {
-            Err(format!("Invalid KV command: {v}").into())
+            Err(Error::InvalidCommand(v.to_string()).into())
         }
     }
 }
@@ -291,7 +298,7 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
         if !PathBuf::from(&config.path).is_dir() {
-            return Err(err_connector_def(id, Builder::INVALID_DIR));
+            return Err(error_connector_def(id, Builder::INVALID_DIR).into());
         }
 
         let (tx, rx) = bounded(qsize());
@@ -323,7 +330,9 @@ impl Connector for Kv {
     ) -> Result<Option<SourceAddr>> {
         let source = ChannelSource::from_channel(
             self.tx.clone(),
-            self.rx.take().ok_or_else(already_created_error)?,
+            self.rx
+                .take()
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
             self.source_is_connected.clone(),
         );
         Ok(Some(builder.spawn(source, ctx)))
@@ -432,8 +441,7 @@ impl KvSink {
                 if let Err(CompareAndSwapError { current, proposed }) =
                     self.db.compare_and_swap(&key, old, Some(vec))?
                 {
-                    Err(format!(
-                        "CAS error: expected {} but found {}.",
+                    Err(Error::Cas(
                         self.decode(proposed, ingest_ns).await?,
                         self.decode(current, ingest_ns).await?,
                     )
@@ -473,7 +481,7 @@ impl Sink for KvSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let ingest_ns = tremor_common::time::nanotime();
         let send_replies = self.source_is_connected.load(Ordering::Acquire);
 

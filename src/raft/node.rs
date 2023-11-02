@@ -15,7 +15,7 @@
 //! The entirety of a cluster node as a struct
 use crate::{
     channel::{bounded, Sender},
-    errors::Result,
+    errors::{ErrorKind, Result},
     qsize,
     raft::{
         api::{self, ServerState},
@@ -56,7 +56,7 @@ impl ClusterNodeKillSwitch {
     pub fn stop(&self, mode: ShutdownMode) -> ClusterResult<()> {
         self.sender
             .try_send(mode)
-            .map_err(|_| ClusterError::from("Error stopping cluster node"))
+            .map_err(|_| ClusterError::Shutdown.into())
     }
 }
 
@@ -100,9 +100,13 @@ impl Running {
 
         let http_api_addr = server_state.addr().api().to_string();
         let app = api::endpoints().with_state(server_state.clone());
-        let http_api_server =
-            axum::Server::bind(&http_api_addr.to_socket_addrs()?.next().ok_or("badaddr")?)
-                .serve(app.into_make_service());
+        let http_api_server = axum::Server::bind(
+            &http_api_addr
+                .to_socket_addrs()?
+                .next()
+                .ok_or(ClusterError::BadAddr)?,
+        )
+        .serve(app.into_make_service());
 
         let run_handle = task::spawn(async move {
             let mut tcp_future = Box::pin(
@@ -131,7 +135,7 @@ impl Running {
                     warn!("[Node {node_id}] TCP cluster API shutdown.");
                     // Important: this will free and drop the store and thus the rocksdb
                     api_worker_handle.abort();
-                    raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
+                    raft.shutdown().await.map_err(|_| ClusterError::Shutdown)?;
                     runtime.stop(ShutdownMode::Graceful).await?;
                     runtime_future.await??;
                 }
@@ -141,7 +145,7 @@ impl Running {
                     }
                     // Important: this will free and drop the store and thus the rocksdb
                     api_worker_handle.abort();
-                    raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
+                    raft.shutdown().await.map_err(|_| ClusterError::Shutdown)?;
                     runtime.stop(ShutdownMode::Graceful).await?;
                     runtime_future.await??;
 
@@ -153,7 +157,7 @@ impl Running {
                     // Important: this will free and drop the store and thus the rocksdb
                     api_worker_handle.abort();
                     // runtime is already down, we only need to stop local raft
-                    raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
+                    raft.shutdown().await.map_err(|_| ClusterError::Shutdown)?;
                 }
                 shutdown_mode = kill_switch_future => {
                     let shutdown_mode = shutdown_mode.unwrap_or(ShutdownMode::Forceful);
@@ -161,7 +165,7 @@ impl Running {
                     // Important: this will free and drop the store and thus the rocksdb
                     api_worker_handle.abort();
                     // tcp and http api stopped listening as we don't poll them no more
-                    raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
+                    raft.shutdown().await.map_err(|_| ClusterError::Shutdown)?;
                     info!("[Node {node_id}] Raft engine did stop.");
                     info!("[Node {node_id}] Stopping the Tremor runtime...");
                     runtime.stop(shutdown_mode).await?;
@@ -171,7 +175,7 @@ impl Running {
             }
             info!("[Node {node_id}] Tremor cluster node stopped");
 
-            Ok::<(), ClusterError>(())
+            Ok::<(), anyhow::Error>(())
         });
 
         Ok(Self {
@@ -298,7 +302,7 @@ impl Node {
         *(runtime
             .cluster_manager
             .write()
-            .map_err(|_| "Failed to set world manager")?) = Some(manager);
+            .map_err(|_| ErrorKind::WriteLock)?) = Some(manager);
         let (api_worker_handle, server_state) = api::initialize(
             node_id,
             addr,
@@ -328,9 +332,7 @@ impl Node {
         promote_to_voter: bool,
     ) -> ClusterResult<Running> {
         if endpoints.is_empty() {
-            return Err(ClusterError::Other(
-                "No join endpoints provided".to_string(),
-            ));
+            return Err(ClusterError::NoEndpoints.into());
         }
 
         // for now we infinitely try to join until it succeeds
@@ -377,7 +379,7 @@ impl Node {
         *(runtime
             .cluster_manager
             .write()
-            .map_err(|_| "Failed to set world manager")?) = Some(manager);
+            .map_err(|_| ErrorKind::WriteLock)?) = Some(manager);
         let (api_worker_handle, server_state) =
             api::initialize(node_id, addr, raft.clone(), store, store_tx, store_rx);
         let running = Running::start(
@@ -439,7 +441,7 @@ impl Node {
         *(runtime
             .cluster_manager
             .write()
-            .map_err(|_| "Failed to set world manager")?) = Some(manager);
+            .map_err(|_| ErrorKind::WriteLock)?) = Some(manager);
         let mut nodes = BTreeMap::new();
         nodes.insert(node_id, addr.clone());
         // this is the crucial bootstrapping step
@@ -474,9 +476,10 @@ impl Node {
                 )
                 .await
             }
-            Err(e) => Err(ClusterError::Other(format!(
-                "Error adding myself to the bootstrapped cluster: {e}"
-            ))),
+            Err(e) => {
+                Err(anyhow::Error::from(e)
+                    .context("Error adding myself to the bootstrapped cluster"))
+            }
         }
     }
 }

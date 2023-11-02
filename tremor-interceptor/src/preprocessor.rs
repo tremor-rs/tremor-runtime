@@ -195,13 +195,13 @@ mod test {
 
         let data = vec![1_u8, 2, 3];
 
-        let encoded = post_p.process(42, 23, &data)?.pop().ok_or("no data")?;
+        let encoded = post_p.process(42, 23, &data)?.pop().expect("no data");
 
         let mut in_ns = 0u64;
         let decoded = pre_p
             .process(&mut in_ns, &encoded, Value::object())?
             .pop()
-            .ok_or("no data")?
+            .expect("no data")
             .0;
 
         assert!(pre_p.finish(None, None)?.is_empty());

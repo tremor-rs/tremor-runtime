@@ -28,7 +28,13 @@ use tremor_value::utils::sorted_serialize;
 fn to_pipe(query: String) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorUIdGen::new();
-    let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
+    let q = Query::parse(
+        &query,
+        &*FN_REGISTRY
+            .read()
+            .map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?,
+        &aggr_reg,
+    )?;
     Ok(q.to_executable_graph(&mut idgen, &MetricsChannel::new(128))?)
 }
 

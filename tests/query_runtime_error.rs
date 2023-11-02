@@ -12,27 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
+use serial_test::serial;
 use std::io::prelude::*;
 use std::path::PathBuf;
 use tremor_common::{file, ports::IN, uids::OperatorUIdGen};
-
+use tremor_pipeline::errors::{Error as PipelineError, ErrorKind as PipelineErrorKind};
 use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::{query::Query, MetricsChannel};
 use tremor_pipeline::{Event, EventId};
-use tremor_script::FN_REGISTRY;
-
-use serial_test::serial;
-use tremor_pipeline::errors::{Error as PipelineError, ErrorKind as PipelineErrorKind};
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
 use tremor_script::module::Manager;
 use tremor_script::utils::*;
+use tremor_script::FN_REGISTRY;
 use tremor_value::utils::sorted_serialize;
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorUIdGen::new();
-    let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
+    let q = Query::parse(
+        &query,
+        &*FN_REGISTRY
+            .read()
+            .map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?,
+        &aggr_reg,
+    )?;
     Ok(q.to_executable_graph(&mut idgen, &MetricsChannel::new(128))?)
 }
 

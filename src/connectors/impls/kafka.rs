@@ -305,6 +305,18 @@ use tokio::task::JoinHandle;
 use tremor_script::EventPayload;
 use tremor_value::Value;
 
+#[derive(Debug, Clone, thiserror::Error)]
+enum Error {
+    #[error("Unknown stats client_type \"{0}\"")]
+    UnknownStatsClient(String),
+    #[error("not an int value")]
+    InvalidInt,
+    #[error("Provided rdkafka_option that will be overwritten: {0}")]
+    OptionOverwritten(String),
+    #[error("Cannot enable `retry_failed_events` and `enable.auto.commit` and `enable.auto.offset.store` at the same time.")]
+    CommitConfigConflict,
+}
+
 const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// verify broker host:port pairs in kafka connector configs
@@ -317,17 +329,17 @@ fn verify_brokers(alias: &alias::Connector, brokers: &[String]) -> Result<(Strin
             }
             [host, port] => {
                 let port: u16 = port.parse().map_err(|_| {
-                    err_connector_def(alias, &format!("Invalid broker: {host}:{port}"))
+                    error_connector_def(alias, &format!("Invalid broker: {host}:{port}"))
                 })?;
                 first_broker.get_or_insert_with(|| ((*host).to_string(), Some(port)));
             }
             b => {
                 let e = format!("Invalid broker: {}", b.join(":"));
-                return Err(err_connector_def(alias, &e));
+                return Err(error_connector_def(alias, &e).into());
             }
         }
     }
-    first_broker.ok_or_else(|| err_connector_def(alias, "Missing brokers."))
+    first_broker.ok_or_else(|| error_connector_def(alias, "Missing brokers.").into())
 }
 
 /// Returns `true` if the error denotes a failed connect attempt
@@ -457,7 +469,7 @@ where
                 make_metrics_payload(Self::KAFKA_CONSUMER_STATS, fields, tags, timestamp)
             }
             other => {
-                return Err(format!("Unknown stats client_type \"{other}\"").into());
+                return Err(Error::UnknownStatsClient(other.to_string()).into());
             }
         };
         self.metrics_tx.send(metrics_payload)?;

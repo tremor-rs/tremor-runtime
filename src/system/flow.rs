@@ -13,13 +13,14 @@
 // limitations under the License.
 
 use crate::{
+    channel::empty_e,
     channel::{bounded, oneshot, OneShotSender, Sender},
-    errors::empty_error,
+    connectors::AliasableConnectorResult,
     raft::{self, NodeId},
 };
 use crate::{
     connectors::{self, ConnectorResult, Known},
-    errors::{Error, Kind as ErrorKind, Result},
+    errors::{ErrorKind, Result},
     instance::{IntendedState, State},
     log_error,
     pipeline::{self, InputTarget},
@@ -43,6 +44,26 @@ use tremor_script::{
     ast::{self, ConnectStmt, Helper},
     errors::{error_generic, not_defined_err},
 };
+
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum Error {
+    #[error("failed to deploy flow {0}: {1}")]
+    Deploy(String, String),
+    #[error("Pipeline {0} not fund in {1}")]
+    PipelineNotFound(String, String),
+    #[error("Connector {0} not fund in {1}")]
+    ConnectorNotFound(String, String),
+    #[error("Unknown connector type {1} in flow {0}")]
+    UnknownConnector(alias::Flow, String),
+    #[error("illegal state change")]
+    IllegalStateChange,
+    #[error("Duplicate flow: {0}")]
+    Duplicate(alias::Flow),
+    #[error("Flow not found: {0}")]
+    NotFound(alias::Flow),
+    #[error("Flow failed: {0}")]
+    Failed(alias::Flow),
+}
 
 #[derive(Debug)]
 /// Control Plane message accepted by each binding control plane handler
@@ -92,13 +113,13 @@ pub struct StatusReport {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct AppContext {
     pub(crate) id: alias::Flow,
-    pub(crate) raft: raft::Cluster,
+    pub(crate) raft: raft::ClusterInterface,
     pub(crate) metrics: MetricsChannel,
 }
 
 impl AppContext {
-    pub fn id(&self) -> &alias::App {
-        self.id.app_id()
+    pub fn id(&self) -> &alias::Flow {
+        &self.id
     }
     pub fn instance(&self) -> &alias::Instance {
         self.id.instance_id()
@@ -124,13 +145,13 @@ impl Flow {
         new_state: IntendedState,
         tx: OneShotSender<Result<()>>,
     ) -> Result<()> {
-        self.addr
+        Ok(self
+            .addr
             .send(Msg::ChangeState {
                 intended_state: new_state,
                 reply_tx: tx,
             })
-            .await
-            .map_err(Error::from)
+            .await?)
     }
 
     /// request a `StatusReport` from this `Flow`
@@ -227,7 +248,10 @@ impl Flow {
                         known_connectors
                             .get(&config.connector_type)
                             .ok_or_else(|| {
-                                ErrorKind::UnknownConnectorType(config.connector_type.to_string())
+                                Error::UnknownConnector(
+                                    alias::Flow::from(alias),
+                                    config.connector_type.to_string(),
+                                )
                             })?;
                     connectors.insert(
                         alias.to_string(),
@@ -245,7 +269,9 @@ impl Flow {
                 ast::CreateTargetDefinition::Pipeline(defn) => {
                     let query = {
                         let aggr_reg = tremor_script::aggr_registry();
-                        let reg = tremor_script::FN_REGISTRY.read()?;
+                        let reg = tremor_script::FN_REGISTRY
+                            .read()
+                            .map_err(|_| ErrorKind::ReadLock)?;
                         let mut helper = Helper::new(&reg, &aggr_reg);
 
                         defn.to_query(&create.with, &mut helper)?
@@ -305,11 +331,9 @@ async fn link(
 
             let pipeline = pipelines
                 .get(to.alias())
-                .ok_or(format!(
-                    "Pipeline {} not found, in: {}",
-                    to.alias(),
-                    key_list(pipelines)
-                ))?
+                .ok_or_else(|| {
+                    Error::PipelineNotFound(to.alias().to_string(), key_list(pipelines))
+                })?
                 .clone();
 
             let (tx, mut rx) = bounded(1);
@@ -323,23 +347,19 @@ async fn link(
 
             timeout(TIMEOUT, rx.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or_else(empty_e)?
                 .map_err(|e| error_generic(link, from, &e))?;
         }
         ConnectStmt::PipelineToConnector { from, to, .. } => {
-            let pipeline = pipelines.get(from.alias()).ok_or(format!(
-                "Pipeline {} not found in: {}",
-                from.alias(),
-                key_list(pipelines)
-            ))?;
+            let pipeline = pipelines.get(from.alias()).ok_or_else(|| {
+                Error::PipelineNotFound(from.alias().to_string(), key_list(pipelines))
+            })?;
 
             let connector = connectors
                 .get(to.alias())
-                .ok_or(format!(
-                    "Connector {} not found: {}",
-                    to.alias(),
-                    key_list(pipelines)
-                ))?
+                .ok_or_else(|| {
+                    Error::ConnectorNotFound(to.alias().to_string(), key_list(connectors))
+                })?
                 .clone();
 
             // first link the pipeline to the connector
@@ -353,7 +373,7 @@ async fn link(
             pipeline.send_mgmt(msg).await?;
             timeout(TIMEOUT, rx.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or_else(empty_e)?
                 .map_err(|e| error_generic(link, from, &e))?;
 
             // then link the connector to the pipeline
@@ -368,20 +388,16 @@ async fn link(
             connector.send(msg).await?;
             timeout(TIMEOUT, rx.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or_else(empty_e)?
                 .map_err(|e| error_generic(link, to, &e))?;
         }
         ConnectStmt::PipelineToPipeline { from, to, .. } => {
-            let from_pipeline = pipelines.get(from.alias()).ok_or(format!(
-                "Pipeline {} not found in: {}",
-                from.alias(),
-                key_list(pipelines)
-            ))?;
-            let to_pipeline = pipelines.get(to.alias()).ok_or(format!(
-                "Pipeline {} not found in: {}",
-                from.alias(),
-                key_list(pipelines)
-            ))?;
+            let from_pipeline = pipelines.get(from.alias()).ok_or_else(|| {
+                Error::PipelineNotFound(from.alias().to_string(), key_list(pipelines))
+            })?;
+            let to_pipeline = pipelines.get(to.alias()).ok_or_else(|| {
+                Error::PipelineNotFound(from.alias().to_string(), key_list(pipelines))
+            })?;
             let (tx_from, mut rx_from) = bounded(1);
             let msg_from = crate::pipeline::MgmtMsg::ConnectOutput {
                 port: from.port().to_string().into(),
@@ -401,12 +417,12 @@ async fn link(
             from_pipeline.send_mgmt(msg_from).await?;
             timeout(TIMEOUT, rx_from.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or_else(empty_e)?
                 .map_err(|e| error_generic(link, to, &e))?;
             to_pipeline.send_mgmt(msg_to).await?;
             timeout(TIMEOUT, rx_to.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or_else(empty_e)?
                 .map_err(|e| error_generic(link, from, &e))?;
         }
     }
@@ -416,9 +432,9 @@ async fn link(
 /// wrapper for all possible messages handled by the flow task
 enum MsgWrapper {
     Msg(Msg),
-    StartResult(ConnectorResult<()>),
-    DrainResult(ConnectorResult<()>),
-    StopResult(ConnectorResult<()>),
+    StartResult(ConnectorResult),
+    DrainResult(ConnectorResult),
+    StopResult(ConnectorResult),
 }
 
 /// How the depoloyment is distributed on a cluster
@@ -444,9 +460,9 @@ struct RunningFlow {
     state_change_senders: HashMap<State, Vec<OneShotSender<Result<()>>>>,
     input_channel: Pin<Box<dyn Stream<Item = MsgWrapper> + Send + Sync>>,
     msg_tx: Sender<Msg>,
-    drain_tx: Sender<ConnectorResult<()>>,
-    stop_tx: Sender<ConnectorResult<()>>,
-    start_tx: Sender<ConnectorResult<()>>,
+    drain_tx: Sender<ConnectorResult>,
+    stop_tx: Sender<ConnectorResult>,
+    start_tx: Sender<ConnectorResult>,
     deployment_type: DeploymentType,
 }
 
@@ -722,10 +738,10 @@ impl RunningFlow {
                         (State::Draining, IntendedState::Running | IntendedState::Paused)
                         | (State::Stopped, _) => {
                             log_error!(
-                                reply_tx.send(Err("illegal state change".into())),
+                                reply_tx.send(Err(Error::IllegalStateChange.into())),
                                 "{prefix} Error sending StateChagnge response: {e:?}"
                             );
-                            return Err("illegal state change".into());
+                            return Err(Error::IllegalStateChange.into());
                         }
                         (State::Failed, intended) => {
                             self.insert_state_change_sender(intended_state, reply_tx);
@@ -759,10 +775,8 @@ impl RunningFlow {
                         .find(|c| c.alias == connector_alias)
                         .cloned()
                         .ok_or_else(|| {
-                            Error::from(ErrorKind::ConnectorNotFound(
-                                flow_id.to_string(),
-                                connector_alias.connector_alias().to_string(),
-                            ))
+                            Error::UnknownConnector(flow_id.clone(), connector_alias.to_string())
+                                .into()
                         });
                     log_error!(
                         reply_tx.send(res),
@@ -786,7 +800,7 @@ impl RunningFlow {
                     }
                 }
                 MsgWrapper::StopResult(res) => {
-                    if self.handle_stop_result(res, &prefix) == ControlFlow::Break(()) {
+                    if self.handle_stop_result(&res, &prefix) == ControlFlow::Break(()) {
                         break;
                     }
                 }
@@ -823,15 +837,11 @@ impl RunningFlow {
         Ok(())
     }
 
-    fn handle_start_result(
-        &mut self,
-        conn_res: ConnectorResult<()>,
-        prefix: impl std::fmt::Display,
-    ) {
-        if let Err(e) = conn_res.res {
+    fn handle_start_result(&mut self, conn_res: ConnectorResult, prefix: impl std::fmt::Display) {
+        if let Some(e) = conn_res.err() {
             error!(
                 "{prefix} Error starting Connector {conn}: {e}",
-                conn = conn_res.alias
+                conn = e.alias()
             );
             if self.state != State::Failed {
                 // only report failed upon the first connector failure
@@ -934,15 +944,16 @@ impl RunningFlow {
 
     fn handle_stop_result(
         &mut self,
-        conn_res: ConnectorResult<()>,
+        conn_res: &ConnectorResult,
         prefix: impl std::fmt::Display,
     ) -> ControlFlow<()> {
-        info!("{prefix} Connector {} stopped.", &conn_res.alias);
+        let alias: &alias::Connector = conn_res.alias();
+
+        info!("{prefix} Connector {alias} stopped.");
 
         log_error!(
-            conn_res.res,
-            "{prefix} Error during Stopping in Connector {}: {e}",
-            &conn_res.alias
+            conn_res,
+            "{prefix} Error during Stopping in Connector {alias}: {e}"
         );
 
         let old = self.expected_stops;
@@ -959,15 +970,16 @@ impl RunningFlow {
 
     async fn handle_drain_result(
         &mut self,
-        conn_res: ConnectorResult<()>,
+        conn_res: ConnectorResult,
         prefix: impl std::fmt::Display,
     ) -> Result<ControlFlow<()>> {
-        info!("{prefix} Connector {} drained.", &conn_res.alias);
+        let alias: &alias::Connector = conn_res.alias();
+
+        info!("{prefix} Connector {alias} drained.");
 
         log_error!(
-            conn_res.res,
-            "{prefix} Error during Draining in Connector {}: {e}",
-            &conn_res.alias
+            conn_res,
+            "{prefix} Error during Draining in Connector {alias}: {e}"
         );
 
         let old = self.expected_drains;
@@ -998,9 +1010,7 @@ impl RunningFlow {
                     if let Some(senders) = self.state_change_senders.get_mut(state) {
                         for sender in senders.drain(..) {
                             log_error!(
-                                sender.send(Err(
-                                    ErrorKind::FlowFailed(self.app_ctx.to_string()).into()
-                                )),
+                                sender.send(Err(Error::Failed(self.app_ctx.id().clone()).into())),
                                 "Error notifying {state} state handlers of failed state: {e:?}"
                             );
                         }
@@ -1085,7 +1095,7 @@ mod tests {
                 &mut self,
                 _pull_id: &mut u64,
                 _ctx: &SourceContext,
-            ) -> Result<SourceReply> {
+            ) -> anyhow::Result<SourceReply> {
                 Ok(SourceReply::Data {
                     origin_uri: EventOriginUri::default(),
                     data: r#"{"snot":"badger"}"#.as_bytes().to_vec(),
@@ -1123,7 +1133,7 @@ mod tests {
                 _ctx: &SinkContext,
                 _serializer: &mut EventSerializer,
                 _start: u64,
-            ) -> Result<SinkReply> {
+            ) -> anyhow::Result<SinkReply> {
                 self.tx.send(event)?;
                 Ok(SinkReply::NONE)
             }
@@ -1184,7 +1194,11 @@ mod tests {
         "#;
         let (tx, _rx) = bounded(128);
         let kill_switch = KillSwitch(tx);
-        let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg)?;
+        let deployable = Deploy::parse(
+            &src,
+            &*FN_REGISTRY.read().map_err(|_| ErrorKind::ReadLock)?,
+            &aggr_reg,
+        )?;
         let deploy = deployable
             .deploy
             .stmts
@@ -1225,7 +1239,7 @@ mod tests {
         assert_eq!(String::from("foo"), connectors[0].alias.to_string());
 
         // assert the flow has started and events are flowing
-        let event = connector_rx.recv().await.ok_or("empty")?;
+        let event = connector_rx.recv().await.expect("empty");
         assert_eq!(
             &literal!({
                 "snot": "badger"

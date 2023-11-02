@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::{
+    errors::ErrorKind,
     instance::IntendedState,
     raft::{
         archive::{extract, get_app, TremorAppDef},
@@ -90,6 +91,16 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
             apps: HashMap::new(),
             world: world.clone(),
         };
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = db.begin_write()?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(APPS).map_err(w_err)?;
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(INSTANCES).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
 
         let read_txn = db.begin_read()?;
         let apps = read_txn.open_table(APPS)?;
@@ -99,6 +110,7 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
             me.load_archive(archive.value())
                 .map_err(|e| store::Error::Other(Box::new(e)))?;
         }
+
         let instances = read_txn.open_table(INSTANCES)?;
 
         // load instances
@@ -220,6 +232,14 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
     }
 
     fn as_snapshot(&self) -> StorageResult<AppsSnapshot> {
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(APPS).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
         let read_txn = self.db.begin_read().map_err(r_err)?;
         let apps = read_txn.open_table(APPS).map_err(r_err)?;
         let archives = apps
@@ -300,7 +320,7 @@ impl AppsStateMachine {
         }
         write_txn.commit().map_err(w_err)?;
 
-        let app = StateApp {
+        let app: StateApp = StateApp {
             app,
             main,
             arena_indices,
@@ -356,7 +376,10 @@ impl AppsStateMachine {
 
         let fake_aggr_reg = AggrRegistry::default();
         {
-            let reg = &*FN_REGISTRY.read().map_err(w_err)?;
+            let reg = &*FN_REGISTRY
+                .read()
+                .map_err(|_| ErrorKind::ReadLock)
+                .map_err(w_err)?;
             let mut helper = Helper::new(reg, &fake_aggr_reg);
             Optimizer::new(&helper)
                 .walk_flow_definition(&mut defn)

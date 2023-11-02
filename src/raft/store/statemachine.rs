@@ -13,8 +13,12 @@
 // limitations under the License.
 
 use crate::{
-    raft::store::{
-        self, statemachine::nodes::NodesStateMachine, StorageResult, TremorRequest, TremorResponse,
+    raft::{
+        store::{
+            self, statemachine::nodes::NodesStateMachine, StorageResult, TremorRequest,
+            TremorResponse,
+        },
+        SillyError,
     },
     system::Runtime,
 };
@@ -23,7 +27,7 @@ use openraft::{
 };
 use redb::{Database, ReadableTable};
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
 use super::STATE_MACHINE;
 
@@ -34,27 +38,27 @@ mod nodes;
 // kv state machine
 mod kv;
 
-pub(crate) fn r_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
+pub(crate) fn r_err<E: Into<anyhow::Error>>(e: E) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Read,
-        AnyError::new(&e),
+        AnyError::new(&SillyError(e.into())),
     )
     .into()
 }
-pub(crate) fn w_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
+pub(crate) fn w_err<E: Into<anyhow::Error>>(e: E) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Write,
-        AnyError::new(&e),
+        AnyError::new(&SillyError(e.into())),
     )
     .into()
 }
-fn d_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
+fn d_err<E: Into<anyhow::Error>>(e: E) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Delete,
-        AnyError::new(&e),
+        AnyError::new(&SillyError(e.into())),
     )
     .into()
 }
@@ -164,6 +168,15 @@ impl TremorStateMachine {
     where
         T: for<'de> serde::Deserialize<'de>,
     {
+        // We need to use a write transaction despite just wanting a read transaction due to
+        // https://github.com/cberner/redb/issues/711
+        let bug_fix_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            // ALLOW: this is just a workaround
+            let _argh = bug_fix_txn.open_table(STATE_MACHINE).map_err(w_err)?;
+        }
+        bug_fix_txn.commit().map_err(w_err)?;
+
         let read_txn = self.db.begin_read().map_err(r_err)?;
 
         let table = read_txn.open_table(STATE_MACHINE).map_err(r_err)?;

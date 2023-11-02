@@ -46,7 +46,7 @@ macro_rules! test_cases {
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
-                let s = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
+                let s = Script::parse(&contents, &*FN_REGISTRY.read().map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?)?;
                 let mut h = Dumb::new();
                 s.format_warnings_with(&mut h)?;
                 h.finalize()?;

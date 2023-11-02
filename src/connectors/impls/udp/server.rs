@@ -15,7 +15,7 @@
 //! The UDP server will close the udp spcket on stop
 use crate::connectors::{
     prelude::*,
-    utils::socket::{udp_socket, UdpSocketOptions},
+    utils::socket::{udp_socket, Error, UdpSocketOptions},
 };
 use tokio::net::UdpSocket;
 
@@ -103,17 +103,18 @@ impl UdpServerSource {
 
 #[async_trait::async_trait]
 impl Source for UdpServerSource {
-    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let listener = udp_socket(&self.config.url, &self.config.socket_options).await?;
         self.listener = Some(listener);
         Ok(true)
     }
 
-    async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        let socket = self
-            .listener
-            .as_ref()
-            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        let socket = self.listener.as_ref().ok_or(Error::NoSocket)?;
         match socket.recv(&mut self.buffer).await {
             Ok(bytes_read) => {
                 if bytes_read == 0 {

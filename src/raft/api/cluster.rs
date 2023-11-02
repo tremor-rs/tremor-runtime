@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{APIRequest, API_WORKER_TIMEOUT};
+use super::{to_api_result, APIRequest, API_WORKER_TIMEOUT};
 use crate::raft::{
-    api::{APIError, APIResult, ToAPIResult},
+    api::{APIError, APIResult},
     node::Addr,
     store::{NodesRequest, TremorRequest},
     NodeId,
@@ -83,14 +83,17 @@ async fn add_node(
         // when this succeeds the local state machine should have the node addr stored, so the network can access it
         // in order to establish a network connection
         debug!("node {addr} not yet known to cluster");
-        let response = state
-            .raft
-            .client_write(TremorRequest::Nodes(NodesRequest::AddNode {
-                addr: addr.clone(),
-            }))
-            .await
-            .to_api_result(&uri, &state)
-            .await?;
+        let response = to_api_result(
+            state
+                .raft
+                .client_write(TremorRequest::Nodes(NodesRequest::AddNode {
+                    addr: addr.clone(),
+                }))
+                .await,
+            &uri,
+            &state,
+        )
+        .await?;
         let node_id: NodeId = NodeId::try_from(response.data)?;
         debug!("node {addr} added to the cluster as node {node_id}");
         Ok(Json(node_id))
@@ -118,12 +121,15 @@ async fn remove_node(
     }
     // TODO: how to check if the node is a learner?
     // remove the node metadata from the state machine
-    state
-        .raft
-        .client_write(TremorRequest::Nodes(NodesRequest::RemoveNode { node_id }))
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    to_api_result(
+        state
+            .raft
+            .client_write(TremorRequest::Nodes(NodesRequest::RemoveNode { node_id }))
+            .await,
+        &uri,
+        &state,
+    )
+    .await?;
     Ok(Json(()))
 }
 
@@ -152,13 +158,13 @@ async fn add_learner(
 
     // add the node as learner
     debug!("Adding node {node_id} as learner...");
-    state
-        .raft
-        .add_learner(node_id, node_addr, true)
-        .await
-        .to_api_result(&uri, &state)
-        .await
-        .map(|d| Json(d.log_id))
+    to_api_result(
+        state.raft.add_learner(node_id, node_addr, true).await,
+        &uri,
+        &state,
+    )
+    .await
+    .map(|d| Json(d.log_id))
 }
 
 /// Removes a node from **Learners** only
@@ -174,12 +180,15 @@ async fn remove_learner(
     let mut nodes = BTreeSet::new();
     nodes.insert(node_id);
 
-    state
-        .raft
-        .change_membership(ChangeMembers::RemoveNodes(nodes), true)
-        .await
-        .to_api_result(&uri, &state)
-        .await?;
+    to_api_result(
+        state
+            .raft
+            .change_membership(ChangeMembers::RemoveNodes(nodes), true)
+            .await,
+        &uri,
+        &state,
+    )
+    .await?;
     Ok(Json(()))
 }
 
@@ -198,12 +207,12 @@ async fn promote_voter(
     let value = if membership.insert(node_id) {
         // only update state if not already in the membership config
         // this call always returns TremorResponse { value: None } // see store.rs
-        state
-            .raft
-            .change_membership(membership, true)
-            .await
-            .to_api_result(&uri, &state)
-            .await?;
+        to_api_result(
+            state.raft.change_membership(membership, true).await,
+            &uri,
+            &state,
+        )
+        .await?;
         Some(node_id)
     } else {
         None
@@ -222,12 +231,12 @@ async fn demote_voter(
     let mut membership =
         timeout(API_WORKER_TIMEOUT, state.raft_manager.get_last_membership()).await??;
     let value = if membership.remove(&node_id) {
-        state
-            .raft
-            .change_membership(membership, true)
-            .await
-            .to_api_result(&uri, &state)
-            .await?;
+        to_api_result(
+            state.raft.change_membership(membership, true).await,
+            &uri,
+            &state,
+        )
+        .await?;
         Some(node_id)
     } else {
         None

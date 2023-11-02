@@ -70,7 +70,6 @@ impl TestNode {
         })
     }
 
-    #[allow(dead_code)]
     async fn just_start(path: impl AsRef<Path>) -> ClusterResult<Self> {
         let addr = free_node_addr().await?;
         let running = Node::load_from_store(path, raft_config()?).await?;
@@ -82,7 +81,6 @@ impl TestNode {
         })
     }
 
-    #[allow(dead_code)]
     async fn join_as_learner(path: impl AsRef<Path>, join_addr: &Addr) -> ClusterResult<Self> {
         let addr = free_node_addr().await?;
         let mut node = Node::new(path, raft_config()?);
@@ -115,9 +113,9 @@ async fn cluster_join_test() -> ClusterResult<()> {
     let dir0 = tempfile::tempdir()?;
     let dir1 = tempfile::tempdir()?;
     let dir2 = tempfile::tempdir()?;
-    let node0 = TestNode::bootstrap(dir0.path()).await?;
-    let node1 = TestNode::start_and_join(dir1.path(), &node0.addr).await?;
-    let node2 = TestNode::start_and_join(dir2.path(), &node1.addr).await?;
+    let node0 = TestNode::bootstrap(dir0.path().join("db")).await?;
+    let node1 = TestNode::start_and_join(dir1.path().join("db"), &node0.addr).await?;
+    let node2 = TestNode::start_and_join(dir2.path().join("db"), &node1.addr).await?;
 
     // all see the same leader
     let client0 = node0.client();
@@ -162,9 +160,9 @@ async fn kill_and_restart_voter() -> ClusterResult<()> {
     let dir1 = tempfile::tempdir()?;
     let dir2 = tempfile::tempdir()?;
 
-    let node0 = TestNode::bootstrap(dir0.path()).await?;
-    let node1 = TestNode::start_and_join(dir1.path(), &node0.addr).await?;
-    let node2 = TestNode::start_and_join(dir2.path(), &node1.addr).await?;
+    let node0 = TestNode::bootstrap(dir0.path().join("db")).await?;
+    let node1 = TestNode::start_and_join(dir1.path().join("db"), &node0.addr).await?;
+    let node2 = TestNode::start_and_join(dir2.path().join("db"), &node1.addr).await?;
 
     let client0 = node0.client();
     let metrics = client0.metrics().await?;
@@ -181,7 +179,7 @@ async fn kill_and_restart_voter() -> ClusterResult<()> {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // restart the node
-    let node1 = TestNode::just_start(dir1.path()).await?;
+    let node1 = TestNode::just_start(dir1.path().join("db")).await?;
 
     // check that the leader is available
     // TODO: solidify to guard against timing issues

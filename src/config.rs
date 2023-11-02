@@ -113,7 +113,7 @@ impl Connector {
         defn: &ast::ConnectorDefinition<'static>,
     ) -> crate::Result<Self> {
         let aggr_reg = tremor_script::registry::aggr();
-        let reg = &*FN_REGISTRY.read()?;
+        let reg = &*FN_REGISTRY.read().map_err(|_| ErrorKind::ReadLock)?;
 
         let mut helper = Helper::new(reg, &aggr_reg);
         let params = defn.params.clone();
@@ -136,8 +136,8 @@ impl Connector {
             connector_alias: &alias::Connector,
         ) -> Result<()> {
             if v.get(k).is_some() && v.get(k).map(Value::value_type) != Some(t) {
-                return Err(ErrorKind::InvalidConnectorDefinition(
-                    connector_alias.to_string(),
+                return Err(ConnectorError::InvalidDefinition(
+                    connector_alias.clone(),
                     format!(
                         "Expected type {t:?} for key {k} but got {:?}",
                         v.get(k).map_or(ValueType::Null, Value::value_type)
@@ -316,6 +316,6 @@ mod tests {
         let id = alias::Connector::new("my_id");
         let res = Connector::from_config(&id, "fancy_schmancy".into(), &config);
         assert!(res.is_err());
-        assert_eq!(String::from("Invalid Definition for connector \"my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
+        assert_eq!(String::from("[my_id] Invalid definition: Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
     }
 }

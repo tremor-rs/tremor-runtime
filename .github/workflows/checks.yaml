@@ -24,27 +24,11 @@ jobs:
   unused-deps:
     runs-on: ubuntu-latest
     steps:
-      - name: Install deps
-        run: sudo snap install remarshal
-      - name: Install deps
-        run: sudo snap install --classic ripgrep
       - uses: actions/checkout@v3
-      - name: Check for unused dependencies (tremor-runtime)
-        run: ./.github/checks/deps.sh .
-      - name: Check for unused dependencies (tremor-influx)
-        run: ./.github/checks/deps.sh tremor-influx
-      - name: Check for unused dependencies (tremor-pipeline)
-        run: ./.github/checks/deps.sh tremor-pipeline
-      - name: Check for unused dependencies (tremor-script)
-        run: ./.github/checks/deps.sh tremor-script
-      - name: Check for unused dependencies (tremor-cli)
-        run: ./.github/checks/deps.sh tremor-cli
-      - name: Check for unused dependencies (tremor-common)
-        run: ./.github/checks/deps.sh tremor-common
-      - name: Check for unused dependencies (tremor-value)
-        run: ./.github/checks/deps.sh tremor-value
-      - name: Check for unused dependencies (tremor-codec)
-        run: ./.github/checks/deps.sh tremor-codec
+      - name: Install deps
+        run: cargo install cargo-machete
+      - name: Check for unused dependencies
+        run: cargo machete --with-metadata
 
   format:
     runs-on: ubuntu-latest

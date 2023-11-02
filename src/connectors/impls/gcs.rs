@@ -126,6 +126,31 @@
 //!
 //! [`s3_streamer`]: ./s3.md#s3-streamer
 
+use http::StatusCode;
+
 mod chunked_buffer;
 mod resumable_upload_client;
 pub(crate) mod streamer;
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("No client available")]
+    NoClient,
+    #[error("Buffer was marked as done at index {0} which is not in memory anymore")]
+    InvalidBuffer(usize),
+    #[error("Not enough data in the buffer")]
+    NotEnoughData,
+    #[error("Request still failing after {0} retries")]
+    RequestFailed(u32),
+    #[error("Request for bucket {0} failed with {1}")]
+    Bucket(String, StatusCode),
+    #[error("Upload failed with {0}")]
+    Upload(StatusCode),
+
+    #[error("Delete failed with {0}")]
+    Delete(StatusCode),
+    #[error("Missing location header")]
+    MissingLocationHeader,
+    #[error("Missing or invalite range header")]
+    MissingOrInvalidRangeHeader,
+}

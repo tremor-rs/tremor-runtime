@@ -13,9 +13,7 @@
 // limitations under the License.
 
 //NOTE: error_chain
-#![allow(deprecated)]
-#![allow(clippy::large_enum_variant)]
-#![allow(missing_docs)]
+#![allow(deprecated, missing_docs, clippy::large_enum_variant)]
 
 use error_chain::error_chain;
 impl<P> From<std::sync::PoisonError<P>> for Error {
@@ -34,6 +32,9 @@ impl From<sled::transaction::TransactionError<()>> for Error {
         Self::from(format!("Sled Transaction Error: {e:?}"))
     }
 }
+
+unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
 
 error_chain! {
     links {

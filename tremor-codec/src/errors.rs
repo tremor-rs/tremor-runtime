@@ -34,6 +34,9 @@ impl PartialEq for Error {
     }
 }
 
+unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
+
 error_chain! {
     foreign_links {
         CsvError(csv::Error);

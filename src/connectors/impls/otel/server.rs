@@ -15,7 +15,7 @@
 use std::net::ToSocketAddrs;
 
 use super::{common::OtelDefaults, logs, metrics, trace};
-use crate::{connectors::prelude::*, errors::already_created_error};
+use crate::connectors::prelude::*;
 use async_std::channel::{bounded, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
@@ -92,6 +92,16 @@ impl ConnectorBuilder for Builder {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Missing host for otel server")]
+    MissingHost,
+    #[error("Missing port for otel server")]
+    MissingPort,
+    #[error("Bad bind address")]
+    BadAddr,
+}
+
 #[async_trait::async_trait]
 impl Connector for Server {
     fn codec_requirements(&self) -> CodecReq {
@@ -106,7 +116,10 @@ impl Connector for Server {
         let source = OtelSource {
             origin_uri: self.origin_uri.clone(),
             config: self.config.clone(),
-            rx: self.rx.take().ok_or_else(already_created_error)?,
+            rx: self
+                .rx
+                .take()
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
         };
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -120,20 +133,12 @@ impl Connector for Server {
     }
 
     async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let host = self
-            .config
-            .url
-            .host_str()
-            .ok_or("Missing host for otel server")?;
-        let port = self
-            .config
-            .url
-            .port()
-            .ok_or("Missing prot for otel server")?;
+        let host = self.config.url.host_str().ok_or(Error::MissingHost)?;
+        let port = self.config.url.port().ok_or(Error::MissingPort)?;
         let endpoint = format!("{host}:{port}")
             .to_socket_addrs()?
             .next()
-            .ok_or("badaddr")?;
+            .ok_or(Error::BadAddr)?;
 
         if let Some(previous_handle) = self.accept_task.take() {
             previous_handle.abort();
@@ -157,7 +162,11 @@ struct OtelSource {
 
 #[async_trait::async_trait()]
 impl Source for OtelSource {
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let (data, remote) = match self.rx.recv().await? {
             OpenTelemetryEvents::Metrics(metrics, remote) if self.config.metrics => {
                 (metrics::resource_metrics_to_json(metrics), remote)

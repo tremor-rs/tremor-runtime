@@ -138,6 +138,12 @@ fn default_request_timeout() -> u64 {
     10_000_000_000u64 // 10 seconds
 }
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("The client is not connected")]
+    NotConnected,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -48,6 +48,8 @@ use std::{collections::BTreeSet, num::ParseIntError, sync::Arc, time::Duration};
 use tokio::{task::JoinHandle, time::timeout};
 use tremor_common::alias;
 
+use super::store::ResponseError;
+
 pub(crate) type APIRequest = Arc<ServerState>;
 /// Tyape alias for API results
 pub type APIResult<T> = Result<T, APIError>;
@@ -226,7 +228,7 @@ where
 }
 
 /// API errors
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, thiserror::Error)]
 pub enum APIError {
     /// We need to send this API request to the leader_url
     ForwardToLeader {
@@ -266,6 +268,8 @@ pub enum APIError {
     Timeout,
     /// recv error
     Recv,
+    /// Response error
+    Response(#[from] ResponseError),
     /// fallback error type
     Other(String),
 }
@@ -286,6 +290,7 @@ impl IntoResponse for APIError {
             | APIError::Fatal(_)
             | APIError::Runtime(_)
             | APIError::Recv
+            | APIError::Response(_)
             | APIError::App(_) => StatusCode::INTERNAL_SERVER_ERROR,
             APIError::NoLeader | APIError::NoQuorum(_) => StatusCode::SERVICE_UNAVAILABLE,
             APIError::Timeout => StatusCode::GATEWAY_TIMEOUT,
@@ -320,30 +325,23 @@ impl IntoResponse for APIError {
     }
 }
 
-#[async_trait::async_trait]
-trait ToAPIResult<T>
+pub(crate) async fn to_api_result<T>(
+    r: Result<T, RaftError<NodeId, ClientWriteError<NodeId, Addr>>>,
+    uri: &Uri,
+    state: &APIRequest,
+) -> APIResult<T>
 where
     T: serde::Serialize + serde::Deserialize<'static>,
 {
-    async fn to_api_result(self, uri: &Uri, req: &APIRequest) -> APIResult<T>;
-}
-
-#[async_trait::async_trait()]
-impl<T: serde::Serialize + serde::Deserialize<'static> + Send> ToAPIResult<T>
-    for Result<T, RaftError<NodeId, ClientWriteError<NodeId, Addr>>>
-{
-    // we need the request context here to construct the redirect url properly
-    async fn to_api_result(self, uri: &Uri, state: &APIRequest) -> APIResult<T> {
-        match self {
-            Ok(response) => Ok(response),
-            Err(RaftError::APIError(ClientWriteError::ForwardToLeader(e))) => {
-                forward_to_leader(e, uri, state).await
-            }
-            Err(RaftError::APIError(ClientWriteError::ChangeMembershipError(e))) => {
-                Err(APIError::ChangeMembership(e))
-            }
-            Err(RaftError::Fatal(e)) => Err(APIError::Fatal(e)),
+    match r {
+        Ok(response) => Ok(response),
+        Err(RaftError::APIError(ClientWriteError::ForwardToLeader(e))) => {
+            forward_to_leader(e, uri, state).await
         }
+        Err(RaftError::APIError(ClientWriteError::ChangeMembershipError(e))) => {
+            Err(APIError::ChangeMembership(e))
+        }
+        Err(RaftError::Fatal(e)) => Err(APIError::Fatal(e)),
     }
 }
 
@@ -396,7 +394,8 @@ impl std::fmt::Display for APIError {
                 .field("node_id", node_id)
                 .field("uri", uri)
                 .finish(),
-            APIError::Other(s) | Self::Store(s) => write!(f, "{s}"),
+
+            APIError::Other(s) => write!(f, "{s}"),
             APIError::HTTP { message, status } => write!(f, "HTTP {status} {message}"),
             APIError::Fatal(e) => write!(f, "Fatal Error: {e}"),
             APIError::ChangeMembership(e) => write!(f, "Error changing cluster membership: {e}"),
@@ -407,10 +406,11 @@ impl std::fmt::Display for APIError {
             APIError::Timeout => write!(f, "Timeout"),
             APIError::Recv => write!(f, "Recv error"),
             APIError::NoLeader => write!(f, "No Leader"),
+            APIError::Store(e) => write!(f, "Store error: {e}"),
+            APIError::Response(e) => write!(f, "Response error: {e}"),
         }
     }
 }
-impl std::error::Error for APIError {}
 
 impl From<store::Error> for APIError {
     fn from(e: store::Error) -> Self {

@@ -19,6 +19,11 @@ use crate::connectors::prelude::*;
 use crate::connectors::utils::pb;
 use tremor_otelapis::opentelemetry::proto::resource::v1::Resource;
 
+#[derive(Debug, Clone, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("Unable to map json value to Resource pb")]
+    InvalidResource,
+}
 pub(crate) fn resource_to_json(pb: Resource) -> Value<'static> {
     literal!({
         "attributes": common::key_value_list_to_json(pb.attributes),
@@ -27,9 +32,7 @@ pub(crate) fn resource_to_json(pb: Resource) -> Value<'static> {
 }
 
 pub(crate) fn resource_to_pb(json: &Value<'_>) -> Result<Resource> {
-    let json = json
-        .as_object()
-        .ok_or("Invalid json mapping for Resource")?;
+    let json = json.as_object().ok_or(Error::InvalidResource)?;
     Ok(Resource {
         dropped_attributes_count: pb::maybe_int_to_pbu32(json.get("dropped_attributes_count"))
             .unwrap_or_default(),

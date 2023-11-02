@@ -19,7 +19,7 @@ pub(crate) mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
 
-use super::{utils::metrics::SinkReporter, ConnectionLostNotifier, Msg, QuiescenceBeacon};
+use super::{utils::metrics::SinkReporter, ConnectionLostNotifier, Error, Msg, QuiescenceBeacon};
 use crate::{
     channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
     config::Connector as ConnectorConfig,
@@ -143,14 +143,14 @@ pub(crate) trait Sink: Send {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply>;
+    ) -> anyhow::Result<SinkReply>;
     /// called when receiving a signal
     async fn on_signal(
         &mut self,
         _signal: Event,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         Ok(SinkReply::default())
     }
 
@@ -179,7 +179,7 @@ pub(crate) trait Sink: Send {
 
     // lifecycle stuff
     /// called when started
-    async fn on_start(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_start(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -190,30 +190,30 @@ pub(crate) trait Sink: Send {
     /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
     ///
     /// Return `Ok(true)` if the connection could be successfully established.
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         Ok(true)
     }
 
     /// called when paused
-    async fn on_pause(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_pause(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// called when resumed
-    async fn on_resume(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_resume(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// called when stopped
-    async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
 
     // connectivity stuff
     /// called when sink lost connectivity
-    async fn on_connection_lost(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_connection_lost(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// called when sink re-established connectivity
-    async fn on_connection_established(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_connection_established(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -251,23 +251,23 @@ pub(crate) trait SinkRuntime: Send + Sync {
 #[derive(Clone)]
 pub(crate) struct SinkContextInner {
     /// the connector unique identifier
-    pub(crate) uid: SinkUId,
+    uid: SinkUId,
     /// the connector alias
-    pub(crate) alias: alias::Connector,
+    alias: alias::Connector,
     /// the connector type
-    pub(crate) connector_type: ConnectorType,
+    connector_type: ConnectorType,
 
     /// check if we are paused or should stop reading/writing
-    pub(crate) quiescence_beacon: QuiescenceBeacon,
+    quiescence_beacon: QuiescenceBeacon,
 
     /// notifier the connector runtime if we lost a connection
-    pub(crate) notifier: ConnectionLostNotifier,
+    notifier: ConnectionLostNotifier,
 
     /// sender for raft requests
     /// Application Context
-    pub(crate) app_ctx: AppContext,
+    app_ctx: AppContext,
 
-    pub(crate) killswitch: KillSwitch,
+    killswitch: KillSwitch,
 }
 #[derive(Clone)]
 pub(crate) struct SinkContext(Arc<SinkContextInner>);
@@ -285,18 +285,15 @@ impl SinkContext {
             KillSwitch::dummy(),
         )
     }
+
     pub(crate) fn killswitch(&self) -> KillSwitch {
         self.0.killswitch.clone()
     }
+
     pub(crate) fn uid(&self) -> SinkUId {
         self.0.uid
     }
-    pub(crate) fn notifier(&self) -> &ConnectionLostNotifier {
-        &self.0.notifier
-    }
-    pub(crate) fn app_ctx(&self) -> &AppContext {
-        &self.0.app_ctx
-    }
+
     pub(crate) fn new(
         uid: SinkUId,
         alias: alias::Connector,
@@ -343,7 +340,7 @@ impl Context for SinkContext {
     fn connector_type(&self) -> &ConnectorType {
         &self.0.connector_type
     }
-    fn raft(&self) -> &raft::Cluster {
+    fn raft(&self) -> &raft::ClusterInterface {
         &self.0.app_ctx.raft
     }
     fn app_ctx(&self) -> &AppContext {
@@ -372,7 +369,7 @@ pub(crate) enum SinkMsg {
         pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     },
     /// Connect to the outside world and send the result back
-    Connect(Sender<Result<bool>>, Attempt),
+    Connect(Sender<anyhow::Result<bool>>, Attempt),
     /// the connection to the outside world wasl ost
     ConnectionLost,
     /// connection established
@@ -385,7 +382,7 @@ pub(crate) enum SinkMsg {
     /// resume the sink
     Resume,
     /// stop the sink
-    Stop(Sender<Result<()>>),
+    Stop(Sender<anyhow::Result<()>>),
     /// drain this sink and notify the connector via the provided sender
     Drain(Sender<Msg>),
 }
@@ -503,21 +500,17 @@ impl EventSerializer {
         codec_config: Option<tremor_codec::Config>,
         default_codec: CodecReq,
         postprocessor_configs: Vec<postprocessor::Config>,
-        connector_type: &ConnectorType,
+        _connector_type: &ConnectorType,
         alias: &alias::Connector,
     ) -> Result<Self> {
         let codec_config = match default_codec {
             CodecReq::Structured => {
                 if codec_config.is_some() {
-                    return Err(format!(
-                        "The {connector_type} connector {alias} can not be configured with a codec.",
-                    )
-                    .into());
+                    return Err(Error::UnsupportedCodec(alias.clone()).into());
                 }
                 tremor_codec::Config::from("null")
             }
-            CodecReq::Required => codec_config
-                .ok_or_else(|| format!("Missing codec for {connector_type} connector {alias}"))?,
+            CodecReq::Required => codec_config.ok_or_else(|| Error::MissingCodec(alias.clone()))?,
             CodecReq::Optional(opt) => {
                 codec_config.unwrap_or_else(|| tremor_codec::Config::from(opt))
             }

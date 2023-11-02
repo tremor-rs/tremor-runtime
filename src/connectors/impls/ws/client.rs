@@ -16,16 +16,13 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{WsReader, WsWriter};
-use crate::{
-    connectors::{
-        prelude::*,
-        utils::{
-            socket::{tcp_client_socket, TcpSocketOptions},
-            tls::TLSClientConfig,
-            ConnectionMeta,
-        },
+use crate::connectors::{
+    prelude::*,
+    utils::{
+        socket::{tcp_client_socket, Error, TcpSocketOptions},
+        tls::TLSClientConfig,
+        ConnectionMeta,
     },
-    errors::{already_created_error, err_connector_def},
 };
 use either::Either;
 use futures::StreamExt;
@@ -72,11 +69,11 @@ impl ConnectorBuilder for Builder {
         let host = config
             .url
             .host()
-            .ok_or_else(|| err_connector_def(id, Self::MISSING_HOST))?
+            .ok_or_else(|| error_connector_def(id, Self::MISSING_HOST))?
             .to_string();
         // TODO: do we really need to make the port required when we have a default defined on the URL?
         if config.url.port().is_none() {
-            return Err(err_connector_def(id, Self::MISSING_PORT));
+            return Err(error_connector_def(id, Self::MISSING_PORT).into());
         };
 
         let (tls_connector, tls_domain) = match config.tls.as_ref() {
@@ -153,7 +150,7 @@ impl WsClientSink {
 
 #[async_trait::async_trait]
 impl Sink for WsClientSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let tcp_stream = tcp_client_socket(&self.config.url, &self.config.socket_options).await?;
         let (local_addr, peer_addr) = (tcp_stream.local_addr()?, tcp_stream.peer_addr()?);
 
@@ -223,10 +220,7 @@ impl Sink for WsClientSink {
         _start: u64,
     ) -> Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
-        let writer = self
-            .wrapped_stream
-            .as_mut()
-            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+        let writer = self.wrapped_stream.as_mut().ok_or(Error::NoSocket)?;
         for (value, meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, meta, ingest_ns).await?;
             if let Err(e) = writer.write(data, Some(meta)).await {
@@ -258,7 +252,9 @@ impl Connector for WsClient {
         // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
         let source = ChannelSource::from_channel(
             self.source_tx.clone(),
-            self.source_rx.take().ok_or_else(already_created_error)?,
+            self.source_rx
+                .take()
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
             // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
             Arc::new(AtomicBool::new(false)),
         );

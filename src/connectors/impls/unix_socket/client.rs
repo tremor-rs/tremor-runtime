@@ -15,8 +15,8 @@
 use super::UnixSocketReader;
 use crate::channel::{bounded, Receiver, Sender};
 use crate::{
-    connectors::prelude::*,
-    errors::{Kind as ErrorKind, Result},
+    connectors::{prelude::*, utils::socket::Error},
+    errors::Result,
 };
 use std::{path::PathBuf, sync::Arc};
 use tokio::{
@@ -82,7 +82,7 @@ impl Connector for Client {
             self.source_tx.clone(),
             self.source_rx
                 .take()
-                .ok_or_else(crate::errors::already_created_error)?,
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
             Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
         );
         Ok(Some(builder.spawn(source, ctx)))
@@ -115,10 +115,7 @@ impl UnixSocketSink {
     }
 
     async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
-        let stream = self
-            .writer
-            .as_mut()
-            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+        let stream = self.writer.as_mut().ok_or(Error::NoSocket)?;
         for chunk in data {
             let slice: &[u8] = chunk.as_slice();
             stream.write_all(slice).await?;
@@ -131,7 +128,7 @@ impl UnixSocketSink {
 
 #[async_trait::async_trait()]
 impl Sink for UnixSocketSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let path = PathBuf::from(&self.config.path);
         if !path.exists() {
             return Err(std::io::Error::new(

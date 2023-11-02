@@ -12,13 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    connectors::{
-        google::TokenSrc,
-        prelude::{Result, Url},
-        utils::object_storage::{BufferPart, ObjectId},
-    },
-    errors::err_gcs,
+use crate::connectors::{
+    google::TokenSrc,
+    prelude::{Result, Url},
+    utils::object_storage::{BufferPart, ObjectId},
 };
 #[cfg(not(test))]
 use gouth::Token;
@@ -28,6 +25,8 @@ use hyper_rustls::HttpsConnectorBuilder;
 use std::time::Duration;
 use tokio::time::sleep;
 use tremor_common::url::HttpsDefaults;
+
+use super::Error;
 
 pub(crate) type GcsHttpClient =
     hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>;
@@ -129,9 +128,7 @@ async fn retriable_request<
         }
     }
 
-    Err(err_gcs(format!(
-        "Request still failing after {max_retries} retries"
-    )))
+    Err(Error::RequestFailed(max_retries).into())
 }
 
 pub(crate) struct DefaultClient<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy> {
@@ -169,10 +166,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             let body_string = String::from_utf8(data)?;
             // assuming error
             error!("Error checking that bucket exists: {body_string}",);
-            return Err(err_gcs(format!(
-                "Check if bucket {bucket} exists failed with {} status",
-                response.status()
-            )));
+            return Err(Error::Bucket(bucket.to_string(), status).into());
         }
     }
 
@@ -199,17 +193,14 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             let body_string = String::from_utf8(data)?;
             error!("Error from Google Cloud Storage: {body_string}",);
 
-            return Err(err_gcs(format!(
-                "Start upload failed with {} status",
-                response.status()
-            )));
+            return Err(Error::Upload(response.status()).into());
         }
 
         Ok(url::Url::parse(
             response
                 .headers()
                 .get("Location")
-                .ok_or_else(|| err_gcs("Missing Location header".to_string()))?
+                .ok_or(Error::MissingLocationHeader)?
                 .to_str()?,
         )?)
     }
@@ -243,16 +234,13 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             }
             let body_string = String::from_utf8(data)?;
             error!("Error from Google Cloud Storage: {body_string}",);
-            return Err(err_gcs(format!(
-                "Start upload failed with status {}",
-                response.status()
-            )));
+            return Err(Error::Upload(response.status()).into());
         }
 
         let raw_range = response
             .headers()
             .get(header::RANGE)
-            .ok_or_else(|| err_gcs("No range header"))?;
+            .ok_or(Error::MissingOrInvalidRangeHeader)?;
         let raw_range = raw_range.to_str()?;
 
         // Range format: bytes=0-262143
@@ -260,10 +248,10 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             .get(
                 raw_range
                     .find('-')
-                    .ok_or_else(|| err_gcs("Did not find a - in the Range header"))?
+                    .ok_or(Error::MissingOrInvalidRangeHeader)?
                     + 1..,
             )
-            .ok_or_else(|| err_gcs("Unable to get the end of the Range"))?;
+            .ok_or(Error::MissingOrInvalidRangeHeader)?;
         Ok(range_end.parse()?)
     }
 
@@ -288,10 +276,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             let body_string = String::from_utf8(data)?;
 
             error!("Error from Google Cloud Storage while cancelling an upload: {body_string}",);
-            Err(err_gcs(format!(
-                "Delete upload failed with status {}",
-                response.status()
-            )))
+            Err(Error::Delete(response.status()).into())
         }
     }
 
@@ -325,10 +310,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
 
             error!("Error from Google Cloud Storage: {body_string}");
 
-            return Err(err_gcs(format!(
-                "Finish upload failed with status {}",
-                response.status()
-            )));
+            return Err(Error::Upload(response.status()).into());
         }
 
         Ok(())
@@ -732,7 +714,7 @@ mod tests {
             },
             || {
                 if !request_handled_clone.swap(true, Ordering::Acquire) {
-                    return Err("boo".into());
+                    anyhow::bail!("boo");
                 }
 
                 Ok(Request::builder()

@@ -17,7 +17,7 @@ pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
 use crate::{
     ast::{base_expr::Ranged, warning},
-    errors::{best_hint, Error, Kind as ErrorKind, Result},
+    errors::{best_hint, Error, ErrorKind, Result},
     tremor_fn,
     utils::hostname as get_hostname,
     EventContext, Value,

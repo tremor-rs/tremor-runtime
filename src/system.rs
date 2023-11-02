@@ -26,9 +26,10 @@ use self::flow::{DeploymentType, Flow};
 use crate::{
     channel::{oneshot, Sender},
     connectors,
-    errors::{Error, Kind as ErrorKind, Result},
+    errors::{ErrorKind, Result},
     instance::IntendedState as IntendedInstanceState,
-    log_error, raft,
+    log_error,
+    raft::{self, ClusterInterface},
 };
 use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
 use tremor_common::alias;
@@ -126,13 +127,18 @@ pub struct Runtime {
 impl Runtime {
     // pub(crate) fn get_manager(&self) -> Result<raft::Manager> {
     //     self.cluster_manager
-    //         .read()?
+    //         .read().map_err(|_| ErrorKind::ReadLock)?
     //         .as_ref()
     //         .cloned()
     //         .ok_or_else(|| ErrorKind::RaftNotRunning.into())
     // }
     pub(crate) fn maybe_get_manager(&self) -> Result<Option<raft::Cluster>> {
-        Ok(self.cluster_manager.read()?.as_ref().cloned())
+        Ok(self
+            .cluster_manager
+            .read()
+            .map_err(|_| ErrorKind::ReadLock)?
+            .as_ref()
+            .cloned())
     }
 
     /// Wait for the cluster to be available
@@ -156,7 +162,11 @@ impl Runtime {
 
         let aggr_reg = tremor_script::registry::aggr();
 
-        let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg);
+        let deployable = Deploy::parse(
+            &src,
+            &*FN_REGISTRY.read().map_err(|_| ErrorKind::ReadLock)?,
+            &aggr_reg,
+        );
         let mut h = highlighter::Term::stderr();
         let deployable = match deployable {
             Ok(deployable) => {
@@ -166,7 +176,9 @@ impl Runtime {
             Err(e) => {
                 log_error!(h.format_error(&e), "Error: {e}");
 
-                return Err(format!("failed to load troy file: {src}").into());
+                return Err(
+                    anyhow::Error::from(e).context(format!("failed to load troy file: {src}"))
+                );
             }
         };
 
@@ -205,30 +217,41 @@ impl Runtime {
                 app: app_id,
                 flow: Box::new(flow.clone()),
                 sender: tx,
-                raft: self.maybe_get_manager()?.unwrap_or_default(),
+                raft: self
+                    .maybe_get_manager()?
+                    .map(ClusterInterface::from)
+                    .unwrap_or_default(),
                 deployment_type,
             })
             .await?;
         match rx.await? {
             Err(e) => {
-                let err_str = match e {
-                    Error(
-                        ErrorKind::Script(e)
-                        | ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)),
-                        _,
-                    ) => {
-                        let mut h = crate::ToStringHighlighter::new();
-                        h.format_error(&tremor_script::errors::Error::from(e))?;
-                        h.finalize()?;
-                        h.to_string()
+                let err_str = if let Some(e) = e.downcast_ref::<tremor_script::errors::Error>() {
+                    let mut h = crate::ToStringHighlighter::new();
+                    h.format_error(e)?;
+                    h.finalize()?;
+                    h.to_string()
+                } else {
+                    match e.downcast::<tremor_pipeline::errors::Error>() {
+                        Ok(tremor_pipeline::errors::Error(
+                            tremor_pipeline::errors::ErrorKind::Script(e),
+                            _,
+                        )) => {
+                            //ErrorKind::Script(e)
+                            let mut h = crate::ToStringHighlighter::new();
+                            h.format_error(&(e.into()))?;
+                            h.finalize()?;
+                            h.to_string()
+                        }
+                        Ok(e) => e.to_string(),
+                        Err(e) => e.to_string(),
                     }
-                    err => err.to_string(),
                 };
                 error!(
                     "Error starting deployment of flow {}: {err_str}",
                     flow.instance_alias
                 );
-                Err(ErrorKind::DeployFlowError(flow.instance_alias.clone(), err_str).into())
+                Err(flow::Error::Deploy(flow.instance_alias.clone(), err_str).into())
             }
             Ok(flow_id) => Ok(flow_id),
         }

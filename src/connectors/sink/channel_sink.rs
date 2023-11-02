@@ -14,7 +14,7 @@
 
 //! Sink implementation that keeps track of multiple streams and keeps channels to send to each stream
 
-use crate::channel::{bounded, Receiver, Sender};
+use crate::channel::{bounded, send_e, Receiver, Sender};
 use crate::{
     connectors::{prelude::*, Context, StreamDone},
     errors::Result,
@@ -257,7 +257,11 @@ where
     /// The writer should receive an error when the channel is empty, so we safely drain all messages.
     /// We will get a double `RemoveStream` message, but this is fine
     async fn unregister_stream_writer(&mut self, stream: u64) -> Result<()> {
-        Ok(self.tx.send(ChannelSinkMsg::RemoveStream(stream)).await?)
+        Ok(self
+            .tx
+            .send(ChannelSinkMsg::RemoveStream(stream))
+            .await
+            .map_err(send_e)?)
     }
 }
 
@@ -346,7 +350,8 @@ where
             }
             stream_sink_tx
                 .send(ChannelSinkMsg::RemoveStream(stream))
-                .await?;
+                .await
+                .map_err(send_e)?;
             Result::Ok(())
         })
     }
@@ -378,7 +383,7 @@ where
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         // clean up
         // make sure channels for the given event are added to avoid stupid errors
         // due to channels not yet handled
@@ -461,7 +466,7 @@ where
         signal: Event,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         match signal.kind.as_ref() {
             Some(SignalKind::Tick) => {
                 self.handle_channels(ctx, serializer, true);

@@ -880,7 +880,7 @@ mod test {
         let g = q.to_executable_graph(&mut idgen, &MetricsChannel::new(128))?;
         assert!(g.inputs.contains_key("in/test_in"));
         assert_eq!(idgen.next_id().id(), first.id() + g.graph.len() as u64 + 1);
-        let out = g.graph.get(4).ok_or("no data")?;
+        let out = g.graph.get(4).expect("no data");
         assert_eq!(out.id, "out/test_out");
         assert_eq!(out.kind, NodeKind::Output("test_out".into()));
         Ok(())

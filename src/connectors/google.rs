@@ -283,7 +283,7 @@ PX8efvDMhv16QqDFF0k80d0=
         let addr = ("127.0.0.1", port)
             .to_socket_addrs()?
             .next()
-            .ok_or("no address")?;
+            .expect("no address");
         let server_handle = tokio::task::spawn(async move {
             let listener = hyper::Server::bind(&addr).serve(service_fn);
             listener.await?;

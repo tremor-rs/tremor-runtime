@@ -37,7 +37,7 @@ use crate::{
         Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
         UnaryOpKind,
     },
-    errors::{err_generic, error_generic, error_missing_effector, Kind as ErrorKind, Result},
+    errors::{err_generic, error_generic, error_missing_effector, ErrorKind, Result},
     extractor::Extractor,
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
     prelude::*,

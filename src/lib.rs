@@ -103,7 +103,7 @@ pub async fn load_troy_file(world: &Runtime, file_name: &str) -> Result<usize> {
     let mut src = String::new();
 
     file.read_to_string(&mut src)
-        .map_err(|e| Error::from(format!("Could not open file {file_name} => {e}")))?;
+        .map_err(|e| anyhow::Error::from(e).context(format!("Could not open file {file_name}")))?;
     world.load_troy(file_name, &src).await
 }
 
@@ -112,7 +112,7 @@ pub async fn load_troy_file(world: &Runtime, file_name: &str) -> Result<usize> {
 #[doc(hidden)]
 macro_rules! log_error {
     ($maybe_error:expr,  $($args:tt)+) => (
-        if let Err(e) = $maybe_error {
+        if let Err(e) = &$maybe_error {
             error!($($args)+, e = e);
             true
         } else {

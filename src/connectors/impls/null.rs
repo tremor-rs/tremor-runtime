@@ -134,7 +134,11 @@ impl Connector for Null {
 struct NullSource {}
 #[async_trait::async_trait]
 impl Source for NullSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         Ok(SourceReply::Finished)
     }
 
@@ -157,7 +161,7 @@ impl Sink for NullSink {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         Ok(SinkReply::NONE)
     }
 

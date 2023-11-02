@@ -13,9 +13,7 @@
 // limitations under the License.
 
 //NOTE: error_chain
-#![allow(deprecated)]
-#![allow(missing_docs)]
-#![allow(clippy::large_enum_variant)]
+#![allow(deprecated, missing_docs, clippy::large_enum_variant)]
 
 use crate::util::SourceKind;
 use error_chain::error_chain;
@@ -47,7 +45,6 @@ error_chain! {
     links {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
-        Runtime(tremor_runtime::errors::Error, tremor_runtime::errors::ErrorKind);
         Codec(tremor_codec::errors::Error, tremor_codec::errors::ErrorKind);
         Interceptor(tremor_interceptor::errors::Error, tremor_interceptor::errors::ErrorKind);
     }

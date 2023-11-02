@@ -187,7 +187,7 @@ impl Sink for ExitSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         if self.done {
             debug!("{ctx} Already exited.");
         } else if let Some((value, _meta)) = event.value_meta_iter().next() {

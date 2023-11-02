@@ -399,7 +399,7 @@ struct Blaster {
 
 #[async_trait::async_trait]
 impl Source for Blaster {
-    async fn on_start(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_start(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         self.stop_at = self
             .stop_after
             .seconds
@@ -408,7 +408,11 @@ impl Source for Blaster {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         if self.finished {
             return Ok(SourceReply::Finished);
         }
@@ -511,7 +515,7 @@ impl Sink for Blackhole {
         ctx: &SinkContext,
         event_serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         if !self.finished {
             let now_ns = nanotime();
 
@@ -551,7 +555,7 @@ impl Sink for Blackhole {
         _signal: Event,
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let now_ns = nanotime();
         if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at) {
             self.finish(ctx)?;

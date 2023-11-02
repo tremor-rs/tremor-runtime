@@ -17,8 +17,8 @@
 
 use std::time::Duration;
 
+use crate::channel::empty_e;
 use crate::connectors::prelude::*;
-use crate::errors::empty_error;
 use crate::{
     connectors::impls::kafka::{is_fatal_error, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT},
     utils::task_id,
@@ -158,6 +158,12 @@ struct KafkaProducerSink {
     metrics_rx: Option<BroadcastReceiver<EventPayload>>,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("The producer {0} is not available")]
+    ProducerNotAvailable(String),
+}
+
 impl KafkaProducerSink {
     fn new(config: Config, producer_config: ClientConfig, reply_tx: ReplySender) -> Self {
         Self {
@@ -179,11 +185,11 @@ impl Sink for KafkaProducerSink {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let producer = self
             .producer
             .as_ref()
-            .ok_or_else(|| ErrorKind::ProducerNotAvailable(ctx.alias().to_string()))?;
+            .ok_or_else(|| Error::ProducerNotAvailable(ctx.alias().to_string()))?;
         let transactional = event.transactional;
         let mut delivery_futures: Vec<DeliveryFuture> = if transactional {
             Vec::with_capacity(event.len())
@@ -257,7 +263,7 @@ impl Sink for KafkaProducerSink {
         Ok(SinkReply::NONE)
     }
 
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         // enforce cleaning out the previous producer
         // We might lose some in flight messages
         if let Some(old_producer) = self.producer.take() {
@@ -287,7 +293,7 @@ impl Sink for KafkaProducerSink {
             }
             Ok(None) => {
                 // receive error - we cannot tell what happened, better error here to trigger a retry
-                Err(empty_error())
+                Err(empty_e().into())
             }
             Ok(Some(kafka_error)) => {
                 // we received an error from rdkafka - fail it big time
@@ -296,7 +302,7 @@ impl Sink for KafkaProducerSink {
         }
     }
 
-    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         if let Some(producer) = self.producer.take() {
             let wait_secs = Duration::from_secs(1);
             if producer.in_flight_count() > 0 {

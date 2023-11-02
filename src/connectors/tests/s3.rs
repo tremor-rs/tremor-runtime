@@ -40,7 +40,7 @@ async fn wait_for_s3(port: u16) -> Result<()> {
 
     while let Err(e) = s3_client.list_buckets().send().await {
         if start.elapsed() > wait_for {
-            return Err(Error::from(e).chain_err(|| "Waiting for mock-s3 container timed out"));
+            return Err(Error::from(e).context("Waiting for mock-s3 container timed out"));
         }
 
         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -54,7 +54,7 @@ async fn wait_for_bucket(bucket: &str, client: Client) -> Result<()> {
 
     while let Err(e) = client.head_bucket().bucket(bucket).send().await {
         if start.elapsed() > wait_for {
-            return Err(Error::from(e).chain_err(|| "Waiting for bucket to become alive timed out"));
+            return Err(Error::from(e).context("Waiting for bucket to become alive timed out"));
         }
 
         tokio::time::sleep(Duration::from_millis(200)).await;

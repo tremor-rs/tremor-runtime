@@ -23,7 +23,7 @@ async fn file_connector() -> Result<()> {
 
     let input_path = Path::new(file!())
         .parent()
-        .ok_or("bad path")?
+        .expect("bad path")
         .join("data")
         .join("non_existent.txt");
     let defn = literal!({

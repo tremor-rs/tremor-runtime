@@ -9,15 +9,8 @@ version = "0.13.0-rc.16"
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
 
-[build-dependencies]
-lalrpop = "0.20"
-matches = "0.1.10"
-
 [dev-dependencies]
 temp-dir = "0.1"
-criterion = "0.5"
-float-cmp = "0.9"
-matches = "0.1"
 pretty_assertions = "1.4"
 
 [dependencies]

@@ -223,7 +223,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
                 .content
                 .windows
                 .get(win_defn.id.id())
-                .ok_or("no data")?
+                .expect("no data")
                 .clone();
             let mut f = ConstFolder { helper: &h };
             f.walk_window_defn(&mut window_defn)?;
@@ -496,7 +496,7 @@ fn test_transactional_single_window() -> Result<()> {
     let id2 = event2.id.clone();
     let mut res = op.on_event(0, uid, &Port::In, &mut state, event2)?;
     assert_eq!(1, res.events.len());
-    let (_, event) = res.events.pop().ok_or("no data")?;
+    let (_, event) = res.events.pop().expect("no data");
     assert!(event.transactional);
     assert!(event.id.is_tracking(&id1));
     assert!(event.id.is_tracking(&id2));
@@ -510,7 +510,7 @@ fn test_transactional_single_window() -> Result<()> {
     let id4 = event4.id.clone();
     let mut res = op.on_event(0, uid, &Port::In, &mut state, event4)?;
     assert_eq!(1, res.events.len());
-    let (_, event) = res.events.pop().ok_or("no data")?;
+    let (_, event) = res.events.pop().expect("no data");
     assert!(!event.transactional);
     assert!(event.id.is_tracking(&id3));
     assert!(event.id.is_tracking(&id4));
@@ -550,7 +550,7 @@ fn test_transactional_multiple_windows() -> Result<()> {
     let id2 = event2.id.clone();
     let mut res = op.on_event(0, uid, &Port::In, &mut state, event2)?;
     assert_eq!(1, res.len());
-    let (_, event) = res.events.pop().ok_or("no data")?;
+    let (_, event) = res.events.pop().expect("no data");
     assert!(event.transactional);
     assert!(event.id.is_tracking(&id0));
     assert!(event.id.is_tracking(&id2));
