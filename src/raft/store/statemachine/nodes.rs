@@ -15,18 +15,19 @@
 //! nodes raft sub-statemachine
 //! handling all the nodes that are known to the cluster and is responsible for assigning node ids
 
+use redb::ReadableTable;
+
 use crate::{
     raft::{
         node::Addr,
         store::{
             bin_to_id, id_to_bin,
-            statemachine::{sm_d_err, sm_w_err, RaftStateMachine},
-            store_w_err, Error as StoreError, NodesRequest, StorageResult, TremorResponse,
+            statemachine::{d_err, w_err, RaftStateMachine},
+            Error as StoreError, NodesRequest, StorageResult, TremorResponse, NODES, SYSTEM,
         },
     },
     system::Runtime,
 };
-use rocksdb::ColumnFamily;
 use std::{
     collections::HashMap,
     sync::{
@@ -35,53 +36,46 @@ use std::{
     },
 };
 
+use super::r_err;
+
 #[derive(Debug, Clone)]
 pub(crate) struct NodesStateMachine {
-    db: Arc<rocksdb::DB>,
+    db: Arc<redb::Database>,
     next_node_id: Arc<AtomicU64>,
     known_nodes: HashMap<crate::raft::NodeId, Addr>,
 }
 
 impl NodesStateMachine {
-    const CF: &str = "nodes";
     const NEXT_NODE_ID: &str = "next_node_id";
-    const COLUMN_FAMILIES: [&'static str; 1] = [Self::CF];
-
-    fn cf(db: &Arc<rocksdb::DB>) -> Result<&ColumnFamily, StoreError> {
-        db.cf_handle(Self::CF)
-            .ok_or(StoreError::MissingCf(Self::CF))
-    }
 }
 
 #[async_trait::async_trait]
 impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
-    async fn load(db: &Arc<rocksdb::DB>, _world: &Runtime) -> Result<Self, StoreError>
+    async fn load(db: &Arc<redb::Database>, _world: &Runtime) -> Result<Self, StoreError>
     where
         Self: std::marker::Sized,
     {
         // load known nodes
+        let read_txn = db.begin_read().map_err(r_err)?;
+
+        let table = read_txn.open_table(SYSTEM).map_err(r_err)?;
         let next_node_id =
-            if let Some(next_node_id) = db.get_cf(Self::cf(db)?, Self::NEXT_NODE_ID)? {
-                bin_to_id(next_node_id.as_slice())?
+            if let Some(next_node_id) = table.get(Self::NEXT_NODE_ID).map_err(r_err)? {
+                bin_to_id(next_node_id.value().as_slice())?
             } else {
                 debug!("No next_node_id stored in db, starting from 0");
                 0
             };
-        let known_nodes = db
-            .iterator_cf(Self::cf(db)?, rocksdb::IteratorMode::Start)
-            .filter(|x| {
-                // filter out NEXT_NODE_ID
-                if let Ok((key_raw, _)) = x {
-                    key_raw.as_ref() != Self::NEXT_NODE_ID.as_bytes()
-                } else {
-                    true
-                }
-            })
+        let table = read_txn.open_table(NODES).map_err(r_err)?;
+
+        let known_nodes = table
+            .iter()
+            .map_err(r_err)?
             .map(|x| {
-                let (key_raw, value_raw) = x?;
-                let node_id = bin_to_id(&key_raw)?;
-                let addr: Addr = rmp_serde::from_slice(&value_raw)?;
-                Ok((node_id, addr))
+                let (node_id, value_raw) = x.map_err(r_err)?;
+
+                let addr: Addr = rmp_serde::from_slice(value_raw.value())?;
+                Ok((node_id.value(), addr))
             })
             .collect::<Result<HashMap<crate::raft::NodeId, Addr>, StoreError>>()?;
 
@@ -122,26 +116,33 @@ impl RaftStateMachine<NodesSnapshot, NodesRequest> for NodesStateMachine {
 
         Ok(TremorResponse::NodeId(node_id))
     }
-    fn column_families() -> &'static [&'static str] {
-        &Self::COLUMN_FAMILIES
-    }
 }
 
 impl NodesStateMachine {
     fn next_node_id(&self) -> StorageResult<crate::raft::NodeId> {
         let s = self.next_node_id.fetch_add(1, Ordering::SeqCst);
         let s_bytes = id_to_bin(s)?;
-        self.db
-            .put_cf(Self::cf(&self.db)?, Self::NEXT_NODE_ID, s_bytes)
-            .map_err(sm_w_err)?;
+
+        let write_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            let mut table = write_txn.open_table(SYSTEM).map_err(w_err)?;
+
+            table.insert(Self::NEXT_NODE_ID, s_bytes).map_err(w_err)?;
+        }
+        write_txn.commit().map_err(w_err)?;
         Ok(s)
     }
 
     fn set_next_node_id(&mut self, next_node_id: u64) -> StorageResult<u64> {
         let bytes = id_to_bin(next_node_id)?;
-        self.db
-            .put_cf(Self::cf(&self.db)?, Self::NEXT_NODE_ID, bytes)
-            .map_err(sm_w_err)?;
+        let write_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            let mut table = write_txn.open_table(SYSTEM).map_err(w_err)?;
+
+            table.insert(Self::NEXT_NODE_ID, bytes).map_err(w_err)?;
+        }
+        write_txn.commit().map_err(w_err)?;
+
         let res = self.next_node_id.swap(next_node_id, Ordering::SeqCst);
         Ok(res)
     }
@@ -167,7 +168,7 @@ impl NodesStateMachine {
     /// add the node identified by `addr` if not already there and assign and return a new `node_id`
     fn add_node(&mut self, addr: &Addr) -> StorageResult<crate::raft::NodeId> {
         if let Some(node_id) = self.find_node_id(addr) {
-            Err(store_w_err(StoreError::NodeAlreadyAdded(*node_id)))
+            Err(w_err(StoreError::NodeAlreadyAdded(*node_id)))
         } else {
             let node_id = self.next_node_id()?;
             self.store_node(node_id, addr)?;
@@ -178,25 +179,26 @@ impl NodesStateMachine {
 
     /// store the given addr under the given `node_id`, without creating a new one
     fn store_node(&mut self, node_id: crate::raft::NodeId, addr: &Addr) -> StorageResult<()> {
-        let node_id_bytes = id_to_bin(node_id)?;
-        self.db
-            .put_cf(
-                Self::cf(&self.db)?,
-                node_id_bytes,
-                rmp_serde::to_vec(addr).map_err(sm_w_err)?,
-            )
-            .map_err(sm_w_err)?;
+        let write_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            let mut table = write_txn.open_table(NODES).map_err(w_err)?;
+
+            table
+                .insert(node_id, rmp_serde::to_vec(addr).map_err(w_err)?.as_slice())
+                .map_err(w_err)?;
+        }
         self.known_nodes.insert(node_id, addr.clone());
-        Ok(())
+        write_txn.commit().map_err(w_err)
     }
 
     fn remove_node(&mut self, node_id: crate::raft::NodeId) -> StorageResult<()> {
+        let write_txn = self.db.begin_write().map_err(d_err)?;
+        {
+            let mut table = write_txn.open_table(NODES).map_err(d_err)?;
+            table.remove(node_id).map_err(d_err)?;
+        }
         self.known_nodes.remove(&node_id);
-        let node_id_bytes = id_to_bin(node_id)?;
-        self.db
-            .delete_cf(Self::cf(&self.db)?, node_id_bytes)
-            .map_err(sm_d_err)?;
-        Ok(())
+        write_txn.commit().map_err(d_err)
     }
 }
 

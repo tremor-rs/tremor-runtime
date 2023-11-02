@@ -13,22 +13,21 @@
 // limitations under the License.
 
 //! KV raft sub-statemachine
-//! storing key value stores in rocksdb only
+//! storing key value stores in database only
 
 use crate::{
     raft::{
         store::{
             self,
-            statemachine::{sm_r_err, sm_w_err, RaftStateMachine},
-            store_r_err, store_w_err, Error as StoreError, KvRequest, StorageResult,
-            TremorResponse,
+            statemachine::{r_err, w_err, RaftStateMachine},
+            KvRequest, StorageResult, TremorResponse, DATA,
         },
         NodeId,
     },
     system::Runtime,
 };
 use openraft::StorageError;
-use rocksdb::ColumnFamily;
+use redb::{Database, ReadableTable};
 use std::{collections::BTreeMap, marker::Sized, sync::Arc};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -36,38 +35,35 @@ pub(crate) struct KvSnapshot(BTreeMap<String, String>);
 
 #[derive(Clone, Debug)]
 pub(crate) struct KvStateMachine {
-    db: Arc<rocksdb::DB>,
+    db: Arc<Database>,
 }
 
 impl KvStateMachine {
-    const CF: &str = "data";
-    const COLUMN_FAMILIES: [&'static str; 1] = [Self::CF];
-
-    fn cf(db: &Arc<rocksdb::DB>) -> Result<&ColumnFamily, StoreError> {
-        db.cf_handle(Self::CF)
-            .ok_or(StoreError::MissingCf(Self::CF))
-    }
-
     /// Store `value` at `key` in the distributed KV store
     fn insert(&self, key: &str, value: &[u8]) -> StorageResult<()> {
-        self.db
-            .put_cf(Self::cf(&self.db)?, key.as_bytes(), value)
-            .map_err(store_w_err)
+        let write_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            let mut table = write_txn.open_table(DATA).map_err(w_err)?;
+            table.insert(key, value).map_err(w_err)?;
+        }
+        write_txn.commit().map_err(w_err)
     }
 
     /// try to obtain the value at the given `key`.
     /// Returns `Ok(None)` if there is no value for that key.
     pub(crate) fn get(&self, key: &str) -> StorageResult<Option<Vec<u8>>> {
-        let key = key.as_bytes();
-        self.db
-            .get_cf(Self::cf(&self.db)?, key)
-            .map_err(store_r_err)
+        let read_txn = self.db.begin_read().map_err(r_err)?;
+        let table = read_txn.open_table(DATA).map_err(r_err)?;
+        table
+            .get(key)
+            .map_err(r_err)
+            .map(|v| v.map(|v| v.value().to_vec()))
     }
 }
 
 #[async_trait::async_trait]
 impl RaftStateMachine<KvSnapshot, KvRequest> for KvStateMachine {
-    async fn load(db: &Arc<rocksdb::DB>, _world: &Runtime) -> Result<Self, store::Error>
+    async fn load(db: &Arc<Database>, _world: &Runtime) -> Result<Self, store::Error>
     where
         Self: Sized,
     {
@@ -75,28 +71,30 @@ impl RaftStateMachine<KvSnapshot, KvRequest> for KvStateMachine {
     }
 
     async fn apply_diff_from_snapshot(&mut self, snapshot: &KvSnapshot) -> StorageResult<()> {
-        for (key, value) in &snapshot.0 {
-            self.db
-                .put_cf(Self::cf(&self.db)?, key.as_bytes(), value.as_bytes())
-                .map_err(sm_w_err)?;
+        let write_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            let mut table = write_txn.open_table(DATA).map_err(w_err)?;
+            for (key, value) in &snapshot.0 {
+                table
+                    .insert(key.as_str(), value.as_bytes())
+                    .map_err(w_err)?;
+            }
         }
+        write_txn.commit().map_err(w_err)?;
         Ok(())
     }
 
     fn as_snapshot(&self) -> StorageResult<KvSnapshot> {
-        let data = self
-            .db
-            .iterator_cf(
-                self.db
-                    .cf_handle(Self::CF)
-                    .ok_or(store::Error::MissingCf(Self::CF))?,
-                rocksdb::IteratorMode::Start,
-            )
+        let read_tnx = self.db.begin_read().map_err(w_err)?;
+        let table = read_tnx.open_table(DATA).map_err(w_err)?;
+        let data = table
+            .iter()
+            .map_err(w_err)?
             .map(|kv| {
-                let (key, value) = kv.map_err(sm_r_err)?;
+                let (key, value) = kv.map_err(r_err)?;
                 Ok((
-                    String::from_utf8(key.to_vec()).map_err(sm_r_err)?,
-                    String::from_utf8(value.to_vec()).map_err(sm_r_err)?,
+                    String::from(key.value()),
+                    String::from_utf8(value.value().to_vec()).map_err(r_err)?,
                 ))
             })
             .collect::<Result<BTreeMap<String, String>, StorageError<NodeId>>>()?;
@@ -110,9 +108,5 @@ impl RaftStateMachine<KvSnapshot, KvRequest> for KvStateMachine {
                 Ok(TremorResponse::KvValue(value.clone()))
             }
         }
-    }
-
-    fn column_families() -> &'static [&'static str] {
-        &Self::COLUMN_FAMILIES
     }
 }

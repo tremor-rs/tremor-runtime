@@ -21,9 +21,11 @@ use crate::{
 use openraft::{
     AnyError, ErrorSubject, ErrorVerb, LogId, StorageError, StorageIOError, StoredMembership,
 };
-use rocksdb::ColumnFamily;
+use redb::{Database, ReadableTable};
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Debug, sync::Arc};
+
+use super::STATE_MACHINE;
 
 // apps related state machine
 pub(crate) mod apps;
@@ -32,7 +34,7 @@ mod nodes;
 // kv state machine
 mod kv;
 
-fn sm_r_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
+pub(crate) fn r_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Read,
@@ -40,7 +42,7 @@ fn sm_r_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
     )
     .into()
 }
-fn sm_w_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
+pub(crate) fn w_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Write,
@@ -48,7 +50,7 @@ fn sm_w_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
     )
     .into()
 }
-fn sm_d_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
+fn d_err<E: Error + 'static>(e: E) -> StorageError<crate::raft::NodeId> {
     StorageIOError::new(
         ErrorSubject::StateMachine,
         ErrorVerb::Delete,
@@ -75,7 +77,7 @@ pub struct SerializableTremorStateMachine {
 
 impl SerializableTremorStateMachine {
     pub(crate) fn to_vec(&self) -> StorageResult<Vec<u8>> {
-        rmp_serde::to_vec(&self).map_err(sm_r_err)
+        rmp_serde::to_vec(&self).map_err(r_err)
     }
 }
 
@@ -101,13 +103,12 @@ impl TryFrom<&TremorStateMachine> for SerializableTremorStateMachine {
 /// abstract raft statemachine for implementing sub-statemachines
 #[async_trait::async_trait]
 trait RaftStateMachine<Ser: Serialize + Deserialize<'static>, Cmd> {
-    async fn load(db: &Arc<rocksdb::DB>, world: &Runtime) -> Result<Self, store::Error>
+    async fn load(db: &Arc<Database>, world: &Runtime) -> Result<Self, store::Error>
     where
         Self: std::marker::Sized;
     async fn apply_diff_from_snapshot(&mut self, snapshot: &Ser) -> StorageResult<()>;
     fn as_snapshot(&self) -> StorageResult<Ser>;
     async fn transition(&mut self, cmd: &Cmd) -> StorageResult<TremorResponse>;
-    fn column_families() -> &'static [&'static str];
 }
 
 #[derive(Debug, Clone)]
@@ -116,45 +117,21 @@ pub(crate) struct TremorStateMachine {
     pub(crate) nodes: nodes::NodesStateMachine,
     pub(crate) kv: kv::KvStateMachine,
     pub(crate) apps: apps::AppsStateMachine,
-    pub db: Arc<rocksdb::DB>,
+    pub db: Arc<Database>,
 }
 
 /// DB Helpers
 impl TremorStateMachine {
     /// storing state machine related stuff
-    const CF: &'static str = "state_machine";
 
     const LAST_MEMBERSHIP: &'static str = "last_membership";
     const LAST_APPLIED_LOG: &'static str = "last_applied_log";
-
-    /// state machine column family
-    fn cf_state_machine(&self) -> StorageResult<&ColumnFamily> {
-        self.db
-            .cf_handle(Self::CF)
-            .ok_or(store::Error::MissingCf(Self::CF))
-            .map_err(sm_w_err)
-    }
-
-    pub(super) fn column_families() -> impl Iterator<Item = &'static str> {
-        let iter = nodes::NodesStateMachine::column_families()
-            .iter()
-            .copied()
-            .chain(
-                kv::KvStateMachine::column_families().iter().copied().chain(
-                    apps::AppsStateMachine::column_families()
-                        .iter()
-                        .copied()
-                        .chain([Self::CF]),
-                ),
-            );
-        iter
-    }
 }
 
 /// Core impl
 impl TremorStateMachine {
     pub(crate) async fn new(
-        db: Arc<rocksdb::DB>,
+        db: Arc<redb::Database>,
         world: Runtime,
     ) -> Result<TremorStateMachine, store::Error> {
         let nodes = NodesStateMachine::load(&db, &world).await?;
@@ -168,60 +145,69 @@ impl TremorStateMachine {
         })
     }
 
+    fn put<T>(&self, key: &str, value: &T) -> StorageResult<()>
+    where
+        T: serde::Serialize,
+    {
+        let write_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            let mut table = write_txn.open_table(STATE_MACHINE).map_err(w_err)?;
+            table
+                .insert(key, rmp_serde::to_vec(value).map_err(w_err)?)
+                .map_err(w_err)?;
+        }
+        write_txn.commit().map_err(w_err)?;
+        Ok(())
+    }
+
+    fn get<T>(&self, key: &str) -> StorageResult<Option<T>>
+    where
+        T: for<'de> serde::Deserialize<'de>,
+    {
+        let read_txn = self.db.begin_read().map_err(r_err)?;
+
+        let table = read_txn.open_table(STATE_MACHINE).map_err(r_err)?;
+        let r = table
+            .get(key)
+            .map_err(r_err)?
+            .map(|v| rmp_serde::from_slice(&v.value()))
+            .transpose()
+            .map_err(r_err)?;
+        Ok(r)
+    }
+
     pub(crate) fn get_last_membership(
         &self,
     ) -> StorageResult<Option<StoredMembership<crate::raft::NodeId, crate::raft::node::Addr>>> {
-        self.db
-            .get_cf(self.cf_state_machine()?, Self::LAST_MEMBERSHIP)
-            .map_err(sm_r_err)
-            .and_then(|value| {
-                value
-                    .map(|v| rmp_serde::from_slice(&v).map_err(sm_r_err))
-                    .transpose()
-            })
+        self.get(Self::LAST_MEMBERSHIP)
     }
 
     pub(crate) fn set_last_membership(
         &self,
         membership: &StoredMembership<crate::raft::NodeId, crate::raft::node::Addr>,
     ) -> StorageResult<()> {
-        self.db
-            .put_cf(
-                self.cf_state_machine()?,
-                Self::LAST_MEMBERSHIP,
-                rmp_serde::to_vec(&membership).map_err(sm_w_err)?,
-            )
-            .map_err(sm_w_err)
+        self.put(Self::LAST_MEMBERSHIP, &membership)
     }
 
     pub(crate) fn get_last_applied_log(&self) -> StorageResult<Option<LogId<crate::raft::NodeId>>> {
-        self.db
-            .get_cf(self.cf_state_machine()?, Self::LAST_APPLIED_LOG)
-            .map_err(sm_r_err)
-            .and_then(|value| {
-                value
-                    .map(|v| rmp_serde::from_slice(&v).map_err(sm_r_err))
-                    .transpose()
-            })
+        self.get(Self::LAST_APPLIED_LOG)
     }
 
     pub(crate) fn set_last_applied_log(
         &self,
         log_id: LogId<crate::raft::NodeId>,
     ) -> StorageResult<()> {
-        self.db
-            .put_cf(
-                self.cf_state_machine()?,
-                Self::LAST_APPLIED_LOG,
-                rmp_serde::to_vec(&log_id).map_err(sm_w_err)?,
-            )
-            .map_err(sm_w_err)
+        self.put(Self::LAST_APPLIED_LOG, &log_id)
     }
 
     fn delete_last_applied_log(&self) -> StorageResult<()> {
-        self.db
-            .delete_cf(self.cf_state_machine()?, Self::LAST_APPLIED_LOG)
-            .map_err(sm_d_err)
+        let write_txn = self.db.begin_write().map_err(d_err)?;
+        {
+            let mut table = write_txn.open_table(STATE_MACHINE).map_err(d_err)?;
+            table.remove(Self::LAST_APPLIED_LOG).map_err(d_err)?;
+        }
+
+        write_txn.commit().map_err(d_err)
     }
 
     // TODO: reason about error handling and avoid leaving the state machine in an inconsistent state

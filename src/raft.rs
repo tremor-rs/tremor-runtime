@@ -39,6 +39,7 @@ use openraft::{
     storage::Adaptor,
     Config, ConfigError, Raft, TokioRuntime,
 };
+use redb::{CommitError, DatabaseError, StorageError, TableError, TransactionError};
 use std::{
     fmt::{Display, Formatter},
     io::Cursor,
@@ -77,8 +78,16 @@ pub(crate) type TremorRaftImpl = Raft<TremorRaftConfig, Network, LogStore, State
 pub enum ClusterError {
     /// Generic error
     Other(String),
-    /// RocksDB error
-    Rocks(rocksdb::Error),
+    /// Database error
+    Database(DatabaseError),
+    /// Transaction error
+    Transaction(TransactionError),
+    /// Transaction error
+    Table(TableError),
+    /// StorageError
+    Storage(StorageError),
+    /// Commit Error
+    Commit(CommitError),
     /// IO error
     Io(std::io::Error),
     /// Store error
@@ -116,11 +125,36 @@ impl From<std::io::Error> for ClusterError {
     }
 }
 
-impl From<rocksdb::Error> for ClusterError {
-    fn from(e: rocksdb::Error) -> Self {
-        ClusterError::Rocks(e)
+impl From<redb::DatabaseError> for ClusterError {
+    fn from(e: redb::DatabaseError) -> Self {
+        ClusterError::Database(e)
     }
 }
+
+impl From<redb::TransactionError> for ClusterError {
+    fn from(e: redb::TransactionError) -> Self {
+        ClusterError::Transaction(e)
+    }
+}
+
+impl From<redb::TableError> for ClusterError {
+    fn from(e: redb::TableError) -> Self {
+        ClusterError::Table(e)
+    }
+}
+
+impl From<redb::StorageError> for ClusterError {
+    fn from(e: redb::StorageError) -> Self {
+        ClusterError::Storage(e)
+    }
+}
+
+impl From<redb::CommitError> for ClusterError {
+    fn from(e: redb::CommitError) -> Self {
+        ClusterError::Commit(e)
+    }
+}
+
 impl From<&str> for ClusterError {
     fn from(e: &str) -> Self {
         ClusterError::Other(e.to_string())
@@ -191,7 +225,11 @@ impl Display for ClusterError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ClusterError::Other(e) => e.fmt(f),
-            ClusterError::Rocks(e) => e.fmt(f),
+            ClusterError::Database(e) => e.fmt(f),
+            ClusterError::Transaction(e) => e.fmt(f),
+            ClusterError::Table(e) => e.fmt(f),
+            ClusterError::Storage(e) => e.fmt(f),
+            ClusterError::Commit(e) => e.fmt(f),
             ClusterError::Io(e) => e.fmt(f),
             ClusterError::Store(e) => e.fmt(f),
             ClusterError::Initialize(e) => e.fmt(f),

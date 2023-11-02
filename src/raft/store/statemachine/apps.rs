@@ -18,13 +18,13 @@ use crate::{
         archive::{extract, get_app, TremorAppDef},
         store::{
             self,
-            statemachine::{sm_d_err, sm_r_err, sm_w_err, RaftStateMachine},
-            store_w_err, AppsRequest, StorageResult, TremorResponse,
+            statemachine::{d_err, r_err, w_err, RaftStateMachine},
+            AppsRequest, StorageResult, TremorResponse, APPS, INSTANCES,
         },
     },
     system::{flow::DeploymentType, Runtime},
 };
-use rocksdb::ColumnFamily;
+use redb::{Database, ReadableTable};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -65,7 +65,7 @@ pub struct StateApp {
 
 #[derive(Clone, Debug)]
 pub(crate) struct AppsStateMachine {
-    db: Arc<rocksdb::DB>,
+    db: Arc<redb::Database>,
     apps: HashMap<alias::App, StateApp>,
     world: Runtime,
 }
@@ -81,7 +81,7 @@ pub(crate) struct AppsSnapshot {
 
 #[async_trait::async_trait]
 impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
-    async fn load(db: &Arc<rocksdb::DB>, world: &Runtime) -> Result<Self, store::Error>
+    async fn load(db: &Arc<Database>, world: &Runtime) -> Result<Self, store::Error>
     where
         Self: std::marker::Sized,
     {
@@ -90,20 +90,24 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
             apps: HashMap::new(),
             world: world.clone(),
         };
+
+        let read_txn = db.begin_read()?;
+        let apps = read_txn.open_table(APPS)?;
         // load apps
-        for kv in db.iterator_cf(Self::cf_apps(db)?, rocksdb::IteratorMode::Start) {
+        for kv in apps.iter()? {
             let (_, archive) = kv?;
-            me.load_archive(&archive)
+            me.load_archive(archive.value())
                 .map_err(|e| store::Error::Other(Box::new(e)))?;
         }
+        let instances = read_txn.open_table(INSTANCES)?;
 
         // load instances
-        let instances = db
-            .iterator_cf(Self::cf_instances(db)?, rocksdb::IteratorMode::Start)
+        let instances = instances
+            .iter()?
             .map(|kv| {
                 let (app_id, instances) = kv?;
-                let app_id = String::from_utf8(app_id.to_vec())?;
-                let instances: Instances = rmp_serde::from_slice(&instances)?;
+                let app_id = String::from(app_id.value());
+                let instances: Instances = rmp_serde::from_slice(&instances.value())?;
                 Ok((alias::App(app_id), instances))
             })
             .collect::<Result<HashMap<alias::App, Instances>, store::Error>>()?;
@@ -133,7 +137,7 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
         // load archives
         let mut snapshot_apps = HashSet::with_capacity(snapshot.archives.len());
         for archive in &snapshot.archives {
-            let app_def = get_app(archive).map_err(sm_r_err)?;
+            let app_def = get_app(archive).map_err(r_err)?;
             snapshot_apps.insert(app_def.name().clone());
             if let Some(existing_app) = self.apps.get(&app_def.name) {
                 // this is by no means secure or anything (archive contents can be forged), just a cheap way to compare for bytewise identity
@@ -184,7 +188,7 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
                                 s_flow.state,
                             )
                             .await
-                            .map_err(sm_w_err)?;
+                            .map_err(w_err)?;
                         }
                     } else {
                         // stop and remove instances that are not in the snapshot
@@ -216,12 +220,17 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
     }
 
     fn as_snapshot(&self) -> StorageResult<AppsSnapshot> {
-        let archives = self
-            .db
-            .iterator_cf(Self::cf_apps(&self.db)?, rocksdb::IteratorMode::Start)
-            .map(|kv| kv.map(|(_, tar)| tar.to_vec()))
-            .collect::<Result<Vec<Vec<u8>>, _>>()
-            .map_err(sm_r_err)?;
+        let read_txn = self.db.begin_read().map_err(r_err)?;
+        let apps = read_txn.open_table(APPS).map_err(r_err)?;
+        let archives = apps
+            .iter()
+            .map_err(r_err)?
+            .map(|kv| {
+                let (_, v) = kv.map_err(r_err)?;
+                Ok(v.value().to_vec())
+            })
+            .collect::<StorageResult<Vec<Vec<u8>>>>()?;
+
         let instances = self
             .apps
             .iter()
@@ -272,41 +281,24 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
             }
         }
     }
-
-    fn column_families() -> &'static [&'static str] {
-        &Self::COLUMN_FAMILIES
-    }
 }
 
 impl AppsStateMachine {
-    const CF_APPS: &str = "apps";
-    const CF_INSTANCES: &str = "instances";
-
-    const COLUMN_FAMILIES: [&'static str; 2] = [Self::CF_APPS, Self::CF_INSTANCES];
-
-    fn cf_apps(db: &Arc<rocksdb::DB>) -> Result<&ColumnFamily, store::Error> {
-        db.cf_handle(Self::CF_APPS)
-            .ok_or(store::Error::MissingCf(Self::CF_APPS))
-    }
-    fn cf_instances(db: &Arc<rocksdb::DB>) -> Result<&ColumnFamily, store::Error> {
-        db.cf_handle(Self::CF_INSTANCES)
-            .ok_or(store::Error::MissingCf(Self::CF_INSTANCES))
-    }
-
     /// Load app definition and `Deploy` AST from the tar-archive in `archive`
     /// and store the definition in the db and state machine
     fn load_archive(&mut self, archive: &[u8]) -> StorageResult<()> {
-        let (app, main, arena_indices) = extract(archive).map_err(store_w_err)?;
+        let (app, main, arena_indices) = extract(archive).map_err(w_err)?;
 
         info!("Loading Archive for app: {}", app.name());
 
-        self.db
-            .put_cf(
-                Self::cf_apps(&self.db).map_err(sm_r_err)?,
-                app.name().0.as_bytes(),
-                archive,
-            )
-            .map_err(store_w_err)?;
+        let write_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            let mut table = write_txn.open_table(APPS).map_err(w_err)?;
+            table
+                .insert(app.name().0.as_str(), archive)
+                .map_err(w_err)?;
+        }
+        write_txn.commit().map_err(w_err)?;
 
         let app = StateApp {
             app,
@@ -364,7 +356,7 @@ impl AppsStateMachine {
 
         let fake_aggr_reg = AggrRegistry::default();
         {
-            let reg = &*FN_REGISTRY.read().map_err(store_w_err)?;
+            let reg = &*FN_REGISTRY.read().map_err(w_err)?;
             let mut helper = Helper::new(reg, &fake_aggr_reg);
             Optimizer::new(&helper)
                 .walk_flow_definition(&mut defn)
@@ -402,15 +394,14 @@ impl AppsStateMachine {
                 deployment_type,
             },
         );
-        let instances = rmp_serde::to_vec(&app.instances).map_err(sm_w_err)?;
+        let instances = rmp_serde::to_vec(&app.instances).map_err(w_err)?;
 
-        self.db
-            .put_cf(
-                Self::cf_instances(&self.db)?,
-                app_id.0.as_bytes(),
-                &instances,
-            )
-            .map_err(store_w_err)?;
+        let write_txn = self.db.begin_write().map_err(w_err)?;
+        {
+            let mut table = write_txn.open_table(INSTANCES).map_err(w_err)?;
+            table.insert(app_id.0.as_str(), instances).map_err(w_err)?;
+        }
+        write_txn.commit().map_err(w_err)?;
 
         // deploy the flow but don't start it yet
         // ensure the cluster is running
@@ -418,12 +409,12 @@ impl AppsStateMachine {
         self.world
             .deploy_flow(app_id.clone(), &deploy, deployment_type)
             .await
-            .map_err(sm_w_err)?;
+            .map_err(w_err)?;
         // change the flow state to the intended state
         self.world
             .change_flow_state(instance, intended_state)
             .await
-            .map_err(sm_w_err)?;
+            .map_err(w_err)?;
         Ok(())
     }
 
@@ -434,7 +425,7 @@ impl AppsStateMachine {
                 self.world
                     .stop_flow(instance_id.clone())
                     .await
-                    .map_err(sm_d_err)?;
+                    .map_err(d_err)?;
                 app.instances.remove(instance_id.instance_id());
             }
         }
@@ -446,7 +437,7 @@ impl AppsStateMachine {
         if let Some(app) = self.apps.remove(app_id) {
             if !app.instances.is_empty() && !force {
                 // error out, we have running instances, which need to be stopped first
-                return Err(sm_d_err(store::Error::RunningInstances(app_id.clone())));
+                return Err(d_err(store::Error::RunningInstances(app_id.clone())));
             }
             // stop instances then delete the app
             for (instance_id, _instance) in app.instances {
@@ -454,16 +445,20 @@ impl AppsStateMachine {
                 self.world
                     .stop_flow(flow_instance_id)
                     .await
-                    .map_err(sm_d_err)?;
+                    .map_err(d_err)?;
             }
-            self.db
-                .delete_cf(Self::cf_apps(&self.db)?, app.app.name().0.as_bytes())
-                .map_err(store_w_err)?;
+            let write_txn = self.db.begin_write().map_err(w_err)?;
+            {
+                let mut table = write_txn.open_table(INSTANCES).map_err(w_err)?;
+                table.remove(app_id.0.as_str()).map_err(w_err)?;
+            }
+            write_txn.commit().map_err(w_err)?;
+
             // delete from arena
             for aid in app.arena_indices {
                 // ALLOW: we have stopped all instances, so nothing referencing those arena contents should be alive anymore (fingers crossed)
                 unsafe {
-                    Arena::delete_index_this_is_really_unsafe_dont_use_it(aid).map_err(sm_d_err)?;
+                    Arena::delete_index_this_is_really_unsafe_dont_use_it(aid).map_err(d_err)?;
                 }
             }
         }
@@ -490,7 +485,7 @@ impl AppsStateMachine {
         self.world
             .change_flow_state(instance_id.clone(), intended_state)
             .await
-            .map_err(sm_w_err)?;
+            .map_err(w_err)?;
         Ok(())
     }
 }

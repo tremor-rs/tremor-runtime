@@ -102,9 +102,6 @@ impl TestNode {
         let kill_switch = running.kill_switch();
         kill_switch.stop(ShutdownMode::Graceful)?;
         running.join().await
-
-        // only ever destroy the db when the raft node is known to have stopped
-        // rocksdb::DB::destroy(&rocksdb::Options::default(), &path).map_err(ClusterError::Rocks)
     }
 
     fn client(&self) -> &ClusterClient {
@@ -197,25 +194,4 @@ async fn kill_and_restart_voter() -> ClusterResult<()> {
     node2.stop().await?;
     node0.stop().await?;
     Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn db_fun() {
-    // See: https://github.com/rust-rocksdb/rust-rocksdb/issues/720
-    let path = Path::new("/tmp/node01");
-    if path.exists() {
-        std::fs::remove_dir_all(path).expect("remove to succeed");
-    }
-    let mut db_opts = rocksdb::Options::default();
-    db_opts.create_missing_column_families(true);
-    db_opts.create_if_missing(true);
-
-    let cf = "foo";
-    let db = rocksdb::DB::open_cf(&db_opts, path, [cf]).expect("open to succeed");
-    tokio::task::spawn(async move {
-        let res = db
-            .get_cf(&db.cf_handle(cf).expect("cf to be there"), "key")
-            .expect("ok");
-        assert!(res.is_none());
-    });
 }
