@@ -130,7 +130,7 @@ rdkafka = { version = "0.34", features = [
 ], default-features = false }
 
 # tracking the version rdkafka depends on
-rdkafka-sys = { version = "4.6", features = [
+rdkafka-sys = { version = "4.7", features = [
   "cmake-build",
   "libz-static",
 ], default-features = false }
