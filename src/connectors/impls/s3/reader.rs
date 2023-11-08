@@ -14,7 +14,6 @@
 use super::auth;
 use crate::connectors::prelude::*;
 use aws_sdk_s3::{primitives::ByteStream, types::Object, Client as S3Client};
-use futures::stream::TryStreamExt;
 use std::error::Error as StdError;
 use std::sync::Arc;
 use tokio::task::{self, JoinHandle};
