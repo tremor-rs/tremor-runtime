@@ -212,6 +212,7 @@ tempfile = { version = "3.8" }
 test-case = "3.1"
 testcontainers = { version = "0.14", features = ["watchdog"] }
 bytes = "1"
+mockito = "1"
 
 [features]
 default = ["integration"]

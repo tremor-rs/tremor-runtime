@@ -17,6 +17,7 @@ use crate::{
     instance::State,
     primerge::PriorityMerge,
     qsize,
+    raft::Cluster,
     system::flow::AppContext,
     Result,
 };
@@ -501,12 +502,12 @@ impl PipelineContext {
 
 impl std::fmt::Display for PipelineContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "[Node:{}][Pipeline::{}]",
-            self.app_context.raft.id(),
-            &self.alias
-        )
+        let node = if let Some(raft) = self.app_context.raft.as_ref() {
+            format!("[Node:{}]", raft.id())
+        } else {
+            String::new()
+        };
+        write!(f, "{node}[Pipeline::{}]", &self.alias)
     }
 }
 
@@ -521,7 +522,7 @@ pub(crate) async fn pipeline_task(
     tick_handler: JoinHandle<()>,
 ) -> Result<()> {
     pipeline.id = id.to_string();
-    let node_id = app_ctx.raft.id();
+    let node_id = app_ctx.raft.as_ref().map_or(0, Cluster::id);
     let ctx = PipelineContext::new(app_ctx.clone(), id.clone());
 
     let mut dests: Dests = halfbrown::HashMap::new();

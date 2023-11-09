@@ -16,7 +16,7 @@ use crate::{
     channel::empty_e,
     channel::{bounded, oneshot, OneShotSender, Sender},
     connectors::AliasableConnectorResult,
-    raft::{self, NodeId},
+    raft::{self, manager::Cluster, NodeId},
 };
 use crate::{
     connectors::{self, ConnectorResult, Known},
@@ -113,7 +113,7 @@ pub struct StatusReport {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct AppContext {
     pub(crate) id: alias::Flow,
-    pub(crate) raft: raft::ClusterInterface,
+    pub(crate) raft: Option<raft::Cluster>,
     pub(crate) metrics: MetricsChannel,
 }
 
@@ -125,13 +125,13 @@ impl AppContext {
         self.id.instance_id()
     }
     pub fn node_id(&self) -> NodeId {
-        self.raft.id()
+        self.raft.as_ref().map_or(0, Cluster::id)
     }
 }
 
 impl std::fmt::Display for AppContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Node::{}][{}]", self.raft.id(), self.id)
+        write!(f, "[Node::{}][{}]", self.node_id(), self.id)
     }
 }
 
@@ -607,39 +607,42 @@ impl RunningFlow {
         while let Some(wrapped) = self.input_channel.next().await {
             match wrapped {
                 MsgWrapper::Msg(Msg::Tick) => {
-                    if let Ok(Ok(members)) = timeout(
-                        Duration::from_millis(100),
-                        self.app_ctx.raft.get_last_membership(),
-                    )
-                    .await
-                    {
-                        current_nodes = members.into_iter().collect();
-                        slot = jh.slot(&hash_key, current_nodes.len() as u32) as usize;
+                    let Some(raft) = self.app_ctx.raft.as_ref() else {
+                        continue;
+                    };
 
-                        if is_active_node(&current_nodes, slot, node_id)
-                            && intended_active_state == IntendedState::Running
-                        {
-                            match self.state {
-                                State::Paused => {
-                                    if let Err(e) = self.handle_resume(&prefix).await {
-                                        error!("{prefix} Error during resuming: {e}");
-                                        self.change_state(State::Failed);
-                                    }
-                                }
-                                State::Initializing => {
-                                    if let Err(e) = self.handle_start(&prefix).await {
-                                        error!("{prefix} Error starting: {e}");
-                                        self.change_state(State::Failed);
-                                    };
-                                }
-                                state => {
-                                    debug!("not changing from state: {state}");
+                    let Ok(Ok(members)) =
+                        timeout(Duration::from_millis(100), raft.get_last_membership()).await
+                    else {
+                        continue;
+                    };
+
+                    current_nodes = members.into_iter().collect();
+                    slot = jh.slot(&hash_key, current_nodes.len() as u32) as usize;
+
+                    if is_active_node(&current_nodes, slot, node_id)
+                        && intended_active_state == IntendedState::Running
+                    {
+                        match self.state {
+                            State::Paused => {
+                                if let Err(e) = self.handle_resume(&prefix).await {
+                                    error!("{prefix} Error during resuming: {e}");
+                                    self.change_state(State::Failed);
                                 }
                             }
-                        } else if self.state == State::Running {
-                            self.handle_pause(&prefix).await?;
-                            intended_active_state = IntendedState::Running;
+                            State::Initializing => {
+                                if let Err(e) = self.handle_start(&prefix).await {
+                                    error!("{prefix} Error starting: {e}");
+                                    self.change_state(State::Failed);
+                                };
+                            }
+                            state => {
+                                debug!("not changing from state: {state}");
+                            }
                         }
+                    } else if self.state == State::Running {
+                        self.handle_pause(&prefix).await?;
+                        intended_active_state = IntendedState::Running;
                     }
                 }
                 MsgWrapper::Msg(Msg::ChangeState {

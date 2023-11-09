@@ -340,8 +340,8 @@ impl Context for SinkContext {
     fn connector_type(&self) -> &ConnectorType {
         &self.0.connector_type
     }
-    fn raft(&self) -> &raft::ClusterInterface {
-        &self.0.app_ctx.raft
+    fn raft(&self) -> Option<&raft::Cluster> {
+        self.0.app_ctx.raft.as_ref()
     }
     fn app_ctx(&self) -> &AppContext {
         &self.0.app_ctx
@@ -449,7 +449,6 @@ pub(crate) fn builder(
         config.codec.clone(),
         connector_codec_requirement,
         postprocessor_configs,
-        &config.connector_type,
         alias,
     )?;
     // the incoming channels for events are all bounded, so we can safely be unbounded here
@@ -492,7 +491,6 @@ impl EventSerializer {
             codec_config,
             default,
             vec![],
-            &ConnectorType::from("dummy"),
             &alias::Connector::from("dummy"),
         )
     }
@@ -500,7 +498,6 @@ impl EventSerializer {
         codec_config: Option<tremor_codec::Config>,
         default_codec: CodecReq,
         postprocessor_configs: Vec<postprocessor::Config>,
-        _connector_type: &ConnectorType,
         alias: &alias::Connector,
     ) -> Result<Self> {
         let codec_config = match default_codec {

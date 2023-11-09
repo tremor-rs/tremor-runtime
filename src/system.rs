@@ -28,8 +28,7 @@ use crate::{
     connectors,
     errors::{ErrorKind, Result},
     instance::IntendedState as IntendedInstanceState,
-    log_error,
-    raft::{self, ClusterInterface},
+    log_error, raft,
 };
 use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
 use tremor_common::alias;
@@ -217,10 +216,7 @@ impl Runtime {
                 app: app_id,
                 flow: Box::new(flow.clone()),
                 sender: tx,
-                raft: self
-                    .maybe_get_manager()?
-                    .map(ClusterInterface::from)
-                    .unwrap_or_default(),
+                raft: self.maybe_get_manager()?,
                 deployment_type,
             })
             .await?;

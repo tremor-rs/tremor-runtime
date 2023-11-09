@@ -104,10 +104,20 @@ async fn uninstall_app(
         .map(|d| d.data)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AppState {
     pub def: TremorAppDef,
     pub instances: Instances,
+}
+
+#[cfg(test)]
+impl AppState {
+    pub(crate) fn dummy() -> Self {
+        AppState {
+            def: TremorAppDef::dummy(),
+            instances: HashMap::new(),
+        }
+    }
 }
 
 impl From<&StateApp> for AppState {

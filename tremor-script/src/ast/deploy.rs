@@ -45,6 +45,19 @@ pub struct Deploy<'script> {
     mid: Box<NodeMeta>,
 }
 
+impl Deploy<'static> {
+    #[must_use]
+    pub(crate) fn dummy() -> Self {
+        Self {
+            docs: Docs::default(),
+            stmts: vec![],
+            config: HashMap::new(),
+            scope: Scope::default(),
+            mid: NodeMeta::dummy(),
+        }
+    }
+}
+
 impl<'script> BaseExpr for Deploy<'script> {
     fn meta(&self) -> &crate::NodeMeta {
         self.mid.meta()

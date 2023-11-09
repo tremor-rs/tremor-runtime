@@ -294,7 +294,7 @@ pub(crate) trait Context: Display + Clone {
     fn connector_type(&self) -> &ConnectorType;
 
     /// gets the API sender
-    fn raft(&self) -> &raft::ClusterInterface;
+    fn raft(&self) -> Option<&raft::Cluster>;
 
     /// the application context
     fn app_ctx(&self) -> &AppContext;
@@ -389,8 +389,8 @@ impl Context for ConnectorContext {
         &self.notifier
     }
 
-    fn raft(&self) -> &raft::ClusterInterface {
-        &self.app_ctx.raft
+    fn raft(&self) -> Option<&raft::Cluster> {
+        self.app_ctx.raft.as_ref()
     }
 
     fn app_ctx(&self) -> &AppContext {
@@ -1342,8 +1342,8 @@ pub(crate) mod unit_tests {
         fn connector_type(&self) -> &ConnectorType {
             &self.t
         }
-        fn raft(&self) -> &raft::ClusterInterface {
-            &self.app_ctx.raft
+        fn raft(&self) -> Option<&raft::Cluster> {
+            self.app_ctx.raft.as_ref()
         }
         fn app_ctx(&self) -> &AppContext {
             &self.app_ctx

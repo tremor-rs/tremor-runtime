@@ -51,7 +51,7 @@ pub(crate) enum Msg {
         /// result sender
         sender: OneShotSender<Result<alias::Flow>>,
         /// API request sender
-        raft: raft::ClusterInterface,
+        raft: Option<raft::Cluster>,
         /// Type of the deployment
         deployment_type: DeploymentType,
     },
@@ -112,7 +112,7 @@ impl FlowSupervisor {
         flow: DeployFlow<'static>,
         sender: oneshot::Sender<Result<alias::Flow>>,
         kill_switch: &KillSwitch,
-        raft: raft::ClusterInterface,
+        raft: Option<raft::Cluster>,
         deployment_type: DeploymentType,
     ) {
         let id = alias::Flow::new(app_id, &flow.instance_alias);

@@ -485,12 +485,12 @@ impl Manager {
         MODULES.write()?.path.add(path);
         Ok(())
     }
-
+    #[cfg(feature = "arena-delete")]
     pub(crate) fn delete_arena_index(idx: arena::Index) -> Result<()> {
         MODULES.write()?.delete_arena_index_(idx);
         Ok(())
     }
-
+    #[cfg(feature = "arena-delete")]
     fn delete_arena_index_(&mut self, idx: arena::Index) {
         self.modules.retain(|m| {
             if m.arena_idx == idx {

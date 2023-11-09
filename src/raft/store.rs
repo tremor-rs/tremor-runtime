@@ -39,14 +39,7 @@ use redb::{
 };
 use serde::{Deserialize, Serialize};
 use simd_json::OwnedValue;
-use std::{
-    fmt::{Debug, Display, Formatter},
-    io::Cursor,
-    ops::RangeBounds,
-    path::Path,
-    string::FromUtf8Error,
-    sync::{Arc, Mutex},
-};
+use std::{fmt::Debug, io::Cursor, ops::RangeBounds, path::Path, string::FromUtf8Error, sync::Arc};
 use tokio::sync::RwLock;
 use tremor_common::alias;
 
@@ -263,11 +256,10 @@ impl TryFrom<TremorResponse> for alias::Flow {
 }
 
 /// A snapshot
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TremorSnapshot {
     /// The meta data of the snapshot.
     pub meta: SnapshotMeta<NodeId, crate::raft::node::Addr>,
-
     /// The data of the state machine at the time of this snapshot.
     pub data: Vec<u8>,
 }
@@ -294,7 +286,7 @@ fn id_to_bin(id: u64) -> Result<Vec<u8>, Error> {
 fn bin_to_id(buf: &[u8]) -> Result<u64, Error> {
     Ok(buf
         .get(0..8)
-        .ok_or_else(|| Error::Other(format!("Invalid buffer length: {}", buf.len()).into()))?
+        .ok_or_else(|| Error::InvalidBinIdBufferLen(buf.len()))?
         .read_u64::<BigEndian>()?)
 }
 
@@ -302,198 +294,84 @@ fn bin_to_id(buf: &[u8]) -> Result<u64, Error> {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// invalid cluster store, node_id missing
-    // #[error("invalid cluster store, node_id missing")]
+    #[error("invalid cluster store, node_id missing")]
     MissingNodeId,
-    // #[error("invalid cluster store, node_addr missing")]
     /// invalid cluster store, node_addr missing
+    #[error("invalid cluster store, node_addr missing")]
     MissingNodeAddr,
+    /// invalid buffer lenght for binay i
+    #[error("Invalid buffer length: {0}")]
+    InvalidBinIdBufferLen(usize),
     /// Invalid utf8
-    Utf8(FromUtf8Error),
+    #[error(transparent)]
+    Utf8(#[from] FromUtf8Error),
     /// Invalid utf8
-    StrUtf8(std::str::Utf8Error),
+    #[error(transparent)]
+    StrUtf8(#[from] std::str::Utf8Error),
     /// MsgPack encode error
-    MsgPackEncode(rmp_serde::encode::Error),
+    #[error(transparent)]
+    MsgPackEncode(#[from] rmp_serde::encode::Error),
     /// MsgPack decode error
-    MsgPackDecode(rmp_serde::decode::Error),
+    #[error(transparent)]
+    MsgPackDecode(#[from] rmp_serde::decode::Error),
     /// Database error
-    Database(DatabaseError),
+    #[error(transparent)]
+    Database(#[from] DatabaseError),
     /// Transaction error
-    Transaction(TransactionError),
+    #[error(transparent)]
+    Transaction(#[from] TransactionError),
     /// Transaction error
-    Table(TableError),
+    #[error(transparent)]
+    Table(#[from] TableError),
     /// StorageError
-    DbStorage(DbStorageError),
+    #[error(transparent)]
+    DbStorage(#[from] DbStorageError),
     /// Commit Error
-    Commit(CommitError),
+    #[error(transparent)]
+    Commit(#[from] CommitError),
     /// IO error
-    Io(std::io::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
     /// Storage error
-    Storage(openraft::StorageError<crate::raft::NodeId>),
+    #[error(transparent)]
+    Storage(#[from] openraft::StorageError<crate::raft::NodeId>),
     /// Tremor error
-    Tremor(Mutex<RuntimeError>),
+    #[error(transparent)]
+    Tremor(#[from] RuntimeError),
     /// Tremor script error
-    TremorScript(Mutex<tremor_script::errors::Error>),
+    #[error(transparent)]
+    TremorScript(#[from] tremor_script::errors::Error),
     /// Missing app
+    #[error("missing app {0}")]
     MissingApp(alias::App),
     /// Missing flow
+    #[error("missing flow {0} in app {1}")]
     MissingFlow(alias::App, alias::FlowDefinition),
     /// Missing instance
+    #[error("missing instance {0}")]
     MissingInstance(alias::Flow),
     /// App still has running instances
+    #[error("app {0} still has running instances")]
     RunningInstances(alias::App),
     /// Node already added
+    #[error("node {0} already added")]
     NodeAlreadyAdded(crate::raft::NodeId),
     /// Other error
-    Other(Box<dyn std::error::Error + Send + Sync>),
-}
-
-impl<T: Send + Sync + 'static> From<std::sync::PoisonError<T>> for Error {
-    fn from(e: std::sync::PoisonError<T>) -> Self {
-        Self::Other(Box::new(e))
-    }
-}
-
-impl From<FromUtf8Error> for Error {
-    fn from(e: FromUtf8Error) -> Self {
-        Error::Utf8(e)
-    }
-}
-
-impl From<std::str::Utf8Error> for Error {
-    fn from(e: std::str::Utf8Error) -> Self {
-        Error::StrUtf8(e)
-    }
-}
-
-impl From<rmp_serde::encode::Error> for Error {
-    fn from(e: rmp_serde::encode::Error) -> Self {
-        Error::MsgPackEncode(e)
-    }
-}
-
-impl From<rmp_serde::decode::Error> for Error {
-    fn from(e: rmp_serde::decode::Error) -> Self {
-        Error::MsgPackDecode(e)
-    }
-}
-impl From<redb::DatabaseError> for Error {
-    fn from(e: redb::DatabaseError) -> Self {
-        Error::Database(e)
-    }
-}
-impl From<redb::TransactionError> for Error {
-    fn from(e: redb::TransactionError) -> Self {
-        Error::Transaction(e)
-    }
-}
-
-impl From<redb::TableError> for Error {
-    fn from(e: redb::TableError) -> Self {
-        Error::Table(e)
-    }
-}
-
-impl From<redb::StorageError> for Error {
-    fn from(e: redb::StorageError) -> Self {
-        Error::DbStorage(e)
-    }
-}
-
-impl From<redb::CommitError> for Error {
-    fn from(e: redb::CommitError) -> Self {
-        Error::Commit(e)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::Io(e)
-    }
-}
-
-impl From<crate::errors::Error> for Error {
-    fn from(e: crate::errors::Error) -> Self {
-        Error::Tremor(Mutex::new(e))
-    }
-}
-impl From<tremor_script::errors::Error> for Error {
-    fn from(e: tremor_script::errors::Error) -> Self {
-        Error::TremorScript(Mutex::new(e))
-    }
-}
-
-impl From<StorageError<crate::raft::NodeId>> for Error {
-    fn from(e: StorageError<crate::raft::NodeId>) -> Self {
-        Error::Storage(e)
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::MissingNodeId => write!(f, "missing node id"),
-            Error::MissingNodeAddr => write!(f, "missing node addr"),
-            Error::Utf8(e) => write!(f, "invalid utf8: {e}"),
-            Error::StrUtf8(e) => write!(f, "invalid utf8: {e}"),
-
-            Error::MsgPackEncode(e) => write!(f, "invalid msgpack: {e}"),
-            Error::MsgPackDecode(e) => write!(f, "invalid msgpack: {e}"),
-
-            Error::Database(e) => write!(f, "database error: {e}"),
-            Error::Transaction(e) => write!(f, "transaction error: {e}"),
-            Error::Table(e) => write!(f, "table error: {e}"),
-            Error::DbStorage(e) => write!(f, "storage error: {e}"),
-            Error::Commit(e) => write!(f, "commit error: {e}"),
-
-            Error::Io(e) => write!(f, "io error: {e}"),
-            Error::Tremor(e) => write!(f, "tremor error: {:?}", e.lock()),
-            Error::TremorScript(e) => write!(f, "tremor script error: {:?}", e.lock()),
-            Error::Other(e) => write!(f, "other error: {e}"),
-            Error::MissingApp(app) => write!(f, "missing app: {app}"),
-            Error::MissingFlow(app, flow) => write!(f, "missing flow: {app}::{flow}"),
-            Error::MissingInstance(instance) => {
-                write!(f, "missing instance: {instance}")
-            }
-            Error::Storage(e) => write!(f, "Storage: {e}"),
-            Error::NodeAlreadyAdded(node_id) => write!(f, "Node {node_id} already added"),
-            Error::RunningInstances(app_id) => {
-                write!(f, "App {app_id} still has running instances")
-            }
-        }
-    }
+    #[error(transparent)]
+    Other(anyhow::Error),
 }
 
 fn w_err(e: impl Into<anyhow::Error>) -> StorageError<crate::raft::NodeId> {
-    StorageIOError::new(
-        ErrorSubject::Store,
-        ErrorVerb::Write,
-        AnyError::new(&SillyError(e.into())),
-    )
-    .into()
+    StorageIOError::new(ErrorSubject::Store, ErrorVerb::Write, SillyError::err(e)).into()
 }
 fn r_err(e: impl Into<anyhow::Error>) -> StorageError<crate::raft::NodeId> {
-    StorageIOError::new(
-        ErrorSubject::Store,
-        ErrorVerb::Read,
-        AnyError::new(&SillyError(e.into())),
-    )
-    .into()
+    StorageIOError::new(ErrorSubject::Store, ErrorVerb::Read, SillyError::err(e)).into()
 }
 fn logs_r_err(e: impl Into<anyhow::Error>) -> StorageError<crate::raft::NodeId> {
-    StorageIOError::new(
-        ErrorSubject::Logs,
-        ErrorVerb::Read,
-        AnyError::new(&SillyError(e.into())),
-    )
-    .into()
+    StorageIOError::new(ErrorSubject::Logs, ErrorVerb::Read, SillyError::err(e)).into()
 }
 fn logs_w_err(e: impl Into<anyhow::Error>) -> StorageError<crate::raft::NodeId> {
-    StorageIOError::new(
-        ErrorSubject::Logs,
-        ErrorVerb::Read,
-        AnyError::new(&SillyError(e.into())),
-    )
-    .into()
+    StorageIOError::new(ErrorSubject::Logs, ErrorVerb::Read, SillyError::err(e)).into()
 }
 
 impl From<Error> for StorageError<crate::raft::NodeId> {
@@ -602,8 +480,8 @@ impl RaftLogReader<TremorRaftConfig> for Store {
         .collect::<StorageResult<_>>()
     }
 }
-#[async_trait]
 
+#[async_trait]
 impl RaftSnapshotBuilder<TremorRaftConfig> for Store {
     async fn build_snapshot(&mut self) -> StorageResult<Snapshot<TremorRaftConfig>> {
         let data;
@@ -998,23 +876,193 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    // use crate::raft::ClusterResult;
 
-    // use super::*;
+    use openraft::{LeaderId, Membership};
 
-    // #[test]
-    // fn init_db_is_idempotent() -> ClusterResult<()> {
-    //     let dir = tempfile::tempdir()?;
-    //     let db = Store::init_db(dir.path())?;
-    //     let handle = db.cf_handle(Store::STORE).expect("no data");
-    //     let data = vec![1_u8, 2_u8, 3_u8];
-    //     db.put_cf(handle, "node_id", data.clone())?;
-    //     drop(db);
+    use crate::system::WorldConfig;
 
-    //     let db2 = Store::init_db(dir.path())?;
-    //     let handle2 = db2.cf_handle(Store::STORE).expect("no data");
-    //     let res2 = db2.get_cf(handle2, "node_id")?;
-    //     assert_eq!(Some(data), res2);
-    //     Ok(())
-    // }
+    use super::*;
+
+    #[test]
+    fn tremor_response() {
+        use alias::{App, Flow};
+        let kv = TremorResponse::KvValue(vec![1, 2, 3]);
+        let app = TremorResponse::AppId(App::default());
+        let node = TremorResponse::NodeId(1);
+        let instance = TremorResponse::AppFlowInstanceId(Flow::default());
+
+        assert_eq!(kv.into_kv_value().expect("ok"), vec![1, 2, 3]);
+        assert_eq!(App::try_from(app).expect("ok"), App::default());
+        assert_eq!(NodeId::try_from(node).expect("ok"), 1);
+        assert_eq!(Flow::try_from(instance).expect("ok"), Flow::default());
+        assert!(matches!(
+            TremorResponse::None.into_kv_value(),
+            Err(ResponseError::NotKv)
+        ));
+        assert!(matches!(
+            App::try_from(TremorResponse::None),
+            Err(ResponseError::NotAppId)
+        ));
+        assert!(matches!(
+            NodeId::try_from(TremorResponse::None),
+            Err(ResponseError::NotNodeId)
+        ));
+        assert!(matches!(
+            Flow::try_from(TremorResponse::None),
+            Err(ResponseError::NotAppFlowInstanceId)
+        ));
+    }
+
+    #[test]
+    fn ids() {
+        let id = 1;
+        let bin = id_to_bin(id).expect("ok");
+        assert_eq!(bin.len(), 8);
+        assert_eq!(bin_to_id(&bin).expect("ok"), id);
+    }
+    #[test]
+    fn test_err_functions() {
+        let e = Error::Other(anyhow::anyhow!("test"));
+        assert!(matches!(w_err(e), StorageError::IO { .. }));
+        let e = Error::Other(anyhow::anyhow!("test"));
+        assert!(matches!(r_err(e), StorageError::IO { .. }));
+        let e = Error::Other(anyhow::anyhow!("test"));
+        assert!(matches!(logs_r_err(e), StorageError::IO { .. }));
+        let e = Error::Other(anyhow::anyhow!("test"));
+        assert!(matches!(logs_w_err(e), StorageError::IO { .. }));
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_vote() -> Result<()> {
+        let node_id = 1;
+        let addr = Addr::default();
+        let (runtime, _) = Runtime::start(WorldConfig::default())
+            .await
+            .expect("runtime");
+        let dir = tempfile::tempdir()?;
+        let mut store = Store::bootstrap(node_id, &addr, dir.path().join("db"), runtime).await?;
+
+        let vote = Vote::new(1, 1);
+        store.save_vote(&vote).await?;
+        let vote2 = store.read_vote().await?;
+        assert_eq!(Some(vote), vote2);
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_last_purged() -> Result<()> {
+        let node_id = 1;
+        let addr = Addr::default();
+        let (runtime, _) = Runtime::start(WorldConfig::default())
+            .await
+            .expect("runtime");
+        let dir = tempfile::tempdir()?;
+        let store = Store::bootstrap(node_id, &addr, dir.path().join("db"), runtime).await?;
+        let log_id = LogId::new(LeaderId::new(1, 1), 1);
+        store.set_last_purged_(&log_id)?;
+        let log_id2 = store.get_last_purged_()?;
+        assert_eq!(Some(log_id), log_id2);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_snapshot_index() -> Result<()> {
+        let node_id = 1;
+        let addr = Addr::default();
+        let (runtime, _) = Runtime::start(WorldConfig::default())
+            .await
+            .expect("runtime");
+        let dir = tempfile::tempdir()?;
+        let store = Store::bootstrap(node_id, &addr, dir.path().join("db"), runtime).await?;
+
+        let snapshot_index = 1;
+        store.set_snapshot_index_(snapshot_index)?;
+        let snapshot_index2 = store.get_snapshot_index_()?;
+        assert_eq!(snapshot_index, snapshot_index2);
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_snapshot() -> Result<()> {
+        let node_id = 1;
+        let addr = Addr::default();
+        let (runtime, _) = Runtime::start(WorldConfig::default())
+            .await
+            .expect("runtime");
+        let dir = tempfile::tempdir()?;
+        let store = Store::bootstrap(node_id, &addr, dir.path().join("db"), runtime).await?;
+
+        let membership = Membership::default();
+        let snapshot = TremorSnapshot {
+            meta: SnapshotMeta {
+                last_log_id: Some(LogId::new(LeaderId::new(1, 1), 1)),
+                last_membership: StoredMembership::new(
+                    Some(LogId::new(LeaderId::new(1, 1), 1)),
+                    membership,
+                ),
+                snapshot_id: "test".to_string(),
+            },
+            data: vec![1, 2, 3],
+        };
+        store.set_current_snapshot_(&snapshot)?;
+        let snapshot2 = store.get_current_snapshot_()?;
+        assert_eq!(Some(snapshot), snapshot2);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn try_get_log_entries() -> Result<()> {
+        let node_id = 1;
+        let addr = Addr::default();
+        let (runtime, _) = Runtime::start(WorldConfig::default())
+            .await
+            .expect("runtime");
+        let dir = tempfile::tempdir()?;
+        let mut store = Store::bootstrap(node_id, &addr, dir.path().join("db"), runtime).await?;
+
+        let entry = Entry {
+            log_id: LogId::new(LeaderId::new(1, 1), 1),
+            payload: EntryPayload::Blank,
+        };
+        store.append_to_log(vec![entry.clone()]).await?;
+        let entries = store.try_get_log_entries(0..2).await?;
+        assert_eq!(entries.len(), 1);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_snapshot() -> Result<()> {
+        let node_id = 1;
+        let addr = Addr::default();
+        let (runtime, _) = Runtime::start(WorldConfig::default())
+            .await
+            .expect("runtime");
+        let dir = tempfile::tempdir()?;
+        let mut store = Store::bootstrap(node_id, &addr, dir.path().join("db"), runtime).await?;
+
+        let entry = Entry {
+            log_id: LogId::new(LeaderId::new(1, 1), 1),
+            payload: EntryPayload::Blank,
+        };
+        store.append_to_log(vec![entry.clone()]).await?;
+
+        let snapshot = store.build_snapshot().await?;
+        // A single log entry will not create a snapshot so we will get None back
+        assert_eq!(snapshot.meta.last_log_id, None);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn save_vote() -> Result<()> {
+        let node_id = 1;
+        let addr = Addr::default();
+        let (runtime, _) = Runtime::start(WorldConfig::default())
+            .await
+            .expect("runtime");
+        let dir = tempfile::tempdir()?;
+        let mut store = Store::bootstrap(node_id, &addr, dir.path().join("db"), runtime).await?;
+
+        let vote = Vote::new(1, 1);
+        store.save_vote(&vote).await?;
+        let vote2 = store.read_vote().await?;
+        assert_eq!(Some(vote), vote2);
+        Ok(())
+    }
 }

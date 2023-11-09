@@ -15,7 +15,7 @@
 // #![cfg_attr(coverage, no_coverage)]
 use crate::{
     channel::{bounded, Receiver, Sender},
-    raft,
+    raft::{self, ClusterError},
 };
 use crate::{connectors::prelude::*, system::flow::AppContext};
 use serde::Deserialize;
@@ -51,49 +51,6 @@ enum Command {
     /// Event Payload: data to put here
     /// Response: the putted value if successful
     Put { key: String },
-    // /// Format:
-    // /// ```json
-    // /// {"swap": "the-key"}
-    // /// ```
-    // /// Event Payload: data to put here
-    // ///
-    // /// Response: the old value or `null` is there was no previous value for this key
-    // Swap { key: Vec<u8> },
-
-    // /// Format:
-    // /// ```json
-    // /// {"delete": "the-key"}
-    // /// ```
-    // ///
-    // /// Response: the old value
-    // Delete { key: Vec<u8> },
-    // /// Format:
-    // /// ```json
-    // /// {
-    // ///    "start": "key1",
-    // ///    "end": "key2",
-    // /// }
-    // /// ```
-    // ///
-    // /// Response: 1 event for each value in the scanned range
-    // Scan {
-    //     start: Vec<u8>,
-    //     end: Option<Vec<u8>>,
-    // },
-    // /// Format:
-    // ///  ```json
-    // /// {
-    // ///    "cas": "key",
-    // ///    "old": "<value|null|not-set>",
-    // /// }
-    // /// ```
-    // /// EventPayload: event payload
-    // ///
-    // /// Response: `null` if the operation succeeded, an event on `err` if it failed
-    // Cas {
-    //     key: Vec<u8>,
-    //     old: Option<&'v Value<'v>>,
-    // },
 }
 
 impl<'v> TryFrom<&'v Value<'v>> for Command {
@@ -108,20 +65,6 @@ impl<'v> TryFrom<&'v Value<'v>> for Command {
             })
         } else if let Some(key) = v.get_str("put").map(ToString::to_string) {
             Ok(Command::Put { key })
-        // } else if let Some(key) = v.get_bytes("swap").map(<[u8]>::to_vec) {
-        //     Ok(Command::Swap { key })
-        // } else if let Some(key) = v.get_bytes("cas").map(<[u8]>::to_vec) {
-        //     Ok(Command::Cas {
-        //         key,
-        //         old: v.get("old"),
-        //     })
-        // } else if let Some(key) = v.get_bytes("delete").map(<[u8]>::to_vec) {
-        //     Ok(Command::Delete { key })
-        // } else if let Some(start) = v.get_bytes("scan").map(<[u8]>::to_vec) {
-        //     Ok(Command::Scan {
-        //         start,
-        //         end: v.get_bytes("end").map(<[u8]>::to_vec),
-        //     })
         } else {
             Err(Error::InvalidCommand(v.to_string()).into())
         }
@@ -133,20 +76,12 @@ impl Command {
         match self {
             Command::Get { .. } => "get",
             Command::Put { .. } => "put",
-            // Command::Swap { .. } => "swap",
-            // Command::Delete { .. } => "delete",
-            // Command::Scan { .. } => "scan",
-            // Command::Cas { .. } => "cas",
         }
     }
 
     fn key(&self) -> &str {
         match self {
             Command::Get { key, .. } | Command::Put { key, .. } => key,
-            // | Command::Swap { key, .. }
-            // | Command::Delete { key }
-            // | Command::Cas { key, .. } => Some(key.clone()),
-            // Command::Scan { .. } => None,
         }
     }
 }
@@ -240,7 +175,9 @@ impl Connector for Kv {
         let sink = KvSink {
             alias: ctx.alias().clone(),
             app_ctx: ctx.app_ctx().clone(),
-            raft: ctx.raft().clone(),
+            raft: ctx
+                .raft()
+                .map_or_else(|| Err(ClusterError::RaftNotRunning), |v| Ok(v.clone()))?,
             tx: self.tx.clone(),
             codec,
             origin_uri,
@@ -257,7 +194,7 @@ impl Connector for Kv {
 struct KvSink {
     alias: alias::Connector,
     app_ctx: AppContext,
-    raft: raft::ClusterInterface,
+    raft: raft::Cluster,
     tx: Sender<SourceReply>,
     codec: Json<Sorted>,
     origin_uri: EventOriginUri,
@@ -305,46 +242,7 @@ impl KvSink {
                 let combined_key = key_parts.join(".");
                 self.raft.kv_set(combined_key, value_vec).await?;
                 Ok(oks(op_name, key, value.clone_static()))
-            } // Command::Swap { key } => {
-              //     // return the old value
-              //     let value = self.encode(value)?;
-              //     let v = self.db.insert(&key, value)?;
-              //     self.decode(v, ingest_ns)
-              //         .map(|old_value| oks(op_name, key, old_value))
-              // }
-              // Command::Delete { key } => self
-              //     .decode(self.db.remove(&key)?, ingest_ns)
-              //     .map(|v| oks(op_name, key, v)),
-              // Command::Cas { key, old } => {
-              //     let vec = self.encode(value)?;
-              //     let old = old.map(|v| self.encode(v)).transpose()?;
-              //     if let Err(CompareAndSwapError { current, proposed }) =
-              //         self.db.compare_and_swap(&key, old, Some(vec))?
-              //     {
-              //         Err(format!(
-              //             "CAS error: expected {} but found {}.",
-              //             self.decode(proposed, ingest_ns)?,
-              //             self.decode(current, ingest_ns)?,
-              //         )
-              //         .into())
-              //     } else {
-              //         Ok(oks(op_name, key, Value::null()))
-              //     }
-              // }
-              // Command::Scan { start, end } => {
-              //     let i = match end {
-              //         None => self.db.range(start..),
-              //         Some(end) => self.db.range(start..end),
-              //     };
-              //     let mut res = Vec::with_capacity(i.size_hint().0);
-              //     for e in i {
-              //         let (key, e) = e?;
-              //         let key: &[u8] = &key;
-
-              //         res.push(ok(op_name, key.to_vec(), self.decode(Some(e), ingest_ns)?));
-              //     }
-              //     Ok(res)
-              // }
+            }
         }
     }
 }
@@ -426,5 +324,544 @@ impl Sink for KvSink {
 
     fn auto_ack(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use matches::assert_matches;
+    use openraft::error::{CheckIsLeaderError, ForwardToLeader, RaftError};
+
+    use crate::raft::{api::APIStoreReq, manager::IFRequest, node::Addr};
+
+    use super::*;
+
+    #[test]
+    fn try_from_command() {
+        let cmd = literal!({
+            "kv": {
+                "get": "the-key",
+                "strict": true
+            }
+        });
+        let cmd = Command::try_from(&cmd).expect("it's OK");
+        assert_eq!(cmd.op_name(), "get");
+        assert_eq!(cmd.key(), "the-key");
+
+        let cmd = literal!({
+            "kv": {
+                "put": "the-key"
+            }
+        });
+        let cmd = Command::try_from(&cmd).expect("it's OK");
+        assert_eq!(cmd.op_name(), "put");
+        assert_eq!(cmd.key(), "the-key");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn on_event_get() -> Result<()> {
+        let (tx, mut rx) = bounded(1);
+
+        let (store_tx, mut store_rx) = bounded(8);
+        let (cluster_tx, _) = bounded(8);
+
+        tokio::spawn(async move {
+            match store_rx.recv().await.expect("rcv") {
+                APIStoreReq::KVGet(_key, result_tx) => {
+                    let _ = result_tx.send(Some(b"42".to_vec()));
+                }
+                _ => panic!("wrong request"),
+            };
+        });
+        let alias = alias::Connector::new("cluster_kv");
+        let raft = raft::Cluster::dummy(store_tx, cluster_tx);
+
+        let app_ctx = AppContext {
+            raft: Some(raft.clone()),
+            ..AppContext::default()
+        };
+        let mut sink = KvSink {
+            alias,
+            app_ctx,
+            raft,
+            tx,
+            codec: Json::default(),
+            origin_uri: EventOriginUri {
+                scheme: "tremor-cluster-kv".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![],
+            },
+            source_is_connected: Arc::new(true.into()),
+        };
+        let ctx = SinkContext::dummy("cluster_kv");
+        let mut serializer = EventSerializer::dummy(None)?;
+
+        let event = Event {
+            data: ((), literal!({"kv": { "get": "the-key" }})).into(),
+            ..Event::default()
+        };
+
+        let reply = sink
+            .on_event("in", event, &ctx, &mut serializer, 0)
+            .await
+            .expect("it's OK");
+
+        assert_eq!(reply, SinkReply::ACK);
+        let reply = rx.recv().await.expect("it's OK");
+        let expected: EventPayload = (
+            Value::from(42),
+            literal!({ "kv": { "op": "get", "ok": "the-key" } }),
+        )
+            .into();
+        assert_matches!(
+            reply,
+            SourceReply::Structured {
+                payload,
+                ..
+            } if payload == expected
+        );
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn on_event_get_strict_local() -> Result<()> {
+        let (tx, mut rx) = bounded(1);
+
+        let (store_tx, mut store_rx) = bounded(8);
+        let (cluster_tx, mut cluster_rx) = bounded(8);
+
+        tokio::spawn(async move {
+            match cluster_rx.recv().await.expect("rcv") {
+                IFRequest::IsLeader(result_tx) => {
+                    let _ = result_tx.send(Ok(()));
+                }
+                IFRequest::SetKeyLocal(_, _) => panic!("wrong request"),
+            };
+            match store_rx.recv().await.expect("rcv") {
+                APIStoreReq::KVGet(_key, result_tx) => {
+                    let _ = result_tx.send(Some(b"42".to_vec()));
+                }
+                _ => panic!("wrong request"),
+            };
+        });
+        let alias = alias::Connector::new("cluster_kv");
+        let raft = raft::Cluster::dummy(store_tx, cluster_tx);
+
+        let app_ctx = AppContext {
+            raft: Some(raft.clone()),
+            ..AppContext::default()
+        };
+        let mut sink = KvSink {
+            alias,
+            app_ctx,
+            raft,
+            tx,
+            codec: Json::default(),
+            origin_uri: EventOriginUri {
+                scheme: "tremor-cluster-kv".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![],
+            },
+            source_is_connected: Arc::new(true.into()),
+        };
+        let ctx = SinkContext::dummy("cluster_kv");
+        let mut serializer = EventSerializer::dummy(None)?;
+
+        let event = Event {
+            data: ((), literal!({"kv": { "get": "the-key", "strict": true }})).into(),
+            ..Event::default()
+        };
+
+        let reply = sink
+            .on_event("in", event, &ctx, &mut serializer, 0)
+            .await
+            .expect("it's OK");
+
+        assert_eq!(reply, SinkReply::ACK);
+        let reply = rx.recv().await.expect("it's OK");
+        let expected: EventPayload = (
+            Value::from(42),
+            literal!({ "kv": { "op": "get", "ok": "the-key" } }),
+        )
+            .into();
+        assert_matches!(
+            reply,
+            SourceReply::Structured {
+                payload,
+                ..
+            } if payload == expected
+        );
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn on_event_get_strict_remote() -> Result<()> {
+        let (tx, mut rx) = bounded(1);
+
+        let (store_tx, _) = bounded(8);
+        let (cluster_tx, mut cluster_rx) = bounded(8);
+
+        let mut api_server = mockito::Server::new();
+
+        let api = api_server.host_with_port();
+        let rpc = api.clone();
+
+        tokio::spawn(async move {
+            match cluster_rx.recv().await.expect("rcv") {
+                IFRequest::IsLeader(result_tx) => {
+                    let _ = result_tx.send(Err(RaftError::APIError(
+                        CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                            leader_node: Some(Addr::new(api, rpc)),
+                            leader_id: Some(1),
+                        }),
+                    )));
+                }
+                IFRequest::SetKeyLocal(_, _) => panic!("wrong request"),
+            };
+        });
+        let alias = alias::Connector::new("cluster_kv");
+        let raft = raft::Cluster::dummy(store_tx, cluster_tx);
+
+        let app_ctx = AppContext {
+            raft: Some(raft.clone()),
+            ..AppContext::default()
+        };
+        let mut sink = KvSink {
+            alias,
+            app_ctx,
+            raft,
+            tx,
+            codec: Json::default(),
+            origin_uri: EventOriginUri {
+                scheme: "tremor-cluster-kv".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![],
+            },
+            source_is_connected: Arc::new(true.into()),
+        };
+        let ctx = SinkContext::dummy("cluster_kv");
+        let mut serializer = EventSerializer::dummy(None)?;
+
+        let event = Event {
+            data: ((), literal!({"kv": { "get": "the-key", "strict": true }})).into(),
+            ..Event::default()
+        };
+
+        let api_mock = api_server
+            .mock("POST", "/v1/api/kv/consistent_read")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("42")
+            .create();
+
+        let reply = sink
+            .on_event("in", event, &ctx, &mut serializer, 0)
+            .await
+            .expect("it's OK");
+
+        assert_eq!(reply, SinkReply::ACK);
+        let reply = rx.recv().await.expect("it's OK");
+        let expected: EventPayload = (
+            Value::from(42),
+            literal!({ "kv": { "op": "get", "ok": "the-key" } }),
+        )
+            .into();
+        assert_matches!(
+            reply,
+            SourceReply::Structured {
+                payload,
+                ..
+            } if payload == expected
+        );
+        api_mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn on_event_put_local() -> Result<()> {
+        let (tx, mut rx) = bounded(1);
+
+        let (store_tx, _) = bounded(8);
+        let (cluster_tx, mut cluster_rx) = bounded(8);
+
+        tokio::spawn(async move {
+            match cluster_rx.recv().await.expect("rcv") {
+                IFRequest::IsLeader(result_tx) => {
+                    let _ = result_tx.send(Ok(()));
+                }
+                IFRequest::SetKeyLocal(_, _) => panic!("wrong request"),
+            };
+            match cluster_rx.recv().await.expect("rcv") {
+                IFRequest::SetKeyLocal(_key, result_tx) => {
+                    let _ = result_tx.send(Ok(b"42".to_vec()));
+                }
+                IFRequest::IsLeader(_) => panic!("wrong request"),
+            };
+        });
+        let alias = alias::Connector::new("cluster_kv");
+        let raft = raft::Cluster::dummy(store_tx, cluster_tx);
+
+        let app_ctx = AppContext {
+            raft: Some(raft.clone()),
+            ..AppContext::default()
+        };
+        let mut sink = KvSink {
+            alias,
+            app_ctx,
+            raft,
+            tx,
+            codec: Json::default(),
+            origin_uri: EventOriginUri {
+                scheme: "tremor-cluster-kv".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![],
+            },
+            source_is_connected: Arc::new(true.into()),
+        };
+        let ctx = SinkContext::dummy("cluster_kv");
+        let mut serializer = EventSerializer::dummy(None)?;
+
+        let event = Event {
+            data: (literal!(42), literal!({"kv": { "put": "the-key",  }})).into(),
+            ..Event::default()
+        };
+
+        let reply = sink
+            .on_event("in", event, &ctx, &mut serializer, 0)
+            .await
+            .expect("it's OK");
+
+        assert_eq!(reply, SinkReply::ACK);
+        let reply = rx.recv().await.expect("it's OK");
+        let expected: EventPayload = (
+            Value::from(42),
+            literal!({ "kv": { "op": "put", "ok": "the-key" } }),
+        )
+            .into();
+        assert_matches!(
+            reply,
+            SourceReply::Structured {
+                payload,
+                ..
+            } if payload == expected
+        );
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn on_event_put_remote() -> Result<()> {
+        let (tx, mut rx) = bounded(1);
+
+        let (store_tx, _) = bounded(8);
+        let (cluster_tx, mut cluster_rx) = bounded(8);
+
+        let mut api_server = mockito::Server::new();
+        let api = api_server.host_with_port();
+        let rpc = api.clone();
+
+        tokio::spawn(async move {
+            match cluster_rx.recv().await.expect("rcv") {
+                IFRequest::IsLeader(result_tx) => {
+                    let _ = result_tx.send(Err(RaftError::APIError(
+                        CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                            leader_node: Some(Addr::new(api, rpc)),
+                            leader_id: Some(1),
+                        }),
+                    )));
+                }
+                IFRequest::SetKeyLocal(_, _) => panic!("wrong request"),
+            };
+        });
+        let alias = alias::Connector::new("cluster_kv");
+        let raft = raft::Cluster::dummy(store_tx, cluster_tx);
+
+        let app_ctx = AppContext {
+            raft: Some(raft.clone()),
+            ..AppContext::default()
+        };
+        let mut sink = KvSink {
+            alias,
+            app_ctx,
+            raft,
+            tx,
+            codec: Json::default(),
+            origin_uri: EventOriginUri {
+                scheme: "tremor-cluster-kv".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![],
+            },
+            source_is_connected: Arc::new(true.into()),
+        };
+        let ctx = SinkContext::dummy("cluster_kv");
+        let mut serializer = EventSerializer::dummy(None)?;
+
+        let event = Event {
+            data: (literal!(42), literal!({"kv": { "put": "the-key",  }})).into(),
+            ..Event::default()
+        };
+
+        let api_mock = api_server
+            .mock("POST", "/v1/api/kv/write")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("42")
+            .create();
+
+        let reply = sink
+            .on_event("in", event, &ctx, &mut serializer, 0)
+            .await
+            .expect("it's OK");
+
+        assert_eq!(reply, SinkReply::ACK);
+        let reply = rx.recv().await.expect("it's OK");
+        let expected: EventPayload = (
+            Value::from(42),
+            literal!({ "kv": { "op": "put", "ok": "the-key" } }),
+        )
+            .into();
+        assert_matches!(
+            reply,
+            SourceReply::Structured {
+                payload,
+                ..
+            } if payload == expected
+        );
+        api_mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bad_command() -> Result<()> {
+        let (tx, mut rx) = bounded(1);
+
+        let (store_tx, _) = bounded(8);
+        let (cluster_tx, _) = bounded(8);
+
+        let alias = alias::Connector::new("cluster_kv");
+        let raft = raft::Cluster::dummy(store_tx, cluster_tx);
+
+        let app_ctx = AppContext {
+            raft: Some(raft.clone()),
+            ..AppContext::default()
+        };
+        let mut sink = KvSink {
+            alias,
+            app_ctx,
+            raft,
+            tx,
+            codec: Json::default(),
+            origin_uri: EventOriginUri {
+                scheme: "tremor-cluster-kv".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![],
+            },
+            source_is_connected: Arc::new(true.into()),
+        };
+        let ctx = SinkContext::dummy("cluster_kv");
+        let mut serializer = EventSerializer::dummy(None)?;
+
+        let event = Event {
+            data: ((), literal!({"kv": { "snot": "the-badger" }})).into(),
+            ..Event::default()
+        };
+
+        let reply = sink
+            .on_event("in", event, &ctx, &mut serializer, 0)
+            .await
+            .expect("it's OK");
+
+        assert_eq!(reply, SinkReply::FAIL);
+        let reply = rx.recv().await.expect("it's OK");
+        let expected: EventPayload = (
+            Value::null(),
+            literal!({ "error": "Invalid command: {\"snot\": String(\"the-badger\")}", "kv": () }),
+        )
+            .into();
+        assert_matches!(
+            reply,
+            SourceReply::Structured {
+                payload,
+                ..
+            } if payload == expected
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn on_event_error() -> Result<()> {
+        let (tx, mut rx) = bounded(1);
+
+        let (store_tx, _) = bounded(8);
+        let (cluster_tx, mut cluster_rx) = bounded(8);
+
+        tokio::spawn(async move {
+            match cluster_rx.recv().await.expect("rcv") {
+                IFRequest::IsLeader(result_tx) => {
+                    let _ = result_tx.send(Ok(()));
+                }
+                IFRequest::SetKeyLocal(_, _) => panic!("wrong request"),
+            };
+            match cluster_rx.recv().await.expect("rcv") {
+                IFRequest::SetKeyLocal(_key, result_tx) => {
+                    let _ = result_tx.send(Err(ClusterError::RaftNotRunning.into()));
+                }
+                IFRequest::IsLeader(_) => panic!("wrong request"),
+            };
+        });
+        let alias = alias::Connector::new("cluster_kv");
+        let raft = raft::Cluster::dummy(store_tx, cluster_tx);
+
+        let app_ctx = AppContext {
+            raft: Some(raft.clone()),
+            ..AppContext::default()
+        };
+        let mut sink = KvSink {
+            alias,
+            app_ctx,
+            raft,
+            tx,
+            codec: Json::default(),
+            origin_uri: EventOriginUri {
+                scheme: "tremor-cluster-kv".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![],
+            },
+            source_is_connected: Arc::new(true.into()),
+        };
+        let ctx = SinkContext::dummy("cluster_kv");
+        let mut serializer = EventSerializer::dummy(None)?;
+
+        let event = Event {
+            data: (literal!(42), literal!({"kv": { "put": "the-key",  }})).into(),
+            ..Event::default()
+        };
+
+        let reply = sink
+            .on_event("in", event, &ctx, &mut serializer, 0)
+            .await
+            .expect("it's OK");
+
+        assert_eq!(reply, SinkReply::FAIL);
+        let reply = rx.recv().await.expect("it's OK");
+        let expected: EventPayload = (
+            Value::null(),
+            literal!({ "error": "The raft node isn't running", "kv": {"op": "put", "key": "the-key"}}),
+        )
+            .into();
+        assert_matches!(
+            reply,
+            SourceReply::Structured {
+                payload,
+                ..
+            } if payload == expected
+        );
+        Ok(())
     }
 }

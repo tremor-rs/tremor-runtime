@@ -78,6 +78,14 @@ impl TremorAppDef {
     pub fn name(&self) -> &alias::App {
         &self.name
     }
+    #[cfg(test)]
+    pub(crate) fn dummy() -> Self {
+        Self {
+            name: alias::App("dummy".to_string()),
+            sha256: "dummy".to_string(),
+            flows: HashMap::new(),
+        }
+    }
 }
 
 /// Packages a tremor application into a tarball, entry point is the `main.troy` file, target the tar.gz file

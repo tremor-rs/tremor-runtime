@@ -101,7 +101,7 @@ impl Tremor {
             );
             Err(Error::HTTP(err))
         } else {
-            Err("Heisenerror, not error nor success".into())
+            Err(Error::Heisenerror)
         }
     }
 }
@@ -413,40 +413,17 @@ Snapshot:
 }
 
 /// Errors that can happen when calling the raft api
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// HTTP error
-    HTTP(reqwest::Error),
-    /// Other error
-    Other(String),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::HTTP(e) => e.fmt(f),
-            Self::Other(e) => e.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl From<reqwest::Error> for Error {
-    fn from(e: reqwest::Error) -> Self {
-        Self::HTTP(e)
-    }
-}
-
-impl From<crate::Error> for Error {
-    fn from(e: crate::Error) -> Self {
-        Self::Other(e.to_string())
-    }
-}
-impl<'s> From<&'s str> for Error {
-    fn from(e: &'s str) -> Self {
-        Self::Other(e.into())
-    }
+    #[error(transparent)]
+    HTTP(#[from] reqwest::Error),
+    /// Heisenerror, not error nor success
+    #[error("Heisenerror, not error nor success")]
+    Heisenerror,
+    /// RuntimeError
+    #[error(transparent)]
+    Other(#[from] crate::Error),
 }
 
 impl Error {
@@ -455,7 +432,401 @@ impl Error {
     pub fn is_not_found(&self) -> bool {
         match self {
             Self::HTTP(e) => e.status() == Some(reqwest::StatusCode::NOT_FOUND),
-            Self::Other(_) => false,
+            _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::{collections::BTreeMap, sync::Arc};
+
+    use openraft::{LeaderId, Membership, ServerState, StoredMembership, Vote};
+
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn write() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+        let request = KVSet {
+            key: "foo".to_string(),
+            value: "bar".into(),
+        };
+        let mock = server
+            .mock("POST", "/v1/api/kv/write")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("42")
+            .create();
+
+        let res = tremor.write(&request).await?;
+        assert_eq!(res, 42);
+        mock.assert();
+
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn read() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+        let request = "foo";
+        let mock = server
+            .mock("POST", "/v1/api/kv/read")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("42")
+            .create();
+
+        let res = tremor.read(request).await?;
+        assert_eq!(res, 42);
+        mock.assert();
+
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread")]
+    async fn consistent_read() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+        let request = "foo";
+        let mock = server
+            .mock("POST", "/v1/api/kv/consistent_read")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("42")
+            .create();
+
+        let res = tremor.consistent_read(request).await?;
+        assert_eq!(res, 42);
+        mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn install() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+        let request = vec![1, 2, 3];
+        let mock = server
+            .mock("POST", "/v1/api/apps")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#""app""#)
+            .create();
+
+        let res = tremor.install(&request).await?;
+        assert_eq!(res, "app".into());
+        mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn uninstall_app() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+        let app = alias::App::new("app");
+        let mock = server
+            .mock("DELETE", "/v1/api/apps/app")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#""app""#)
+            .create();
+
+        let res = tremor.uninstall_app(&app).await?;
+        assert_eq!(res, "app".into());
+        mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn start() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+        let flow = "flow".into();
+        let instance = alias::Flow::new("app", "instance");
+        let mut config = std::collections::HashMap::new();
+        config.insert("foo".to_string(), "bar".into());
+        let mock = server
+            .mock("POST", "/v1/api/apps/app/flows/flow")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&instance)?)
+            .create();
+
+        let res = tremor.start(&flow, &instance, config, true, false).await?;
+        assert_eq!(res, instance);
+        mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn change_instance_state() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+        let instance = alias::Flow::new("app", "instance");
+        let mock = server
+            .mock("POST", "/v1/api/apps/app/instances/instance")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&instance)?)
+            .create();
+
+        let res = tremor
+            .change_instance_state(&instance, TremorInstanceState::Pause)
+            .await?;
+        assert_eq!(res, instance);
+        mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn stop_instance() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+        let instance = alias::Flow::new("app", "instance");
+        let mock = server
+            .mock("DELETE", "/v1/api/apps/app/instances/instance")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&instance)?)
+            .create();
+
+        let res = tremor.stop_instance(&instance).await?;
+        assert_eq!(res, instance);
+        mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn list() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+        let mut apps = HashMap::new();
+        apps.insert("app".into(), AppState::dummy());
+        let mock = server
+            .mock("GET", "/v1/api/apps")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&apps)?)
+            .create();
+
+        let res = tremor.list().await?;
+        assert_eq!(res, apps);
+        mock.assert();
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn add_node() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+
+        let addr = Addr::default();
+
+        let mock = server
+            .mock("POST", "/v1/cluster/nodes")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"42"#)
+            .create();
+
+        let res = tremor.add_node(&addr).await?;
+        assert_eq!(res, 42);
+        mock.assert();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remove_node() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+
+        let node_id = 42;
+
+        let mock = server
+            .mock("DELETE", "/v1/cluster/nodes/42")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("null")
+            .create();
+
+        tremor.remove_node(&node_id).await?;
+        mock.assert();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_nodes() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+
+        let mut nodes = HashMap::new();
+        nodes.insert(42, Addr::default());
+
+        let mock = server
+            .mock("GET", "/v1/cluster/nodes")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&nodes)?)
+            .create();
+
+        let res = tremor.get_nodes().await?;
+        assert_eq!(res, nodes);
+        mock.assert();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn add_learner() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+
+        let node_id = 42;
+        let log_id = LogId {
+            leader_id: LeaderId {
+                term: 23,
+                node_id: 42,
+            },
+            index: 19,
+        };
+
+        let mock = server
+            .mock("PUT", "/v1/cluster/learners/42")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&log_id)?)
+            .create();
+
+        let res = tremor.add_learner(&node_id).await?;
+        assert_eq!(res, Some(log_id));
+        mock.assert();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remove_learner() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+
+        let node_id = 42;
+
+        let mock = server
+            .mock("DELETE", "/v1/cluster/learners/42")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body("null")
+            .create();
+
+        tremor.remove_learner(&node_id).await?;
+
+        mock.assert();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn promote_voter() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+
+        let node_id = 42;
+
+        let mock = server
+            .mock("PUT", "/v1/cluster/voters/42")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"42"#)
+            .create();
+
+        let res = tremor.promote_voter(&node_id).await?;
+        assert_eq!(res, Some(42));
+        mock.assert();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn demote_voter() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+
+        let node_id = 42;
+
+        let mock = server
+            .mock("DELETE", "/v1/cluster/voters/42")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"42"#)
+            .create();
+
+        let res = tremor.demote_voter(&node_id).await?;
+        assert_eq!(res, Some(42));
+        mock.assert();
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn metrics() -> Result<()> {
+        let mut server = mockito::Server::new();
+
+        let tremor = Tremor::new(&server.host_with_port())?;
+
+        let mut metrics = RaftMetrics {
+            running_state: Ok(()),
+            id: 42,
+            current_term: 23,
+            vote: Vote::new(42, 23),
+            last_log_index: Some(19),
+            last_applied: None,
+            snapshot: None,
+            purged: None,
+            state: ServerState::Leader,
+            current_leader: Some(42),
+            membership_config: Arc::new(StoredMembership::new(
+                Some(LogId {
+                    leader_id: LeaderId {
+                        term: 23,
+                        node_id: 42,
+                    },
+                    index: 19,
+                }),
+                Membership::new(Vec::new(), BTreeMap::new()),
+            )),
+            replication: None,
+        };
+        metrics.id = 42;
+
+        let mock = server
+            .mock("GET", "/v1/cluster/metrics")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&metrics)?)
+            .create();
+
+        let res = tremor.metrics().await?;
+        assert_eq!(res, metrics);
+        mock.assert();
+        Ok(())
     }
 }

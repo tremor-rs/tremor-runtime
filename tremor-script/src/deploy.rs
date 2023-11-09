@@ -20,11 +20,12 @@ use crate::{
     lexer::{self, Lexer},
     module::PreCachedNodes,
     prelude::*,
+    NodeMeta,
 };
 use std::collections::BTreeSet;
 
 /// A tremor deployment ( troy)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Deploy {
     /// The deployment
     pub deploy: ast::Deploy<'static>,
@@ -35,8 +36,22 @@ pub struct Deploy {
     /// Number of local variables (should be 0)
     pub locals: usize,
 }
+
+impl Deploy {
+    /// Creates a dummy deployment for testing
+    #[must_use]
+    pub fn dummy() -> Self {
+        Self {
+            deploy: ast::Deploy::dummy(),
+            aid: arena::Index::INVALID,
+            warnings: BTreeSet::new(),
+            locals: 0,
+        }
+    }
+}
+
 impl BaseExpr for Deploy {
-    fn meta(&self) -> &crate::NodeMeta {
+    fn meta(&self) -> &NodeMeta {
         self.deploy.meta()
     }
 }

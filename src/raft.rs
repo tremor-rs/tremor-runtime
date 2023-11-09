@@ -28,9 +28,9 @@ pub mod store;
 #[cfg(test)]
 mod test;
 
-pub(crate) use self::manager::{Cluster, ClusterInterface};
+pub(crate) use self::manager::Cluster;
 use network::raft_network_impl::Network;
-use openraft::{storage::Adaptor, Config, Raft, TokioRuntime};
+use openraft::{storage::Adaptor, AnyError, Config, Raft, TokioRuntime};
 use std::io::Cursor;
 use store::{TremorRequest, TremorResponse};
 
@@ -84,6 +84,12 @@ type ClusterResult<T> = crate::Result<T>;
 /// so instead of forking we're doing the silly dance
 #[derive(Debug)]
 pub(crate) struct SillyError(anyhow::Error);
+impl SillyError {
+    /// Create a new silly error
+    pub fn err(e: impl Into<anyhow::Error>) -> AnyError {
+        AnyError::new(&Self(e.into()))
+    }
+}
 
 impl std::fmt::Display for SillyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -3,7 +3,7 @@ Experimental, for testing, don't use in production or if you do fix all the thin
 
 Based on https://kubernetes.io/docs/tutorials/stateful-application/cassandra/
 
-this are purely notes
+These are purely notes
 
 ```
 minikube start --cpus 16 --memory 8192 --disk-size 50000mb

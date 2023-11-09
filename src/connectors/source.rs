@@ -359,8 +359,8 @@ impl Context for SourceContext {
     fn connector_type(&self) -> &ConnectorType {
         &self.connector_type
     }
-    fn raft(&self) -> &raft::ClusterInterface {
-        &self.app_ctx.raft
+    fn raft(&self) -> Option<&raft::Cluster> {
+        self.app_ctx.raft.as_ref()
     }
     fn app_ctx(&self) -> &AppContext {
         &self.app_ctx

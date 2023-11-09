@@ -55,13 +55,26 @@ pub struct FlowInstance {
 }
 pub type Instances = HashMap<alias::Instance, FlowInstance>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StateApp {
     pub app: TremorAppDef,
     pub instances: Instances,
     /// we keep the arena indices around, so we can safely delete its contents
     arena_indices: Vec<arena::Index>,
     main: Deploy,
+}
+
+#[cfg(test)]
+impl StateApp {
+    #[must_use]
+    pub(crate) fn dummy() -> Self {
+        Self {
+            app: TremorAppDef::dummy(),
+            instances: HashMap::new(),
+            arena_indices: Vec::new(),
+            main: Deploy::dummy(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -108,7 +121,7 @@ impl RaftStateMachine<AppsSnapshot, AppsRequest> for AppsStateMachine {
         for kv in apps.iter()? {
             let (_, archive) = kv?;
             me.load_archive(archive.value())
-                .map_err(|e| store::Error::Other(Box::new(e)))?;
+                .map_err(|e| store::Error::Other(e.into()))?;
         }
 
         let instances = read_txn.open_table(INSTANCES)?;
