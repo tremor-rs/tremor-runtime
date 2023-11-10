@@ -21,7 +21,7 @@ matches = "0.1"
 pretty_assertions = "1.4"
 
 [dependencies]
-tokio = { version = "1.32", features = ["full"] }
+tokio = { version = "1.34", features = ["full"] }
 anyhow = "1"
 clap = { version = "4", features = ["color", "derive"] }
 clap_complete = "4"
