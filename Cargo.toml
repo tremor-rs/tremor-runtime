@@ -123,7 +123,7 @@ tokio-tungstenite = "0.20"
 # dns
 trust-dns-resolver = { version = "0.23" }
 
-rdkafka = { version = "0.35", features = [
+rdkafka = { version = "0.36", features = [
   "cmake-build",
   "libz-static",
   "tokio",
