@@ -61,4 +61,4 @@ syslog_loose = "0.19"
 serde_yaml = "0.9"
 
 [dev-dependencies]
-proptest = "1.1"
+proptest = "1.4"
