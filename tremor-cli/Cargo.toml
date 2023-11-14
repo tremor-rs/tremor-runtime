@@ -59,7 +59,7 @@ globwalk = "0.8"
 port_scanner = "0.1"
 shell-words = "1"
 tch = { version = "0.13", optional = true }
-termcolor = "1.2"
+termcolor = "1.4"
 
 [[bin]]
 name = "tremor"

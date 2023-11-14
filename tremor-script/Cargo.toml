@@ -51,7 +51,7 @@ simd-json-derive = "0.13"
 value-trait = "0.8"
 sketches-ddsketch = "0.2"
 strip-ansi-escapes = "0.2"
-termcolor = "1.2"
+termcolor = "1.4"
 tremor-common = { version = "0.13.0-rc.16", path = "../tremor-common" }
 tremor-influx = { version = "0.13.0-rc.16", path = "../tremor-influx" }
 tremor-value = { version = "0.13.0-rc.16", path = "../tremor-value" }
