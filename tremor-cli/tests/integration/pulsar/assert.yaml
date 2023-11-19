@@ -1,0 +1,17 @@
+status: 0
+name: pulsar_connectors
+asserts:
+  - source: out.log
+    contains:
+     - |
+       {"event":{"batch":true,"number":1},"meta":{"pulsar_consumer":{"headers":{"foo":"YmFy"},"key":"badger","offset":0,"partition":0,"timestamp":null,"topic":"tremor_test"}}}
+     - |
+       {"event":{"batch":true,"number":2},"meta":{"pulsar_consumer":{"headers":null,"key":"snot","offset":0,"partition":1,"timestamp":null,"topic":"tremor_test"}}}
+     - |
+       {"event":{"batch":false,"foo":"bar"},"meta":{"pulsar_consumer":{"headers":null,"key":"snot","offset":1,"partition":1,"timestamp":null,"topic":"tremor_test"}}}
+     - |
+       {"event":{"batch":false},"meta":{"pulsar_consumer":{"headers":null,"key":"snot","offset":2,"partition":1,"timestamp":null,"topic":"tremor_test"}}}
+     - |
+       {"event":{"batch":true,"number":3},"meta":{"pulsar_consumer":{"headers":null,"key":"snot","offset":3,"partition":1,"timestamp":null,"topic":"tremor_test"}}}
+     - |
+       {"event":{"batch":true,"number":4},"meta":{"pulsar_consumer":{"headers":null,"key":"snot","offset":4,"partition":1,"timestamp":null,"topic":"tremor_test"}}}

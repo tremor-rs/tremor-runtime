@@ -1,0 +1,20 @@
+- dir: "."
+  cmd: "docker"
+  args:
+    - "run"
+    - "--name"
+    - "tremor-pulsar"
+    - "-p"
+    - "6650:6650"
+    - "-p"
+    - "18080:8080"
+    - "apachepulsar/pulsar"
+    - "./bin/pulsar"
+    - "standalone"
+
+  await:
+    "port-open":
+      - "6650"
+    "http-ok":
+      - "http://127.0.0.1:18080/admin/brokers/health"
+  max-await-secs: 300

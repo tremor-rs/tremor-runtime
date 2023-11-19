@@ -1,0 +1,7 @@
+{"event":{"batch": true,"number": 1},"meta": {"key": "badger","partition": 0,"headers": {"foo": "bar"},"timestamp": 123}}
+{"event":{"batch": true,"number": 2},"meta":{"headers": {}, "timestamp": 456}}
+{"event":{"batch": false,"foo": "bar"},"meta": {"key": [1,2,3],"partition": "", "timestamp": 42}}
+{"event":{"batch": false},"meta": {"timestamp":9}}
+{"event":{"batch": true,"number": 3},"meta": {"headers": {}, "timestamp":4}}
+{"event":{"batch": true,"number": 4},"meta": {"headers": {}, "timestamp":0}}
+{"event":"exit","meta":{"key":"foo"}}

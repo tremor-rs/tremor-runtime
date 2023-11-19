@@ -1,0 +1,82 @@
+define flow pulsar_produce
+flow
+  use tremor::{connectors, pipelines};
+  use integration;
+
+  define connector producer from pulsar_producer
+  with
+    metrics_interval_s = 1,
+    reconnect = {
+      "retry": {
+        "interval_ms": 3000,
+        "max_retries": 10
+      }
+    },
+    codec = "json",
+    config = {
+      "brokers": [
+        "127.0.0.1:9092",
+      ],
+      "topic": "tremor_test",
+      "key": "snot"
+    }
+  end;
+
+  define pipeline produce
+  pipeline
+    use std::time::nanos;
+
+    define script add_pulsar_meta
+    script
+      let $pulsar_producer = event.meta;
+      emit event["event"]
+    end;
+    create script add_pulsar_meta;
+
+    define operator batch from generic::batch
+    with
+      count = 2,
+      timeout = nanos::from_seconds(1)
+    end;
+    create operator batch;
+
+    select event from in into add_pulsar_meta;
+
+
+    select event from add_pulsar_meta
+    where 
+      match event of
+        case %{ batch == true } => false
+        case _ => true
+      end
+    into out;
+    select event from add_pulsar_meta
+    where 
+      match event of 
+        case %{ batch == true } => true 
+        case _ => false 
+      end 
+    into batch;
+    select event from add_pulsar_meta/err into err;
+
+    select event from batch/err into err;
+    select event from batch into out;
+  end;
+
+
+  create connector read_file from integration::read_file;
+  create connector producer;
+  create connector stderr from connectors::console;
+
+  create pipeline passthrough from pipelines::passthrough;
+  create pipeline produce from produce;
+
+  connect /connector/read_file to /pipeline/produce;
+  connect /connector/read_file/err to /pipeline/passthrough;
+  connect /pipeline/produce/out to /connector/producer;
+  connect /pipeline/produce/err to /connector/stderr/stderr;
+  connect /pipeline/passthrough to /connector/stderr/stderr;
+
+end;
+
+deploy flow pulsar_produce;
