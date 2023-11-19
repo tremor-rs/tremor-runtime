@@ -197,6 +197,7 @@ error_chain! {
         OneShotRecv(tokio::sync::oneshot::error::RecvError);
         ParseFloatError(std::num::ParseFloatError);
         ParseIntError(std::num::ParseIntError);
+        PulsarError(pulsar::Error);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         RustlsError(rustls::Error);

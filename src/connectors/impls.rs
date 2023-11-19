@@ -54,6 +54,8 @@ pub(crate) mod ws;
 /// `OpenTelemetry`
 pub(crate) mod otel;
 /// AWS S3 connectors
+pub(crate) mod pulsar;
+/// Apache Pulsar connectors
 pub(crate) mod s3;
 /// std streams connector (stdout, stderr, stdin)
 pub(crate) mod stdio;
