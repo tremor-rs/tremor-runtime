@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use aws_config::meta::region::RegionProviderChain;
+use aws_config::{meta::region::RegionProviderChain, BehaviorVersion};
 use aws_sdk_s3::{config, Client};
 use aws_types::region::Region;
 
@@ -39,7 +39,7 @@ where
     let region_provider =
         RegionProviderChain::first_try(region.map(Region::new)).or_default_provider();
     let region = region_provider.region().await;
-    let config = aws_config::from_env().load().await;
+    let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
     let mut config_builder = config::Builder::from(&config)
         .region(region)
         .force_path_style(path_style_access);

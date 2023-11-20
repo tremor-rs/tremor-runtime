@@ -234,7 +234,6 @@ async fn fetch_keys_task(
     // fetch first page of keys.
     let mut continuation_token: Option<String> = None;
     let mut resp = fetch_keys(continuation_token.take()).await?;
-    debug!("Fetched {} keys of {}.", resp.key_count(), resp.max_keys());
 
     let mut stream = 0; // for the Channel Source
     loop {
@@ -249,7 +248,7 @@ async fn fetch_keys_task(
             }
         }
 
-        if resp.is_truncated {
+        if resp.is_truncated.unwrap_or(false) {
             continuation_token = resp.next_continuation_token().map(ToString::to_string);
         } else {
             // No more pages to fetch.
@@ -309,8 +308,7 @@ impl S3Instance {
             stream,
         }) = self.rx.recv().await
         {
-            debug!("{} Fetching key {:?}...", self.ctx, object_data.key());
-            let err = if object_data.size() <= self.multipart_threshold {
+            let err = if object_data.size().unwrap_or(0) <= self.multipart_threshold {
                 // Perform a single fetch.
                 self.fetch_no_multipart(stream, object_data).await
             } else {
@@ -355,7 +353,7 @@ impl S3Instance {
     async fn fetch_multipart(&self, stream: u64, object_data: Object) -> Result<()> {
         // Fetch multipart.
         let mut fetched_bytes = 0; // represent the next byte to fetch.
-        let size = object_data.size();
+        let size = object_data.size().unwrap_or(0);
         let key = object_data.key().map(ToString::to_string);
 
         while fetched_bytes < size {
