@@ -200,7 +200,7 @@ error_chain! {
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         RustlsError(rustls::Error);
-        S3ByteStream(aws_smithy_http::byte_stream::error::Error);
+        S3ByteStream(aws_sdk_s3::primitives::ByteStreamError);
         S3Endpoint(aws_smithy_http::endpoint::error::InvalidEndpointError);
         Serenity(serenity::Error);
         Sled(sled::Error);
