@@ -158,7 +158,7 @@ tonic = { version = "0.6.1", default-features = false, features = [
   "transport",
   "tls",
 ] }
-prost = "0.9.0"
+prost = "0.12.2"
 prost-types = "0.9.0"
 # This is related to https://github.com/tremor-rs/tremor-runtime/issues/1688 the otel API's need to
 # be updated together with tonic
