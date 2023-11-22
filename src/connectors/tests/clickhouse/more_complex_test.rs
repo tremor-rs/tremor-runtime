@@ -44,27 +44,25 @@
 // As the `DateTime64` encoding is not implemented in `clickhouse-rs`, the
 // columns `k`, `l`, `m` and `n` commented out everywhere in the file.
 
-use std::{
-    net::{Ipv4Addr, Ipv6Addr},
-    time::{Duration, Instant},
-};
-
-use chrono::{DateTime, NaiveDateTime, Utc};
-use chrono_tz::Tz;
-use clickhouse_rs::Pool;
-use testcontainers::{clients, core::Port, images::generic::GenericImage, RunnableImage};
-use tremor_common::ports::IN;
-use tremor_pipeline::{CbAction, Event, EventId};
-use tremor_value::literal;
-
 use super::utils;
 use crate::{
     connectors::{
         impls::clickhouse,
         tests::{free_port, ConnectorHarness},
     },
-    errors::{Error, Result},
+    errors::Result,
 };
+use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono_tz::Tz;
+use clickhouse_rs::Pool;
+use std::{
+    net::{Ipv4Addr, Ipv6Addr},
+    time::{Duration, Instant},
+};
+use testcontainers::{clients, core::Port, images::generic::GenericImage, RunnableImage};
+use tremor_common::ports::IN;
+use tremor_pipeline::{CbAction, Event, EventId};
+use tremor_value::literal;
 
 macro_rules! assert_row_equals {
     (
@@ -317,9 +315,7 @@ async fn test() -> Result<()> {
         if start.elapsed() > wait_for {
             let max_time = wait_for.as_secs();
             error!("We waited for more than {max_time}");
-            return Err(Error::from(
-                "Timeout while waiting for all the data to be available",
-            ));
+            anyhow::bail!("Timeout while waiting for all the data to be available",);
         }
 
         tokio::time::sleep(delay).await;

@@ -103,7 +103,7 @@ op!(BucketGrouperFactory(_uid, node) {
 #[derive(Debug)]
 struct Rate {
     /// the maximum number of events per time range
-    rate: u64,
+    max: u64,
     /// time range in milliseconds, (default: 1000 - 1 second)
     time_range: u64,
     /// numbers of window in the time_range (default: 100)
@@ -112,12 +112,12 @@ struct Rate {
 
 impl Rate {
     pub fn from_meta(meta: &Value) -> Option<Self> {
-        let rate = meta.get("rate")?.as_u64()?;
+        let max = meta.get("rate")?.as_u64()?;
 
         let time_range = meta.get_u64("time_range").unwrap_or(1000);
         let windows = meta.get_usize("windows").unwrap_or(100);
         Some(Self {
-            rate,
+            max,
             time_range,
             windows,
         })
@@ -158,7 +158,8 @@ impl Operator for Grouper {
     #[allow(clippy::manual_let_else)] // clippy bug
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _node_id: u64,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         event: Event,
@@ -187,7 +188,7 @@ impl Operator for Grouper {
                     TimeWindow::new(
                         rate.windows,
                         rate.time_range / (rate.windows as u64),
-                        rate.rate,
+                        rate.max,
                     ),
                 );
                 let Some(g) = groups.cache.get_mut(&dimensions) else {
@@ -230,12 +231,12 @@ impl Operator for Grouper {
 mod test {
     use super::*;
     use simd_json::ObjectHasher;
-    use tremor_common::ids::Id;
+    use tremor_common::uids::UId;
     use tremor_value::Value;
 
     #[test]
     fn bucket() -> Result<()> {
-        let operator_id = OperatorId::new(0);
+        let operator_id = OperatorUId::new(0);
         let mut op = Grouper {
             buckets: HashMap::new(),
         };
@@ -249,10 +250,10 @@ mod test {
         let mut state = Value::null();
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event1.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event1.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("no data");
         assert!(r.events.is_empty());
         assert_eq!(port, "err");
         assert_eq!(e, event1);
@@ -266,28 +267,28 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("no data");
         assert!(r.events.is_empty());
         assert_eq!(port, "out");
         assert_eq!(e, event2);
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("no data");
         assert!(r.events.is_empty());
         assert_eq!(port, "out");
         assert_eq!(e, event2);
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event2.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("no data");
         assert!(r.events.is_empty());
         assert_eq!(port, "overflow");
         assert_eq!(e, event2);
@@ -300,17 +301,17 @@ mod test {
         };
 
         let mut r = op
-            .on_event(operator_id, &Port::In, &mut state, event3.clone())
+            .on_event(0, operator_id, &Port::In, &mut state, event3.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("no data");
         assert!(r.events.is_empty());
         assert_eq!(port, "out");
         assert_eq!(e, event3);
 
         let mut m = op.metrics(&Object::with_hasher(ObjectHasher::default()), 0)?;
-        let overflow = m.pop().ok_or("no data")?;
-        let pass = m.pop().ok_or("no data")?;
+        let overflow = m.pop().expect("no data");
+        let pass = m.pop().expect("no data");
         assert!(m.is_empty());
         assert_eq!(overflow["tags"]["action"], "overflow");
         assert_eq!(overflow["fields"]["count"], 1);

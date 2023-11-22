@@ -13,10 +13,11 @@
 // limitations under the License.
 
 use super::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness};
-use crate::channel::{bounded, Receiver, Sender, TryRecvError};
+use crate::channel::{bounded, Receiver, Sender};
 use crate::connectors::impls::ws::WsDefaults;
 use crate::connectors::{impls::ws, utils::tls::TLSClientConfig};
-use crate::errors::{Result, ResultExt};
+use crate::errors::Result;
+use anyhow::{Context, Error};
 use futures::SinkExt;
 use futures::StreamExt;
 use rustls::ServerName;
@@ -33,6 +34,7 @@ use std::{
 };
 use tokio::{
     net::{TcpListener, TcpStream},
+    sync::mpsc::error::TryRecvError,
     task,
 };
 use tokio_rustls::TlsConnector;
@@ -82,7 +84,7 @@ impl TestClient<WebSocketStream<tokio_rustls::client::TlsStream<TcpStream>>> {
     async fn send(&mut self, data: &str) -> Result<()> {
         let status = self.client.send(Message::Text(data.to_string())).await;
         if status.is_err() {
-            Err("Failed to send to ws server".into())
+            Err(Error::msg("Failed to send to ws server"))
         } else {
             Ok(())
         }
@@ -98,7 +100,7 @@ impl TestClient<WebSocketStream<tokio_rustls::client::TlsStream<TcpStream>>> {
             Some(Ok(Message::Binary(data))) => Ok(ExpectMessage::Binary(data)),
             Some(Ok(other)) => Ok(ExpectMessage::Unexpected(other)),
             Some(Err(e)) => Err(e.into()),
-            None => Err("EOF".into()), // stream end
+            None => Err(Error::msg("EOF")), // stream end
         }
     }
 
@@ -144,13 +146,13 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
     fn send(&mut self, data: &str) -> Result<()> {
         self.client
             .send(Message::Text(data.into()))
-            .chain_err(|| "Failed to send to ws server")
+            .context("Failed to send to ws server")
     }
 
     fn port(&mut self) -> Result<u16> {
         match self.client.get_ref() {
             MaybeTlsStream::Plain(client) => Ok(client.local_addr()?.port()),
-            _otherwise => Err("Unable to retrieve local port".into()),
+            _otherwise => Err(anyhow::anyhow!("Unable to retrieve local port")),
         }
     }
 
@@ -250,7 +252,7 @@ impl TestServer {
                 Ok(Message::Binary(data)) => return Ok(ExpectMessage::Binary(data)),
                 Ok(other) => return Ok(ExpectMessage::Unexpected(other)),
                 Err(TryRecvError::Empty) => continue,
-                Err(_e) => return Err("Failed to receive text message".into()),
+                Err(_e) => anyhow::bail!("Failed to receive text message"),
             }
         }
     }
@@ -308,10 +310,7 @@ async fn ws_server_text_routing() -> Result<()> {
         match TestClient::new(&format!("localhost:{free_port}")) {
             Err(e) => {
                 if start.elapsed() > timeout {
-                    return Err(format!(
-                        "Timeout waiting for the ws server to start listening: {e}."
-                    )
-                    .into());
+                    anyhow::bail!("Timeout waiting for the ws server to start listening: {e}.");
                 }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
@@ -489,10 +488,7 @@ async fn wss_server_text_routing() -> Result<()> {
         match TestClient::new_tls(url.as_str(), free_port).await {
             Err(e) => {
                 if start.elapsed() > timeout {
-                    return Err(format!(
-                        "Timeout waiting for the ws server to start listening: {e}."
-                    )
-                    .into());
+                    anyhow::bail!("Timeout waiting for the ws server to start listening: {e}.");
                 }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
@@ -579,10 +575,7 @@ async fn wss_server_binary_routing() -> Result<()> {
         match TestClient::new_tls(url.as_str(), free_port).await {
             Err(e) => {
                 if start.elapsed() > timeout {
-                    return Err(format!(
-                        "Timeout waiting for the ws server to start listening: {e}."
-                    )
-                    .into());
+                    anyhow::bail!("Timeout waiting for the ws server to start listening: {e}.");
                 }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }

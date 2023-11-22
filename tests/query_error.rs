@@ -16,9 +16,9 @@ use regex::Regex;
 use serial_test::serial;
 use std::io::prelude::*;
 use std::path::Path;
-use tremor_common::{file, ids::OperatorIdGen};
-use tremor_pipeline::query::Query;
+use tremor_common::{file, uids::OperatorUIdGen};
 use tremor_pipeline::ExecutableGraph;
+use tremor_pipeline::{query::Query, MetricsChannel};
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
 use tremor_script::module::Manager;
@@ -26,9 +26,15 @@ use tremor_script::FN_REGISTRY;
 
 fn to_executable_graph(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
-    let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
-    Ok(q.to_executable_graph(&mut idgen)?)
+    let mut idgen = OperatorUIdGen::new();
+    let q = Query::parse(
+        &query,
+        &*FN_REGISTRY
+            .read()
+            .map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?,
+        &aggr_reg,
+    )?;
+    Ok(q.to_executable_graph(&mut idgen, &MetricsChannel::default())?)
 }
 macro_rules! test_cases {
 
@@ -74,30 +80,25 @@ macro_rules! test_cases {
                     let mut err = String::new();
                     file.read_to_string(&mut err)?;
 
-                    match s {
-                        Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) => {
+                    let Some(e) = s.err() else {
+                        panic!("Expected error, but got succeess")
+                    };
+
+                    if let Some(e) = e.downcast_ref::<tremor_script::errors::Error>() {
+                        let got = Dumb::error_to_string(e)?;
+                        assert_eq!(err.trim(), got.trim(), "unexpected error message:\n{}", got);
+                    } else if let Ok(tremor_pipeline::errors::Error(e, o)) = e.downcast::<tremor_pipeline::errors::Error>() {
+                        if let tremor_pipeline::errors::ErrorKind::Script(e) = e {
                             let e = tremor_script::errors::Error(e, o);
                             let got = Dumb::error_to_string(&e)?;
                             assert_eq!(err.trim(), got.trim(), "unexpected error message:\n{}", got);
-                        }
-                        Err(Error(ErrorKind::Script(e), o)) =>{
-                            let e = tremor_script::errors::Error(e, o);
-                            let got = Dumb::error_to_string(&e)?;
-                            assert_eq!(err.trim(), got.trim(), "unexpected error message:\n{}", got);
-                        }
-                        Err(Error(ErrorKind::Pipeline(e), _)) =>{
+                        } else {
                             let got = format!("{}", e);
                             assert_eq!(err.trim(), got.trim(), "unexpected error message:\n{}", got);
                         }
-                        Err(e) => {
-                            println!("got wrong error: {:?}", e);
-                            assert!(false);
-                        }
-                        _ =>{
-                            println!("Expected error, but got succeess");
-                            assert!(false);
-                        }
-                    };
+                    } else {
+                        panic!("Wrong error")
+                    }
                 };
                 Ok(())
             }

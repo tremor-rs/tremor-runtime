@@ -124,17 +124,9 @@ pub(crate) fn span_id(meta: Option<&Value>) -> String {
     get_or_default(meta, "span_id")
 }
 
-pub(crate) fn trace_sampled(meta: Option<&Value>) -> Result<bool> {
+pub(crate) fn trace_sampled(meta: Option<&Value>) -> bool {
     // Override for a specific per event severity
-    if let Some(has_meta) = meta {
-        if let Some(trace_sampled) = has_meta.get("trace_sampled") {
-            return trace_sampled
-                .as_bool()
-                .ok_or_else(|| "trace_sampled is not a boolean".into());
-        };
-    }
-
-    Ok(false)
+    meta.get_bool("trace_sampled").unwrap_or(false)
 }
 
 pub(crate) fn source_location(meta: Option<&Value>) -> Option<LogEntrySourceLocation> {
@@ -200,7 +192,7 @@ mod test {
         assert_eq!(None, operation(Some(&meta)));
         assert_eq!(String::new(), trace(Some(&meta)));
         assert_eq!(String::new(), span_id(Some(&meta)));
-        assert_eq!(false, trace_sampled(Some(&meta))?);
+        assert_eq!(false, trace_sampled(Some(&meta)));
         assert_eq!(None, source_location(Some(&meta)));
 
         Ok(())
@@ -421,20 +413,12 @@ mod test {
     }
 
     #[test]
-    fn trace_sampled_overrides() -> Result<()> {
+    fn trace_sampled_overrides() {
         let meta = literal!({
             "trace_sampled": true
         });
-        let meta_trace_ok = trace_sampled(Some(&meta))?;
+        let meta_trace_ok = trace_sampled(Some(&meta));
         assert!(meta_trace_ok);
-
-        let meta = literal!({
-            "trace_sampled": [ "snot" ]
-        });
-        let trace_err = trace_sampled(Some(&meta));
-        assert!(trace_err.is_err());
-
-        Ok(())
     }
 
     #[test]

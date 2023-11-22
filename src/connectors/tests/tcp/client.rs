@@ -15,7 +15,7 @@
 use crate::{
     connectors::{
         impls::tcp,
-        tests::{free_port, setup_for_tls, tcp::EchoServer, ConnectorHarness},
+        tests::{free_port::find_free_tcp_port, setup_for_tls, tcp::EchoServer, ConnectorHarness},
     },
     errors::Result,
 };
@@ -40,7 +40,7 @@ async fn tcp_client() -> Result<()> {
 async fn tcp_client_test(use_tls: bool) -> Result<()> {
     let _: std::result::Result<_, _> = env_logger::try_init();
 
-    let free_port = free_port::find_free_tcp_port().await?;
+    let free_port = find_free_tcp_port().await?;
 
     let server_addr = format!("localhost:{free_port}");
 

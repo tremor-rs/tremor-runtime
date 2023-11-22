@@ -28,6 +28,7 @@ lazy_static::lazy_static! {
 struct ArenaEntry {
     src: Option<Pin<String>>,
     version: u64,
+    rc: u64,
 }
 
 /// The arena for all our scripts
@@ -78,15 +79,23 @@ impl From<u32> for Index {
 /// Append only arena
 impl Arena {
     #[cfg(feature = "arena-delete")]
-    unsafe fn delte_index_this_is_really_unsafe_dont_use_it_(&mut self, idx: Index) -> Result<()> {
+    unsafe fn delete_index_this_is_really_unsafe_dont_use_it_(&mut self, idx: Index) -> Result<()> {
+        use crate::module::Manager;
+
         if let Some(e) = self.sources.get_mut(idx.idx) {
-            if e.version == idx.version {
+            if e.version != idx.version {
+                Err("Invalid version to delete".into())
+            } else if e.rc == 1 {
                 e.version += 1;
                 e.src = None;
-                eprintln!("[ARENA] Freed arena index {}", idx);
+                e.rc = 0;
+                eprintln!("[ARENA] Freed arena index {idx}");
+                Manager::delete_arena_index(idx)?;
                 Ok(())
             } else {
-                Err("Invalid version to delete".into())
+                e.rc -= 1;
+                eprintln!("[ARENA] RC reduction of arena index {idx} to {}", e.rc);
+                Ok(())
             }
         } else {
             Err("Index already deleted".into())
@@ -96,31 +105,52 @@ impl Arena {
     #[allow(clippy::let_and_return)]
     fn insert_<S>(&mut self, src: &S) -> Index
     where
-        S: ToString + ?Sized,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
-        if let Some((idx, e)) = self
-            .sources
-            .iter_mut()
-            .enumerate()
-            .find(|e| e.1.src.is_none())
-        {
-            e.src = Some(Pin::new(src.to_string()));
+        if let Some((idx, e)) = self.sources.iter_mut().enumerate().find(|e| {
+            e.1.src
+                .as_ref()
+                .map(|s| {
+                    let s: &str = s;
+                    let src: &str = src;
+                    s == src
+                })
+                .unwrap_or_default()
+        }) {
+            e.rc += 1;
             let idx = Index {
                 idx,
                 version: e.version,
             };
             #[cfg(feature = "arena-delete")]
-            eprintln!("[ARENA] Reclaimed arena index {}", idx);
+            eprintln!("[ARENA] RC re-use arena index {idx}: {}", e.rc);
+            idx
+        } else if let Some((idx, e)) = self
+            .sources
+            .iter_mut()
+            .enumerate()
+            .find(|e| e.1.src.is_none() && e.1.rc == 0)
+        {
+            e.src = Some(Pin::new(src.to_string()));
+            e.rc = 1;
+            e.version += 1;
+            let idx = Index {
+                idx,
+                version: e.version,
+            };
+            #[cfg(feature = "arena-delete")]
+            eprintln!("[ARENA] Reclaimed arena index {idx}");
             idx
         } else {
             let idx = self.sources.len();
             self.sources.push(ArenaEntry {
                 src: Some(Pin::new(src.to_string())),
                 version: 0,
+                rc: 1,
             });
             let idx = Index { idx, version: 0 };
             #[cfg(feature = "arena-delete")]
-            eprintln!("[ARENA] Added arena index {}", idx);
+            eprintln!("[ARENA] Added arena index {idx}");
             idx
         }
     }
@@ -159,7 +189,7 @@ impl Arena {
     /// really never
     pub fn insert<S>(src: &S) -> Result<(Index, &'static str)>
     where
-        S: ToString + ?Sized,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let mut a = ARENA.write()?;
         let id = a.insert_(src);
@@ -167,14 +197,19 @@ impl Arena {
         Ok((id, s))
     }
 
+    /// # Safety
     /// Removes a idex from the arena, freeing the memory and marking it valid for reause
     /// this function generally should not ever be used. It is a special case for the language
     /// server where we know that we really only parse the script to check for errors and
     /// warnings.
     /// That's also why it's behind a feature falg
+    /// # Errors
+    /// Errors when it can't lock the arena or the delete is invalid
+    /// # Safety
+    /// This function is unsafe because it can lead to memory unsafety if the index is used while being deleted
     #[cfg(feature = "arena-delete")]
-    pub unsafe fn delte_index_this_is_really_unsafe_dont_use_it(id: Index) -> Result<()> {
+    pub unsafe fn delete_index_this_is_really_unsafe_dont_use_it(id: Index) -> Result<()> {
         let mut a = ARENA.write()?;
-        a.delte_index_this_is_really_unsafe_dont_use_it_(id)
+        a.delete_index_this_is_really_unsafe_dont_use_it_(id)
     }
 }

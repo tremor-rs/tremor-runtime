@@ -17,30 +17,29 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
-use super::{CodecReq, Connectivity};
-use crate::channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender};
-use crate::connectors::{
-    metrics::SourceReporter,
-    prelude::*,
-    utils::reconnect::{Attempt, ConnectionLostNotifier},
-    ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
-};
-use crate::errors::empty_error;
-use crate::errors::{Error, Result};
+use crate::channel::empty_e;
+use crate::errors::Result;
 use crate::pipeline;
 use crate::pipeline::InputTarget;
+use crate::{
+    channel::{unbounded, Sender, UnboundedReceiver, UnboundedSender},
+    raft,
+};
+use crate::{
+    connectors::{
+        prelude::*,
+        utils::reconnect::{Attempt, ConnectionLostNotifier},
+        CodecReq, Connectivity, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
+    },
+    system::flow::AppContext,
+};
 pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
 use hashbrown::HashSet;
 use std::collections::{btree_map::Entry, BTreeMap};
 use std::fmt::Display;
 use tokio::task;
 use tremor_codec::{self as codec, Codec};
-use tremor_common::{
-    alias,
-    ids::{Id, SinkId, SourceId},
-    ports::{Port, ERR, OUT},
-    time::nanotime,
-};
+use tremor_common::uids::UId;
 use tremor_config::NameWithConfig;
 use tremor_interceptor::preprocessor;
 use tremor_interceptor::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors};
@@ -48,7 +47,8 @@ use tremor_pipeline::{
     CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };
 use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
-use tremor_value::{literal, Value};
+
+use super::{utils::metrics::SourceReporter, Error};
 
 #[derive(Debug)]
 /// Messages a Source can receive
@@ -63,7 +63,7 @@ pub(crate) enum SourceMsg {
         pipeline: (DeployEndpoint, pipeline::Addr),
     },
     /// Connect to the outside world and send the result back
-    Connect(Sender<Result<bool>>, Attempt),
+    Connect(Sender<anyhow::Result<bool>>, Attempt),
     /// connectivity is lost in the connector
     ConnectionLost,
     /// connectivity is re-established
@@ -77,7 +77,7 @@ pub(crate) enum SourceMsg {
     /// resume the source
     Resume,
     /// stop the source
-    Stop(Sender<Result<()>>),
+    Stop(Sender<anyhow::Result<()>>),
     /// drain the source - bears a sender for sending out a SourceDrained status notification
     Drain(Sender<Msg>),
     #[cfg(test)]
@@ -150,7 +150,11 @@ pub(crate) trait Source: Send {
     /// `pull_id` can be modified, but users need to beware that it needs to remain unique per event stream. The modified `pull_id`
     /// will be used in the `EventId` and will be passed backl into the `ack`/`fail` methods. This allows sources to encode
     /// information into the `pull_id` to keep track of internal state.
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply>;
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply>;
     /// This callback is called when the data provided from
     /// pull_event did not create any events, this is needed for
     /// linked sources that require a 1:1 mapping between requests
@@ -160,7 +164,7 @@ pub(crate) trait Source: Send {
         _pull_id: u64,
         _stream: u64,
         _ctx: &SourceContext,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -174,7 +178,7 @@ pub(crate) trait Source: Send {
     ///////////////////////////
 
     /// called when the source is started. This happens only once in the whole source lifecycle, before any other callbacks
-    async fn on_start(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_start(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -185,21 +189,21 @@ pub(crate) trait Source: Send {
     /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
     ///
     /// Return `Ok(true)` if the connection could be successfully established.
-    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         Ok(true)
     }
 
     /// called when the source is explicitly paused as result of a user/operator interaction
     /// in contrast to `on_cb_trigger` which happens automatically depending on downstream pipeline or sink connector logic.
-    async fn on_pause(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_pause(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// called when the source is explicitly resumed from being paused
-    async fn on_resume(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_resume(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// called when the source is stopped. This happens only once in the whole source lifecycle, as the very last callback
-    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -208,35 +212,45 @@ pub(crate) trait Source: Send {
     /// Expected reaction is to pause receiving messages, which is handled automatically by the runtime
     /// Source implementations might want to close connections or signal a pause to the upstream entity it connects to if not done in the connector (the default)
     // TODO: add info of Cb event origin (port, origin_uri)?
-    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// Called when we receive a `open` Circuit breaker event from any connected pipeline
     /// This means we can start/continue polling this source for messages
     /// Source implementations might want to start establishing connections if not done in the connector (the default)
-    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         Ok(())
     }
 
     // guaranteed delivery callbacks
     /// an event has been acknowledged and can be considered delivered
     /// multiple acks for the same set of ids are always possible
-    async fn ack(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+    async fn ack(
+        &mut self,
+        _stream_id: u64,
+        _pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
     /// an event has failed along its way and can be considered failed
     /// multiple fails for the same set of ids are always possible
-    async fn fail(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+    async fn fail(
+        &mut self,
+        _stream_id: u64,
+        _pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
     // connectivity stuff
     /// called when connector lost connectivity
-    async fn on_connection_lost(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_connection_lost(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// called when connector re-established connectivity
-    async fn on_connection_established(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_connection_established(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -274,22 +288,61 @@ pub(crate) trait StreamReader: Send {
 #[derive(Clone)]
 pub(crate) struct SourceContext {
     /// connector uid
-    pub uid: SourceId,
+    uid: SourceUId,
     /// connector alias
-    pub(crate) alias: alias::Connector,
+    alias: alias::Connector,
 
     /// connector type
-    pub(crate) connector_type: ConnectorType,
+    connector_type: ConnectorType,
     /// The Quiescence Beacon
-    pub(crate) quiescence_beacon: QuiescenceBeacon,
+    quiescence_beacon: QuiescenceBeacon,
 
     /// tool to notify the connector when the connection is lost
-    pub(crate) notifier: ConnectionLostNotifier,
+    notifier: ConnectionLostNotifier,
+
+    /// Application Context
+    app_ctx: AppContext,
+
+    /// kill switch
+    killswitch: KillSwitch,
+
+    /// Precomputed prefix for logging
+    prefix: alias::SourceContext,
+}
+
+impl SourceContext {
+    pub(crate) fn new(
+        uid: SourceUId,
+        alias: alias::Connector,
+        connector_type: ConnectorType,
+        quiescence_beacon: QuiescenceBeacon,
+        notifier: ConnectionLostNotifier,
+        app_ctx: AppContext,
+        killswitch: KillSwitch,
+    ) -> Self {
+        let prefix = alias::SourceContext::new(format!("[Source::{app_ctx}::{alias}]"));
+        Self {
+            uid,
+            alias,
+            connector_type,
+            quiescence_beacon,
+            notifier,
+            app_ctx,
+            killswitch,
+            prefix,
+        }
+    }
+    pub(crate) fn killswitch(&self) -> KillSwitch {
+        self.killswitch.clone()
+    }
+    pub(crate) fn prefix(&self) -> &alias::SourceContext {
+        &self.prefix
+    }
 }
 
 impl Display for SourceContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Source::{}]", &self.alias)
+        write!(f, "{}", &self.prefix)
     }
 }
 
@@ -297,17 +350,20 @@ impl Context for SourceContext {
     fn alias(&self) -> &alias::Connector {
         &self.alias
     }
-
     fn quiescence_beacon(&self) -> &QuiescenceBeacon {
         &self.quiescence_beacon
     }
-
     fn notifier(&self) -> &ConnectionLostNotifier {
         &self.notifier
     }
-
     fn connector_type(&self) -> &ConnectorType {
         &self.connector_type
+    }
+    fn raft(&self) -> Option<&raft::Cluster> {
+        self.app_ctx.raft.as_ref()
+    }
+    fn app_ctx(&self) -> &AppContext {
+        &self.app_ctx
     }
 }
 
@@ -381,27 +437,24 @@ impl SourceManagerBuilder {
 /// # Errors
 /// - on invalid connector configuration
 pub(crate) fn builder(
-    source_uid: SourceId,
-    config: &super::ConnectorConfig,
+    source_uid: SourceUId,
+    config: &ConnectorConfig,
     connector_default_codec: CodecReq,
     source_metrics_reporter: SourceReporter,
+    alias: &alias::Connector,
 ) -> Result<SourceManagerBuilder> {
     let preprocessor_configs = config.preprocessors.clone().unwrap_or_default();
     let codec_config = match connector_default_codec {
         CodecReq::Structured => {
             if config.codec.is_some() {
-                return Err(format!(
-                    "The connector {} can not be configured with a codec.",
-                    config.connector_type
-                )
-                .into());
+                return Err(Error::UnsupportedCodec(alias.clone()).into());
             }
             tremor_codec::Config::from("null")
         }
         CodecReq::Required => config
             .codec
             .clone()
-            .ok_or_else(|| format!("Missing codec for connector {}", config.connector_type))?,
+            .ok_or_else(|| Error::MissingCodec(alias.clone()))?,
         CodecReq::Optional(opt) => config
             .codec
             .clone()
@@ -418,7 +471,7 @@ pub(crate) fn builder(
 /// maintaining stream state
 // TODO: there is optimization potential here for reusing codec and preprocessors after a stream got ended
 struct Streams {
-    uid: SourceId,
+    uid: SourceUId,
     codec_config: tremor_codec::Config,
     preprocessor_configs: Vec<preprocessor::Config>,
     states: BTreeMap<u64, StreamState>,
@@ -430,7 +483,7 @@ impl Streams {
     }
     /// constructor
     fn new(
-        uid: SourceId,
+        uid: SourceUId,
         codec_config: tremor_codec::Config,
         preprocessor_configs: Vec<preprocessor::Config>,
     ) -> Self {
@@ -487,7 +540,7 @@ impl Streams {
 
     /// build a stream
     fn build_stream(
-        source_uid: SourceId,
+        source_uid: SourceUId,
         stream_id: u64,
         codec_config: &tremor_codec::Config,
         codec_overwrite: Option<NameWithConfig>,
@@ -558,7 +611,7 @@ where
     /// Gather all the sinks that reported being started.
     /// This will give us some knowledge on the topology and most importantly
     /// on how many `Drained` messages to wait. Assumes a static topology.
-    started_sinks: HashSet<SinkId>,
+    started_sinks: HashSet<SinkUId>,
     num_started_sinks: u64,
     /// is counted up for each call to `pull_data` in order to identify the pull call
     /// an event is originating from. We can only ack or fail pulls.
@@ -830,7 +883,12 @@ where
             &mut self.pipelines_err
         } else {
             error!("{} Tried to connect to invalid port: {}", &self.ctx, &port);
-            tx.send(Err("Connecting to invalid port".into())).await?;
+            tx.send(Err(ConnectorError::InvalidPort(
+                self.ctx.alias().clone(),
+                port.clone(),
+            )
+            .into()))
+                .await?;
             return Ok(Control::Continue);
         };
         // We can not move this to the system flow since we need to know about transactionality
@@ -943,7 +1001,11 @@ where
     }
 
     /// handle data from the source
-    async fn handle_source_reply(&mut self, data: Result<SourceReply>, pull_id: u64) -> Result<()> {
+    async fn handle_source_reply(
+        &mut self,
+        data: anyhow::Result<SourceReply>,
+        pull_id: u64,
+    ) -> Result<()> {
         let data = match data {
             Ok(d) => d,
             Err(e) => {
@@ -1017,7 +1079,7 @@ where
         let mut ingest_ns = nanotime();
         if let Some(mut stream_state) = self.streams.end_stream(stream_id) {
             let results = build_last_events(
-                &self.ctx.alias,
+                &self.ctx,
                 &mut stream_state,
                 &mut ingest_ns,
                 pull_id,
@@ -1088,7 +1150,7 @@ where
         if let Some(stream) = stream {
             let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?;
             let results = build_events(
-                &self.ctx.alias,
+                &self.ctx,
                 stream_state,
                 &mut ingest_ns,
                 pull_id,
@@ -1116,7 +1178,7 @@ where
             let mut stream_state = self.streams.create_anonymous_stream(codec_overwrite)?;
             let meta = meta.unwrap_or_else(Value::object);
             let mut results = build_events(
-                &self.ctx.alias,
+                &self.ctx,
                 &mut stream_state,
                 &mut ingest_ns,
                 pull_id,
@@ -1129,7 +1191,7 @@ where
             .await;
             // finish up the stream immediately
             let mut last_events = build_last_events(
-                &self.ctx.alias,
+                &self.ctx,
                 &mut stream_state,
                 &mut ingest_ns,
                 pull_id,
@@ -1220,7 +1282,7 @@ where
                 //       and handle it the same as rx
                 let src_future = self.source.pull_data(&mut pull_id, &self.ctx);
                 match futures::future::select(Box::pin(rx.recv()), src_future).await {
-                    Either::Left((msg, _o)) => Either::Left(msg.ok_or_else(empty_error)?),
+                    Either::Left((msg, _o)) => Either::Left(msg.ok_or_else(empty_e)?),
                     Either::Right((data, _o)) => Either::Right(data),
                 }
             };
@@ -1250,7 +1312,7 @@ where
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
 async fn build_events(
-    alias: &alias::Connector,
+    ctx: &SourceContext,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
@@ -1265,7 +1327,7 @@ async fn build_events(
         ingest_ns,
         data,
         meta.clone(),
-        alias,
+        ctx.prefix(),
     ) {
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());
@@ -1283,13 +1345,7 @@ async fn build_events(
                     Err(None) => continue,
                     Err(Some(e)) => (
                         ERR,
-                        make_error(
-                            alias,
-                            &Error::from(e),
-                            stream_state.stream_id,
-                            pull_id,
-                            meta,
-                        ),
+                        make_error(ctx, &e, stream_state.stream_id, pull_id, meta),
                     ),
                 };
                 let event = build_event(
@@ -1307,13 +1363,7 @@ async fn build_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(
-                alias,
-                &Error::from(e),
-                stream_state.stream_id,
-                pull_id,
-                meta,
-            );
+            let err_payload = make_error(ctx, &e, stream_state.stream_id, pull_id, meta);
             let event = build_event(
                 stream_state,
                 pull_id,
@@ -1331,7 +1381,7 @@ async fn build_events(
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
 async fn build_last_events(
-    alias: &alias::Connector,
+    ctx: &SourceContext,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
@@ -1340,7 +1390,7 @@ async fn build_last_events(
     meta: Value<'static>,
     is_transactional: bool,
 ) -> Vec<(Port<'static>, Event)> {
-    match finish(stream_state.preprocessors.as_mut_slice(), alias) {
+    match finish(stream_state.preprocessors.as_mut_slice(), ctx.prefix()) {
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());
             for (chunk, meta) in processed {
@@ -1356,13 +1406,7 @@ async fn build_last_events(
                     Err(None) => continue,
                     Err(Some(e)) => (
                         ERR,
-                        make_error(
-                            alias,
-                            &Error::from(e),
-                            stream_state.stream_id,
-                            pull_id,
-                            meta,
-                        ),
+                        make_error(ctx, &e, stream_state.stream_id, pull_id, meta),
                     ),
                 };
                 let event = build_event(
@@ -1379,13 +1423,7 @@ async fn build_last_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(
-                alias,
-                &Error::from(e),
-                stream_state.stream_id,
-                pull_id,
-                meta,
-            );
+            let err_payload = make_error(ctx, &e, stream_state.stream_id, pull_id, meta);
             let event = build_event(
                 stream_state,
                 pull_id,
@@ -1400,9 +1438,9 @@ async fn build_last_events(
 }
 
 /// create an error payload
-fn make_error(
-    connector_alias: &alias::Connector,
-    error: &Error,
+fn make_error<E: std::error::Error>(
+    ctx: &SourceContext,
+    error: &E,
     stream_id: u64,
     pull_id: u64,
     mut meta: Value<'static>,
@@ -1410,7 +1448,7 @@ fn make_error(
     let e_string = error.to_string();
     let data = literal!({
         "error": e_string.clone(),
-        "source": connector_alias.to_string(),
+        "source": ctx.to_string(),
         "stream_id": stream_id,
         "pull_id": pull_id
     });

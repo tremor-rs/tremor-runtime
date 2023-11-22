@@ -58,8 +58,9 @@ mod bench;
 
 use super::{prelude::KillSwitch, sink::SinkMsg};
 use crate::{
+    channel::empty_e,
     channel::{bounded, unbounded, Receiver, UnboundedReceiver},
-    errors::empty_error,
+    system::flow::AppContext,
 };
 use crate::{
     config,
@@ -68,14 +69,15 @@ use crate::{
     instance::State,
     pipeline, qsize, Event,
 };
+use anyhow::anyhow;
 use log::{debug, info};
 use std::time::Duration;
 use std::{collections::HashMap, time::Instant};
 use tokio::{sync::oneshot, task, time::timeout};
 use tremor_common::alias::{self};
 use tremor_common::{
-    ids::{ConnectorIdGen, Id, SourceId},
     ports::{Port, ERR, IN, OUT},
+    uids::{ConnectorUIdGen, SourceUId, UId},
 };
 use tremor_pipeline::{CbAction, EventId};
 use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta};
@@ -95,8 +97,8 @@ impl ConnectorHarness {
         input_ports: Vec<Port<'static>>,
         output_ports: Vec<Port<'static>>,
     ) -> Result<Self> {
-        let alias = alias::Connector::new("test", alias);
-        let mut connector_id_gen = ConnectorIdGen::new();
+        let alias = alias::Connector::new(alias);
+        let mut connector_id_gen = ConnectorUIdGen::new();
         let mut known_connectors = HashMap::new();
 
         for builder in builtin_connector_types() {
@@ -109,6 +111,7 @@ impl ConnectorHarness {
             builder,
             raw_config,
             &kill_switch,
+            AppContext::default(),
         )
         .await?;
         let mut pipes = HashMap::new();
@@ -180,8 +183,8 @@ impl ConnectorHarness {
         // start the connector
         let (tx, mut rx) = bounded(1);
         self.addr.start(tx).await?;
-        let cr = rx.recv().await.ok_or_else(empty_error)?;
-        cr.res?;
+        let cr = rx.recv().await.ok_or_else(empty_e)?;
+        cr?;
 
         // send a `CBAction::Restore` to the connector, so it starts pulling data
         self.send_to_source(SourceMsg::Cb(CbAction::Restore, EventId::default()))?;
@@ -196,7 +199,7 @@ impl ConnectorHarness {
         // ensure we notify the connector that its sink part is connected
         self.addr
             .send_sink(SinkMsg::Signal {
-                signal: Event::signal_start(SourceId::new(1)),
+                signal: Event::signal_start(SourceUId::new(1)),
             })
             .await?;
 
@@ -216,10 +219,10 @@ impl ConnectorHarness {
         debug!("Stopping harness...");
         self.addr.stop(tx).await?;
         debug!("Waiting for stop result...");
-        let cr = rx.recv().await.ok_or_else(empty_error)?;
+        let cr = rx.recv().await.ok_or_else(empty_e)?;
         debug!("Stop result received.");
-        cr.res?;
-        //self.handle.cancel().await;
+        cr?;
+        //self.handle.abort();
         let out_events = self
             .pipes
             .get_mut(&OUT)
@@ -300,10 +303,9 @@ impl ConnectorHarness {
         T: Into<Port<'static>>,
     {
         let port = port.into();
-        Ok(self
-            .pipes
+        self.pipes
             .get_mut(&port)
-            .ok_or_else(|| format!("No pipeline connected to port {port}"))?)
+            .ok_or_else(|| anyhow!("No pipeline connected to port {port}"))
     }
 
     /// get the out pipeline - if any
@@ -341,7 +343,6 @@ impl ConnectorHarness {
 
     // this is only used in integration tests,
     // otherwise this throws an error when compiled for non-integration tests
-    #[allow(dead_code)]
     pub(crate) async fn signal_tick_to_sink(&self) -> Result<()> {
         self.addr
             .send_sink(SinkMsg::Signal {
@@ -374,12 +375,11 @@ impl TestPipeline {
         self.addr.send_mgmt(pipeline::MgmtMsg::Stop).await
     }
     pub(crate) fn new(alias: String) -> Self {
-        let flow_id = alias::Flow::new("test");
         let qsize = qsize();
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = unbounded();
         let (tx_mgmt, mut rx_mgmt) = bounded(qsize);
-        let pipeline_id = alias::Pipeline::new(flow_id, alias);
+        let pipeline_id = alias::Pipeline::new(alias);
         let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, pipeline_id);
 
         task::spawn(async move {
@@ -423,7 +423,7 @@ impl TestPipeline {
     pub(crate) async fn get_contraflow(&mut self) -> Result<Event> {
         match timeout(Duration::from_secs(20), self.rx_cf.recv())
             .await?
-            .ok_or("No contraflow")?
+            .ok_or_else(|| anyhow!("No contraflow"))?
         {
             pipeline::CfMsg::Insight(event) => Ok(event),
         }
@@ -462,14 +462,14 @@ impl TestPipeline {
                     }
                 }
                 Ok(None) => {
-                    return Err(empty_error());
+                    return Err(empty_e().into());
                 }
                 Err(_) => {
-                    return Err(format!("Did not receive an event for {TIMEOUT:?}").into());
+                    return Err(anyhow!("Did not receive an event for {TIMEOUT:?}"));
                 }
             }
             if start.elapsed() > TIMEOUT {
-                return Err(format!("Did not receive an event for {TIMEOUT:?}").into());
+                return Err(anyhow!("Did not receive an event for {TIMEOUT:?}"));
             }
         }
     }
@@ -484,13 +484,13 @@ impl TestPipeline {
                 Ok(Some(msg)) => match *msg {
                     pipeline::Msg::Signal(_signal) => (),
                     pipeline::Msg::Event { event, .. } => {
-                        return Err(
-                            format!("Expected no event for {duration:?}, got: {event:?}").into(),
-                        );
+                        return Err(anyhow!(
+                            "Expected no event for {duration:?}, got: {event:?}"
+                        ));
                     }
                 },
                 Ok(None) => {
-                    return Err(empty_error());
+                    return Err(empty_e().into());
                 }
             }
             if start.elapsed() > duration {
@@ -526,6 +526,7 @@ pub(crate) mod free_port {
             loop {
                 if let Ok(listener) = TcpListener::bind(("127.0.0.1", candidate)).await {
                     let port = listener.local_addr()?.port();
+                    assert_eq!(candidate, port);
                     drop(listener);
                     return Ok(port);
                 }

@@ -1,0 +1,23 @@
+define flow main
+flow
+  use tremor::pipelines as tp;
+  use tremor::connectors;
+  use lib::pipelines as lp;
+
+
+  define connector cluster from cluster_kv;
+  create connector console from connectors::console;
+  create connector cluster;
+  
+
+  create pipeline main from lp::main;
+  create pipeline reply from tp::passthrough;
+  create pipeline debug from tp::passthrough; 
+
+  connect /connector/console to /pipeline/main;
+  connect /pipeline/main to /connector/cluster;
+  
+  connect /connector/cluster to /pipeline/reply;
+
+  connect /pipeline/reply to /connector/console;
+end;

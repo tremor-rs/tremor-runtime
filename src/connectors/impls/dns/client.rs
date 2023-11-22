@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::channel::{bounded, Receiver, Sender};
-use crate::{connectors::prelude::*, system::KillSwitch};
+use crate::connectors::prelude::*;
 use std::sync::Arc;
 use std::{boxed::Box, sync::atomic::AtomicBool};
 use trust_dns_resolver::{
@@ -21,6 +21,16 @@ use trust_dns_resolver::{
     proto::rr::{RData, RecordType},
     TokioAsyncResolver,
 };
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Metadata `$dns.lookup` missing or invalid")]
+    Metadata,
+    #[error("No DNS resolver available")]
+    NoResolvers,
+    #[error("Invalid or unsupported record type: {0}")]
+    InvalidRecordType(String),
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -35,7 +45,6 @@ impl ConnectorBuilder for Builder {
         &self,
         _id: &alias::Connector,
         _raw_config: &ConnectorConfig,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let (tx, rx) = bounded(128);
         Ok(Box::new(Client {
@@ -68,7 +77,7 @@ impl Connector for Client {
             self.tx.clone(),
             self.rx
                 .take()
-                .ok_or("Tried to create a source from a connector that has already been used")?,
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
             self.source_is_connected.clone(),
         );
         Ok(Some(builder.spawn(source, ctx)))
@@ -115,10 +124,7 @@ impl DnsSink {
         correlation: Option<&Value<'event>>,
     ) -> Result<EventPayload> {
         // check if we have a resolver
-        let resolver = self
-            .resolver
-            .as_ref()
-            .ok_or_else(|| Error::from("No DNS resolver available"))?;
+        let resolver = self.resolver.as_ref().ok_or(Error::NoResolvers)?;
 
         let data = if let Some(record_type) = record_type {
             // type lookup
@@ -136,9 +142,10 @@ impl DnsSink {
         Ok(e)
     }
 }
+
 #[async_trait::async_trait]
 impl Sink for DnsSink {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.resolver = Some(TokioAsyncResolver::tokio_from_system_conf()?);
         Ok(true)
     }
@@ -149,16 +156,16 @@ impl Sink for DnsSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let source_is_connected = self.source_is_connected.load(Ordering::Acquire);
         for (_, m) in event.value_meta_iter() {
             // verify incoming request and extract DNS query params
             let dns_meta = m.get("dns");
-            let lookup = dns_meta.get("lookup").ok_or("Invalid DNS request")?;
+            let lookup = dns_meta.get("lookup").ok_or(Error::Metadata)?;
             let name = lookup
                 .as_str()
                 .or_else(|| lookup.get_str("name"))
-                .ok_or("Invalid DNS request: Metadata `$dns.lookup` missing")?;
+                .ok_or(Error::Metadata)?;
             let record_type = lookup.get_str("type").map(str_to_record_type).transpose()?;
             // issue DNS query
             let (port, payload) = match self.query(name, record_type, m.get("correlation")).await {
@@ -223,7 +230,7 @@ fn str_to_record_type(s: &str) -> Result<RecordType> {
         "TLSA" => Ok(RecordType::TLSA),
         "TXT" => Ok(RecordType::TXT),
         "ZERO" => Ok(RecordType::ZERO),
-        other => Err(format!("Invalid or unsupported record type: {other}").into()),
+        other => Err(Error::InvalidRecordType(other.to_string()).into()),
     }
 }
 
@@ -268,33 +275,35 @@ fn lookup_to_value(l: &Lookup) -> Value<'static> {
 
 #[cfg(test)]
 mod test {
+    use matches::assert_matches;
+
     use super::*;
     #[test]
     fn test_str_to_record_type() {
-        assert_eq!(str_to_record_type("A"), Ok(RecordType::A));
-        assert_eq!(str_to_record_type("AAAA"), Ok(RecordType::AAAA));
-        assert_eq!(str_to_record_type("ANAME"), Ok(RecordType::ANAME));
-        assert_eq!(str_to_record_type("ANY"), Ok(RecordType::ANY));
-        assert_eq!(str_to_record_type("AXFR"), Ok(RecordType::AXFR));
-        assert_eq!(str_to_record_type("CAA"), Ok(RecordType::CAA));
-        assert_eq!(str_to_record_type("CNAME"), Ok(RecordType::CNAME));
-        assert_eq!(str_to_record_type("HINFO"), Ok(RecordType::HINFO));
-        assert_eq!(str_to_record_type("HTTPS"), Ok(RecordType::HTTPS));
-        assert_eq!(str_to_record_type("IXFR"), Ok(RecordType::IXFR));
-        assert_eq!(str_to_record_type("MX"), Ok(RecordType::MX));
-        assert_eq!(str_to_record_type("NAPTR"), Ok(RecordType::NAPTR));
-        assert_eq!(str_to_record_type("NS"), Ok(RecordType::NS));
-        assert_eq!(str_to_record_type("NULL"), Ok(RecordType::NULL));
-        assert_eq!(str_to_record_type("OPENPGPKEY"), Ok(RecordType::OPENPGPKEY));
-        assert_eq!(str_to_record_type("OPT"), Ok(RecordType::OPT));
-        assert_eq!(str_to_record_type("PTR"), Ok(RecordType::PTR));
-        assert_eq!(str_to_record_type("SOA"), Ok(RecordType::SOA));
-        assert_eq!(str_to_record_type("SRV"), Ok(RecordType::SRV));
-        assert_eq!(str_to_record_type("SSHFP"), Ok(RecordType::SSHFP));
-        assert_eq!(str_to_record_type("SVCB"), Ok(RecordType::SVCB));
-        assert_eq!(str_to_record_type("TLSA"), Ok(RecordType::TLSA));
-        assert_eq!(str_to_record_type("TXT"), Ok(RecordType::TXT));
-        assert_eq!(str_to_record_type("ZERO"), Ok(RecordType::ZERO));
-        assert!(str_to_record_type("NOT A DNS ENTRIE").is_err());
+        assert_matches!(str_to_record_type("A"), Ok(RecordType::A));
+        assert_matches!(str_to_record_type("AAAA"), Ok(RecordType::AAAA));
+        assert_matches!(str_to_record_type("ANAME"), Ok(RecordType::ANAME));
+        assert_matches!(str_to_record_type("ANY"), Ok(RecordType::ANY));
+        assert_matches!(str_to_record_type("AXFR"), Ok(RecordType::AXFR));
+        assert_matches!(str_to_record_type("CAA"), Ok(RecordType::CAA));
+        assert_matches!(str_to_record_type("CNAME"), Ok(RecordType::CNAME));
+        assert_matches!(str_to_record_type("HINFO"), Ok(RecordType::HINFO));
+        assert_matches!(str_to_record_type("HTTPS"), Ok(RecordType::HTTPS));
+        assert_matches!(str_to_record_type("IXFR"), Ok(RecordType::IXFR));
+        assert_matches!(str_to_record_type("MX"), Ok(RecordType::MX));
+        assert_matches!(str_to_record_type("NAPTR"), Ok(RecordType::NAPTR));
+        assert_matches!(str_to_record_type("NS"), Ok(RecordType::NS));
+        assert_matches!(str_to_record_type("NULL"), Ok(RecordType::NULL));
+        assert_matches!(str_to_record_type("OPENPGPKEY"), Ok(RecordType::OPENPGPKEY));
+        assert_matches!(str_to_record_type("OPT"), Ok(RecordType::OPT));
+        assert_matches!(str_to_record_type("PTR"), Ok(RecordType::PTR));
+        assert_matches!(str_to_record_type("SOA"), Ok(RecordType::SOA));
+        assert_matches!(str_to_record_type("SRV"), Ok(RecordType::SRV));
+        assert_matches!(str_to_record_type("SSHFP"), Ok(RecordType::SSHFP));
+        assert_matches!(str_to_record_type("SVCB"), Ok(RecordType::SVCB));
+        assert_matches!(str_to_record_type("TLSA"), Ok(RecordType::TLSA));
+        assert_matches!(str_to_record_type("TXT"), Ok(RecordType::TXT));
+        assert_matches!(str_to_record_type("ZERO"), Ok(RecordType::ZERO));
+        assert_matches!(str_to_record_type("NOT A DNS ENTRIE"), Err(_));
     }
 }

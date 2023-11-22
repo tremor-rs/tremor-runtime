@@ -74,6 +74,12 @@ proptest = "1"
 tempfile = "3"
 test-case = "3"
 
+[package.metadata.cargo-machete]
+ignored = [
+    # we need this during build time 
+    "lalrpop",
+]
+
 [features]
 # this is required for the erlang EQC tests of the language
 erlang-float-testing = []

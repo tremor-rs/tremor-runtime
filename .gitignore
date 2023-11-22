@@ -54,3 +54,5 @@ tremor-script/current_counterexample.eqc
 .vscode/dryrun.log
 tremor-script-nif/libpath
 docs-test
+*.mm_profdata
+chrome_profiler.json

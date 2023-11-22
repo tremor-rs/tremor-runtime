@@ -1,0 +1,5 @@
+let state = ["one", "two", "three"];
+for state of
+  case (idx, name) when present event[idx] => [name, event[idx]]
+  case (idx, name)  => [name, null]
+end

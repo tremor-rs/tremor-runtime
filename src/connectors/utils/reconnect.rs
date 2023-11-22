@@ -14,12 +14,13 @@
 
 /// reconnect logic and execution for connectors
 use crate::{
+    channel::empty_e,
     config::Reconnect,
     connectors::{
         sink::SinkMsg, source::SourceMsg, Addr, Connectivity, Connector, ConnectorContext, Context,
         Msg,
     },
-    errors::{empty_error, Result},
+    errors::Result,
 };
 use futures::future::FutureExt;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
@@ -189,9 +190,7 @@ pub(crate) struct ReconnectRuntime {
     interval_ms: Option<u64>,
     strategy: Box<dyn ReconnectStrategy>,
     addr: Addr,
-    notifier: ConnectionLostNotifier,
     retry_task: Option<JoinHandle<()>>,
-    alias: alias::Connector,
 }
 
 /// Notifier that connector implementations
@@ -214,28 +213,11 @@ impl ConnectionLostNotifier {
 }
 
 impl ReconnectRuntime {
-    pub(crate) fn notifier(&self) -> ConnectionLostNotifier {
-        self.notifier.clone()
-    }
     /// constructor
-    pub(crate) fn new(
-        connector_addr: &Addr,
-        notifier: ConnectionLostNotifier,
-        config: &Reconnect,
-    ) -> Self {
-        Self::inner(
-            connector_addr.clone(),
-            connector_addr.alias.clone(),
-            notifier,
-            config,
-        )
+    pub(crate) fn new(connector_addr: &Addr, config: &Reconnect) -> Self {
+        Self::inner(connector_addr.clone(), config)
     }
-    fn inner(
-        addr: Addr,
-        alias: alias::Connector,
-        notifier: ConnectionLostNotifier,
-        config: &Reconnect,
-    ) -> Self {
+    fn inner(addr: Addr, config: &Reconnect) -> Self {
         let strategy: Box<dyn ReconnectStrategy> = match config {
             Reconnect::None => Box::new(FailFast {}),
             Reconnect::Retry {
@@ -255,10 +237,12 @@ impl ReconnectRuntime {
             interval_ms: None,
             strategy,
             addr,
-            notifier,
             retry_task: None,
-            alias,
         }
+    }
+
+    pub(crate) fn alias(&self) -> &alias::Connector {
+        &self.addr.alias
     }
 
     /// Use the given connector to attempt to establish a connection.
@@ -274,7 +258,7 @@ impl ReconnectRuntime {
         let source_res = if self.addr.has_source() {
             self.addr
                 .send_source(SourceMsg::Connect(tx.clone(), self.attempt))?;
-            rx.recv().map(|r| r.ok_or_else(empty_error)?).await
+            rx.recv().map(|r| r.ok_or_else(empty_e)?).await
         } else {
             Ok(true)
         };
@@ -282,7 +266,7 @@ impl ReconnectRuntime {
             self.addr
                 .send_sink(SinkMsg::Connect(tx, self.attempt))
                 .await?;
-            rx.recv().map(|r| r.ok_or_else(empty_error)?).await
+            rx.recv().map(|r| r.ok_or_else(empty_e)?).await
         } else {
             Ok(true)
         };
@@ -326,14 +310,15 @@ impl ReconnectRuntime {
 
     pub(crate) async fn enqueue_retry(&mut self, _ctx: &ConnectorContext) -> bool {
         if let ShouldRetry::No(msg) = self.strategy.should_reconnect(&self.attempt) {
-            warn!("[Connector::{}] Not reconnecting: {}", &self.alias, msg);
+            warn!("[Connector::{}] Not reconnecting: {}", self.alias(), msg);
             false
         } else {
             // compute next interval
             let interval = self.strategy.next_interval(self.interval_ms, &self.attempt);
             info!(
                 "[Connector::{}] Reconnecting after {} ms",
-                &self.alias, interval
+                &self.alias(),
+                interval
             );
             self.interval_ms = Some(interval);
 
@@ -347,7 +332,7 @@ impl ReconnectRuntime {
             if spawn_retry {
                 let duration = Duration::from_millis(interval);
                 let sender = self.addr.sender.clone();
-                let alias = self.alias.clone();
+                let alias = self.alias().clone();
                 self.retry_task = Some(task::spawn(async move {
                     tokio::time::sleep(duration).await;
                     if sender.send(Msg::Reconnect).await.is_err() {
@@ -388,6 +373,7 @@ mod tests {
     use crate::{
         connectors::{utils::quiescence::QuiescenceBeacon, CodecReq},
         qsize,
+        system::flow::AppContext,
     };
 
     /// does not connect
@@ -397,7 +383,7 @@ mod tests {
     #[async_trait::async_trait]
     impl Connector for FakeConnector {
         async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-            self.answer.ok_or_else(|| "Blergh!".into())
+            self.answer.ok_or_else(|| anyhow::anyhow!("Blergh!"))
         }
 
         fn codec_requirements(&self) -> CodecReq {
@@ -447,7 +433,7 @@ mod tests {
     async fn failfast_runtime() -> Result<()> {
         let (tx, _rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = alias::Connector::new("flow", "test");
+        let alias = alias::Connector::new("test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -455,7 +441,7 @@ mod tests {
             sender: tx.clone(),
         };
         let config = Reconnect::None;
-        let mut runtime = ReconnectRuntime::inner(addr, alias.clone(), notifier, &config);
+        let mut runtime = ReconnectRuntime::inner(addr, &config);
         let mut connector = FakeConnector {
             answer: Some(false),
         };
@@ -464,7 +450,8 @@ mod tests {
             alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,
-            notifier: runtime.notifier(),
+            notifier,
+            app_ctx: AppContext::default(),
         };
         // failing attempt
         assert_eq!(
@@ -479,7 +466,7 @@ mod tests {
     async fn backoff_runtime() -> Result<()> {
         let (tx, mut rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = alias::Connector::new("flow", "test");
+        let alias = alias::Connector::new("test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -492,7 +479,7 @@ mod tests {
             max_retries: Some(3),
             randomized: true,
         };
-        let mut runtime = ReconnectRuntime::inner(addr, alias.clone(), notifier, &config);
+        let mut runtime = ReconnectRuntime::inner(addr, &config);
         let mut connector = FakeConnector {
             answer: Some(false),
         };
@@ -501,7 +488,8 @@ mod tests {
             alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,
-            notifier: runtime.notifier(),
+            notifier,
+            app_ctx: AppContext::default(),
         };
         // 1st failing attempt
         assert!(matches!(
@@ -512,7 +500,7 @@ mod tests {
         assert!(matches!(
             timeout(Duration::from_secs(5), rx.recv())
                 .await?
-                .ok_or_else(empty_error)?,
+                .ok_or_else(empty_e)?,
             Msg::Reconnect
         ));
 
@@ -525,7 +513,7 @@ mod tests {
         assert!(matches!(
             timeout(Duration::from_secs(5), rx.recv())
                 .await?
-                .ok_or_else(empty_error)?,
+                .ok_or_else(empty_e)?,
             Msg::Reconnect
         ));
 

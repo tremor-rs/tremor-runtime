@@ -192,7 +192,7 @@ macro_rules! literal_internal {
     // Done. Insert all entries from the stack
     (@object $object:ident [@entries $(($value:expr => $($key:tt)+))*] () () ()) => {
         let len = literal_internal!(@object @count [@entries $(($value => $($key)+))*]);
-        $object = $crate::Object::with_capacity_and_hasher(len, ::simd_json::value::ObjectHasher::default());
+        $object = $crate::Object::with_capacity_and_hasher(len, $crate::ObjectHasher::default());
         $(
             // ALLOW: this is a macro, we don't care about the return value
             $object.insert(($($key)+).into(), $value);
@@ -357,5 +357,23 @@ mod tests {
         assert_eq!(Value::from(vec![1_u64]), v);
         let v: Value = literal!([]);
         assert_eq!(Value::Array(vec![]), v);
+    }
+
+    #[test]
+    fn static_nodes() {
+        let v: Value = literal!(1);
+        assert_eq!(Value::from(1), v);
+
+        let v: Value = literal!(1.1);
+        assert_eq!(Value::from(1.1), v);
+
+        let v: Value = literal!(null);
+        assert_eq!(Value::const_null(), v);
+
+        let v: Value = literal!(false);
+        assert_eq!(Value::from(false), v);
+
+        let v: Value = literal!("snot");
+        assert_eq!(Value::from("snot"), v);
     }
 }

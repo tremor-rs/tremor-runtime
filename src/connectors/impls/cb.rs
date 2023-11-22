@@ -155,13 +155,9 @@ impl ConnectorBuilder for Builder {
         _: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
-        kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
-        Ok(Box::new(Cb {
-            config,
-            kill_switch: kill_switch.clone(),
-        }))
+        Ok(Box::new(Cb { config }))
     }
 }
 
@@ -178,7 +174,6 @@ impl ConnectorBuilder for Builder {
 /// * In case the pipeline branches off, it copies the event and it reaches two offramps, we might receive more than 1 ack or fail for an event with the current runtime.
 pub(crate) struct Cb {
     config: Config,
-    kill_switch: KillSwitch,
 }
 
 #[async_trait::async_trait()]
@@ -193,13 +188,13 @@ impl Connector for Cb {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         if self.config.paths.is_empty() {
-            return Err(ErrorKind::InvalidConfiguration(
-                ctx.alias().to_string(),
+            return Err(ConnectorError::InvalidConfiguration(
+                ctx.alias().clone(),
                 "\"paths\" config missing".to_string(),
             )
             .into());
         }
-        let source = CbSource::new(&self.config, ctx.alias(), self.kill_switch.clone()).await?;
+        let source = CbSource::new(&self.config, ctx.alias(), ctx.killswitch()).await?;
         Ok(Some(builder.spawn(source, ctx)))
     }
 
@@ -224,7 +219,7 @@ impl Sink for CbSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {
             if let Some(cb) = ctx.extract_meta(meta).or_else(|| ctx.extract_meta(value)) {
                 let cb_cmds = if let Some(array) = cb.as_array() {
@@ -317,6 +312,12 @@ struct CbSource {
     kill_switch: KillSwitch,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("No file to write")]
+    NoFile,
+}
+
 impl CbSource {
     fn did_receive_all(&self) -> bool {
         let all_received = if self.config.expect_batched {
@@ -362,7 +363,11 @@ impl CbSource {
 
 #[async_trait::async_trait()]
 impl Source for CbSource {
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         if self.files.is_empty() {
             info!("{ctx} finished.");
             self.finished = true;
@@ -384,7 +389,7 @@ impl Source for CbSource {
             }
             tokio::task::spawn(async move {
                 kill_switch.stop(ShutdownMode::Graceful).await?;
-                Result::Ok(())
+                Ok::<(), anyhow::Error>(())
             });
 
             Ok(SourceReply::Finished)
@@ -393,7 +398,7 @@ impl Source for CbSource {
             let file = self
                 .files
                 .get_mut(idx) // this is safe as we do the module above
-                .ok_or(ErrorKind::ClientNotAvailable("cb", "No file available"))?;
+                .ok_or(Error::NoFile)?;
             let res = if let Some(line) = file.next_line().await? {
                 self.num_sent += 1;
                 self.last_sent
@@ -424,16 +429,21 @@ impl Source for CbSource {
         }
     }
 
-    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         self.received_cbs.trigger += 1;
         Ok(())
     }
-    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         self.received_cbs.restore += 1;
         Ok(())
     }
 
-    async fn ack(&mut self, stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+    async fn ack(
+        &mut self,
+        stream_id: u64,
+        pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         self.received_cbs
             .ack
             .entry(stream_id)
@@ -442,7 +452,12 @@ impl Source for CbSource {
         Ok(())
     }
 
-    async fn fail(&mut self, stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+    async fn fail(
+        &mut self,
+        stream_id: u64,
+        pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         self.received_cbs
             .fail
             .entry(stream_id)

@@ -18,11 +18,13 @@
 use tremor_common::{alias, ports::Port};
 
 use super::{
-    docs::Docs, helper::Scope, node_id::BaseRef, raw::BaseExpr, CreationalWith, DefinitionalArgs,
-    DefinitionalArgsWith, NodeMeta,
+    docs::Docs,
+    helper::Scope,
+    node_id::{BaseRef, NodeId},
+    raw::BaseExpr,
+    CreationalWith, DefinitionalArgs, DefinitionalArgsWith, HashMap, NodeMeta, PipelineDefinition,
+    Value,
 };
-use super::{node_id::NodeId, PipelineDefinition};
-use super::{HashMap, Value};
 use crate::{impl_expr, impl_expr_no_lt};
 pub(crate) mod raw;
 
@@ -39,6 +41,27 @@ pub struct Deploy<'script> {
     #[serde(skip)]
     /// Documentation comments
     pub docs: Docs,
+    #[serde(skip)]
+    mid: Box<NodeMeta>,
+}
+
+impl Deploy<'static> {
+    #[must_use]
+    pub(crate) fn dummy() -> Self {
+        Self {
+            docs: Docs::default(),
+            stmts: vec![],
+            config: HashMap::new(),
+            scope: Scope::default(),
+            mid: NodeMeta::dummy(),
+        }
+    }
+}
+
+impl<'script> BaseExpr for Deploy<'script> {
+    fn meta(&self) -> &crate::NodeMeta {
+        self.mid.meta()
+    }
 }
 
 impl<'script> Deploy<'script> {
@@ -285,7 +308,8 @@ impl crate::ast::node_id::BaseRef for CreateStmt<'_> {
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeployFlow<'script> {
-    pub(crate) mid: Box<NodeMeta>,
+    /// metadata id
+    pub mid: Box<NodeMeta>,
     /// Target of the artefact definition being deployed
     pub from_target: NodeId,
     /// Target for creation

@@ -312,8 +312,9 @@ async fn get_object(client: &Client, bucket: &str, key: &str) -> Vec<u8> {
 
 async fn get_object_value(client: &Client, bucket: &str, key: &str) -> value::Value<'static> {
     let mut v = get_object(client, bucket, key).await;
-    let obj = value::parse_to_value(&mut v).expect("parse failed");
-    return obj.into_static();
+    value::parse_to_value(&mut v)
+        .expect("parse failed")
+        .into_static()
 }
 
 fn get_unbatched_event() -> (Event, value::Value<'static>) {

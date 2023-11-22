@@ -71,7 +71,6 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let origin_uri = EventOriginUri {
@@ -87,9 +86,9 @@ impl ConnectorBuilder for Builder {
 
 #[derive(Clone)]
 pub(crate) struct RemoteOpenTelemetryEndpoint {
-    logs_client: LogsServiceClient<TonicChannel>,
-    metrics_client: MetricsServiceClient<TonicChannel>,
-    trace_client: TraceServiceClient<TonicChannel>,
+    logs: LogsServiceClient<TonicChannel>,
+    metrics: MetricsServiceClient<TonicChannel>,
+    traces: TraceServiceClient<TonicChannel>,
 }
 
 #[async_trait::async_trait]
@@ -121,17 +120,14 @@ struct OtelSink {
 
 #[async_trait::async_trait()]
 impl Sink for OtelSink {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let endpoint = self.config.url.to_string();
-        let channel = TonicEndpoint::from_shared(endpoint)
-            .map_err(|e| format!("Unable to connect to remote otel endpoint: {e}"))?
-            .connect()
-            .await?;
+        let channel = TonicEndpoint::from_shared(endpoint)?.connect().await?;
 
         self.remote = Some(RemoteOpenTelemetryEndpoint {
-            logs_client: LogsServiceClient::new(channel.clone()),
-            metrics_client: MetricsServiceClient::new(channel.clone()),
-            trace_client: TraceServiceClient::new(channel),
+            logs: LogsServiceClient::new(channel.clone()),
+            metrics: MetricsServiceClient::new(channel.clone()),
+            traces: TraceServiceClient::new(channel),
         });
 
         Ok(true)
@@ -143,7 +139,7 @@ impl Sink for OtelSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         if let Some(remote) = &mut self.remote {
             for value in event.value_iter() {
                 let err = if self.config.metrics && value.contains_key("metrics") {
@@ -153,7 +149,7 @@ impl Sink for OtelSink {
                             "Error converting payload to otel metrics",
                         )?,
                     };
-                    remote.metrics_client.export(request).await.err()
+                    remote.metrics.export(request).await.err()
                 } else if self.config.logs && value.contains_key("logs") {
                     let request = ExportLogsServiceRequest {
                         resource_logs: ctx.bail_err(
@@ -161,7 +157,7 @@ impl Sink for OtelSink {
                             "Error converting payload to otel logs",
                         )?,
                     };
-                    remote.logs_client.export(request).await.err()
+                    remote.logs.export(request).await.err()
                 } else if self.config.trace && value.contains_key("trace") {
                     let request = ExportTraceServiceRequest {
                         resource_spans: ctx.bail_err(
@@ -169,7 +165,7 @@ impl Sink for OtelSink {
                             "Error converting payload to otel span",
                         )?,
                     };
-                    remote.trace_client.export(request).await.err()
+                    remote.traces.export(request).await.err()
                 } else {
                     warn!("{ctx} Invalid or disabled otel payload: {value}");
                     None
@@ -197,7 +193,7 @@ impl Sink for OtelSink {
         _signal: Event,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         Ok(SinkReply::default())
     }
 
@@ -212,7 +208,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn otel_client_builder() -> Result<()> {
-        let alias = alias::Connector::new("flow", "my_otel_client");
+        let alias = alias::Connector::new("my_otel_client");
         let with_processors = literal!({
             "config": {
                 "url": "localhost:4317",
@@ -225,8 +221,7 @@ mod tests {
         )?;
 
         let builder = super::Builder::default();
-        let kill_switch = KillSwitch::dummy();
-        let _connector = builder.build(&alias, &config, &kill_switch).await?;
+        let _connector = builder.build(&alias, &config).await?;
 
         Ok(())
     }

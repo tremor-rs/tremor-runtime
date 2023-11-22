@@ -13,9 +13,7 @@
 // limitations under the License.
 
 //NOTE: error_chain
-#![allow(deprecated)]
-#![allow(missing_docs)]
-#![allow(clippy::large_enum_variant)]
+#![allow(deprecated, missing_docs, clippy::large_enum_variant)]
 
 use crate::util::SourceKind;
 use error_chain::error_chain;
@@ -37,18 +35,23 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
         Self::from("Send Error")
     }
 }
+impl From<tremor_runtime::raft::ClusterError> for Error {
+    fn from(e: tremor_runtime::raft::ClusterError) -> Self {
+        ErrorKind::ClusterError(e).into()
+    }
+}
 
 error_chain! {
     links {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
-        Runtime(tremor_runtime::errors::Error, tremor_runtime::errors::ErrorKind);
         Codec(tremor_codec::errors::Error, tremor_codec::errors::ErrorKind);
         Interceptor(tremor_interceptor::errors::Error, tremor_interceptor::errors::ErrorKind);
     }
     foreign_links {
         Value(tremor_value::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        SerdeJsonError(serde_json::Error) #[doc = "Error during json parsing"];
         JsonError(simd_json::Error) #[doc = "Error during json parsing"];
         Io(std::io::Error) #[doc = "Error during std::io"];
         Fmt(std::fmt::Error) #[doc = "Error during std::fmt"];
@@ -62,6 +65,10 @@ error_chain! {
         JoinError(tokio::task::JoinError);
     }
     errors {
+        ClusterError(e: tremor_runtime::raft::ClusterError) {
+            description("Cluster Error")
+                display("Cluster Error: {}", e)
+        }
         TestFailures(stats: crate::test::stats::Stats) {
             description("Some tests failed")
                 display("{} out of {} tests failed.\nFailed tests: {}",

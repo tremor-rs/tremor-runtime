@@ -158,13 +158,15 @@ where
 #[cfg(test)]
 #[cfg(feature = "gcp-integration")]
 pub(crate) mod tests {
+    use super::*;
+    use crate::{
+        connectors::tests::free_port,
+        errors::{Error, Result},
+    };
     use hyper::{
         service::{make_service_fn, service_fn},
         Body,
     };
-
-    use super::*;
-    use crate::errors::{Error, Result};
     use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
 
     #[derive(Clone)]
@@ -250,7 +252,7 @@ PX8efvDMhv16QqDFF0k80d0=
     async fn gouth_token() -> Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
 
-        let port = crate::connectors::tests::free_port::find_free_tcp_port().await?;
+        let port = free_port::find_free_tcp_port().await?;
         let sa = ServiceAccount {
             client_email: "snot@tremor.rs".to_string(),
             private_key_id: "badger".to_string(),
@@ -281,7 +283,7 @@ PX8efvDMhv16QqDFF0k80d0=
         let addr = ("127.0.0.1", port)
             .to_socket_addrs()?
             .next()
-            .ok_or("no address")?;
+            .expect("no address");
         let server_handle = tokio::task::spawn(async move {
             let listener = hyper::Server::bind(&addr).serve(service_fn);
             listener.await?;

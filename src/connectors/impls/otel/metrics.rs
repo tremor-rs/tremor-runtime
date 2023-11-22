@@ -15,13 +15,15 @@
 #![allow(dead_code)]
 
 use super::{
-    common, id,
+    common::{self, Error},
+    id,
     resource::{self, resource_to_pb},
 };
 use crate::{
     connectors::utils::pb::{self, maybe_from_value},
     errors::Result,
 };
+use anyhow::Context;
 use tremor_otelapis::opentelemetry::proto::{
     collector::metrics::v1::ExportMetricsServiceRequest,
     metrics::v1::{
@@ -52,7 +54,7 @@ pub(crate) fn int_exemplars_to_json(data: Vec<IntExemplar>) -> Value<'static> {
 
 pub(crate) fn int_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntExemplar>> {
     json.as_array()
-        .ok_or("Unable to map json value to Exemplars pb")?
+        .ok_or(Error::InvalidMapping("IntExemplar"))?
         .iter()
         .map(|data| {
             Ok(IntExemplar {
@@ -104,14 +106,14 @@ pub(crate) fn double_exemplars_to_json(data: Vec<Exemplar>) -> Value<'static> {
 #[allow(deprecated)] // handling depricated fields is required by the PB files
 pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Exemplar>> {
     json.as_array()
-        .ok_or("Unable to map json value to Exemplars pb")?
+        .ok_or(Error::InvalidMapping("Exemplar"))?
         .iter()
         .map(|data| {
             let filtered_attributes = match (
                 data.get_object("filtered_attributes"),
                 data.get_object("filtered_labels"),
             ) {
-                (None, None) => return Err("missing field `filtered_attributes`".into()),
+                (None, None) => return Err(Error::MissingField("filtered_attributes").into()),
                 (Some(a), None) | (None, Some(a)) => common::obj_key_value_list_to_pb(a),
                 (Some(a), Some(l)) => {
                     let mut a = common::obj_key_value_list_to_pb(a);
@@ -144,7 +146,7 @@ pub(crate) fn quantile_values_to_json(data: Vec<ValueAtQuantile>) -> Value<'stat
 
 pub(crate) fn quantile_values_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ValueAtQuantile>> {
     json.as_array()
-        .ok_or("Unable to map json value to ValueAtQuantiles")?
+        .ok_or(Error::InvalidMapping("ValueAtQuantile"))?
         .iter()
         .map(|data| {
             let value = pb::maybe_double_to_pb(data.get("value"))?;
@@ -170,7 +172,7 @@ pub(crate) fn int_data_points_to_json(pb: Vec<IntDataPoint>) -> Value<'static> {
 
 pub(crate) fn int_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntDataPoint>> {
     json.as_array()
-        .ok_or("Unable to map json value to otel pb IntDataPoint list")?
+        .ok_or(Error::InvalidMapping("IntDataPoint"))?
         .iter()
         .map(|item| {
             Ok(IntDataPoint {
@@ -220,7 +222,7 @@ pub(crate) fn double_data_points_to_json(pb: Vec<NumberDataPoint>) -> Value<'sta
 #[allow(deprecated)] // handling depricated fields is required by the PB files
 pub(crate) fn double_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<NumberDataPoint>> {
     json.as_array()
-        .ok_or("Unable to map json value to otel pb NumberDataPoint list")?
+        .ok_or(Error::InvalidMapping("NumberDataPoint"))?
         .iter()
         .map(|data| {
             let attributes = common::get_attributes_or_labes(data)?;
@@ -268,7 +270,7 @@ pub(crate) fn double_histo_data_points_to_pb(
     json: Option<&Value<'_>>,
 ) -> Result<Vec<HistogramDataPoint>> {
     json.as_array()
-        .ok_or("Unable to map json value to otel pb HistogramDataPoint list")?
+        .ok_or(Error::InvalidMapping("HistogramDataPoint"))?
         .iter()
         .map(|data| {
             let attributes = common::get_attributes_or_labes(data)?;
@@ -317,7 +319,7 @@ pub(crate) fn double_summary_data_points_to_pb(
     json: Option<&Value<'_>>,
 ) -> Result<Vec<SummaryDataPoint>> {
     json.as_array()
-        .ok_or("Unable to map json value to otel pb SummaryDataPoint list")?
+        .ok_or(Error::InvalidMapping("SummaryDataPoint"))?
         .iter()
         .map(|data| {
             let attributes = common::get_attributes_or_labes(data)?;
@@ -354,8 +356,8 @@ pub(crate) fn int_histo_data_points_to_json(pb: Vec<IntHistogramDataPoint>) -> V
 pub(crate) fn int_histo_data_points_to_pb(
     json: Option<&Value<'_>>,
 ) -> Result<Vec<IntHistogramDataPoint>> {
-    json.as_array()
-        .ok_or("Unable to map json value to otel pb IntHistogramDataPoint list")?
+    json.try_as_array()
+        .context(Error::InvalidMapping("IntHistogramDataPoint"))?
         .iter()
         .map(|item| {
             Ok(IntHistogramDataPoint {
@@ -460,7 +462,7 @@ pub(crate) fn metrics_data_to_pb(data: &Value<'_>) -> Result<metric::Data> {
         let data_points = double_summary_data_points_to_pb(json.get("data_points"))?;
         Ok(metric::Data::Summary(Summary { data_points }))
     } else {
-        Err("Invalid metric data point type - cannot convert to pb".into())
+        Err(Error::InvalidMapping("metric::Data").into())
     }
 }
 
@@ -504,7 +506,7 @@ pub(crate) fn instrumentation_library_metrics_to_pb(
 ) -> Result<Vec<InstrumentationLibraryMetrics>> {
     let data = data
         .as_array()
-        .ok_or("Invalid json mapping for InstrumentationLibraryMetrics")?;
+        .ok_or(Error::InvalidMapping("InstrumentationLibraryMetrics"))?;
     let mut pb = Vec::with_capacity(data.len());
     for data in data {
         let mut metrics = Vec::new();
@@ -550,7 +552,7 @@ pub(crate) fn resource_metrics_to_json(request: ExportMetricsServiceRequest) -> 
 
 pub(crate) fn resource_metrics_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceMetrics>> {
     json.get_array("metrics")
-        .ok_or("Invalid json mapping for otel metrics message - cannot convert to pb")?
+        .ok_or(Error::InvalidMapping("ResourceMetrics"))?
         .iter()
         .filter_map(Value::as_object)
         .map(|item| {
@@ -1268,12 +1270,12 @@ mod tests {
             ]
         });
         assert_eq!(
-            Ok(vec![ResourceMetrics {
+            Some(vec![ResourceMetrics {
                 resource: None,
                 instrumentation_library_metrics: vec![],
                 schema_url: "bla".to_string()
             }]),
-            resource_metrics_to_pb(Some(&rm))
+            resource_metrics_to_pb(Some(&rm)).ok()
         );
     }
 
@@ -1284,12 +1286,12 @@ mod tests {
             "schema_url": "snot"
         }]);
         assert_eq!(
-            Ok(vec![InstrumentationLibraryMetrics {
+            Some(vec![InstrumentationLibraryMetrics {
                 instrumentation_library: None,
                 metrics: vec![],
                 schema_url: "snot".to_string()
             }]),
-            instrumentation_library_metrics_to_pb(Some(&ilm))
+            instrumentation_library_metrics_to_pb(Some(&ilm)).ok()
         );
     }
 
@@ -1302,13 +1304,13 @@ mod tests {
             // surprise: no data
         });
         assert_eq!(
-            Ok(Metric {
+            Some(Metric {
                 name: "badger".to_string(),
                 description: "snot".to_string(),
                 unit: "fahrenheit".to_string(),
                 data: None
             }),
-            metric_to_pb(&metric)
+            metric_to_pb(&metric).ok()
         );
     }
 }

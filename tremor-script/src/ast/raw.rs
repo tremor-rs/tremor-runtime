@@ -16,8 +16,14 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
+use super::{
+    base_expr::Ranged,
+    docs::{FnDoc, ModDoc},
+    warning, ComprehensionFoldOp, Const, NodeId, NodeMeta,
+};
 use crate::ast::optimizer::Optimizer;
 use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
@@ -31,7 +37,7 @@ use crate::{
         Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
         UnaryOpKind,
     },
-    errors::{err_generic, error_generic, error_missing_effector, Kind as ErrorKind, Result},
+    errors::{err_generic, error_generic, error_missing_effector, ErrorKind, Result},
     extractor::Extractor,
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
     prelude::*,
@@ -39,17 +45,9 @@ use crate::{
 };
 pub use base_expr::BaseExpr;
 use beef::Cow;
-use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
 use simd_json::ObjectHasher;
-
-use super::{
-    base_expr::Ranged,
-    docs::{FnDoc, ModDoc},
-    module::Manager,
-    warning, ComprehensionFoldOp, Const, NodeId, NodeMeta,
-};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct UseRaw {
@@ -86,11 +84,7 @@ impl<'script> ScriptRaw<'script> {
         for e in self.exprs {
             match e {
                 TopLevelExprRaw::Use(UseRaw { modules, .. }) => {
-                    for (module, alias) in modules {
-                        let mid = Manager::load(&module)?;
-                        let alias = alias.unwrap_or_else(|| module.id.clone());
-                        helper.scope().add_module_alias(alias, mid);
-                    }
+                    helper.load_modules(&modules)?;
                 }
                 TopLevelExprRaw::Const(const_raw) => {
                     let c = const_raw.up(helper)?;
@@ -640,7 +634,7 @@ impl<'script> Upable<'script> for FnDefnRaw<'script> {
         // register documentation
         helper.docs.fns.push(self.doc());
 
-        let mut locals: HashMap<_, _> = self
+        let mut locals = self
             .args
             .iter()
             .enumerate()

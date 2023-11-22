@@ -12,22 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::flow::Flow;
-use super::KillSwitch;
-use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
 use crate::{
-    channel::{bounded, Sender},
-    errors::empty_error,
-};
-use crate::{
+    channel::{bounded, ChannelError, OneShotSender, Sender},
     connectors::{self, ConnectorBuilder, ConnectorType},
-    log_error,
+    errors::Result,
+    instance::IntendedState,
+    log_error, qsize, raft,
+    system::{
+        flow::{self, AppContext, Flow},
+        KillSwitch, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
+    },
 };
-use crate::{
-    errors::{Kind as ErrorKind, Result},
-    qsize,
-};
-use hashbrown::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap};
 use tokio::{
     sync::oneshot,
     task::{self, JoinHandle},
@@ -35,21 +31,38 @@ use tokio::{
 };
 use tremor_common::{
     alias,
-    ids::{ConnectorIdGen, OperatorIdGen},
+    uids::{ConnectorUIdGen, OperatorUIdGen},
 };
 use tremor_script::ast::DeployFlow;
+
+use super::flow::DeploymentType;
 
 pub(crate) type Channel = Sender<Msg>;
 
 /// This is control plane
 #[derive(Debug)]
 pub(crate) enum Msg {
-    /// deploy a Flow
-    StartDeploy {
-        /// deploy flow
+    /// Deploy a flow, instantiate it, but does not start it or any child instance (connector, pipeline)
+    DeployFlow {
+        /// the App this flow shall be a part of
+        app: alias::App,
+        /// the `deploy flow` AST
         flow: Box<DeployFlow<'static>>,
         /// result sender
-        sender: oneshot::Sender<Result<()>>,
+        sender: OneShotSender<Result<alias::Flow>>,
+        /// API request sender
+        raft: Option<raft::Cluster>,
+        /// Type of the deployment
+        deployment_type: DeploymentType,
+    },
+    /// change instance state
+    ChangeInstanceState {
+        /// unique ID for the `Flow` instance to start
+        id: alias::Flow,
+        /// The state the instance should be changed to
+        intended_state: IntendedState,
+        /// result sender
+        reply_tx: OneShotSender<Result<()>>,
     },
     RegisterConnectorType {
         /// the type of connector
@@ -57,19 +70,19 @@ pub(crate) enum Msg {
         /// the builder
         builder: Box<dyn ConnectorBuilder>,
     },
-    GetFlows(oneshot::Sender<Result<Vec<Flow>>>),
+    GetFlows(OneShotSender<Result<Vec<Flow>>>),
     GetFlow(alias::Flow, oneshot::Sender<Result<Flow>>),
     /// Initiate the Quiescence process
-    Drain(oneshot::Sender<Result<()>>),
+    Drain(OneShotSender<Result<()>>),
     /// stop this manager
-    Stop,
+    Terminate,
 }
 
 #[derive(Debug)]
 pub(crate) struct FlowSupervisor {
     flows: HashMap<alias::Flow, Flow>,
-    operator_id_gen: OperatorIdGen,
-    connector_id_gen: ConnectorIdGen,
+    operator_id_gen: OperatorUIdGen,
+    connector_id_gen: ConnectorUIdGen,
     known_connectors: connectors::Known,
 }
 
@@ -78,8 +91,8 @@ impl FlowSupervisor {
         Self {
             flows: HashMap::new(),
             known_connectors: connectors::Known::new(),
-            operator_id_gen: OperatorIdGen::new(),
-            connector_id_gen: ConnectorIdGen::new(),
+            operator_id_gen: OperatorUIdGen::new(),
+            connector_id_gen: ConnectorUIdGen::new(),
         }
     }
 
@@ -93,26 +106,39 @@ impl FlowSupervisor {
         }
     }
 
-    async fn handle_start_deploy(
+    async fn handle_deploy(
         &mut self,
+        app_id: alias::App,
         flow: DeployFlow<'static>,
-        sender: oneshot::Sender<Result<()>>,
+        sender: oneshot::Sender<Result<alias::Flow>>,
         kill_switch: &KillSwitch,
+        raft: Option<raft::Cluster>,
+        deployment_type: DeploymentType,
     ) {
-        let id = alias::Flow::from(&flow);
+        let id = alias::Flow::new(app_id, &flow.instance_alias);
         let res = match self.flows.entry(id.clone()) {
-            Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
-            Entry::Vacant(vacant) => Flow::start(
-                flow,
-                &mut self.operator_id_gen,
-                &mut self.connector_id_gen,
-                &self.known_connectors,
-                kill_switch,
-            )
-            .await
-            .map(|deploy| {
-                vacant.insert(deploy);
-            }),
+            Entry::Occupied(_occupied) => Err(flow::Error::Duplicate(id.clone()).into()),
+            Entry::Vacant(vacant) => {
+                let ctx = AppContext {
+                    id: id.clone(),
+                    raft,
+                    ..AppContext::default()
+                };
+                Flow::deploy(
+                    ctx,
+                    flow,
+                    &mut self.operator_id_gen,
+                    &mut self.connector_id_gen,
+                    &self.known_connectors,
+                    kill_switch,
+                    deployment_type,
+                )
+                .await
+                .map(|deploy| {
+                    vacant.insert(deploy);
+                    id
+                })
+            }
         };
         log_error!(
             sender.send(res).map_err(|_| "send error"),
@@ -133,46 +159,43 @@ impl FlowSupervisor {
                     self.flows
                         .get(id)
                         .cloned()
-                        .ok_or_else(|| ErrorKind::FlowNotFound(id.to_string()).into()),
+                        .ok_or_else(|| flow::Error::NotFound(id.clone()).into()),
                 )
                 .map_err(|_| "send error"),
             "Error sending GetFlow response: {e}"
         );
     }
 
-    async fn handle_stop(&self) -> Result<()> {
+    async fn handle_terminate(&mut self) -> Result<()> {
         info!("Stopping Manager ...");
         if !self.flows.is_empty() {
-            // send stop to each deployment
-            let (tx, mut rx) = bounded(self.flows.len());
-            let mut expected_stops: usize = 0;
-            for flow in self.flows.values() {
-                log_error!(
-                    flow.stop(tx.clone()).await,
+            // drain the flows, we are stopping anyways, this is the last interaction with them
+            let mut rxs = Vec::with_capacity(self.flows.len());
+            for (_, flow) in self.flows.drain() {
+                let (tx, rx) = crate::channel::oneshot();
+                if !log_error!(
+                    flow.stop(tx).await,
                     "Failed to stop Deployment \"{alias}\": {e}",
                     alias = flow.id()
-                );
-                expected_stops += 1;
+                ) {
+                    rxs.push(rx);
+                }
             }
 
             timeout(
                 DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
                 task::spawn(async move {
-                    while expected_stops > 0 {
-                        log_error!(
-                            rx.recv().await.ok_or_else(empty_error)?,
-                            "Error during Stopping: {e}"
-                        );
-                        expected_stops = expected_stops.saturating_sub(1);
+                    for rx in rxs.drain(..) {
+                        log_error!(rx.await?, "Error during Stopping: {e}");
                     }
-                    Result::Ok(())
+                    Ok::<(), anyhow::Error>(())
                 }),
             )
             .await???;
         }
         Ok(())
     }
-    async fn handle_drain(&self, sender: oneshot::Sender<Result<()>>) {
+    async fn handle_drain(&mut self, sender: oneshot::Sender<Result<()>>) {
         if self.flows.is_empty() {
             log_error!(
                 sender.send(Ok(())).map_err(|_| "send error"),
@@ -181,31 +204,60 @@ impl FlowSupervisor {
         } else {
             let num_flows = self.flows.len();
             info!("Draining all {num_flows} Flows ...");
-            let mut alive_flows = 0_usize;
-            let (tx, mut rx) = bounded(num_flows);
-            for (_, flow) in &self.flows {
+            let mut rxs = Vec::with_capacity(self.flows.len());
+            for (_, flow) in self.flows.drain() {
+                let (tx, rx) = crate::channel::oneshot();
+
                 if !log_error!(
-                    flow.drain(tx.clone()).await,
+                    flow.stop(tx).await,
                     "Failed to drain Deployment \"{alias}\": {e}",
                     alias = flow.id()
                 ) {
-                    alive_flows += 1;
+                    rxs.push(rx);
                 }
             }
             task::spawn(async move {
-                while alive_flows > 0 {
-                    match rx.recv().await {
-                        Some(Err(e)) => {
+                for rx in rxs.drain(..) {
+                    match rx.await {
+                        Ok(Err(e)) => {
                             error!("Error during Draining: {e}");
                         }
-                        None | Some(_) => {}
+                        Ok(_) | Err(_) => {}
                     };
-                    alive_flows -= 1;
                 }
                 info!("Flows drained.");
-                sender.send(Ok(())).map_err(|_| "Failed to send reply")?;
-                Result::Ok(())
+                sender.send(Ok(())).map_err(|_| ChannelError::Send)?;
+                Ok::<(), anyhow::Error>(())
             });
+        }
+    }
+
+    async fn handle_change_state(
+        &mut self,
+        id: alias::Flow,
+        intended_state: IntendedState,
+        reply_tx: OneShotSender<Result<()>>,
+    ) -> Result<()> {
+        if let IntendedState::Stopped = intended_state {
+            // we remove the flow as it won't be reachable anymore, once it is stopped
+            // keeping it around will lead to errors upon stopping
+            if let Some(flow) = self.flows.remove(&id) {
+                flow.stop(reply_tx).await?;
+                Ok(())
+            } else {
+                reply_tx
+                    .send(Err(flow::Error::NotFound(id.clone()).into()))
+                    .map_err(|_| ChannelError::Send)?;
+                Err(flow::Error::NotFound(id.clone()).into())
+            }
+        } else if let Some(flow) = self.flows.get(&id) {
+            flow.change_state(intended_state, reply_tx).await?;
+            Ok(())
+        } else {
+            reply_tx
+                .send(Err(flow::Error::NotFound(id.clone()).into()))
+                .map_err(|_| ChannelError::Send)?;
+            Err(flow::Error::NotFound(id.clone()).into())
         }
     }
 
@@ -213,6 +265,7 @@ impl FlowSupervisor {
         let (tx, mut rx) = bounded(qsize());
         let kill_switch = KillSwitch(tx.clone());
         let task_kill_switch = kill_switch.clone();
+
         let system_h = task::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 match msg {
@@ -221,17 +274,41 @@ impl FlowSupervisor {
                         builder,
                         ..
                     } => self.handle_register_connector_type(connector_type, builder),
-                    Msg::StartDeploy { flow, sender } => {
-                        self.handle_start_deploy(*flow, sender, &task_kill_switch)
-                            .await;
+                    Msg::DeployFlow {
+                        app,
+                        flow,
+                        sender,
+                        raft: raft_api_tx,
+                        deployment_type,
+                    } => {
+                        self.handle_deploy(
+                            app,
+                            *flow,
+                            sender,
+                            &task_kill_switch,
+                            raft_api_tx,
+                            deployment_type,
+                        )
+                        .await;
                     }
                     Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx),
                     Msg::GetFlow(id, reply_tx) => self.handle_get_flow(&id, reply_tx),
-                    Msg::Stop => {
-                        self.handle_stop().await?;
+                    Msg::Terminate => {
+                        self.handle_terminate().await?;
                         break;
                     }
                     Msg::Drain(sender) => self.handle_drain(sender).await,
+                    Msg::ChangeInstanceState {
+                        id,
+                        intended_state,
+                        reply_tx,
+                    } => {
+                        // if an error happened here already, the reply_tx hasn't been sent anywhere so we need to send the error here
+                        log_error!(
+                            self.handle_change_state(id, intended_state, reply_tx).await,
+                            "Error sending ChangeInstanceState reply: {e}"
+                        );
+                    }
                 }
             }
             info!("Manager stopped.");

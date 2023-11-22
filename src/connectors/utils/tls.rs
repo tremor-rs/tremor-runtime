@@ -14,7 +14,7 @@
 
 //! TLS utilities
 
-use crate::errors::{Error, Kind as ErrorKind, Result};
+use crate::errors::Result;
 use futures::Future;
 use hyper::server::{
     accept::Accept,
@@ -68,28 +68,24 @@ pub(crate) struct TLSClientConfig {
     /// Path to the private key to use for TLS with client-side certificate
     pub(crate) key: Option<PathBuf>,
 }
-
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Invalid certificate in {0}")]
+    InvalidCertificate(String),
+}
 /// Load the passed certificates file
 fn load_certs(path: &Path) -> Result<Vec<Certificate>> {
     let certfile = tremor_common::file::open(path)?;
     let mut reader = BufReader::new(certfile);
-    certs(&mut reader)
-        .map_err(|_| {
-            Error::from(ErrorKind::TLSError(format!(
-                "Invalid certificate in {}",
-                path.display()
-            )))
-        })
+    Ok(certs(&mut reader)
+        .map_err(|_| Error::InvalidCertificate(path.display().to_string()))
         .and_then(|certs| {
             if certs.is_empty() {
-                Err(Error::from(ErrorKind::TLSError(format!(
-                    "No valid TLS certificates found in {}",
-                    path.display()
-                ))))
+                Err(Error::InvalidCertificate(path.display().to_string()))
             } else {
                 Ok(certs.into_iter().map(Certificate).collect())
             }
-        })
+        })?)
 }
 
 /// Load the passed private key file
@@ -99,12 +95,8 @@ fn load_keys(path: &Path) -> Result<PrivateKey> {
     let keyfile = tremor_common::file::open(path)?;
     let mut reader = BufReader::new(keyfile);
 
-    let certs = pkcs8_private_keys(&mut reader).map_err(|_e| {
-        Error::from(ErrorKind::TLSError(format!(
-            "Invalid PKCS8 Private key in {}",
-            path.display()
-        )))
-    })?;
+    let certs = pkcs8_private_keys(&mut reader)
+        .map_err(|_e| Error::InvalidCertificate(path.display().to_string()))?;
     let mut keys: Vec<PrivateKey> = certs.into_iter().map(PrivateKey).collect();
 
     // only attempt to load as RSA keys if file has no pkcs8 keys
@@ -112,23 +104,15 @@ fn load_keys(path: &Path) -> Result<PrivateKey> {
         let keyfile = tremor_common::file::open(path)?;
         let mut reader = BufReader::new(keyfile);
         keys = rsa_private_keys(&mut reader)
-            .map_err(|_e| {
-                Error::from(ErrorKind::TLSError(format!(
-                    "Invalid RSA Private key in {}",
-                    path.display()
-                )))
-            })?
+            .map_err(|_e| Error::InvalidCertificate(path.display().to_string()))?
             .into_iter()
             .map(PrivateKey)
             .collect();
     }
 
-    keys.into_iter().next().ok_or_else(|| {
-        Error::from(ErrorKind::TLSError(format!(
-            "No valid private keys (RSA or PKCS8) found in {}",
-            path.display()
-        )))
-    })
+    keys.into_iter()
+        .next()
+        .ok_or_else(|| Error::InvalidCertificate(path.display().to_string()).into())
 }
 impl TLSServerConfig {
     pub(crate) fn to_server_config(&self) -> Result<ServerConfig> {
@@ -162,12 +146,8 @@ impl TLSClientConfig {
                 Item::X509Certificate(cert) => Some(Certificate(cert)),
                 _ => None,
             });
-            cert.and_then(|cert| roots.add(&cert).ok()).ok_or_else(|| {
-                Error::from(ErrorKind::TLSError(format!(
-                    "Invalid certificate in {}",
-                    cafile.display()
-                )))
-            })?;
+            cert.and_then(|cert| roots.add(&cert).ok())
+                .ok_or_else(|| Error::InvalidCertificate(cafile.display().to_string()))?;
             roots
         } else {
             SYSTEM_ROOT_CERTS.clone()

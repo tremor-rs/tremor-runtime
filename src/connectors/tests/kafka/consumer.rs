@@ -16,7 +16,7 @@ use crate::{
     connectors::{
         impls::kafka,
         tests::{
-            free_port,
+            free_port::find_free_tcp_port,
             kafka::{redpanda_container, PRODUCE_TIMEOUT},
             ConnectorHarness,
         },
@@ -106,7 +106,7 @@ async fn transactional_retry() -> Result<()> {
             value: Some("snot"),
         }));
     if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to kafka".into());
+        anyhow::bail!("Unable to send record to kafka");
     }
 
     let e1 = harness.out()?.get_event().await?;
@@ -142,7 +142,7 @@ async fn transactional_retry() -> Result<()> {
         .partition(0)
         .timestamp(12);
     if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
     let e2 = harness.out()?.get_event().await?;
     assert_eq!(Value::null(), e2.data.suffix().value());
@@ -191,7 +191,7 @@ async fn transactional_retry() -> Result<()> {
         .partition(2)
         .timestamp(123);
     if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // next event
@@ -207,7 +207,6 @@ async fn transactional_retry() -> Result<()> {
                 "partition": 2,
                 "timestamp": 123_000_000
             }
-
         }),
         e4.data.suffix().meta()
     );
@@ -219,14 +218,14 @@ async fn transactional_retry() -> Result<()> {
         .partition(2)
         .timestamp(1234);
     if producer.send(record4, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     let e5 = harness.err()?.get_event().await?;
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::transactional_retry",
+            "source": "[Source::[Node::0][default/]::transactional_retry]",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -336,7 +335,7 @@ async fn custom_no_retry() -> Result<()> {
             value: Some("snot"),
         }));
     if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to kafka".into());
+        anyhow::bail!("Unable to send record to kafka");
     }
 
     let e1 = harness.out()?.get_event().await?;
@@ -372,7 +371,7 @@ async fn custom_no_retry() -> Result<()> {
         .partition(0)
         .timestamp(12);
     if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // get second event
@@ -408,7 +407,7 @@ async fn custom_no_retry() -> Result<()> {
         .partition(2)
         .timestamp(123);
     if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // we only get the next event, no previous one
@@ -436,14 +435,14 @@ async fn custom_no_retry() -> Result<()> {
         .partition(2)
         .timestamp(1234);
     if producer.send(record4, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     let e5 = harness.err()?.get_event().await?;
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::custom_no_retry",
+            "source": "[Source::[Node::0][default/]::custom_no_retry]",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -541,7 +540,7 @@ async fn performance() -> Result<()> {
             value: Some("snot"),
         }));
     if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to kafka".into());
+        anyhow::bail!("Unable to send record to kafka");
     }
 
     let e1 = harness.out()?.get_event().await?;
@@ -577,7 +576,7 @@ async fn performance() -> Result<()> {
         .partition(0)
         .timestamp(12);
     if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // get second event
@@ -614,7 +613,7 @@ async fn performance() -> Result<()> {
         .partition(2)
         .timestamp(123);
     if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // we only get the next event, no previous one
@@ -642,14 +641,14 @@ async fn performance() -> Result<()> {
         .partition(2)
         .timestamp(1234);
     if producer.send(record4, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     let e5 = harness.err()?.get_event().await?;
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::performance",
+            "source": "[Source::[Node::0][default/]::performance]",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -696,7 +695,7 @@ async fn performance() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
-    let kafka_port = free_port::find_free_tcp_port().await?;
+    let kafka_port = find_free_tcp_port().await?;
     let _: std::result::Result<_, _> = env_logger::try_init();
     let connector_config = literal!({
         "reconnect": {
@@ -734,7 +733,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn invalid_rdkafka_options() -> Result<()> {
     let _: std::result::Result<_, _> = env_logger::try_init();
-    let kafka_port = free_port::find_free_tcp_port().await?;
+    let kafka_port = find_free_tcp_port().await?;
     let broker = format!("127.0.0.1:{kafka_port}");
     let topic = "tremor_test_pause_resume";
     let group_id = "invalid_rdkafka_options";
@@ -828,7 +827,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         .partition(1)
         .timestamp(0);
     if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to Kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
     debug!("BEFORE GET EVENT 1");
     let e1 = harness.out()?.get_event().await?;
@@ -848,7 +847,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         .partition(0)
         .timestamp(1);
     if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to Kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
     // we didn't receive shit because we are paused
     assert!(harness
@@ -929,7 +928,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
         .partition(0)
         .timestamp(1);
     if producer.send(record1, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to Kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
     // send message 2
     let record2 = FutureRecord::to(topic)
@@ -938,7 +937,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
         .partition(0)
         .timestamp(2);
     if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to Kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // send message 3
@@ -948,7 +947,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
         .partition(0)
         .timestamp(3);
     if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to Kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // receive events
@@ -1129,7 +1128,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
         .partition(0)
         .timestamp(1);
     if producer.send(record1, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to Kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
     // send message 2
     let record2 = FutureRecord::to(topic)
@@ -1138,7 +1137,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
         .partition(0)
         .timestamp(2);
     if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to Kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // send message 3
@@ -1148,7 +1147,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
         .partition(0)
         .timestamp(3);
     if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Unable to send record to Kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // receive events
@@ -1278,7 +1277,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
         .partition(0)
         .timestamp(5678);
     if producer.send(record5, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
     let record6 = FutureRecord::to(topic)
         .key("6")
@@ -1286,7 +1285,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
         .partition(0)
         .timestamp(5679);
     if producer.send(record6, PRODUCE_TIMEOUT).await.is_err() {
-        return Err("Could not send to kafka".into());
+        anyhow::bail!("Unable to send record to Kafka");
     }
 
     // discard old repeated events (We don't know why they come again)
@@ -1343,7 +1342,7 @@ async fn create_topic(
         match r {
             Err((topic, err)) => {
                 error!("Error creating topic {}: {}", &topic, err);
-                return Err(err.to_string().into());
+                return Err(err.into());
             }
             Ok(topic) => {
                 info!("Created topic {}", topic);

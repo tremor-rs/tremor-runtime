@@ -65,13 +65,14 @@ impl EchoServer {
                 Ok(Ok(bytes_read)) => {
                     debug!("[ECHO SERVER] Received {bytes_read} bytes.");
                     buf.truncate(bytes_read);
-                    stream.write_all(&buf).await.map_err(|e| {
-                        Error::from(format!("Error writing to tcp connection: {e}"))
-                    })?;
+                    stream
+                        .write_all(&buf)
+                        .await
+                        .map_err(|e| Error::msg(format!("Error writing to tcp connection: {e}")))?;
                 }
                 Ok(Err(e)) => {
                     error!("[ECHO SERVER] Error: {e}");
-                    return Err(Error::from(format!(
+                    return Err(Error::msg(format!(
                         "Error reading from tcp connection: {e}"
                     )));
                 }

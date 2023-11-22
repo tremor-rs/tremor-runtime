@@ -23,7 +23,8 @@ use lexer::Lexer;
 use std::io::Write;
 use std::io::{self, Read};
 use termcolor::{Color, ColorSpec};
-use tremor_common::ids::OperatorIdGen;
+use tremor_common::uids::OperatorUIdGen;
+use tremor_pipeline::MetricsChannel;
 use tremor_script::highlighter::{Dumb as TermNoHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::lexer::{self, Token};
 use tremor_script::pos::{Span, Spanned};
@@ -263,9 +264,9 @@ impl DbgDot {
             let env = env::setup()?;
             match Query::parse(&data.raw, &env.fun, &env.aggr) {
                 Ok(runnable) => {
-                    let mut idgen = OperatorIdGen::new();
-                    let g =
-                        tremor_pipeline::query::Query(runnable).to_executable_graph(&mut idgen)?;
+                    let mut idgen = OperatorUIdGen::new();
+                    let g = tremor_pipeline::query::Query(runnable)
+                        .to_executable_graph(&mut idgen, &MetricsChannel::default())?;
 
                     println!("{}", g.dot);
                 }

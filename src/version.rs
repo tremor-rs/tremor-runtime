@@ -16,12 +16,8 @@ use rdkafka::util::get_rdkafka_version;
 /// Version of the tremor crate;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[cfg(not(debug_assertions))]
 /// Checks if a we are in a debug build
-pub const DEBUG: bool = false;
-#[cfg(debug_assertions)]
-/// Checks if a we are in a debug build
-pub const DEBUG: bool = true;
+pub const DEBUG: bool = cfg!(debug_assertions);
 
 #[must_use]
 /// Provides formatting for "long" version name of build
@@ -42,7 +38,7 @@ pub fn long_ver() -> String {
 
 /// Prints tremor and librdkafka version.
 pub fn print() {
-    eprintln!("tremor version: {}", long_ver().as_str());
+    eprintln!("tremor version: {}", long_ver());
     eprintln!("tremor instance: {}", instance!());
     let (version_n, version_s) = get_rdkafka_version();
     eprintln!("rd_kafka version: 0x{version_n:08x}, {version_s}");
@@ -50,7 +46,7 @@ pub fn print() {
 
 /// Logs tremor and librdkafka version.
 pub fn log() {
-    info!("tremor version: {}", long_ver().as_str());
+    info!("tremor version: {}", long_ver());
     let (version_n, version_s) = get_rdkafka_version();
     info!("rd_kafka version: 0x{version_n:08x}, {version_s}");
 }

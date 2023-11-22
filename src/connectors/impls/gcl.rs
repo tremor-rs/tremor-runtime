@@ -259,6 +259,12 @@ use tremor_value::Value;
 
 pub(crate) mod writer;
 
+#[derive(Debug, Clone, thiserror::Error)]
+enum Error {
+    #[error("log_severity is not an integer")]
+    SeverityNotInteger,
+}
+
 // The span ID within the trace associated with the log entry.
 //  For Trace spans, this is the same format that the Trace API v2
 //  uses: a 16-character hexadecimal encoding of an 8-byte array,

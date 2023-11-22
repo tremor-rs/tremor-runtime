@@ -17,8 +17,8 @@ use std::io::prelude::*;
 use tremor_common::file;
 use tremor_runtime::errors::*;
 use tremor_script::{
-    highlighter::Dumb, module::Manager, prelude::*, utils::*, AggrType, EventContext, Script,
-    FN_REGISTRY,
+    highlighter::Dumb, module::Manager, prelude::*, utils::*, AggrType, Script, FN_REGISTRY,
+    NO_CONTEXT,
 };
 use tremor_value::{Object, Value};
 
@@ -43,7 +43,7 @@ macro_rules! test_cases {
                 Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
-                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read().map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;
@@ -55,7 +55,7 @@ macro_rules! test_cases {
                 let err = err.trim();
 
                 if let Some(mut json) =  in_json.pop() {
-                    let context = EventContext::new(0, None);
+                    let context = NO_CONTEXT;
                     let mut meta = Value::from(Object::default());
                     let mut state = Value::null();
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
@@ -96,7 +96,7 @@ macro_rules! ignore_cases {
                 Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
-                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read().map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;
@@ -109,7 +109,7 @@ macro_rules! ignore_cases {
 
                 let mut state = Value::null();
                 if let Some(mut json) =  in_json.pop() {
-                    let context = EventContext::new(0, None);
+                    let context = NO_CONTEXT;
                     let mut meta = Value::object();
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {

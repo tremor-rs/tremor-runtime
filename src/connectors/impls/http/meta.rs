@@ -26,6 +26,16 @@ use hyper::{header::HeaderValue, Body, Method, Request, Response};
 use mime::Mime;
 use tremor_value::Value;
 
+#[derive(Clone, Debug, thiserror::Error)]
+enum Error {
+    #[error("Invalid HTTP Method")]
+    InvalidMethod,
+    #[error("Invalid HTTP URL")]
+    InvalidUrl,
+    #[error("Request already consumed")]
+    AlreadyConsumed,
+}
+
 /// Utility for building an HTTP request from a possibly batched event
 /// and some configuration values
 pub(crate) struct HttpRequestBuilder {
@@ -95,12 +105,12 @@ impl HttpRequestBuilder {
     ) -> Result<Self> {
         let request_meta = meta.get("request");
         let method = if let Some(method_v) = request_meta.get("method") {
-            Method::from_bytes(method_v.as_bytes().ok_or("Invalid HTTP Method")?)?
+            Method::from_bytes(method_v.as_bytes().ok_or(Error::InvalidMethod)?)?
         } else {
             config.method.0.clone()
         };
         let uri: Uri = if let Some(url_v) = request_meta.get("url") {
-            url_v.as_str().ok_or("Invalid HTTP URL")?.parse()?
+            url_v.as_str().ok_or(Error::InvalidUrl)?.parse()?
         } else {
             config.url.to_string().parse()?
         };
@@ -193,7 +203,7 @@ impl HttpRequestBuilder {
     }
 
     pub(super) fn take_request(&mut self) -> Result<Request<Body>> {
-        Ok(self.request.take().ok_or("Request already consumed")?)
+        Ok(self.request.take().ok_or(Error::AlreadyConsumed)?)
     }
     /// Finalize and send the response.
     /// In the chunked case we have already sent it before.
@@ -209,9 +219,7 @@ impl HttpRequestBuilder {
     }
 }
 
-pub(crate) fn content_type(
-    headers: Option<&HeaderMap>,
-) -> std::result::Result<Option<Mime>, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub(crate) fn content_type(headers: Option<&HeaderMap>) -> Result<Option<Mime>> {
     if let Some(headers) = headers {
         let header_content_type = headers
             .get(hyper::header::CONTENT_TYPE)
@@ -300,6 +308,7 @@ pub(super) fn extract_response_meta<B>(response: &Response<B>) -> Result<Value<'
 
 #[cfg(test)]
 mod test {
+
     use super::*;
     #[tokio::test(flavor = "multi_thread")]
     async fn builder() -> Result<()> {
@@ -310,13 +319,7 @@ mod test {
             "cake": ["black forst", "cheese"],
             "pie": "key lime"
         }});
-        let mut s = EventSerializer::new(
-            None,
-            CodecReq::Optional("json"),
-            vec![],
-            &ConnectorType("http".into()),
-            &alias::Connector::new("flow", "http"),
-        )?;
+        let mut s = EventSerializer::dummy(Some(tremor_codec::Config::from("json")))?;
         let config = client::Config::new(&c)?;
 
         let mut b = HttpRequestBuilder::new(request_id, meta, &codec_map, &config)?;

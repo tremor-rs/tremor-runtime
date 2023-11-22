@@ -27,7 +27,7 @@
 
 pub mod errors;
 pub use crate::errors::Error;
-use crate::errors::{Kind as ErrorKind, Result};
+use crate::errors::{ErrorKind, Result};
 use std::fmt::{Debug, Display};
 use tremor_value::Value;
 mod codec {
@@ -56,7 +56,7 @@ mod prelude {
     pub use super::Codec;
     pub use crate::errors::*;
     pub use simd_json::prelude::*;
-    pub use tremor_value::{literal, Object, Value};
+    pub use tremor_value::{Object, Value};
 }
 
 /// Configuration, commonly used for codecs
@@ -129,9 +129,9 @@ pub fn resolve(config: &Config) -> Result<Box<dyn Codec>> {
         "binflux" => Ok(Box::<binflux::BInflux>::default()),
         "csv" => Ok(Box::new(csv::Csv {})),
         "dogstatsd" => Ok(Box::<dogstatsd::DogStatsD>::default()),
+        "influx" => Ok(Box::new(influx::Influx {})),
         "json" => json::from_config(config.config.as_ref()),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
-        "influx" => Ok(Box::new(influx::Influx {})),
         "null" => Ok(Box::new(null::Null {})),
         "statsd" => Ok(Box::<statsd::StatsD>::default()),
         "string" => Ok(Box::new(string::String {})),

@@ -43,7 +43,7 @@ macro_rules! test_cases {
                 Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
-                let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
+                let s = Script::parse(&contents, &*FN_REGISTRY.read().map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?);
                 if let Err(e) = s {
                     let got = Dumb::error_to_string(&e)?;
                     println!("{}", got);
@@ -83,7 +83,7 @@ macro_rules! ignored_cases {
                 Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
-                let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
+                let s = Script::parse(&contents, &*FN_REGISTRY.read().map_err(|_| tremor_runtime::errors::ErrorKind::ReadLock)?);
                 if let Err(e) = s {
                     let got = Dumb::error_to_string(&e)?;
                     println!("{}", got);

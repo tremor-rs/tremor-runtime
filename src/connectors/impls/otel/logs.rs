@@ -22,20 +22,28 @@ use super::{
 use crate::connectors::utils::pb;
 use crate::errors::Result;
 
+use anyhow::Context;
 use tremor_otelapis::opentelemetry::proto::{
     collector::logs::v1::ExportLogsServiceRequest,
     logs::v1::{InstrumentationLibraryLogs, LogRecord, ResourceLogs},
 };
 use tremor_value::{literal, prelude::*, Value};
 
+#[derive(Debug, Clone, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("The `traceflags` is invalid, expected: 0b10000000, actual: {0}")]
+    InvalidTraceFlags(u32),
+    #[error("The `severity_number` is NOT in the valid range 0 <= {0} <= 24")]
+    InvalidSeverityNumber(i32),
+    #[error("Missing `logs` array")]
+    MissingLogs,
+}
+
 fn affirm_traceflags_valid(traceflags: u32) -> Result<u32> {
     if (traceflags == 128) || (traceflags == 0) {
         Ok(traceflags)
     } else {
-        Err(
-            format!("The `traceflags` is invalid, expected: 0b10000000, actual: {traceflags}",)
-                .into(),
-        )
+        Err(Error::InvalidTraceFlags(traceflags).into())
     }
 }
 
@@ -44,10 +52,7 @@ fn affirm_severity_number_valid(severity_number: i32) -> Result<i32> {
         // NOTE `0` implies unspecified severity
         Ok(severity_number)
     } else {
-        Err(
-            format!("The `severity_number` is NOT in the valid range 0 <= {severity_number} <= 24")
-                .into(),
-        )
+        Err(Error::InvalidSeverityNumber(severity_number).into())
     }
 }
 
@@ -94,8 +99,10 @@ pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord> {
         // severity value is optional - default to 0 if not specified
         severity_number: pb::maybe_int_to_pbi32(log.get("severity_number"))
             .ok()
-            .and_then(|sn| affirm_severity_number_valid(sn).ok())
+            .map(affirm_severity_number_valid)
+            .transpose()?
             .unwrap_or_default(),
+
         // defined as optional - fallback to an empty string
         severity_text: pb::maybe_string_to_pb(log.get("severity_text")).unwrap_or_default(),
         // name is defined as optional - fallback to empty string
@@ -116,8 +123,8 @@ pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord> {
 pub(crate) fn maybe_instrumentation_library_logs_to_pb(
     data: Option<&Value<'_>>,
 ) -> Result<Vec<InstrumentationLibraryLogs>> {
-    data.as_array()
-        .ok_or("Invalid json mapping for InstrumentationLibraryLogs")?
+    data.try_as_array()
+        .context("Invalid json mapping for InstrumentationLibraryLogs")?
         .iter()
         .filter_map(Value::as_object)
         .map(|ill| {
@@ -166,7 +173,7 @@ pub(crate) fn resource_logs_to_json(request: ExportLogsServiceRequest) -> Result
 
 pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>> {
     json.get_array("logs")
-        .ok_or("Missing `logs` array")?
+        .ok_or(Error::MissingLogs)?
         .iter()
         .filter_map(Value::as_object)
         .map(|data| {
@@ -406,12 +413,12 @@ mod tests {
             ]
         });
         assert_eq!(
-            Ok(vec![ResourceLogs {
+            Some(vec![ResourceLogs {
                 instrumentation_library_logs: vec![],
                 resource: None,
                 schema_url: String::new()
             }]),
-            resource_logs_to_pb(&log)
+            resource_logs_to_pb(&log).ok()
         );
     }
 
@@ -424,12 +431,12 @@ mod tests {
             }
         ]);
         assert_eq!(
-            Ok(vec![InstrumentationLibraryLogs {
+            Some(vec![InstrumentationLibraryLogs {
                 instrumentation_library: None,
                 logs: vec![],
                 schema_url: String::new()
             }]),
-            maybe_instrumentation_library_logs_to_pb(Some(&ill))
+            maybe_instrumentation_library_logs_to_pb(Some(&ill)).ok()
         );
     }
 
@@ -437,7 +444,7 @@ mod tests {
     fn minimal_log_record() {
         let lr = literal!({});
         assert_eq!(
-            Ok(LogRecord {
+            Some(LogRecord {
                 time_unix_nano: 0,
                 severity_number: 0,
                 severity_text: String::new(),
@@ -449,7 +456,7 @@ mod tests {
                 trace_id: vec![],
                 span_id: vec![]
             }),
-            log_record_to_pb(&lr)
+            log_record_to_pb(&lr).ok()
         );
     }
 }

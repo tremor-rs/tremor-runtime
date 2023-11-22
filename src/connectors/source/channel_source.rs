@@ -12,17 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    errors::empty_error,
-    qsize,
+use crate::connectors::{
+    source::{Source, SourceContext, SourceReply, SourceReplySender, StreamDone, StreamReader},
+    Context,
 };
 use crate::{
-    connectors::{
-        source::{Source, SourceContext, SourceReply, SourceReplySender, StreamDone, StreamReader},
-        Context,
-    },
-    errors::Result,
+    channel::{bounded, empty_e, Receiver, Sender},
+    qsize,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -74,8 +70,12 @@ impl ChannelSource {
 
 #[async_trait::async_trait()]
 impl Source for ChannelSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.rx.recv().await.ok_or_else(empty_error)?)
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        Ok(self.rx.recv().await.ok_or_else(empty_e)?)
     }
 
     /// this source is not handling acks/fails
@@ -87,7 +87,7 @@ impl Source for ChannelSource {
         true
     }
 
-    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
         // we will not send responses to out/err if we are not connected and this is determined by this variable
         self.is_connected.store(true, Ordering::Release);

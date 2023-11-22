@@ -28,6 +28,8 @@ use tremor_common::url::HttpsDefaults;
 use tremor_pipeline::Event;
 use tremor_value::Value;
 
+use super::Error;
+
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
@@ -64,7 +66,6 @@ impl ConnectorBuilder for Builder {
         _alias: &alias::Connector,
         _config: &ConnectorConfig,
         raw_config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
@@ -94,8 +95,8 @@ impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
                 .url
                 .host_str()
                 .ok_or_else(|| {
-                    ErrorKind::InvalidConfiguration(
-                        "gpubsub-publisher".to_string(),
+                    ConnectorError::InvalidConfiguration(
+                        ctx.alias().clone(),
                         "Missing hostname".to_string(),
                     )
                 })?
@@ -123,7 +124,7 @@ struct GpubSink<T: TokenProvider> {
 
 #[async_trait::async_trait()]
 impl<T: TokenProvider> Sink for GpubSink<T> {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.config.url.scheme() == "https" {
@@ -153,11 +154,8 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "PubSub",
-            "The publisher is not connected",
-        ))?;
+    ) -> anyhow::Result<SinkReply> {
+        let client = self.client.as_mut().ok_or(Error::NotConnected)?;
 
         let mut messages = Vec::with_capacity(event.len());
 

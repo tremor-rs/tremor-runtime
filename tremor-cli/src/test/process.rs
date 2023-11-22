@@ -12,18 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::status;
-use super::after;
-use super::assert;
-use super::before;
-use super::stats;
-use super::tag;
-use super::target_process;
-use crate::report;
-use crate::util::slurp_string;
+use super::{
+    after, assert, before,
+    report::{self, TestReport},
+    stats, status, tag, target_process,
+};
 use crate::{
     errors::{Error, Result},
-    report::TestReport,
+    util::slurp_string,
 };
 use futures::StreamExt;
 use globwalk::GlobWalkerBuilder;

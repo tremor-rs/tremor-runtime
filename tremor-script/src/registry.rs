@@ -17,7 +17,7 @@ pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
 use crate::{
     ast::{base_expr::Ranged, warning},
-    errors::{best_hint, Error, Kind as ErrorKind, Result},
+    errors::{best_hint, Error, ErrorKind, Result},
     tremor_fn,
     utils::hostname as get_hostname,
     EventContext, Value,
@@ -954,6 +954,7 @@ pub use tests::fun;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::NO_CONTEXT;
     use simd_json::prelude::*;
 
     /// Test utility to grab a function from the registry
@@ -964,7 +965,7 @@ mod tests {
             .find(m, f)
             .expect("could not find function")
             .clone();
-        move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext::new(0, None), args) }
+        move |args: &[&Value]| -> FResult<Value> { f.invoke(&NO_CONTEXT, args) }
     }
 
     #[test]
@@ -1030,9 +1031,7 @@ mod tests {
         let one = Value::from(1);
         let two = Value::from(2);
 
-        assert!(f
-            .invoke(&EventContext::new(0, None), &[&one, &two])
-            .is_err());
+        assert!(f.invoke(&NO_CONTEXT, &[&one, &two]).is_err());
     }
 
     #[test]
@@ -1042,7 +1041,7 @@ mod tests {
         });
 
         let one = Value::from(1);
-        assert!(f.invoke(&EventContext::new(0, None), &[&one]).is_err());
+        assert!(f.invoke(&NO_CONTEXT, &[&one]).is_err());
     }
 
     #[test]
@@ -1061,10 +1060,7 @@ mod tests {
 
         let two = Value::from(2);
         let three = Value::from(3);
-        assert_eq!(
-            Ok(Value::from(5)),
-            f.invoke(&EventContext::new(0, None), &[&two, &three])
-        );
+        assert_eq!(Ok(Value::from(5)), f.invoke(&NO_CONTEXT, &[&two, &three]));
     }
 
     #[test]
@@ -1084,7 +1080,7 @@ mod tests {
 
         assert_eq!(
             Ok(Value::from(6)),
-            f.invoke(&EventContext::new(0, None), &[&one, &two, &three])
+            f.invoke(&NO_CONTEXT, &[&one, &two, &three])
         );
     }
 

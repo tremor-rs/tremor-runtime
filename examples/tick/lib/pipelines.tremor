@@ -1,0 +1,12 @@
+## Defines the main pipeline
+define pipeline main
+from in, console
+pipeline
+  use lib::scripts;
+
+  create script port_test from scripts::port_test;
+  select event from console into port_test/console;
+  select event from in into port_test;
+  select event from port_test into out;
+  select event from port_test/err into out;
+end;

@@ -111,7 +111,7 @@ impl TestHttpServer {
                     // Return the service to hyper.
                     async move { Ok::<_, Infallible>(service) }
                 });
-                let addr = (host, port).to_socket_addrs()?.next().ok_or("no address")?;
+                let addr = (host, port).to_socket_addrs()?.next().expect("no address");
 
                 let listener = hyper::Server::bind(&addr).serve(make_service);
                 listener.await?;
@@ -683,7 +683,7 @@ async fn missing_tls_config_https() -> Result<()> {
         .map(|e| e.to_string())
         .unwrap_or_default();
 
-    assert_eq!("Invalid Definition for connector \"test::missing_tls_config_https\": missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config.", res);
+    assert_eq!("[missing_tls_config_https] Invalid definition: missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config.", res);
 
     Ok(())
 }
@@ -700,7 +700,7 @@ async fn missing_config() -> Result<()> {
         .map(|e| e.to_string())
         .unwrap_or_default();
 
-    assert!(res.contains("Missing Configuration"));
+    assert!(dbg!(res).contains("Missing configuration"));
 
     Ok(())
 }

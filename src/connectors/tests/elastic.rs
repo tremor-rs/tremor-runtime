@@ -15,8 +15,8 @@
 use std::time::{Duration, Instant};
 
 use super::{setup_for_tls, ConnectorHarness};
-use crate::connectors::impls::elastic;
 use crate::connectors::impls::http::auth::Auth;
+use crate::connectors::{impls::elastic, tests::free_port};
 use crate::errors::{Error, Result};
 use elasticsearch::auth::{ClientCertificate, Credentials};
 use elasticsearch::cert::{Certificate, CertificateValidation};
@@ -57,7 +57,7 @@ async fn connector_elastic() -> Result<()> {
     let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = free_port::find_free_tcp_port().await?;
     let image = RunnableImage::from(
         default_image()
             .with_env_var("xpack.security.enabled", "false")
@@ -479,7 +479,7 @@ async fn elastic_routing() -> Result<()> {
     let _: std::result::Result<_, _> = env_logger::try_init();
 
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = free_port::find_free_tcp_port().await?;
     let image = RunnableImage::from(
         default_image()
             .with_env_var("xpack.security.enabled", "false")
@@ -801,7 +801,7 @@ async fn elastic_routing() -> Result<()> {
 async fn auth_basic() -> Result<()> {
     let _: std::result::Result<_, _> = env_logger::try_init();
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
         default_image()
@@ -863,7 +863,7 @@ async fn auth_basic() -> Result<()> {
 async fn auth_api_key() -> Result<()> {
     let _: std::result::Result<_, _> = env_logger::try_init();
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
         default_image()
@@ -953,7 +953,7 @@ async fn auth_client_cert() -> Result<()> {
     };
 
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
         default_image()
@@ -1091,7 +1091,7 @@ async fn elastic_https() -> Result<()> {
     };
 
     let docker = clients::Cli::default();
-    let port = super::free_port::find_free_tcp_port().await?;
+    let port = free_port::find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
         default_image()
@@ -1233,9 +1233,7 @@ async fn wait_for_es(elastic: &Elasticsearch) -> Result<()> {
         .await
     {
         if start.elapsed() > wait_for {
-            return Err(
-                Error::from(e).chain_err(|| "Waiting for elasticsearch container timed out.")
-            );
+            return Err(Error::from(e).context("Waiting for elasticsearch container timed out."));
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }

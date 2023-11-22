@@ -127,7 +127,6 @@ impl ConnectorBuilder for Builder {
         _: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         let origin_uri = EventOriginUri {
@@ -186,11 +185,15 @@ impl MetronomeSource {
 
 #[async_trait::async_trait()]
 impl Source for MetronomeSource {
-    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.next = nanotime() + self.interval_ns;
         Ok(true)
     }
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let now = nanotime();
         // we need to wait here before we continue to fulfill the interval conditions
         if now < self.next {
@@ -228,7 +231,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn missing_config() -> Result<()> {
-        let alias = alias::Connector::new("flow", "connector");
+        let alias = alias::Connector::new("connector");
         let builder = super::Builder::default();
         let connector_config = super::ConnectorConfig {
             connector_type: builder.connector_type(),
@@ -239,14 +242,7 @@ mod tests {
             reconnect: Reconnect::None,
             metrics_interval_s: Some(5),
         };
-        let kill_switch = KillSwitch::dummy();
-        assert!(matches!(
-            builder
-                .build(&alias, &connector_config, &kill_switch)
-                .await
-                .err(),
-            Some(Error(ErrorKind::MissingConfiguration(_), _))
-        ));
+        assert!(builder.build(&alias, &connector_config,).await.is_err(),);
         Ok(())
     }
 }

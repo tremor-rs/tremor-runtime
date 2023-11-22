@@ -230,13 +230,12 @@
 //! [optimistic concurrency control]: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-optimistic-concurrency-control
 
 use super::http::auth::Auth;
-use crate::system::KillSwitch;
 use crate::{
     connectors::{
         impls::http::utils::Header, prelude::*, sink::concurrency_cap::ConcurrencyCap,
         utils::tls::TLSClientConfig,
     },
-    errors::{err_connector_def, Error, Result},
+    errors::Result,
 };
 use either::Either;
 use elasticsearch::{
@@ -258,6 +257,21 @@ use tokio::task;
 use tremor_common::time::nanotime;
 use tremor_value::utils::sorted_serialize;
 use tremor_value::value::StaticValue;
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("No elasticsearch client available.")]
+    NoClient,
+    #[error("Invalid Response from ES: No \"items\" or not an array: {0}")]
+    InvalidResponse(String),
+    #[error("Invalid `$elastic.action` {0}")]
+    InvalidAction(String),
+
+    #[error("Missing field `$elastic._id`")]
+    MissingId,
+    #[error("Invalid value for `$elastic.refresh`: {0}")]
+    InvalidRefresh(String),
+}
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -313,11 +327,10 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         raw_config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
         if config.nodes.is_empty() {
-            Err(err_connector_def(id, "empty nodes provided"))
+            Err(error_connector_def(id, "empty nodes provided").into())
         } else {
             let tls_config = match config.tls.as_ref() {
                 Some(Either::Left(tls_config)) => Some(tls_config.clone()),
@@ -328,7 +341,7 @@ impl ConnectorBuilder for Builder {
                 for node_url in &config.nodes {
                     if node_url.scheme() != "https" {
                         let e = format!("Node URL '{node_url}' needs 'https' scheme with tls.");
-                        return Err(err_connector_def(id, &e));
+                        return Err(error_connector_def(id, &e).into());
                     }
                 }
             }
@@ -403,7 +416,7 @@ impl Connector for Elastic {
             response_rx: self
                 .response_rx
                 .take()
-                .ok_or("Elasticsearch source can only be created once.")?,
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
         };
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -432,11 +445,15 @@ struct ElasticSource {
 
 #[async_trait::async_trait]
 impl Source for ElasticSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.response_rx.recv().await.ok_or("channel broken")?)
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        Ok(self.response_rx.recv().await.ok_or(ChannelError::Send)?)
     }
 
-    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
         // we will not send responses to out/err if we are not connected and this is determined by this variable
         self.source_is_connected.store(true, Ordering::Release);
@@ -547,7 +564,7 @@ impl ElasticSink {
 
 #[async_trait::async_trait()]
 impl Sink for ElasticSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let mut clients = Vec::with_capacity(self.config.nodes.len());
         for node in &self.config.nodes {
             let conn_pool = SingleNodeConnectionPool::new(node.url().clone());
@@ -621,7 +638,7 @@ impl Sink for ElasticSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         if event.is_empty() {
             debug!("{ctx} Received empty event. Won't send it to ES");
             return Ok(SinkReply::NONE);
@@ -703,17 +720,14 @@ impl Sink for ElasticSink {
                 }
                 drop(guard);
 
-                Result::Ok(())
+                Ok::<(), anyhow::Error>(())
             });
             Ok(SinkReply::NONE)
         } else {
             // shouldn't happen actually
             error!("{} No elasticsearch client available.", &ctx);
             handle_error(
-                Error::from(ErrorKind::ClientNotAvailable(
-                    "elastic",
-                    "No elasticsearch client available.",
-                )),
+                Error::NoClient.into(),
                 &event,
                 &self.origin_uri,
                 &self.response_tx,
@@ -813,10 +827,9 @@ async fn handle_response(
             response_tx.send(source_reply).await?;
         }
     } else {
-        return Err(Error::from(format!(
-            "Invalid Response from ES: No \"items\" or not an array: {}",
-            String::from_utf8(sorted_serialize(&response)?)?
-        )));
+        return Err(
+            Error::InvalidResponse(String::from_utf8(sorted_serialize(&response)?)?).into(),
+        );
     }
     // ack the event
     Ok(())
@@ -825,16 +838,13 @@ async fn handle_response(
 /// handle an error for the whole event
 ///
 /// send event to err port
-async fn handle_error<E>(
-    e: E,
+async fn handle_error(
+    e: anyhow::Error,
     event: &Event,
     elastic_origin_uri: &EventOriginUri,
     response_tx: &Sender<SourceReply>,
     include_payload: bool,
-) -> Result<()>
-where
-    E: std::error::Error,
-{
+) -> Result<()> {
     let e_str = e.to_string();
     let mut meta = literal!({
         "elastic": {
@@ -883,9 +893,6 @@ struct ESMeta<'a, 'value> {
 }
 
 impl<'a, 'value> ESMeta<'a, 'value> {
-    // ALLOW: this is a string
-    const MISSING_ID: &'static str = "Missing field `$elastic[\"_id\"]`";
-
     fn new(meta: &'a Value<'value>) -> Self {
         Self {
             meta: if let Some(elastic_meta) = meta.get("elastic") {
@@ -910,7 +917,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                     self.insert_update_op(data, ops)
                 }
             }
-            other => Err(Error::from(format!("Invalid `$elastic.action` {other}"))),
+            other => Err(Error::InvalidAction(other.to_string()).into()),
         }
     }
 
@@ -940,7 +947,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         if let Some(pipeline) = self.get_pipeline() {
             op = op.pipeline(pipeline);
         }
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
@@ -948,7 +955,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         let mut op: BulkDeleteOperation<()> = self
             .get_id()
             .map(BulkOperation::delete)
-            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+            .ok_or(Error::MissingId)?;
         if let Some(index) = self.get_index() {
             op = op.index(index);
         }
@@ -968,7 +975,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
             op = op.routing(routing);
         }
 
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
@@ -979,7 +986,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         let mut op = self
             .get_id()
             .map(|id| BulkOperation::create(id, data))
-            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+            .ok_or(Error::MissingId)?;
         if let Some(index) = self.get_index() {
             op = op.index(index);
         }
@@ -989,7 +996,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         if let Some(routing) = self.get_routing() {
             op = op.routing(routing);
         }
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
@@ -998,10 +1005,10 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         let mut op = self
             .get_id()
             .map(|id| BulkOperation::update(id, data))
-            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+            .ok_or(Error::MissingId)?;
 
         op = self.apply_update_params(op);
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
@@ -1014,10 +1021,10 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                 let src = literal!({ "doc": data.clone() });
                 BulkOperation::update(id, src)
             })
-            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+            .ok_or(Error::MissingId)?;
 
         op = self.apply_update_params(op);
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
@@ -1141,9 +1148,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         } else if refresh.as_str() == Some("wait_for") {
             Ok(Some(Refresh::WaitFor))
         } else if let Some(other) = refresh {
-            Err(Error::from(format!(
-                "Invalid value for `$elastic.refresh`: {other}",
-            )))
+            Err(Error::InvalidRefresh(other.to_string()).into())
         } else {
             Ok(None)
         }
@@ -1174,9 +1179,10 @@ impl CertValidation {
 }
 #[cfg(test)]
 mod tests {
+    use elasticsearch::http::request::Body;
+
     use super::*;
     use crate::config::Connector as ConnectorConfig;
-    use elasticsearch::http::request::Body;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn connector_builder_empty_nodes() -> Result<()> {
@@ -1185,17 +1191,14 @@ mod tests {
                 "nodes": []
             }
         });
-        let alias = alias::Connector::new("flow", "my_elastic");
+        let alias = alias::Connector::new("my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
-        let kill_switch = KillSwitch::dummy();
         assert_eq!(
-            String::from(
-                "Invalid Definition for connector \"flow::my_elastic\": empty nodes provided"
-            ),
+            String::from("[my_elastic] Invalid definition: empty nodes provided"),
             builder
-                .build(&alias, &connector_config, &kill_switch)
+                .build(&alias, &connector_config,)
                 .await
                 .err()
                 .map(|e| e.to_string())
@@ -1214,15 +1217,14 @@ mod tests {
                 ]
             }
         });
-        let alias = alias::Connector::new("snot", "my_elastic");
+        let alias = alias::Connector::new("my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
-        let kill_switch = KillSwitch::dummy();
         assert_eq!(
             String::from("empty host"),
             builder
-                .build(&alias, &connector_config, &kill_switch)
+                .build(&alias, &connector_config,)
                 .await
                 .err()
                 .map(|e| e.to_string())
@@ -1322,7 +1324,7 @@ mod tests {
         assert_eq!(false, es_meta.get_raw_payload());
         assert_eq!(Some(2), es_meta.get_if_primary_term());
         assert_eq!(Some(3), es_meta.get_if_seq_no());
-        assert_eq!(Ok(Some(Refresh::WaitFor)), es_meta.get_refresh());
+        assert_eq!(Some(Refresh::WaitFor), es_meta.get_refresh().ok().flatten());
         assert_eq!(Some("routing"), es_meta.get_routing());
         assert_eq!(Some("10s"), es_meta.get_timeout());
         assert_eq!(Some("ttt"), es_meta.get_type());

@@ -15,7 +15,6 @@ rust-version = "1.62"
 [workspace]
 
 members = [
-  "tremor-api",
   "tremor-cli",
   "tremor-codec",
   "tremor-common",
@@ -34,6 +33,7 @@ lto = "thin"
 opt-level = 3
 
 [dependencies]
+thiserror = "1"
 tokio = { version = "1.34", features = ["full"] }
 tokio-stream = "0.1"
 anyhow = "1"
@@ -49,6 +49,7 @@ beef = { version = "0.5", features = ["impl_serde"] }
 bimap = { version = "0.6", features = ["serde"] }
 chrono = "0.4"
 chrono-tz = "0.8"
+jumphash = "0.1"
 
 # Once a new version of clickhouse-rs is released, we can stop using a git
 # repository as a dependency. The declaration can then be replaced with the
@@ -64,11 +65,9 @@ chrono-tz = "0.8"
 clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "73d39ba" }
 dashmap = "5.5"
 either = { version = "1.9", features = ["serde"] }
-error-chain = "0.12"
 file-mode = "0.1"
 futures = "0.3.29"
 event-listener = "3"
-glob = "0.3"
 halfbrown = "0.2"
 hashbrown = { version = "0.14", features = ["serde"] }
 hex = "0.4"
@@ -89,14 +88,14 @@ socket2 = { version = "0.5", features = ["all"] }
 tremor-common = { path = "tremor-common" }
 tremor-config = { path = "tremor-config" }
 tremor-codec = { path = "tremor-codec" }
-tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
-tremor-script = { path = "tremor-script" }
+tremor-script = { path = "tremor-script", features = ["arena-delete"] }
 tremor-value = { path = "tremor-value" }
 tremor-interceptor = { path = "tremor-interceptor" }
 url = "2.4"
 value-trait = "0.8"
-
+byteorder = "1.5"
+axum = "0.6"
 
 # blaster / blackhole# codecs
 hdrhistogram = "7"
@@ -137,9 +136,6 @@ rdkafka-sys = { version = "4.6", features = [
 
 # crononome
 cron = "0.12"
-
-# logstash grok patterns
-grok = "2"
 
 # discord
 serenity = { version = "0.11", default-features = false, features = [
@@ -189,13 +185,21 @@ uuid = { version = "1.3", features = ["v4"] }
 
 # wal
 qwal = { git = "https://github.com/tremor-rs/qwal" }
-itoa = "1"
-ryu = "1"
-lexical = "6"
-simdutf8 = "0.1"
+
+# Clustering
+tarpc = { version = "0.33", features = ["full"] }
+openraft = { version = "0.8.4", features = [
+  "serde",
+], git = "https://github.com/datafuselabs/openraft.git", rev = "e8bdd60" } # 6098f5cf61b074c8fccecf722278183c3ee5cd27
+
+serde_json = "1.0.57"
+# rocksdb = { version = "0.19.0", git = "https://github.com/tremor-rs/rust-rocksdb", rev = "a02b00f029fb45d294715748cd2459491594e0e3" }
+redb = "*"
+tar = "0.4"
+sha2 = "0.10"
+rmp-serde = "1"
 
 [dev-dependencies]
-port_scanner = "0.1"
 serial_test = { version = "2.0", features = ["logging"] }
 env_logger = "0.10"
 matches = "0.1"
@@ -204,19 +208,17 @@ proptest = "1.4"
 regex = "1"
 # We downgraded to 0.6 because:
 # in the face of high concurrency serial_test 0.7.0 panics after 60 seconds
-signal-hook = "0.3"
-signal-hook-tokio = "0.3"
 tempfile = { version = "3.8" }
 test-case = "3.1"
 testcontainers = { version = "0.14", features = ["watchdog"] }
-num_cpus = "1"
 bytes = "1"
+mockito = "1"
 
 [features]
-default = []
+default = ["integration"]
 
 # support for 128bit numbers in tremor-value
-128bit = ["tremor-value/128bit"]
+128bit = ["tremor-value/128bit", "simd-json/128bit", "value-trait/128bit"]
 bert = ["tremor-pipeline/bert"]
 
 integration = ["integration-docker", "integration-local"]
@@ -250,7 +252,6 @@ socket-integration = []
 net-integration = []
 wal-integration = []
 clickhouse-integration = []
-tarpaulin-exclude = []
 # those are falky tests
 flaky-test = []
 

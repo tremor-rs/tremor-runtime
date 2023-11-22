@@ -13,9 +13,7 @@
 // limitations under the License.
 
 // NOTE: We need this because of error_chain
-#![allow(clippy::large_enum_variant)]
-#![allow(deprecated)]
-#![allow(missing_docs)]
+#![allow(deprecated, missing_docs, clippy::large_enum_variant)]
 
 use crate::errors::ErrorKind::InvalidBinaryBoolean;
 pub use crate::prelude::ValueType;
@@ -227,6 +225,9 @@ impl UnfinishedToken {
         Self { range, value }
     }
 }
+
+unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
 
 impl ErrorKind {
     pub(crate) fn aid(&self) -> arena::Index {

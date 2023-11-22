@@ -14,6 +14,7 @@
 
 #![allow(dead_code)]
 
+use super::common::Error;
 use crate::connectors::prelude::*;
 use ::rand::Rng;
 use std::fmt::Write;
@@ -92,16 +93,17 @@ fn hex_id_to_pb(
     } else if let Some(json) = data.and_then(Value::as_bytes) {
         json.to_vec()
     } else if let Some(arr) = data.as_array() {
-        arr.iter().map(Value::as_u8).collect::<Option<Vec<u8>>>().ok_or_else(|| format!(
-            "Invalid {kind} id ( wrong array element ) - values must be between 0 and 255 - cannot convert to pb"
-        ))?
+        arr.iter()
+            .map(Value::as_u8)
+            .collect::<Option<Vec<u8>>>()
+            .ok_or_else(|| Error::InvalidArrayContent(kind.to_string()))?
     } else {
-        return Err(format!("Cannot convert json value to otel pb {kind} id").into());
+        return Err(Error::FaildToConvert(kind.to_string()).into());
     };
     if (allow_empty && data.is_empty()) || data.len() == len_bytes {
         Ok(data)
     } else {
-        Err(format!("Invalid {kind} id ( wrong array length ) - cannot convert to pb",).into())
+        Err(Error::InvalidLength(kind.to_string()).into())
     }
 }
 
@@ -156,7 +158,7 @@ pub mod test {
                 let bytes = hex::decode(expected).unwrap_or_default();
 
                 let json = Value::Bytes(bytes.clone().into());
-                let pb = hex_span_id_to_pb(Some(&json))?;
+                let pb = hex_span_id_to_pb(Some(&json)).expect("Failed to convert");
                 prop_assert_eq!(bytes.clone(), pb);
             }
         }
@@ -169,7 +171,7 @@ pub mod test {
                 let bytes = hex::decode(expected).unwrap_or_default();
 
                 let json = Value::Bytes(bytes.clone().into());
-                let pb = hex_trace_id_to_pb(Some(&json))?;
+                let pb = hex_trace_id_to_pb(Some(&json)).expect("Failed to convert");
                 prop_assert_eq!(bytes.clone(), pb);
             }
         }

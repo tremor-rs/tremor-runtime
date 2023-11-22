@@ -98,7 +98,6 @@ impl ConnectorBuilder for Builder {
         &self,
         _id: &alias::Connector,
         _raw_config: &ConnectorConfig,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(StdStreamConnector {}))
     }
@@ -128,7 +127,11 @@ impl StdStreamSource {
 
 #[async_trait::async_trait()]
 impl Source for StdStreamSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let reply = if self.done {
             SourceReply::Finished
         } else {
@@ -185,6 +188,12 @@ impl StdStreamConnector {
     const REF_IN_PORTS: &'static [Port<'static>; 3] = &Self::IN_PORTS;
 }
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("{0} is not a valid port, use one of `in`, `stdout` or `stderr`")]
+    InvalidPort(String),
+}
+
 #[async_trait::async_trait()]
 impl Sink for StdStreamSink {
     async fn on_event(
@@ -194,18 +203,14 @@ impl Sink for StdStreamSink {
         _ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, meta, event.ingest_ns).await?;
             for chunk in data {
                 match input {
                     "in" | "stdout" => self.stdout.write_all(&chunk).await?,
                     "stderr" => self.stderr.write_all(&chunk).await?,
-                    _ => {
-                        return Err(
-                            "{} is not a valid port, use one of `in`, `stdout` or `stderr`".into(),
-                        )
-                    }
+                    port => return Err(Error::InvalidPort(port.into()).into()),
                 }
             }
         }

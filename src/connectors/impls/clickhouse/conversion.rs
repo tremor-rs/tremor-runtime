@@ -18,6 +18,8 @@ use std::{
     sync::Arc,
 };
 
+use super::DummySqlType;
+use crate::errors::Result;
 use chrono_tz::Tz;
 pub(super) use clickhouse_rs::types::Value as CValue;
 use either::Either;
@@ -25,10 +27,21 @@ use tremor_value::Value as TValue;
 use uuid::Uuid;
 use value_trait::prelude::*;
 
-use super::DummySqlType;
-use crate::errors::{Error, ErrorKind, Result};
-
 const UTC: Tz = Tz::UTC;
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Malformed IP address")]
+    MalformedIpAddr,
+    #[error("Malformed UUID")]
+    MalformedUuid,
+    #[error("Unexpected event format: column `{column}` is of type `{expected_type}`, but the event has type `{actual_type}`")]
+    UnexpectedEventFormat {
+        column: String,
+        expected_type: DummySqlType,
+        actual_type: ValueType,
+    },
+}
 
 pub(super) fn convert_value(
     column_name: &str,
@@ -99,21 +112,21 @@ pub(super) fn convert_value(
             //
             // ... But it does work!
             |[a, b, c, d]| CValue::Ipv4([d, c, b, a]),
-            ErrorKind::MalformedIpAddr,
+            Error::MalformedIpAddr,
         ),
 
         DummySqlType::Ipv6 => convert_string_or_array(
             context,
             |ip: Ipv6Addr| ip.octets(),
             CValue::Ipv6,
-            ErrorKind::MalformedIpAddr,
+            Error::MalformedIpAddr,
         ),
 
         DummySqlType::Uuid => convert_string_or_array(
             context,
             Uuid::into_bytes,
             CValue::Uuid,
-            ErrorKind::MalformedUuid,
+            Error::MalformedUuid,
         ),
 
         DummySqlType::DateTime => get_and_wrap(context, ValueAsScalar::as_u32, |timestamp| {
@@ -160,11 +173,12 @@ where
     Output: 'event,
 {
     f(context.value).ok_or_else(|| {
-        Error::from(ErrorKind::UnexpectedEventFormat(
-            context.column_name.to_string(),
-            context.expected_type.to_string(),
-            context.value.value_type(),
-        ))
+        Error::UnexpectedEventFormat {
+            column: context.column_name.to_string(),
+            expected_type: context.expected_type.clone(),
+            actual_type: context.value.value_type(),
+        }
+        .into()
     })
 }
 
@@ -185,7 +199,7 @@ fn convert_string_or_array<Output, Getter, Variant, const N: usize>(
     context: ConversionContext,
     extractor: Getter,
     variant: Variant,
-    error: ErrorKind,
+    error: Error,
 ) -> Result<CValue>
 where
     Output: FromStr,
@@ -215,18 +229,19 @@ where
     if let Some(octets) = context.value.as_array() {
         coerce_octet_sequence(octets.as_slice())
             .map(variant)
-            .map_err(|()| Error::from(error))
+            .map_err(|()| error.into())
     } else if let Some(string) = context.value.as_str() {
         Output::from_str(string)
             .map(extractor)
             .map(variant)
-            .map_err(|_| Error::from(error))
+            .map_err(|_| error.into())
     } else {
-        Err(Error::from(ErrorKind::UnexpectedEventFormat(
-            context.column_name.to_string(),
-            context.expected_type.to_string(),
-            context.value.value_type(),
-        )))
+        Err(Error::UnexpectedEventFormat {
+            column: context.column_name.to_string(),
+            expected_type: context.expected_type.clone(),
+            actual_type: context.value.value_type(),
+        }
+        .into())
     }
 }
 

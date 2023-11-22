@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::channel::empty_e;
 use crate::connectors::{
     impls::kafka::{TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR},
     prelude::*,
 };
-use crate::errors::empty_error;
 use futures::StreamExt;
 use halfbrown::HashMap;
 use indexmap::IndexMap;
@@ -37,6 +37,8 @@ use tokio::{
 };
 use tremor_common::time::nanotime;
 use tremor_value::value::StaticValue;
+
+use super::Error;
 
 const KAFKA_CONSUMER_META_KEY: &str = "kafka_consumer";
 
@@ -94,7 +96,7 @@ impl Mode {
         } else if let Some(str_int) = v.as_str() {
             str_int.parse::<i64>()?
         } else {
-            return Err("not an int value".into());
+            return Err(Error::InvalidInt.into());
         };
         Ok(res)
     }
@@ -190,7 +192,7 @@ impl Mode {
                         .unwrap_or_default()
                     && *retry_failed_events
                 {
-                    return Err("Cannot enable `retry_failed_events` and `enable.auto.commit` and `enable.auto.offset.store` at the same time.".into());
+                    return Err(Error::CommitConfigConflict.into());
                 }
                 for (k, v) in rdkafka_options {
                     client_config.set(k, v.to_string());
@@ -265,7 +267,6 @@ impl ConnectorBuilder for Builder {
         alias: &alias::Connector,
         config: &ConnectorConfig,
         raw_config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let metrics_interval_s = config.metrics_interval_s;
         let config = Config::new(raw_config)?;
@@ -279,12 +280,7 @@ impl ConnectorBuilder for Builder {
         };
 
         let client_id = format!("tremor-{}-{alias}", hostname());
-        let mut client_config = config.mode.to_config().map_err(|e| {
-            Error::from(ErrorKind::InvalidConfiguration(
-                alias.to_string(),
-                e.to_string(),
-            ))
-        })?;
+        let mut client_config = config.mode.to_config()?;
 
         // we do overwrite the rdkafka options to ensure a sane config
         set_client_config(&mut client_config, "group.id", &config.group_id)?;
@@ -330,7 +326,7 @@ fn set_client_config<V: Into<String>>(
     value: V,
 ) -> Result<()> {
     if client_config.get(key).is_some() {
-        return Err(format!("Provided rdkafka_option that will be overwritten: {key}").into());
+        return Err(Error::OptionOverwritten(key.to_string()).into());
     }
     client_config.set(key, value);
     Ok(())
@@ -563,7 +559,7 @@ impl KafkaConsumerSource {
 
 #[async_trait::async_trait()]
 impl Source for KafkaConsumerSource {
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         if let Some(consumer_task) = self.consumer_task.take() {
             self.cached_assignment.take(); // clear out references to the consumer
                                            // drop the consumer
@@ -630,7 +626,7 @@ impl Source for KafkaConsumerSource {
             }
             Ok(None) => {
                 // receive error - bail out
-                Err(empty_error())
+                Err(empty_e().into())
             }
             Ok(Some(KafkaError::Global(RDKafkaErrorCode::NoError))) => {
                 debug!("{ctx} Consumer connected.");
@@ -640,15 +636,24 @@ impl Source for KafkaConsumerSource {
         }
     }
 
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        let (reply, custom_pull_id) = self.source_rx.recv().await.ok_or_else(empty_error)?;
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        let (reply, custom_pull_id) = self.source_rx.recv().await.ok_or_else(empty_e)?;
         if let Some(custom_pull_id) = custom_pull_id {
             *pull_id = custom_pull_id;
         }
         Ok(reply)
     }
 
-    async fn ack(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
+    async fn ack(
+        &mut self,
+        stream_id: u64,
+        pull_id: u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         debug!("{ctx} ACK {stream_id} {pull_id}");
         if let Some(offsets) = self.offsets.as_mut() {
             if let Some(consumer) = self.consumer.as_ref() {
@@ -698,7 +703,12 @@ impl Source for KafkaConsumerSource {
         Ok(())
     }
 
-    async fn fail(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
+    async fn fail(
+        &mut self,
+        stream_id: u64,
+        pull_id: u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         debug!("{ctx} FAIL {stream_id} {pull_id}");
         // how can we make sure we do not conflict with the store_offset handling in `ack`?
         if let KafkaConsumerSource {
@@ -742,14 +752,14 @@ impl Source for KafkaConsumerSource {
         Ok(())
     }
 
-    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         let assignment = self.get_assignment()?;
         if let Some(consumer) = self.consumer.as_ref() {
             consumer.pause(&assignment)?;
         }
         Ok(())
     }
-    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         let assignment = self.get_assignment()?;
         if let Some(consumer) = self.consumer.as_mut() {
             consumer.resume(&assignment)?;
@@ -757,7 +767,7 @@ impl Source for KafkaConsumerSource {
         Ok(())
     }
 
-    async fn on_pause(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_pause(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         let assignment = self.get_assignment()?;
         if let Some(consumer) = self.consumer.as_mut() {
             consumer.pause(&assignment)?;
@@ -765,7 +775,7 @@ impl Source for KafkaConsumerSource {
         Ok(())
     }
 
-    async fn on_resume(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_resume(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         let assignment = self.get_assignment()?;
         if let Some(consumer) = self.consumer.as_mut() {
             consumer.resume(&assignment)?;
@@ -773,7 +783,7 @@ impl Source for KafkaConsumerSource {
         Ok(())
     }
 
-    async fn on_stop(&mut self, ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SourceContext) -> anyhow::Result<()> {
         // free references, see: https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md#high-level-kafkaconsumer
         self.cached_assignment.take();
 

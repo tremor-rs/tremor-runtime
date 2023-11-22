@@ -18,11 +18,9 @@ mod sink;
 use crate::connectors::google::{GouthTokenProvider, TokenSrc};
 use crate::connectors::impls::gcl::writer::sink::{GclSink, TonicChannelFactory};
 use crate::connectors::prelude::*;
-use crate::errors::Error;
 use googapis::google::api::MonitoredResource;
 use googapis::google::logging::r#type::LogSeverity;
 use serde::Deserialize;
-use simd_json::OwnedValue;
 use std::collections::HashMap;
 use tonic::transport::Channel;
 use tremor_common::alias;
@@ -162,9 +160,9 @@ impl Config {
         // Override for a specific per event severity
         if let Some(has_meta) = meta {
             if let Some(log_severity) = has_meta.get("log_severity") {
-                return log_severity
+                return Ok(log_severity
                     .as_i32()
-                    .ok_or_else(|| "log_severity is not an integer".into());
+                    .ok_or(super::Error::SeverityNotInteger)?);
             };
         }
 
@@ -192,41 +190,29 @@ fn value_to_monitored_resource(
     match from {
         None => Ok(None),
         Some(from) => {
-            let vt = from.value_type();
-            match from {
-                // Consider refactoring for unwrap_or_default when #1819 is resolved
-                OwnedValue::Object(from) => {
-                    let kind = from.get("type");
-                    let kind = kind.as_str();
-                    let maybe_labels = from.get("labels");
-                    let labels: HashMap<String, String> = match maybe_labels {
-                        None => HashMap::new(),
-                        Some(labels) => labels
-                            .as_object()
-                            .ok_or_else(|| {
-                                Error::from(ErrorKind::GclTypeMismatch("Value::Object", vt))
-                            })?
-                            .iter()
-                            .map(|(key, value)| {
-                                let key = key.to_string();
-                                let value = value.to_string();
-                                (key, value)
-                            })
-                            .collect(),
-                    };
-                    Ok(Some(MonitoredResource {
-                        r#type: match kind {
-                            None => String::new(),
-                            Some(kind) => kind.to_string(),
-                        },
-                        labels,
-                    }))
-                }
-                _otherwise => Err(Error::from(ErrorKind::GclTypeMismatch(
-                    "Value::Object",
-                    from.value_type(),
-                ))),
-            }
+            let from = from.try_as_object()?;
+            let kind = from.get("type");
+            let kind = kind.as_str();
+            let maybe_labels = from.get("labels");
+            let labels: HashMap<String, String> = match maybe_labels {
+                None => HashMap::new(),
+                Some(labels) => labels
+                    .try_as_object()?
+                    .iter()
+                    .map(|(key, value)| {
+                        let key = key.to_string();
+                        let value = value.to_string();
+                        (key, value)
+                    })
+                    .collect(),
+            };
+            Ok(Some(MonitoredResource {
+                r#type: match kind {
+                    None => String::new(),
+                    Some(kind) => kind.to_string(),
+                },
+                labels,
+            }))
         }
     }
 }
@@ -270,7 +256,6 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(Gcl {
             config: Config::new(raw)?,
@@ -281,10 +266,10 @@ impl ConnectorBuilder for Builder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use simd_json::OwnedValue;
 
     #[test]
     fn value_to_monitored_resource_conversion() -> Result<()> {
-        let mut ok_count = 0;
         let from: OwnedValue = literal!({
             "type": "gce_instance".to_string(),
             "labels": {
@@ -293,30 +278,24 @@ mod tests {
             }
         })
         .into();
-        let value = value_to_monitored_resource(Some(&from))?;
-        if let Some(value) = value {
-            assert_eq!("gce_instance", &value.r#type);
-            assert_eq!("us-central1-a".to_string(), value.labels["zone"]);
-            assert_eq!(
-                "00000000000000000000".to_string(),
-                value.labels["instance_id"]
-            );
-            ok_count += 1;
-        } else {
-            return Err("Skipped test asserts due to serialization error".into());
-        }
+        let value = value_to_monitored_resource(Some(&from))?
+            .expect("Skipped test asserts due to serialization error");
+
+        assert_eq!("gce_instance", &value.r#type);
+        assert_eq!("us-central1-a".to_string(), value.labels["zone"]);
+        assert_eq!(
+            "00000000000000000000".to_string(),
+            value.labels["instance_id"]
+        );
 
         let from: OwnedValue = literal!({
             "type": "gce_instance".to_string(),
         })
         .into();
-        let value = value_to_monitored_resource(Some(&from))?;
-        if let Some(value) = value {
-            assert_eq!(0, value.labels.len());
-            ok_count += 1;
-        } else {
-            return Err("Skipped test asserts due to serialization error".into());
-        }
+        let value = value_to_monitored_resource(Some(&from))?
+            .expect("Skipped test asserts due to serialization error");
+
+        assert_eq!(0, value.labels.len());
 
         let from: OwnedValue = literal!({
             "type": "gce_instance".to_string(),
@@ -331,7 +310,6 @@ mod tests {
         let bad_value = value_to_monitored_resource(Some(&from));
         assert!(bad_value.is_err());
 
-        assert_eq!(2, ok_count);
         Ok(())
     }
 }

@@ -41,10 +41,8 @@ mod handler;
 mod utils;
 
 use crate::channel::{bounded, Receiver, Sender};
-use crate::{
-    connectors::{prelude::*, spawn_task},
-    system::KillSwitch,
-};
+use crate::connectors::prelude::*;
+use crate::connectors::Context as ContextTrait;
 use handler::Handler;
 use serenity::prelude::*;
 use tokio::task::JoinHandle;
@@ -73,7 +71,6 @@ impl ConnectorBuilder for Builder {
         _: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
 
@@ -122,8 +119,13 @@ impl Connector for Discord {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         // the source is listening for events formatted as `Value` from the discord client
+        let rx = self
+            .message_channel
+            .1
+            .take()
+            .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?;
         let source = DiscordSource {
-            rx: self.message_channel.1.take().ok_or("No message channel")?,
+            rx,
             origin_uri: self.origin_uri.clone(),
         };
         Ok(Some(builder.spawn(source, ctx)))
@@ -160,9 +162,8 @@ impl Connector for Discord {
                 rx: RwLock::new(Some(rx)),
             });
 
-            let mut client = client
-                .await
-                .map_err(|e| Error::from(format!("Err discord creating client: {e}")))?;
+            let mut client = client.await?;
+
             // set up new client task
             self.client_task = Some(spawn_task(
                 ctx.clone(),
@@ -186,16 +187,16 @@ impl Sink for DiscordSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         for v in event.value_iter() {
-            if self.tx.send(v.clone_static()).await.is_err() {
+            if let Err(e) = self.tx.send(v.clone_static()).await {
                 error!(
                     "{} Discord Client unreachable. Initiating Reconnect...",
                     &ctx
                 );
                 ctx.notifier().connection_lost().await?;
                 // return here to avoid notifying the notifier multiple times
-                return Err("Discord unreachable.".into());
+                return Err(e.into());
             }
         }
         Ok(SinkReply::NONE)
@@ -213,8 +214,13 @@ struct DiscordSource {
 #[async_trait::async_trait()]
 impl Source for DiscordSource {
     #[allow(clippy::option_if_let_else)]
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        self.rx
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        Ok(self
+            .rx
             .recv()
             .await
             .map(|data| SourceReply::Structured {
@@ -223,7 +229,7 @@ impl Source for DiscordSource {
                 stream: DEFAULT_STREAM_ID,
                 port: None,
             })
-            .ok_or_else(|| Error::from("channel closed"))
+            .ok_or(ChannelError::Recv)?)
     }
 
     fn is_transactional(&self) -> bool {

@@ -16,9 +16,24 @@
 
 use crate::connectors::prelude::*;
 use crate::connectors::utils::pb;
+use anyhow::Context;
 use tremor_otelapis::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, InstrumentationLibrary, KeyValue, KeyValueList, StringKeyValue,
 };
+
+#[derive(Debug, Clone, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("missing field `{0}`")]
+    MissingField(&'static str),
+    #[error("Invalid `{0}` id ( wrong array element ) - values must be between 0 and 255 - cannot convert to pb")]
+    InvalidArrayContent(String),
+    #[error("Cannot convert json value to otel pb `{0}` id")]
+    FaildToConvert(String),
+    #[error("Invalid json to mapping for `{0}`")]
+    InvalidMapping(&'static str),
+    #[error("Invalid `{0}` id ( wrong array length ) - cannot convert to pb")]
+    InvalidLength(String),
+}
 
 pub(crate) struct OtelDefaults;
 impl Defaults for OtelDefaults {
@@ -118,8 +133,8 @@ pub(crate) fn string_key_value_to_json(pb: Vec<StringKeyValue>) -> Value<'static
 }
 
 pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<StringKeyValue>> {
-    data.as_object()
-        .ok_or("Unable to map json to Vec<StringKeyValue> pb")?
+    data.try_as_object()
+        .context("Unable to map json to Vec<StringKeyValue> pb")?
         .iter()
         .map(|(key, value)| {
             let key = key.to_string();
@@ -137,14 +152,14 @@ pub(crate) fn key_value_list_to_json(pb: Vec<KeyValue>) -> Value<'static> {
 
 pub(crate) fn maybe_key_value_list_to_pb(data: Option<&Value<'_>>) -> Result<Vec<KeyValue>> {
     let obj = data
-        .as_object()
-        .ok_or("Expected a json object, found otherwise - cannot map to pb")?;
+        .try_as_object()
+        .context("Expected a json object, found otherwise - cannot map to pb")?;
     Ok(obj_key_value_list_to_pb(obj))
 }
 
 pub(crate) fn get_attributes_or_labes(data: &Value) -> Result<Vec<KeyValue>> {
     match (data.get_object("attributes"), data.get_object("labels")) {
-        (None, None) => Err("missing field `attributes`".into()),
+        (None, None) => Err(Error::MissingField("attributes").into()),
         (Some(a), None) | (None, Some(a)) => Ok(obj_key_value_list_to_pb(a)),
         (Some(a), Some(l)) => {
             let mut a = obj_key_value_list_to_pb(a);

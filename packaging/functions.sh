@@ -47,7 +47,7 @@ function package_archive {
 
   # print package details
   echo "PACKAGE SIZE:"
-  du --human-readable --summarize "$archive_file" | awk '{print $1}'
+  du -h -s "$archive_file" | awk '{print $1}'
   echo "PACKAGE INFO:"
   gzip --list "$archive_file"
   echo "PACKAGE CONTENTS:"

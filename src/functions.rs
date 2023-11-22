@@ -14,7 +14,7 @@
 
 use crate::connectors::impls::gcl;
 use crate::connectors::impls::otel;
-use crate::errors::Result;
+use crate::errors::{ErrorKind, Result};
 use crate::version::VERSION;
 use tremor_script::registry::Registry;
 use tremor_script::FN_REGISTRY;
@@ -25,7 +25,7 @@ use tremor_script::{tremor_const_fn, tremor_fn};
 /// # Errors
 ///  * if we can't load the registry
 pub fn load() -> Result<()> {
-    let mut reg = FN_REGISTRY.write()?;
+    let mut reg = FN_REGISTRY.write().map_err(|_| ErrorKind::WriteLock)?;
     install(&mut reg)
 }
 

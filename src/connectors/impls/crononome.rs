@@ -115,7 +115,7 @@
 
 mod handler;
 
-use crate::{connectors::prelude::*, errors::err_connector_def, system::KillSwitch};
+use crate::connectors::prelude::*;
 use handler::{ChronomicQueue, CronEntryInt};
 use serde_yaml::Value as YamlValue;
 use tremor_common::time::nanotime;
@@ -144,7 +144,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let raw = Config::new(raw)?;
         let payload = if let Some(yaml_entries) = raw.entries {
@@ -162,7 +161,7 @@ impl ConnectorBuilder for Builder {
                 .map(CronEntryInt::try_from)
                 .collect::<Result<Vec<CronEntryInt>>>()?
         } else {
-            return Err(err_connector_def(id, "missing `entries` array"));
+            return Err(error_connector_def(id, "missing `entries` array").into());
         };
 
         Ok(Box::new(Crononome { entries }))
@@ -211,14 +210,18 @@ impl CrononomeSource {
 }
 #[async_trait::async_trait()]
 impl Source for CrononomeSource {
-    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.cq = ChronomicQueue::default(); // create a new queue to avoid duplication in case of reconnect
         for entry in &self.entries {
             self.cq.enqueue(entry);
         }
         Ok(true)
     }
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let mut origin_uri = self.origin_uri.clone();
         if let Some(trigger) = self.cq.wait_for_next().await {
             origin_uri.path.push(trigger.0.clone());

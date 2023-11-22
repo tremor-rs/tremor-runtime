@@ -14,7 +14,7 @@ use super::ConnectorHarness;
 use crate::{
     connectors::{impls::bench, prelude::KillSwitch, sink::SinkMsg},
     errors::Result,
-    system::{flow_supervisor, World, WorldConfig},
+    system::{flow_supervisor, Runtime, WorldConfig},
 };
 use std::{io::Write, time::Duration};
 use tempfile::NamedTempFile;
@@ -40,7 +40,7 @@ async fn stop_after_events() -> Result<()> {
         "iters": 2
       }
     });
-    let (world, world_handle) = World::start(WorldConfig::default()).await?;
+    let (world, world_handle) = Runtime::start(WorldConfig::default()).await?;
     let mut harness = ConnectorHarness::new_with_kill_switch(
         function_name!(),
         &bench::Builder::default(),
@@ -62,7 +62,7 @@ async fn stop_after_events() -> Result<()> {
                 .send_sink(SinkMsg::Event { event, port: IN })
                 .await?;
         }
-        Result::Ok(())
+        Ok::<(), anyhow::Error>(())
     });
 
     // the bench connector should shut the world down
@@ -123,7 +123,7 @@ async fn stop_after_secs() -> Result<()> {
     // the bench connector should trigger the kill switch
     let two_secs = Duration::from_secs(2);
     let msg = timeout(two_secs, rx.recv()).await?.expect("failed to recv");
-    assert!(matches!(msg, flow_supervisor::Msg::Stop));
+    assert!(matches!(msg, flow_supervisor::Msg::Terminate));
     info!("Flow supervisor finished");
     info!("Harness stopped");
     handle.abort(); // stopping the pipeline after the connector to ensure it is draining the source

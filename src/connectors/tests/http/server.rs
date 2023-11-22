@@ -67,7 +67,7 @@ where
         }
         let (_out, _err) = connector.stop().await?;
 
-        Result::Ok(())
+        Ok::<(), anyhow::Error>(())
     });
     let response = timeout(
         Duration::from_secs(5),
@@ -105,12 +105,12 @@ async fn http_server_test_basic() -> Result<()> {
 
     // send an empty body, return request data in the body as json
 
-    let mut result = Err("todo".into());
+    let mut result = Err(anyhow::anyhow!("todo"));
 
     let mut final_port = 0;
     while let Err(e) = result {
         if start.elapsed() > timeout {
-            return Err(format!("HTTP Server not listening after {timeout:?}: {e}").into());
+            anyhow::bail!("HTTP Server not listening after {timeout:?}: {e}");
         }
         let (connector, url, port) = harness_dflt("http").await?;
         final_port = port;
@@ -378,7 +378,7 @@ async fn https_server_test() -> Result<()> {
             };
             c_addr.send_sink(SinkMsg::Event { event, port: IN }).await?;
         }
-        Result::Ok(())
+        Ok::<(), anyhow::Error>(())
     });
 
     let tls_config = TLSClientConfig {
@@ -415,7 +415,7 @@ async fn https_server_test() -> Result<()> {
             .uri(&url)
             .body(hyper::Body::empty())?;
         if start.elapsed() > max_timeout {
-            return Err(format!("Timeout waiting for HTTPS server to boot up: {e}").into());
+            anyhow::bail!("Timeout waiting for HTTPS server to boot up: {e}");
         }
         response = timeout(one_sec, client.request(req)).await;
     }

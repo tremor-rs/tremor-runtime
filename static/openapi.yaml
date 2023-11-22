@@ -81,12 +81,18 @@ paths:
             application/yaml:
               schema:
                 $ref: '#/components/schemas/flows'
-  /v1/flows/{flow-id}:
+  /v1/flows/{app-id}/{flow-id}:
     parameters:
+      - name: app-id
+        in: path
+        required: true
+        description: The unique id of an app inside the runtime
+        schema:
+          type: string
       - name: flow-id
         in: path
         required: true
-        description: The unique id of the flow in the runtime
+        description: The unique id of the flow in the the app identified by `app_id`
         schema:
           type: string
     get:
@@ -141,8 +147,14 @@ paths:
 
         '404':
           description: The flow 'flow-id' wasnt found. It is thus not deployed in the runtime.
-  /v1/flows/{flow-id}/connectors:
+  /v1/flows/{app-id}/{flow-id}/connectors:
     parameters:
+      - name: app-id
+        in: path
+        required: true
+        description: The unique id of an app inside the runtime
+        schema:
+          type: string
       - name: flow-id
         in: path
         required: true
@@ -167,8 +179,14 @@ paths:
                 $ref: '#/components/schemas/connectors'
         '404':
           description: The flow 'flow-id' wasnt found. It is thus not deployed in the runtime.
-  /v1/flows/{flow-id}/connectors/{connector-id}:
+  /v1/flows/{app-id}/{flow-id}/connectors/{connector-id}:
     parameters:
+      - name: app-id
+        in: path
+        required: true
+        description: The unique id of an app inside the runtime
+        schema:
+          type: string
       - name: flow-id
         in: path
         required: true

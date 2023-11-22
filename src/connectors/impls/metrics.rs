@@ -151,14 +151,20 @@
 
 use crate::connectors::prelude::*;
 use beef::Cow;
-use tokio::sync::broadcast::{error::RecvError, Receiver, Sender};
-use tremor_pipeline::{MetricsMsg, METRICS_CHANNEL};
+use tokio::sync::broadcast::error::RecvError;
+use tremor_pipeline::{MetricsMsg, MetricsReceiver, MetricsSender};
 use tremor_script::utils::hostname;
 
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
 const TAGS: Cow<'static, str> = Cow::const_str("tags");
 const FIELDS: Cow<'static, str> = Cow::const_str("fields");
 const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Invalid metrics data")]
+    InvalidMetricsData,
+}
 
 /// This is a system connector to collect and forward metrics.
 /// System metrics are fed to this connector and can be received by binding this connector's `out` port to a pipeline to handle metrics events.
@@ -169,15 +175,11 @@ const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 ///
 /// There should be only one instance around all the time, identified by `tremor://localhost/connector/system::metrics/system`
 ///
-pub(crate) struct MetricsConnector {
-    tx: Sender<MetricsMsg>,
-}
+pub(crate) struct MetricsConnector {}
 
 impl MetricsConnector {
     pub(crate) fn new() -> Self {
-        Self {
-            tx: METRICS_CHANNEL.tx(),
-        }
+        Self {}
     }
 }
 
@@ -194,7 +196,6 @@ impl ConnectorBuilder for Builder {
         &self,
         _id: &alias::Connector,
         _config: &ConnectorConfig,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(MetricsConnector::new()))
     }
@@ -211,7 +212,8 @@ impl Connector for MetricsConnector {
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = MetricsSource::new(self.tx.subscribe());
+        let source = MetricsSource::new(ctx.app_ctx().metrics.rx());
+        info!("{ctx} Metrics connector id: {}", source.rx.id());
         Ok(Some(builder.spawn(source, ctx)))
     }
 
@@ -220,7 +222,7 @@ impl Connector for MetricsConnector {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = MetricsSink::new(self.tx.clone());
+        let sink = MetricsSink::new(ctx.app_ctx().metrics.tx());
         Ok(Some(builder.spawn(sink, ctx)))
     }
     fn codec_requirements(&self) -> CodecReq {
@@ -229,12 +231,12 @@ impl Connector for MetricsConnector {
 }
 
 pub(crate) struct MetricsSource {
-    rx: Receiver<MetricsMsg>,
+    rx: MetricsReceiver,
     origin_uri: EventOriginUri,
 }
 
 impl MetricsSource {
-    pub(crate) fn new(rx: Receiver<MetricsMsg>) -> Self {
+    pub(crate) fn new(rx: MetricsReceiver) -> Self {
         Self {
             rx,
             origin_uri: EventOriginUri {
@@ -249,7 +251,11 @@ impl MetricsSource {
 
 #[async_trait::async_trait()]
 impl Source for MetricsSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         loop {
             match self.rx.recv().await {
                 Ok(msg) => {
@@ -285,11 +291,11 @@ impl Source for MetricsSource {
 }
 
 pub(crate) struct MetricsSink {
-    tx: Sender<MetricsMsg>,
+    tx: MetricsSender,
 }
 
 impl MetricsSink {
-    pub(crate) fn new(tx: Sender<MetricsMsg>) -> Self {
+    pub(crate) fn new(tx: MetricsSender) -> Self {
         Self { tx }
     }
 }
@@ -317,7 +323,8 @@ pub(crate) fn verify_metrics_value(value: &Value<'_>) -> Result<()> {
                 None
             }
         })
-        .ok_or_else(|| ErrorKind::InvalidMetricsData.into())
+        .ok_or(Error::InvalidMetricsData)?;
+    Ok(())
 }
 
 /// passing events through to the source channel
@@ -335,7 +342,7 @@ impl Sink for MetricsSink {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         // verify event format
         for (value, _meta) in event.value_meta_iter() {
             verify_metrics_value(value)?;

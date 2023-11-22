@@ -17,7 +17,7 @@
 
 use crate::connectors::{
     prelude::*,
-    utils::socket::{udp_socket, UdpSocketOptions},
+    utils::socket::{udp_socket, Error, UdpSocketOptions},
 };
 use tokio::net::UdpSocket;
 
@@ -51,11 +51,10 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
         if config.url.port().is_none() {
-            return Err("Missing port for UDP client".into());
+            return Err(Error::MissingPort.into());
         }
 
         Ok(Box::new(UdpClient { config }))
@@ -105,7 +104,7 @@ impl UdpClientSink {
 
 #[async_trait::async_trait()]
 impl Sink for UdpClientSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let connect_addrs = tokio::net::lookup_host((
             self.config.url.host_or_local(),
             self.config.url.port_or_dflt(),
@@ -118,7 +117,7 @@ impl Sink for UdpClientSink {
             // chose default bind if unspecified by checking the first resolved connect addr
             let is_ipv4 = connect_addrs
                 .first()
-                .ok_or_else(|| format!("unable to resolve {}", self.config.url))?
+                .ok_or_else(|| Error::UnableToConnect(self.config.url.to_string()))?
                 .is_ipv4();
             if is_ipv4 {
                 Url::parse(super::UDP_IPV4_UNSPECIFIED)?
@@ -144,10 +143,7 @@ impl Sink for UdpClientSink {
         serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let socket = self
-            .socket
-            .as_ref()
-            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+        let socket = self.socket.as_ref().ok_or(Error::NoSocket)?;
         for (value, meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, meta, event.ingest_ns).await?;
             if let Err(e) = Self::send_event(socket, data).await {

@@ -18,12 +18,14 @@ use crate::{
     errors::Result,
     highlighter::Highlighter,
     lexer::{self, Lexer},
+    module::PreCachedNodes,
     prelude::*,
+    NodeMeta,
 };
 use std::collections::BTreeSet;
 
 /// A tremor deployment ( troy)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Deploy {
     /// The deployment
     pub deploy: ast::Deploy<'static>,
@@ -35,21 +37,49 @@ pub struct Deploy {
     pub locals: usize,
 }
 
+impl Deploy {
+    /// Creates a dummy deployment for testing
+    #[must_use]
+    pub fn dummy() -> Self {
+        Self {
+            deploy: ast::Deploy::dummy(),
+            aid: arena::Index::INVALID,
+            warnings: BTreeSet::new(),
+            locals: 0,
+        }
+    }
+}
+
+impl BaseExpr for Deploy {
+    fn meta(&self) -> &NodeMeta {
+        self.deploy.meta()
+    }
+}
+
 impl<'run, 'event, 'script> Deploy
 where
     'script: 'event,
     'event: 'run,
 {
     /// Removes a deploy from the arena, freeing the memory and marking it valid for reause
-    /// this function generally should not ever be used. It is a special case for the language
+    /// this function generally should not ever be used.
+    ///
+    /// # Safety
+    /// It is a special case for the language
     /// server where we know that we really only parse the script to check for errors and
     /// warnings.
+    ///
     /// That's also why it's behind a feature falg
+    /// # Errors
+    /// if the deploy and it's related data is not found in the arena
+    /// # Safety
+    /// The function is unsafe because if the deploy is still referenced somewhere it could lead
+    /// to memory unsaftey. To combat that we ensure that it is consumed when freed.
     #[cfg(feature = "arena-delete")]
     pub unsafe fn consume_and_free(self) -> Result<()> {
         let Deploy { aid, deploy, .. } = self;
         drop(deploy);
-        Arena::delte_index_this_is_really_unsafe_dont_use_it(aid)
+        Arena::delete_index_this_is_really_unsafe_dont_use_it(aid)
     }
 
     /// Retrieve deployment unit
@@ -86,8 +116,10 @@ where
         src: &'static str,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
+        precached: &PreCachedNodes,
     ) -> Result<Self> {
         let mut helper = ast::Helper::new(reg, aggr_reg);
+        helper.precached = precached.clone();
         //let cu = include_stack.push(&file_name)?;
         let tokens = Lexer::new(src, aid).collect::<Result<Vec<_>>>()?;
         let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
@@ -120,10 +152,12 @@ where
         aggr_reg: &AggrRegistry,
     ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
     where
-        S: ToString + ?Sized,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
-        Self::parse_(aid, src, reg, aggr_reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
+        let empty = PreCachedNodes::new();
+        Self::parse_(aid, src, reg, aggr_reg, &empty)
+            .map_err(|e| crate::errors::ErrorWithIndex(aid, e))
     }
 
     /// Parses a string into a deployment
@@ -132,10 +166,25 @@ where
     /// if the deployment can not be parsed
     pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
-        S: ToString + ?Sized,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
+    {
+        Self::parse_with_cache(src, reg, aggr_reg, &PreCachedNodes::new())
+    }
+    /// Parses a string into a deployment
+    ///
+    /// # Errors
+    /// if the deployment can not be parsed
+    pub fn parse_with_cache<S>(
+        src: &S,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+        precached: &PreCachedNodes,
+    ) -> Result<Self>
+    where
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
-        Self::parse_(aid, src, reg, aggr_reg)
+        Self::parse_(aid, src, reg, aggr_reg, precached)
     }
 
     /// Format an error given a script source.
@@ -159,7 +208,7 @@ mod test {
     fn parse(query: &str) {
         let reg = crate::registry();
         let aggr_reg = crate::aggr_registry();
-        if let Err(e) = Deploy::parse(query, &reg, &aggr_reg) {
+        if let Err(e) = Deploy::parse(&query, &reg, &aggr_reg) {
             eprintln!("{e}");
             panic!("error during parsing");
         }

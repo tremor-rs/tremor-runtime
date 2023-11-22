@@ -50,12 +50,11 @@ pub mod value;
 pub use crate::serde::structurize;
 pub use error::*;
 pub use known_key::{Error as KnownKeyError, KnownKey};
-pub use simd_json::{json, json_typed, Buffers, StaticNode};
-pub use value::from::*;
+pub use simd_json::{json, json_typed, value::ObjectHasher, Buffers, StaticNode};
 pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, Value};
 
 use beef::Cow;
-use simd_json::{prelude::*, Node, ObjectHasher};
+use simd_json::{prelude::*, Node};
 use simd_json_derive::{Deserialize, Serialize, Tape};
 
 /// Maximum size for a vector object

@@ -31,7 +31,7 @@ pub(super) async fn wait_for_ok(port: u16) -> Result<()> {
         if start.elapsed() > wait_for {
             let max_time = wait_for.as_secs();
             error!("We waited for more than {max_time}");
-            return Err(e.chain_err(|| "Waiting for the ClickHouse container timed out."));
+            return Err(e.context("Waiting for the ClickHouse container timed out."));
         }
 
         tokio::time::sleep(Duration::from_secs(1)).await;

@@ -14,7 +14,7 @@
 
 use crate::errors::Result;
 use std::io::Write;
-use tremor_common::base64::{Engine, BASE64};
+use tremor_common::base64::{encode, BASE64};
 
 /// Authorization methods
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -44,14 +44,14 @@ impl Auth {
                 ref username,
                 ref password,
             } => {
-                let encoded = BASE64.encode(format!("{username}:{password}"));
+                let encoded = encode(format!("{username}:{password}"));
                 Ok(Some(format!("Basic {}", &encoded)))
             }
             Auth::Bearer(token) => Ok(Some(format!("Bearer {}", &token))),
             Auth::ElasticsearchApiKey { id, api_key } => {
                 let mut header_value = "ApiKey ".to_string();
                 let mut writer =
-                    base64::write::EncoderStringWriter::from_consumer(&mut header_value, &BASE64);
+                    ::base64::write::EncoderStringWriter::from_consumer(&mut header_value, &BASE64);
                 write!(writer, "{id}:")?;
                 write!(writer, "{api_key}")?;
                 writer.into_inner(); // release the reference, so header-value is accessible again
@@ -79,15 +79,18 @@ mod tests {
             password: "snot".to_string(),
         };
         assert_eq!(
-            Ok(Some("Basic YmFkZ2VyOnNub3Q=".to_string())),
-            auth.as_header_value()
+            Some("Basic YmFkZ2VyOnNub3Q=".to_string()),
+            auth.as_header_value().ok().flatten()
         );
     }
 
     #[test]
     fn header_value_bearer() {
         let auth = Auth::Bearer("token".to_string());
-        assert_eq!(Ok(Some("Bearer token".to_string())), auth.as_header_value());
+        assert_eq!(
+            Some("Bearer token".to_string()),
+            auth.as_header_value().ok().flatten()
+        );
     }
 
     #[test]
@@ -97,8 +100,8 @@ mod tests {
             api_key: "snot".to_string(),
         };
         assert_eq!(
-            Ok(Some("ApiKey YmFkZ2VyOnNub3Q=".to_string())),
-            auth.as_header_value()
+            Some("ApiKey YmFkZ2VyOnNub3Q=".to_string()),
+            auth.as_header_value().ok().flatten()
         );
     }
 }

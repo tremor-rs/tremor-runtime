@@ -20,12 +20,15 @@ use crate::connectors::{
         ObjectStorageSinkImpl, ObjectStorageUpload, YoloSink,
     },
 };
+use anyhow::Context as ErrorContext;
 use aws_sdk_s3::{
     types::{CompletedMultipartUpload, CompletedPart},
     Client as S3Client,
 };
 use tremor_common::time::nanotime;
 use tremor_pipeline::{EventId, OpMeta};
+
+use super::Error;
 
 pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";
 
@@ -90,7 +93,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let mut config = Config::new(config)?;
         config.normalize(id);
@@ -166,9 +168,7 @@ impl S3ObjectStorageSinkImpl {
     }
 
     fn get_client(&self) -> Result<&S3Client> {
-        self.client
-            .as_ref()
-            .ok_or_else(|| ErrorKind::S3Error("no s3 client available".to_string()).into())
+        Ok(self.client.as_ref().ok_or(Error::NoClient)?)
     }
 }
 
@@ -242,10 +242,7 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
             .bucket(bucket)
             .send()
             .await
-            .map_err(|e| {
-                let msg = format!("Failed to access Bucket `{bucket}`: {e}");
-                Error::from(ErrorKind::S3Error(msg))
-            })?;
+            .with_context(|| format!("Failed to access Bucket `{bucket}`"))?;
         Ok(true)
     }
 
@@ -265,12 +262,9 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
 
         //let upload = CurrentUpload::new(resp.)
 
-        let upload_id = resp.upload_id.ok_or_else(|| {
-            ErrorKind::S3Error(format!(
-                "Failed to start upload for s3://{}: upload id not found in response.",
-                &object_id
-            ))
-        })?;
+        let upload_id = resp
+            .upload_id
+            .ok_or_else(|| Error::UploadStart(object_id.to_string()))?;
         let upload = S3Upload::new(object_id.clone(), upload_id, event);
 
         Ok(upload)

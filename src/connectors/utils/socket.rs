@@ -13,11 +13,25 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::{lookup_host, UdpSocket};
 use tokio::net::{TcpListener, TcpStream};
 use tremor_common::url::{Defaults, Url};
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("unable to resolve {0}")]
+    UnableToConnect(String),
+    #[error("no socket")]
+    NoSocket,
+    #[error("could not resolve to any addresses")]
+    CouldNotResolve,
+    #[error("invalid address {0}:{1}")]
+    InvalidAddress(String, u16),
+    #[error("missing port")]
+    MissingPort,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "UPPERCASE")]
@@ -58,7 +72,7 @@ pub(crate) async fn udp_socket<D: Defaults>(
         // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
         let socket_addr = sock_addr
             .as_socket()
-            .ok_or_else(|| format!("Invalid address {}:{}", host_port.0, host_port.1))?;
+            .ok_or_else(|| Error::InvalidAddress(host_port.0.to_string(), host_port.1))?;
         let sock = Socket::new(
             Domain::for_address(socket_addr),
             Type::DGRAM,
@@ -79,10 +93,7 @@ pub(crate) async fn udp_socket<D: Defaults>(
             }
         }
     }
-    Err(last_err.map_or_else(
-        || Error::from("could not resolve to any addresses"),
-        Error::from,
-    ))
+    Err(last_err.map_or_else(|| Error::CouldNotResolve.into(), anyhow::Error::from))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -128,7 +139,7 @@ pub(crate) async fn tcp_server_socket<D: Defaults>(
         // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
         let socket_addr = sock_addr
             .as_socket()
-            .ok_or_else(|| format!("Invalid address {}:{}", host_port.0, host_port.1))?;
+            .ok_or_else(|| Error::InvalidAddress(host_port.0.to_string(), host_port.1))?;
         let sock = Socket::new(
             Domain::for_address(socket_addr),
             Type::STREAM,
@@ -150,10 +161,7 @@ pub(crate) async fn tcp_server_socket<D: Defaults>(
             }
         }
     }
-    Err(last_err.map_or_else(
-        || Error::from("could not resolve to any addresses"),
-        Error::from,
-    ))
+    Err(last_err.map_or_else(|| Error::CouldNotResolve.into(), anyhow::Error::from))
 }
 
 pub(crate) async fn tcp_client_socket<D: Defaults>(
@@ -166,7 +174,7 @@ pub(crate) async fn tcp_client_socket<D: Defaults>(
         let sock_addr = SockAddr::from(addr);
         let socket_addr = sock_addr
             .as_socket()
-            .ok_or_else(|| format!("Invalid address {}:{}", host_port.0, host_port.1))?;
+            .ok_or_else(|| Error::InvalidAddress(host_port.0.to_string(), host_port.1))?;
         let sock = Socket::new(
             Domain::for_address(socket_addr),
             Type::STREAM,
@@ -187,8 +195,5 @@ pub(crate) async fn tcp_client_socket<D: Defaults>(
             }
         }
     }
-    Err(last_err.map_or_else(
-        || Error::from("could not resolve to any addresses"),
-        Error::from,
-    ))
+    Err(last_err.map_or_else(|| Error::CouldNotResolve.into(), anyhow::Error::from))
 }

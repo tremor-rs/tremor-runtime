@@ -41,7 +41,6 @@ use crate::{
         InvokeAggrFn, NodeMeta, Patch, PatchOperation, Path, Pattern, PredicatePattern,
         RecordPattern, ReservedPath, RunConsts, Segment, TuplePattern, UnaryOpKind,
     },
-    ctx::NO_CONTEXT,
     errors::{
         err_need_obj, error_array_out_of_bound, error_bad_array_index, error_bad_key,
         error_bad_key_err, error_decreasing_range, error_division_by_zero, error_guard_not_bool,
@@ -50,7 +49,7 @@ use crate::{
         error_patch_merge_type_conflict, error_patch_update_key_missing, unknown_local, Result,
     },
     prelude::*,
-    stry, EventContext, Value, NO_AGGRS, NO_CONSTS,
+    stry, EventContext, Value, NO_AGGRS, NO_CONSTS, NO_CONTEXT,
 };
 use simd_json::StaticNode;
 use std::{

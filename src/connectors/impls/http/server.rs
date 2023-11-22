@@ -16,17 +16,14 @@ use super::{
     meta::{consolidate_mime, content_type, extract_request_meta, HeaderValueValue},
     utils::RequestId,
 };
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    connectors::utils::tls,
-    errors::empty_error,
+use crate::connectors::{
+    prelude::*,
+    utils::{mime::MimeCodecMap, tls::TLSServerConfig},
 };
 use crate::{
-    connectors::{
-        prelude::*,
-        utils::{mime::MimeCodecMap, tls::TLSServerConfig},
-    },
-    errors::err_connector_def,
+    channel::empty_e,
+    channel::{bounded, Receiver, Sender},
+    connectors::utils::tls,
 };
 use dashmap::DashMap;
 use halfbrown::{Entry, HashMap};
@@ -44,7 +41,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{sync::oneshot, task::JoinHandle};
-use tremor_common::ids::Id;
+use tremor_common::uids::UId;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -81,13 +78,12 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _raw_config: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let tls_server_config = config.tls.clone();
 
         if tls_server_config.is_some() && config.url.scheme() != "https" {
-            return Err(err_connector_def(id, Self::HTTPS_REQUIRED));
+            return Err(error_connector_def(id, Self::HTTPS_REQUIRED).into());
         }
         let origin_uri = EventOriginUri {
             scheme: "http-server".to_string(),
@@ -178,9 +174,15 @@ struct HttpServerSource {
     codec_map: MimeCodecMap,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Address is missing")]
+    AddressMissing,
+}
+
 #[async_trait::async_trait()]
 impl Source for HttpServerSource {
-    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         if let Some(accept_task) = self.server_task.take() {
             // stop acceptin' new connections
             accept_task.abort();
@@ -188,7 +190,7 @@ impl Source for HttpServerSource {
         Ok(())
     }
 
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let host = self.url.host_or_local().to_string();
         let port = self.url.port().unwrap_or_else(|| {
             if self.url.scheme() == "https" {
@@ -216,7 +218,10 @@ impl Source for HttpServerSource {
             .map(Arc::new);
 
         let server_context = HttpServerState::new(tx, ctx.clone(), "http");
-        let addr = (host, port).to_socket_addrs()?.next().ok_or("no address")?;
+        let addr = (host, port)
+            .to_socket_addrs()?
+            .next()
+            .ok_or(Error::AddressMissing)?;
 
         // Server task - this is the main receive loop for http server instances
         self.server_task = Some(spawn_task(ctx.clone(), async move {
@@ -281,13 +286,17 @@ impl Source for HttpServerSource {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let RawRequestData {
             data,
             request_meta,
             content_type,
             response_channel,
-        } = self.request_rx.recv().await.ok_or_else(empty_error)?;
+        } = self.request_rx.recv().await.ok_or_else(empty_e)?;
 
         // assign request id, set pull_id
         let request_id = RequestId::new(self.request_counter);
@@ -372,7 +381,7 @@ impl Sink for HttpServerSink {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
         let min_pull_id = event
             .id
@@ -527,7 +536,7 @@ impl Sink for HttpServerSink {
         _signal: Event,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         // clean out closed channels
         self.inflight.retain(|_key, sender| !sender.is_closed());
         Ok(SinkReply::NONE)
@@ -609,7 +618,7 @@ impl SinkResponse {
             }
         });
         tx.send(response.body(body)?)
-            .map_err(|_| "Error sending response")?;
+            .map_err(|_| ChannelError::Send)?;
         Ok(Self {
             request_id,
             chunk_tx,

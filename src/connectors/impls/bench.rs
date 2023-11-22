@@ -209,11 +209,7 @@ use std::{
     io::{stdout, BufRead as StdBufRead, BufReader, Read, Write},
     time::Duration,
 };
-use tremor_common::{
-    base64::{Engine, BASE64},
-    file,
-    time::nanotime,
-};
+use tremor_common::{base64, file, time::nanotime};
 use xz2::read::XzDecoder;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -262,7 +258,7 @@ pub(crate) struct Builder {}
 
 fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
     if base64 {
-        Ok(BASE64.decode(data)?)
+        Ok(base64::decode(data)?)
     } else {
         let d: &[u8] = data.as_ref();
         Ok(d.to_vec())
@@ -276,7 +272,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
         let mut source_data_file = file::open(&config.path)?;
@@ -325,7 +320,6 @@ impl ConnectorBuilder for Builder {
             acc: Acc { elements, count: 0 },
             origin_uri,
             stop_after,
-            kill_switch: kill_switch.clone(),
         }))
     }
 
@@ -358,7 +352,6 @@ pub(crate) struct Bench {
     acc: Acc,
     origin_uri: EventOriginUri,
     stop_after: StopAfter,
-    kill_switch: KillSwitch,
 }
 
 #[async_trait::async_trait]
@@ -385,7 +378,7 @@ impl Connector for Bench {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = Blackhole::new(&self.config, self.stop_after, self.kill_switch.clone());
+        let sink = Blackhole::new(&self.config, self.stop_after, ctx.killswitch());
         Ok(Some(builder.spawn(sink, ctx)))
     }
 
@@ -406,7 +399,7 @@ struct Blaster {
 
 #[async_trait::async_trait]
 impl Source for Blaster {
-    async fn on_start(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_start(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         self.stop_at = self
             .stop_after
             .seconds
@@ -415,7 +408,11 @@ impl Source for Blaster {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         if self.finished {
             return Ok(SourceReply::Finished);
         }
@@ -518,7 +515,7 @@ impl Sink for Blackhole {
         ctx: &SinkContext,
         event_serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         if !self.finished {
             let now_ns = nanotime();
 
@@ -558,7 +555,7 @@ impl Sink for Blackhole {
         _signal: Event,
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let now_ns = nanotime();
         if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at) {
             self.finish(ctx)?;

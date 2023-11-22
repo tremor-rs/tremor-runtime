@@ -15,7 +15,7 @@
 #![allow(dead_code)]
 
 use super::{
-    common::{self, EMPTY},
+    common::{self, Error, EMPTY},
     id,
     resource::{self, resource_to_pb},
 };
@@ -25,10 +25,7 @@ use crate::connectors::utils::pb::{
 };
 use tremor_otelapis::opentelemetry::proto::{
     collector::trace::v1::ExportTraceServiceRequest,
-    trace::v1::{
-        span::{Event, Link},
-        InstrumentationLibrarySpans, ResourceSpans, Span, Status,
-    },
+    trace::v1::{span, InstrumentationLibrarySpans, ResourceSpans, Span, Status},
 };
 
 #[allow(deprecated)]
@@ -45,7 +42,7 @@ pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {
     )
 }
 
-pub(crate) fn span_events_to_json(pb: Vec<Event>) -> Value<'static> {
+pub(crate) fn span_events_to_json(pb: Vec<span::Event>) -> Value<'static> {
     pb.into_iter()
         .map(|data| {
             literal!({
@@ -58,12 +55,12 @@ pub(crate) fn span_events_to_json(pb: Vec<Event>) -> Value<'static> {
         .collect()
 }
 
-pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>> {
+pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<span::Event>> {
     json.as_array()
         .unwrap_or(&EMPTY)
         .iter()
         .map(|json| {
-            Ok(Event {
+            Ok(span::Event {
                 name: maybe_string_to_pb(json.get("name"))?,
                 time_unix_nano: maybe_int_to_pbu64(json.get("time_unix_nano"))?,
                 attributes: common::maybe_key_value_list_to_pb(json.get("attributes"))
@@ -75,7 +72,7 @@ pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>> 
         .collect()
 }
 
-pub(crate) fn span_links_to_json(pb: Vec<Link>) -> Value<'static> {
+pub(crate) fn span_links_to_json(pb: Vec<span::Link>) -> Value<'static> {
     pb.into_iter()
         .map(|data| {
             literal!({
@@ -89,12 +86,12 @@ pub(crate) fn span_links_to_json(pb: Vec<Link>) -> Value<'static> {
         .collect()
 }
 
-pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>> {
+pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<span::Link>> {
     json.as_array()
         .unwrap_or(&EMPTY)
         .iter()
         .map(|json| {
-            Ok(Link {
+            Ok(span::Link {
                 span_id: id::hex_span_id_to_pb(json.get("span_id"))?,
                 trace_id: id::hex_trace_id_to_pb(json.get("trace_id"))?,
                 trace_state: maybe_string_to_pb(json.get("trace_state"))?,
@@ -109,9 +106,7 @@ pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>> {
     if json.is_none() {
         return Ok(None);
     }
-    let json = json
-        .as_object()
-        .ok_or("Unable to map json value to pb trace status")?;
+    let json = json.as_object().ok_or(Error::InvalidMapping("Status"))?;
 
     // This is generated code in the pb stub code deriving from otel proto files
     #[allow(deprecated)]
@@ -188,7 +183,7 @@ pub(crate) fn instrumentation_library_spans_to_pb(
     data: Option<&Value<'_>>,
 ) -> Result<Vec<InstrumentationLibrarySpans>> {
     data.as_array()
-        .ok_or("Invalid json mapping for InstrumentationLibrarySpans")?
+        .ok_or(Error::InvalidMapping("InstrumentationLibrarySpans"))?
         .iter()
         .filter_map(Value::as_object)
         .map(|data| {
@@ -235,7 +230,7 @@ pub(crate) fn resource_spans_to_json(request: ExportTraceServiceRequest) -> Valu
 
 pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceSpans>> {
     json.get_array("trace")
-        .ok_or("Invalid json mapping for otel trace message - cannot convert to pb")?
+        .ok_or(Error::InvalidMapping("ResourceSpans"))?
         .iter()
         .filter_map(Value::as_object)
         .map(|json| {
@@ -302,7 +297,7 @@ mod tests {
 
     #[test]
     fn span_event() -> Result<()> {
-        let pb = vec![Event {
+        let pb = vec![span::Event {
             time_unix_nano: 0,
             name: "badger".into(),
             attributes: vec![],
@@ -323,7 +318,7 @@ mod tests {
         assert_eq!(pb, back_again);
 
         // Empty span events
-        let pb: Vec<Event> = vec![];
+        let pb: Vec<span::Event> = vec![];
         let json = span_events_to_json(vec![]);
         let back_again = span_events_to_pb(Some(&json))?;
         let expected: Value = literal!([]);
@@ -341,7 +336,7 @@ mod tests {
         let trace_id_json = id::random_trace_id_value(nanotime);
         let trace_id_pb = id::hex_trace_id_to_pb(Some(&trace_id_json))?;
 
-        let pb = vec![Link {
+        let pb = vec![span::Link {
             attributes: vec![],
             dropped_attributes_count: 42,
             span_id: span_id_pb.clone(),
@@ -555,12 +550,12 @@ mod tests {
             ]
         });
         assert_eq!(
-            Ok(vec![ResourceSpans {
+            Some(vec![ResourceSpans {
                 resource: None,
                 instrumentation_library_spans: vec![],
                 schema_url: "schema_url".to_string()
             }]),
-            resource_spans_to_pb(Some(&resource_spans))
+            resource_spans_to_pb(Some(&resource_spans)).ok()
         );
     }
 
@@ -571,12 +566,12 @@ mod tests {
             "schema_url": "schema_url"
         }]);
         assert_eq!(
-            Ok(vec![InstrumentationLibrarySpans {
+            Some(vec![InstrumentationLibrarySpans {
                 instrumentation_library: None,
                 spans: vec![],
                 schema_url: "schema_url".to_string()
             }]),
-            instrumentation_library_spans_to_pb(Some(&ils))
+            instrumentation_library_spans_to_pb(Some(&ils)).ok()
         );
     }
 
@@ -596,7 +591,7 @@ mod tests {
             "dropped_attributes_count": 0
         });
         assert_eq!(
-            Ok(Span {
+            Some(Span {
                 trace_id: b"aaaaaaaaaaaaaaaa".to_vec(),
                 span_id: b"aaaaaaaa".to_vec(),
                 trace_state: String::new(),
@@ -613,7 +608,7 @@ mod tests {
                 dropped_links_count: 0,
                 status: None
             }),
-            span_to_pb(&span)
+            span_to_pb(&span).ok()
         );
     }
 
@@ -624,13 +619,13 @@ mod tests {
             "name": "urknall"
         }]);
         assert_eq!(
-            Ok(vec![Event {
+            Some(vec![span::Event {
                 time_unix_nano: 1,
                 name: "urknall".to_string(),
                 attributes: vec![],
                 dropped_attributes_count: 0
             }]),
-            span_events_to_pb(Some(&span_events))
+            span_events_to_pb(Some(&span_events)).ok()
         );
     }
 }

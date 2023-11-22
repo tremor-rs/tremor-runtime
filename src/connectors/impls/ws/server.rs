@@ -33,6 +33,16 @@ use tokio_tungstenite::accept_async;
 
 const URL_SCHEME: &str = "tremor-ws-server";
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Source runtime not initialized")]
+    NoSource,
+    #[error("Sink runtime not initialized")]
+    NoSink,
+    #[error("Invalid URL")]
+    InvalidUrl,
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
@@ -72,7 +82,6 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _: &ConnectorConfig,
         raw_config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
@@ -161,14 +170,8 @@ impl Connector for WsServer {
         // TODO: this can be simplified as the connect can be moved into the source
         let path = vec![self.config.url.port_or_dflt().to_string()];
 
-        let source_runtime = self
-            .source_runtime
-            .clone()
-            .ok_or("Source runtime not initialized")?;
-        let sink_runtime = self
-            .sink_runtime
-            .clone()
-            .ok_or("sink runtime not initialized")?;
+        let source_runtime = self.source_runtime.clone().ok_or(Error::NoSource)?;
+        let sink_runtime = self.sink_runtime.clone().ok_or(Error::NoSink)?;
 
         // cancel last accept task if necessary, this will drop the previous listener
         if let Some(previous_handle) = self.accept_task.take() {
@@ -185,7 +188,7 @@ impl Connector for WsServer {
             self.config
                 .url
                 .set_port(Some(port))
-                .map_err(|()| "Invalid URL")?;
+                .map_err(|()| Error::InvalidUrl)?;
         }
         let listener = tcp_server_socket(
             &self.config.url,

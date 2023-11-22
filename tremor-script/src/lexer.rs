@@ -21,7 +21,7 @@ pub use crate::pos::*;
 use crate::Value;
 use crate::{
     arena,
-    errors::{Error, Kind as ErrorKind, Result, ResultExt, UnfinishedToken},
+    errors::{Error, ErrorKind, Result, ResultExt, UnfinishedToken},
 };
 use crate::{errors::unexpected_character, pos};
 use beef::Cow;

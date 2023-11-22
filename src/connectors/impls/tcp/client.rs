@@ -19,19 +19,13 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::TcpReader;
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    errors::already_created_error,
-};
-use crate::{
-    connectors::{
-        prelude::*,
-        utils::{
-            socket::{tcp_client_socket, TcpSocketOptions},
-            tls::TLSClientConfig,
-        },
+use crate::channel::{bounded, Receiver, Sender};
+use crate::connectors::{
+    prelude::*,
+    utils::{
+        socket::{tcp_client_socket, Error, TcpSocketOptions},
+        tls::TLSClientConfig,
     },
-    errors::err_connector_def,
 };
 use either::Either;
 use std::sync::{atomic::AtomicBool, Arc};
@@ -81,15 +75,14 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         if config.url.port().is_none() {
-            return Err(err_connector_def(id, Self::MISSING_PORT));
+            return Err(error_connector_def(id, Self::MISSING_PORT).into());
         }
         let host = match config.url.host_str() {
             Some(host) => host.to_string(),
-            None => return Err(err_connector_def(id, Self::MISSING_HOST)),
+            None => return Err(error_connector_def(id, Self::MISSING_HOST).into()),
         };
         let (tls_connector, tls_domain) = match config.tls.as_ref() {
             Some(Either::Right(true)) => {
@@ -145,7 +138,9 @@ impl Connector for TcpClient {
         // this source is wired up to the ending channel that is forwarding data received from the TCP (or TLS) connection
         let source = ChannelSource::from_channel(
             self.source_tx.clone(),
-            self.source_rx.take().ok_or_else(already_created_error)?,
+            self.source_rx
+                .take()
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
             // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
             Arc::new(AtomicBool::new(false)),
         );
@@ -198,10 +193,7 @@ impl TcpClientSink {
 
     /// writing to the client socket
     async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
-        let stream = self
-            .wrapped_stream
-            .as_mut()
-            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+        let stream = self.wrapped_stream.as_mut().ok_or(Error::NoSocket)?;
         for chunk in data {
             let slice: &[u8] = chunk.as_slice();
             stream.write_all(slice).await?;
@@ -212,7 +204,7 @@ impl TcpClientSink {
 
 #[async_trait::async_trait()]
 impl Sink for TcpClientSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let buf_size = self.config.buf_size;
 
         // connect TCP stream
@@ -316,7 +308,7 @@ impl Sink for TcpClientSink {
     }
 
     /// when writing is done
-    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         if let Some(stream) = self.tcp_stream.as_mut() {
             if let Err(e) = stream.shutdown().await {
                 error!("{ctx} stopping: {e}...",);

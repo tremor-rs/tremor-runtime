@@ -29,12 +29,9 @@
 //!
 //! We try to route the event to the connection with `stream_id` `123`.
 use super::{UnixSocketReader, UnixSocketWriter};
+use crate::channel::{bounded, empty_e, Receiver, Sender};
+use crate::connectors::prelude::*;
 use crate::connectors::sink::channel_sink::ChannelSinkMsg;
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    errors::empty_error,
-};
-use crate::{connectors::prelude::*, errors::already_created_error};
 use std::sync::Arc;
 use std::{path::PathBuf, sync::atomic::AtomicBool};
 use tokio::{io::split, net::UnixListener, task::JoinHandle, time::timeout};
@@ -68,7 +65,6 @@ impl ConnectorBuilder for Builder {
         _: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let (sink_tx, sink_rx) = bounded(qsize());
@@ -134,7 +130,9 @@ impl Connector for UnixSocketServer {
             resolve_connection_meta,
             builder.reply_tx(),
             self.sink_tx.clone(),
-            self.sink_rx.take().ok_or_else(already_created_error)?,
+            self.sink_rx
+                .take()
+                .ok_or_else(|| ConnectorError::AlreadyCreated(ctx.alias().clone()))?,
             self.sink_is_connected.clone(),
         );
         Ok(Some(builder.spawn(sink, ctx)))
@@ -171,7 +169,7 @@ impl UnixSocketSource {
 
 #[async_trait::async_trait()]
 impl Source for UnixSocketSource {
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         if let Some(listener_task) = self.listener_task.take() {
             listener_task.abort();
         }
@@ -256,11 +254,15 @@ impl Source for UnixSocketSource {
         }));
         Ok(true)
     }
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.connection_rx.recv().await.ok_or_else(empty_error)?)
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        Ok(self.connection_rx.recv().await.ok_or_else(empty_e)?)
     }
 
-    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         if let Some(listener_task) = self.listener_task.take() {
             // stop acceptin' new connections
             listener_task.abort();
