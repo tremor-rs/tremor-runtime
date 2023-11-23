@@ -880,7 +880,7 @@ dependencies = [
  "once_cell",
  "pin-project-lite 0.2.13",
  "pin-utils",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "tokio",
  "tracing",
 ]
@@ -2833,7 +2833,7 @@ dependencies = [
  "http",
  "hyper",
  "log",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "rustls-native-certs",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -4504,7 +4504,7 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite 0.2.13",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "rustls-native-certs",
  "rustls-pemfile",
  "serde",
@@ -4740,9 +4740,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.8"
+version = "0.21.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "446e14c5cda4f3f30fe71863c34ec70f5ac79d6087097ad0bb433e1be5edf04c"
+checksum = "629648aced5775d558af50b2b4c7b02983a04b312126d45eeead26e7caa498b9"
 dependencies = [
  "log",
  "ring 0.17.5",
@@ -6029,7 +6029,7 @@ version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
 dependencies = [
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "tokio",
 ]
 
@@ -6516,7 +6516,7 @@ dependencies = [
  "rdkafka-sys",
  "regex",
  "reqwest",
- "rustls 0.21.8",
+ "rustls 0.21.9",
  "rustls-native-certs",
  "rustls-pemfile",
  "ryu",
