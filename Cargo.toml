@@ -94,7 +94,7 @@ tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
 tremor-interceptor = { path = "tremor-interceptor" }
-url = "2.4"
+url = "2.5"
 value-trait = "0.8"
 
 
