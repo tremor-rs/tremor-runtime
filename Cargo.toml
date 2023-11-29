@@ -165,7 +165,7 @@ prost-types = "0.9.0"
 tremor-otelapis = { version = "=0.2.4" }
 
 # aws-s3
-aws-sdk-s3 = { version = "0.39", features = ["behavior-version-latest"] }
+aws-sdk-s3 = { version = "1.4", features = ["behavior-version-latest"] }
 aws-types = "1"
 aws-config = "1"
 aws-smithy-http = "0.60"
