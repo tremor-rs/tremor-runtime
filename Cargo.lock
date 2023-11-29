@@ -6500,7 +6500,7 @@ dependencies = [
  "elasticsearch",
  "env_logger",
  "error-chain",
- "event-listener 3.1.0",
+ "event-listener 4.0.0",
  "file-mode",
  "futures",
  "glob",
