@@ -178,7 +178,7 @@ googapis = { version = "0.6", default-features = false, features = [
   "google-storage-v2",
 ] }
 gouth = { version = "0.2" }
-http = "0.2"
+http = "1.0"
 reqwest = { version = "0.11", default-features = false, features = [
   "rustls-tls",
   "rustls-tls-native-roots",
