@@ -116,7 +116,7 @@ elasticsearch = { version = "=8.5.0-alpha.1", default-features = false, features
 tokio-rustls = "0.24"
 async-channel = "2.1"
 rustls = "0.21"
-rustls-pemfile = "1"
+rustls-pemfile = "2"
 rustls-native-certs = "0.6"
 tokio-tungstenite = "0.20"
 
