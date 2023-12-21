@@ -26,7 +26,7 @@ beef = { version = "0.5", features = ["impl_serde"] }
 byteorder = "1"
 chrono = "0.4"
 chrono-tz = "0.8"
-cidr-utils = "0.5"
+cidr-utils = "0.6"
 codespan = "0.11"
 dissect = "0.7"
 distance = "0.4"
