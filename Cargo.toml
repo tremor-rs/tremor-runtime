@@ -103,7 +103,7 @@ hdrhistogram = "7"
 xz2 = "0.1"
 
 # http
-hyper = { version = "0.14", features = ["full"] }
+hyper = { version = "1.1", features = ["full"] }
 hyper-rustls = { version = "0.24", features = ["http2"] }
 mime = "0.3"
 # elasticsearch
