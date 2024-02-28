@@ -15,7 +15,7 @@
 // Note: We ignore the is_* functions for coverage as they effectively are
 // only lists
 
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::all, clippy::unwrap_used))]
+#[allow(clippy::all, clippy::unwrap_used)]
 use crate::parser::g::__ToTriple;
 pub use crate::pos::*;
 use crate::Value;
