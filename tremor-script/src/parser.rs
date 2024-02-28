@@ -19,14 +19,11 @@ pub(crate) mod g {
 }
 
 lalrpop_mod!(
-    #[cfg_attr(
-        feature = "cargo-clippy",
-        allow(
-            clippy::all,
-            clippy::unwrap_used,
-            clippy::unnecessary_unwrap,
-            clippy::pedantic,
-        )
+    #[allow(
+        clippy::all,
+        clippy::unwrap_used,
+        clippy::unnecessary_unwrap,
+        clippy::pedantic
     )]
     grammar
 );
