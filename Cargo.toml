@@ -63,7 +63,7 @@ chrono-tz = "0.8"
 # [1]: https://crates.io/crates/clickhouse-rs/versions
 clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "73d39ba" }
 dashmap = "5.5"
-either = { version = "1.9", features = ["serde"] }
+either = { version = "1.10", features = ["serde"] }
 error-chain = "0.12"
 file-mode = "0.1"
 futures = "0.3.29"
