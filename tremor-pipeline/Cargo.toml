@@ -9,7 +9,7 @@ version = "0.13.0-rc.16"
 [dependencies]
 tokio = "1"
 beef = { version = "0.5", features = ["impl_serde"] }
-either = { version = "1.9", features = ["serde"] }
+either = { version = "1.10", features = ["serde"] }
 error-chain = "0.12"
 halfbrown = "0.2"
 indexmap = "2"
