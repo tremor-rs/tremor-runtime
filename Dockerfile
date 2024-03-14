@@ -30,6 +30,9 @@ COPY tremor-script-nif /app/tremor-script-nif
 COPY tremor-api /app/tremor-api
 COPY tremor-influx /app/tremor-influx
 COPY tremor-value /app/tremor-value
+COPY tremor-config /app/tremor-config
+COPY tremor-codec /app/tremor-codec
+COPY tremor-interceptor /app/tremor-interceptor
 # Binaries
 COPY tremor-cli /app/tremor-cli
 COPY tremor-common /app/tremor-common
