@@ -8,10 +8,8 @@ on:
   push:
     branches: [main]
 
-
 jobs:
   cli-test-harness:
-
     strategy:
       matrix:
         kind: [integration, unit, command]
@@ -45,10 +43,8 @@ jobs:
       #     # this might remove tools that are actually needed,
       #     # if set to "true" but frees about 6 GB
       #     tool-cache: false
-      - uses: ructions/toolchain@v2
-        with:
-          components: llvm-tools-preview
-
+      - name: Install llvm-tools-preview
+        run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov

@@ -7,11 +7,11 @@ on:
         type: choice
         description: "Which version you'd like to release?"
         options:
-        - major (_.X.X)
-        - minor (X._.X)
-        - patch (X.X._)
-        - rc (X.X.X-rc)
-        - release (removes rc)
+          - major (_.X.X)
+          - minor (X._.X)
+          - patch (X.X._)
+          - rc (X.X.X-rc)
+          - release (removes rc)
         required: true
 
 jobs:
@@ -22,9 +22,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: ructions/toolchain@v2
-        with:
-          toolchain: stable
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-edit
         uses: actions-rs/install@v0.1
@@ -41,7 +38,7 @@ jobs:
           echo "OLD=$OLD_VERSION" >> $GITHUB_ENV
           cargo set-version --workspace --bump ${{ env.VER }}
           NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
-          echo "NEW=$NEW_VERSION" >> $GITHUB_ENV   
+          echo "NEW=$NEW_VERSION" >> $GITHUB_ENV
       - name: Create release branch
         run: |
           git checkout -b release/${{ env.NEW }}
