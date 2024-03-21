@@ -208,7 +208,7 @@ signal-hook = "0.3"
 signal-hook-tokio = "0.3"
 tempfile = { version = "3.8" }
 test-case = "3.3"
-testcontainers = { version = "0.14", features = ["watchdog"] }
+testcontainers = { version = "0.15", features = ["watchdog"] }
 num_cpus = "1"
 bytes = "1"
 
