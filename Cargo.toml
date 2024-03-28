@@ -24,9 +24,12 @@ members = [
   "tremor-pipeline",
   "tremor-script",
   "tremor-value",
+  "tremor-connectors",
+  "tremor-system",
+  "tremor-event",
 ]
+
 default-members = ["tremor-cli"]
-exclude = ["tremor-script-nif"]
 
 [profile.release]
 debug = true
@@ -34,6 +37,18 @@ lto = "thin"
 opt-level = 3
 
 [dependencies]
+tremor-codec = { path = "tremor-codec" }
+tremor-common = { path = "tremor-common" }
+tremor-config = { path = "tremor-config" }
+tremor-connectors = { path = "tremor-connectors" }
+tremor-influx = { path = "tremor-influx" }
+tremor-interceptor = { path = "tremor-interceptor" }
+tremor-pipeline = { path = "tremor-pipeline" }
+tremor-script = { path = "tremor-script" }
+tremor-system = { path = "tremor-system" }
+tremor-value = { path = "tremor-value" }
+tremor-event = { path = "tremor-event" }
+
 tokio = { version = "1.34", features = ["full"] }
 tokio-stream = "0.1"
 anyhow = "1"
@@ -47,25 +62,10 @@ async-trait = "0.1"
 base64 = "0.21"
 beef = { version = "0.5", features = ["impl_serde"] }
 bimap = { version = "0.6", features = ["serde"] }
-chrono = "0.4"
-chrono-tz = "0.8"
 
-# Once a new version of clickhouse-rs is released, we can stop using a git
-# repository as a dependency. The declaration can then be replaced with the
-# following:
-#
-# clickhouse-rs = { version = "...", default-features = false, features = [
-#   "async_std",
-# ] }
-#
-# Releases can be tracked at [1].
-#
-# [1]: https://crates.io/crates/clickhouse-rs/versions
-clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "73d39ba" }
 dashmap = "5.5"
 either = { version = "1.10", features = ["serde"] }
 error-chain = "0.12"
-file-mode = "0.1"
 futures = "0.3.29"
 event-listener = "5"
 glob = "0.3"
@@ -86,109 +86,19 @@ serde_yaml = "0.9"
 simd-json = { version = "0.13", features = ["known-key"] }
 simd-json-derive = "0.13"
 socket2 = { version = "0.5", features = ["all"] }
-tremor-common = { path = "tremor-common" }
-tremor-config = { path = "tremor-config" }
-tremor-codec = { path = "tremor-codec" }
-tremor-influx = { path = "tremor-influx" }
-tremor-pipeline = { path = "tremor-pipeline" }
-tremor-script = { path = "tremor-script" }
-tremor-value = { path = "tremor-value" }
-tremor-interceptor = { path = "tremor-interceptor" }
 url = "2.5"
 value-trait = "0.8"
 
-
-# blaster / blackhole# codecs
-hdrhistogram = "7"
-xz2 = "0.1"
-
-# http
-hyper = { version = "0.14", features = ["full"] }
-hyper-rustls = { version = "0.24", features = ["http2"] }
-mime = "0.3"
-# elasticsearch
-elasticsearch = { version = "=8.5.0-alpha.1", default-features = false, features = [
-  "rustls-tls",
-] }
-
-
 # for tcp & ws
-tokio-rustls = "0.24"
 async-channel = "2.1"
-rustls = "0.21"
-rustls-pemfile = "1"
-rustls-native-certs = "0.6"
-tokio-tungstenite = "0.20"
-
-# dns
-trust-dns-resolver = { version = "0.23" }
-
-rdkafka = { version = "0.36", features = [
-  "cmake-build",
-  "libz-static",
-  "tokio",
-], default-features = false }
-
-# tracking the version rdkafka depends on
-rdkafka-sys = { version = "4.6", features = [
-  "cmake-build",
-  "libz-static",
-], default-features = false }
-
-# crononome
-cron = "0.12"
 
 # logstash grok patterns
 grok = "2"
 
-# discord
-serenity = { version = "0.11", default-features = false, features = [
-  "client",
-  "gateway",
-  "rustls_backend",
-  "model",
-  "cache",
-] }
-
-# kv
-sled = "0.34"
-
-# opentelemetry
-tonic = { version = "0.6.1", default-features = false, features = [
-  "transport",
-  "tls",
-] }
-prost = "0.9.0"
-prost-types = "0.9.0"
-# This is related to https://github.com/tremor-rs/tremor-runtime/issues/1688 the otel API's need to
-# be updated together with tonic
-tremor-otelapis = { version = "=0.2.4" }
-
-# aws-s3
-aws-sdk-s3 = { version = "1.4", features = ["behavior-version-latest"] }
-aws-types = "1"
-aws-config = "1"
-aws-smithy-http = "0.60"
-
-# gcp
-googapis = { version = "0.6", default-features = false, features = [
-  "google-pubsub-v1",
-  "google-cloud-bigquery-storage-v1",
-  "google-logging-v2",
-  "google-storage-v2",
-] }
-gouth = { version = "0.2" }
-http = "0.2"
-reqwest = { version = "0.11", default-features = false, features = [
-  "rustls-tls",
-  "rustls-tls-native-roots",
-] }
 
 # http
-uuid = { version = "1.6", features = ["v4"] }
 
 # wal
-qwal = { git = "https://github.com/tremor-rs/qwal" }
 itoa = "1"
 ryu = "1"
 lexical = "6"

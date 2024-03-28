@@ -107,6 +107,8 @@ impl Codec for Csv {
 
 #[cfg(test)]
 mod tests {
+    use tremor_value::literal;
+
     use super::*;
 
     #[tokio::test(flavor = "multi_thread")]

@@ -34,61 +34,7 @@ pub struct WorldConfig {
     pub debug_connectors: bool,
 }
 
-/// default graceful shutdown timeout
-pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
-
 /// default timeout for interrogating operations, like listing deployments
-
-#[derive(Debug, PartialEq, Eq)]
-/// shutdown mode - controls how we shutdown Tremor
-pub enum ShutdownMode {
-    /// shut down by stopping all binding instances and wait for quiescence
-    Graceful,
-    /// Just stop everything and not wait
-    Forceful,
-}
-
-/// for draining and stopping
-#[derive(Debug, Clone)]
-pub struct KillSwitch(Sender<flow_supervisor::Msg>);
-
-impl KillSwitch {
-    /// stop the runtime
-    ///
-    /// # Errors
-    /// * if draining or stopping fails
-    pub(crate) async fn stop(&self, mode: ShutdownMode) -> Result<()> {
-        if mode == ShutdownMode::Graceful {
-            let (tx, rx) = oneshot::channel();
-            self.0.send(flow_supervisor::Msg::Drain(tx)).await?;
-            if let Ok(res) = timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT, rx).await {
-                if res.is_err() {
-                    error!("Error draining all Flows",);
-                }
-            } else {
-                warn!(
-                    "Timeout draining all Flows after {}s",
-                    DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT.as_secs()
-                );
-            }
-        }
-        let res = self.0.send(flow_supervisor::Msg::Stop).await;
-        if let Err(e) = &res {
-            error!("Error stopping all Flows: {e}");
-        }
-        Ok(res?)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn dummy() -> Self {
-        KillSwitch(crate::channel::bounded(1).0)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn new(sender: Sender<flow_supervisor::Msg>) -> Self {
-        KillSwitch(sender)
-    }
-}
 
 /// Tremor runtime
 #[derive(Clone, Debug)]

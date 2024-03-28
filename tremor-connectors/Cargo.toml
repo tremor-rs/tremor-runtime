@@ -1,0 +1,292 @@
+[package]
+name = "tremor-connectors"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tremor-common = { path = "../tremor-common" }
+tremor-config = { path = "../tremor-config" }
+tremor-codec = { path = "../tremor-codec" }
+tremor-pipeline = { path = "../tremor-pipeline" }
+tremor-script = { path = "../tremor-script" }
+tremor-value = { path = "../tremor-value" }
+tremor-interceptor = { path = "../tremor-interceptor" }
+tremor-system = { path = "../tremor-system" }
+
+beef = { version = "0.5", default-features = false }
+value-trait = { version = "0.8", default-features = false }
+futures = { version = "0.3", default-features = false }
+halfbrown = { version = "0.2", default-features = false }
+tokio = { version = "1.34", default-features = false }
+simd-json = { version = "0.13", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+error-chain = { version = "0.12", default-features = false }
+url = { version = "2.5", default-features = false }
+async-trait = { version = "0.1", default-features = false }
+log = { version = "0.4", features = ["kv_unstable"] }
+tokio-stream = { version = "0.1", default-features = false }
+bimap = { version = "0.6", default-features = false, features = ["serde"] }
+hostname = { version = "0.3", default-features = false }
+anyhow = { version = "1.0", default-features = false }
+
+
+# shared
+simd-json-derive = { version = "0.13", optional = true, default-features = false }
+uuid = { version = "1.6", optional = true, default-features = false, features = [
+    "v4",
+] }
+http-body = { version = "0.4", optional = true, default-features = false }
+lazy_static = { version = "1", optional = true, default-features = false }
+tempfile = { version = "3.8", optional = true, default-features = false }
+
+
+# tls
+tokio-rustls = { version = "0.24", optional = true, default-features = false }
+rustls = { version = "0.21", optional = true, default-features = false }
+rustls-pemfile = { version = "1", optional = true, default-features = false }
+rustls-native-certs = { version = "0.6", optional = true, default-features = false }
+
+# dns
+trust-dns-resolver = { version = "0.23", optional = true, default-features = false, features = [
+    "tokio-runtime",
+    "system-config",
+] }
+
+# elasticsearch
+elasticsearch = { version = "=8.5.0-alpha.1", optional = true, default-features = false, features = [
+    "rustls-tls",
+] }
+
+# http
+http = { version = "0.2", optional = true, default-features = false }
+hyper = { version = "0.14", optional = true, default-features = false }
+hyper-rustls = { version = "0.24", optional = true, default-features = false, features = [
+    "rustls-native-certs",
+    "http1",
+    "http2",
+    "tokio-runtime",
+] }
+mime = { version = "0.3", optional = true, default-features = false }
+reqwest = { version = "0.11", optional = true, default-features = false, features = [
+    "rustls-tls",
+    "rustls-tls-native-roots",
+] }
+base64 = { version = "0.21", optional = true, default-features = false }
+dashmap = { version = "5.5", optional = true, default-features = false }
+
+
+# gcp
+googapis = { version = "0.6", optional = true, default-features = false, features = [
+    "google-pubsub-v1",
+    "google-cloud-bigquery-storage-v1",
+    "google-logging-v2",
+    "google-storage-v2",
+] }
+gouth = { version = "0.2", optional = true, default-features = false }
+async-stream = { version = "0.3", optional = true, default-features = false }
+async-std = { version = "1.12.0", optional = true, default-features = false, features = [
+    "std",
+    "async-io",
+] }
+
+
+# opentelemetry
+tonic = { version = "0.6.1", optional = true, default-features = false, features = [
+    "transport",
+    "tls",
+] }
+prost = { version = "0.9.0", optional = true, default-features = false }
+prost-types = { version = "0.9.0", optional = true, default-features = false }
+# This is related to https://github.com/tremor-rs/tremor-runtime/issues/1688 the otel API's need to
+# be updated together with tonic
+tremor-otelapis = { version = "=0.2.4", optional = true, default-features = false, features = [
+    "otel-all",
+] }
+rand = { version = "0.8.5", optional = true, default-features = false }
+hex = { version = "0.4", optional = true, default-features = false }
+
+# aws
+aws-sdk-s3 = { version = "1.4", optional = true, default-features = false, features = [
+    "behavior-version-latest",
+] }
+aws-types = { version = "1", optional = true, default-features = false }
+aws-config = { version = "1", optional = true, default-features = false }
+aws-smithy-http = { version = "0.60", optional = true, default-features = false }
+async-channel = { version = "2.1", optional = true, default-features = false }
+
+# kafka
+rdkafka = { version = "0.36", optional = true, features = [
+    "cmake-build",
+    "libz-static",
+    "tokio",
+], default-features = false }
+rdkafka-sys = { version = "4.6", optional = true, features = [
+    "cmake-build",
+    "libz-static",
+], default-features = false }
+indexmap = { version = "2", optional = true, default-features = false }
+
+
+# websockets
+tokio-tungstenite = { version = "0.20", optional = true, default-features = false, features = [
+    "handshake",
+] }
+
+# discord
+serenity = { version = "0.11", optional = true, default-features = false, features = [
+    "client",
+    "gateway",
+    "rustls_backend",
+    "model",
+    "cache",
+] }
+
+# file
+file-mode = { version = "0.1", optional = true, default-features = false }
+async-compression = { version = "0.4", optional = true, default-features = false, features = [
+    "xz",
+    "tokio",
+] }
+
+# kv
+sled = { version = "0.34", optional = true, default-features = false }
+
+# wal
+qwal = { git = "https://github.com/tremor-rs/qwal", optional = true, default-features = false, features = [
+    "tokio",
+] }
+
+# bench
+hdrhistogram = { version = "7", optional = true, default-features = false }
+xz2 = { version = "0.1", optional = true, default-features = false }
+
+
+# clickhouse
+# Once a new version of clickhouse-rs is released, we can stop using a git
+# repository as a dependency. The declaration can then be replaced with the
+# following:
+#
+# clickhouse-rs = { version = "...", default-features = false, features = [
+#   "async_std",
+# ] }
+#
+# Releases can be tracked at [1].
+#
+# [1]: https://crates.io/crates/clickhouse-rs/versions
+clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "73d39ba", optional = true, default-features = false, features = [
+    "tokio_io",
+    "tls",
+] }
+either = { version = "1.10", optional = true, default-features = false, features = [
+    "serde",
+] }
+chrono-tz = { version = "0.8", optional = true, default-features = false }
+
+# crononome
+serde_yaml = { version = "0.9", optional = true, default-features = false }
+chrono = { version = "0.4", optional = true, default-features = false }
+cron = { version = "0.12", optional = true, default-features = false }
+
+# udp
+
+socket2 = { version = "0.5", optional = true, default-features = false }
+
+[dev-dependencies]
+serde_yaml = { version = "0.9", default-features = false }
+test-case = "3.3"
+proptest = "1.4"
+lazy_static = "1"
+
+[features]
+default = [
+    "dns",
+    "elasticsearch",
+    "http",
+    "gcp",
+    "otel",
+    "aws",
+    "kafka",
+    "websockets",
+    "discord",
+    "file",
+    "kv",
+    "wal",
+    "clickhouse",
+    "crononome",
+    "stdio",
+    "metronome",
+    "null",
+    "metrics",
+    "tcp",
+    "udp",
+    "unix-socket",
+    "dev",
+]
+
+dev = ["circut-breaker", "exit", "bench"]
+
+tls = [
+    "dep:tokio-rustls",
+    "dep:rustls",
+    "dep:rustls-pemfile",
+    "dep:rustls-native-certs",
+    "dep:lazy_static",
+]
+
+dns = ["dep:trust-dns-resolver"]
+elasticsearch = ["dep:elasticsearch"]
+http = [
+    "dep:http",
+    "dep:hyper",
+    "dep:hyper-rustls",
+    "dep:mime",
+    "dep:reqwest",
+    "dep:base64",
+    "dep:http-body",
+    "dep:dashmap",
+    "tls",
+]
+gcp = [
+    "dep:googapis",
+    "dep:gouth",
+    "dep:simd-json-derive",
+    "dep:async-stream",
+    "dep:http-body",
+    "dep:async-std",
+    "dep:tempfile",
+]
+otel = [
+    "dep:tonic",
+    "dep:prost",
+    "dep:prost-types",
+    "dep:tremor-otelapis",
+    "dep:rand",
+    "dep:hex",
+]
+aws = [
+    "dep:aws-sdk-s3",
+    "dep:aws-types",
+    "dep:aws-config",
+    "dep:aws-smithy-http",
+    "dep:async-channel",
+]
+kafka = ["dep:rdkafka", "dep:rdkafka-sys", "dep:indexmap"]
+websockets = ["dep:tokio-tungstenite"]
+discord = ["dep:serenity"]
+file = ["dep:file-mode", "dep:async-compression"]
+kv = ["dep:sled"]
+wal = ["dep:qwal", "dep:simd-json-derive", "dep:tempfile"]
+bench = ["dep:xz2", "dep:hdrhistogram", "dep:tempfile"]
+clickhouse = ["dep:clickhouse-rs", "dep:chrono-tz", "dep:either", "dep:uuid"]
+crononome = ["dep:serde_yaml", "dep:chrono", "dep:cron"]
+stdio = ["dep:lazy_static"]
+metronome = []
+null = []
+metrics = []
+exit = []
+circut-breaker = []
+tcp = []
+udp = ["dep:socket2"]
+unix-socket = ["dep:tempfile"]

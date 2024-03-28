@@ -15,9 +15,7 @@
 pub use super::*;
 pub use crate::errors::*;
 pub use crate::{CbAction, Event, OpMeta, Operator};
-pub use beef::Cow;
-pub use halfbrown::{hashmap, HashMap};
-pub use serde_yaml;
+pub use halfbrown::HashMap;
 pub use simd_json::OwnedValue;
 pub use tremor_common::ports::{Port, ERR, IN, OUT, OVERFLOW};
 pub use tremor_config::Impl as ConfigImpl;
