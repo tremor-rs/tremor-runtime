@@ -9,16 +9,19 @@ readme = "README.md"
 version = "0.13.0-rc.16"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
-rand = { version = "0.8", features = ["small_rng"] }
-beef = { version = "0.5", features = ["impl_serde"] }
-serde = "1"
-url = { version = "2", features = ["serde"] }
+tokio = { version = "1", default-features = false }
+rand = { version = "0.8", default-features = false, features = ["small_rng"] }
+beef = { version = "0.5", default-features = false, features = ["impl_serde"] }
+serde = { version = "1", default-features = false, features = ["derive"] }
+url = { version = "2", default-features = false, features = ["serde"] }
 simd-json = { version = "0.13", features = ["known-key"] }
-simd-json-derive = "0.13"
-base64 = "0.21"
-regex = "*"
-lazy_static = "*"
+simd-json-derive = { version = "0.13", default-features = false }
+base64 = { version = "0.21", default-features = false, features = ["std"] }
+regex = { version = "1", default-features = false }
+lazy_static = { version = "1", default-features = false }
+futures = { version = "0.3", default-features = false }
+pin-project-lite = { version = "0.2", default-features = false }
+
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
