@@ -158,6 +158,8 @@ impl Codec for Csr {
 
 #[cfg(test)]
 mod test {
+    use tremor_value::literal;
+
     use super::*;
 
     // Test if the codec can be created from config

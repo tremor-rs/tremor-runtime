@@ -158,6 +158,7 @@ error_chain! {
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
         Codec(tremor_codec::errors::Error, tremor_codec::errors::ErrorKind);
         Interceptor(tremor_interceptor::errors::Error, tremor_interceptor::errors::ErrorKind);
+        Connector(tremor_connector::errors::Error, tremor_connector::errors::ErrorKind);
     }
     foreign_links {
         AddrParseError(std::net::AddrParseError);
@@ -166,55 +167,24 @@ error_chain! {
         AsyncChannelTryRecvError(async_std::channel::TryRecvError);
         Base64Error(tremor_common::base64::DecodeError);
         ChannelReceiveError(std::sync::mpsc::RecvError);
-        Clickhouse(clickhouse_rs::errors::Error);
         Common(tremor_common::Error);
         Config(tremor_config::Error);
-        CronError(cron::error::Error);
-        DnsError(trust_dns_resolver::error::ResolveError);
-        ElasticError(elasticsearch::Error);
-        ElasticTransportBuildError(elasticsearch::http::transport::BuildError);
         EnvVarError(std::env::VarError);
         FromUtf8Error(std::string::FromUtf8Error);
-        GoogleAuthError(gouth::Error);
-        GrokError(grok::Error);
-        HeaderToStringError(http::header::ToStrError);
+        GrokError(grok::Error );
         Hex(hex::FromHexError);
-        Http(http::Error);
-        HttpHeaderError(http::header::InvalidHeaderValue);
-        Hyper(hyper::Error);
-        InvalidHeaderName(reqwest::header::InvalidHeaderName);
-        InvalidMetadataValue(tonic::metadata::errors::InvalidMetadataValue);
-        InvalidMethod(http::method::InvalidMethod);
-        InvalidStatusCode(http::status::InvalidStatusCode);
-        InvalidTLSClientName(rustls::client::InvalidDnsNameError);
         Io(std::io::Error);
         JoinError(tokio::task::JoinError);
         JsonAccessError(value_trait::AccessError);
         JsonError(simd_json::Error);
-        KafkaError(rdkafka::error::KafkaError);
-        MimeParsingError(mime::FromStrError);
-        ModeParseError(file_mode::ModeParseError);
         OneShotRecv(tokio::sync::oneshot::error::RecvError);
         ParseFloatError(std::num::ParseFloatError);
         ParseIntError(std::num::ParseIntError);
         RegexError(regex::Error);
-        ReqwestError(reqwest::Error);
-        RustlsError(rustls::Error);
-        S3ByteStream(aws_sdk_s3::primitives::ByteStreamError);
-        S3Endpoint(aws_smithy_http::endpoint::error::InvalidEndpointError);
-        Serenity(serenity::Error);
-        Sled(sled::Error);
         Timeout(tokio::time::error::Elapsed);
-        TonicStatusError(tonic::Status);
-        TonicTransportError(tonic::transport::Error);
         TryFromIntError(std::num::TryFromIntError);
-        UriParserError(http::uri::InvalidUri);
-        UrlParserError(url::ParseError);
         Utf8Error(std::str::Utf8Error);
         ValueError(tremor_value::Error);
-        WalInfailable(qwal::Error<std::convert::Infallible>);
-        WalJson(qwal::Error<simd_json::Error>);
-        Ws(tokio_tungstenite::tungstenite::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
     }
 
@@ -224,10 +194,6 @@ error_chain! {
                 display("Type error: Expected {}, found {}", expected, found)
         }
 
-        S3Error(n: String) {
-            description("S3 Error")
-            display("S3Error: {}", n)
-        }
 
         UnknownOp(n: String, o: String) {
             description("Unknown operator")
@@ -279,26 +245,8 @@ error_chain! {
             description("Invalid Configuration")
                 display("Invalid Configuration for {}: {}", configured_thing, msg)
         }
-        InvalidConnectorDefinition(connector_id: String, msg: String) {
-            description("Invalid Connector Definition")
-                display("Invalid Definition for connector \"{}\": {}", connector_id, msg)
-        }
-        InvalidConnect(target: String, port: Port<'static>) {
-            description("Invalid Connect attempt")
-                display("Invalid Connect to {} via port {}", target, port)
-        }
-        InvalidDisconnect(target: String, entity: String, port: Port<'static>) {
-            description("Invalid Disonnect attempt")
-                display("Invalid Disconnect of {} from {} via port {}", entity, target, port)
-        }
-        InvalidMetricsData {
-            description("Invalid Metrics data")
-                display("Invalid Metrics data")
-        }
-        NoSocket {
-            description("No socket available")
-                display("No socket available. Probably not connected yet.")
-        }
+
+
         DeployFlowError(flow: String, err: String) {
             description("Error deploying Flow")
                 display("Error deploying Flow {}: {}", flow, err)
@@ -306,10 +254,6 @@ error_chain! {
         DuplicateFlow(flow: String) {
             description("Duplicate Flow")
                 display("Flow with id \"{}\" is already deployed.", flow)
-        }
-        ProducerNotAvailable(alias: String) {
-            description("Producer not available")
-                display("Kafka Producer not available for Connector {}", alias)
         }
         FlowNotFound(alias: String) {
             description("Deployment not found")
@@ -320,74 +264,6 @@ error_chain! {
                 display("Connector \"{}\" not found in Flow \"{}\"", alias, flow_id)
         }
 
-        GbqSinkFailed(msg: &'static str) {
-            description("GBQ Sink failed")
-                display("GBQ Sink failed: {}", msg)
-        }
-        GbqSchemaNotProvided(table: String) {
-            description("GBQ Schema not provided")
-                display("GBQ Schema not provided for table {}", table)
-        }
-        ClientNotAvailable(name: &'static str, msg: &'static str) {
-            description("Client not available")
-                display("{} client not available: {}", name, msg)
-        }
-        PubSubError(msg: &'static str) {
-            description("PubSub error")
-                display("PubSub error: {}", msg)
-        }
-        BigQueryTypeMismatch(expected: &'static str, actual:value_trait::ValueType) {
-            description("Type in the message does not match BigQuery type")
-                display("Type in the message does not match BigQuery type. Expected: {}, actual: {:?}", expected, actual)
-        }
-
-        NoClickHouseClientAvailable {
-            description("The ClickHouse adapter has no client available")
-            display("The ClickHouse adapter has no client available")
-        }
-
-        ExpectedObjectEvent(found_type: ValueType) {
-            description("Expected object event")
-                display("Expected an object event, found a \"{found_type:?}\"")
-        }
-
-        MissingEventColumn(column: String) {
-            description("Missing event column")
-                display("Column \"{column}\" is missing")
-        }
-
-        UnexpectedEventFormat(column_name: String, expected_type: String, found_type: ValueType) {
-            description("Unexpected event format")
-                display("Field \"{column_name}\" is of type \'{found_type:?}\" while it should have type \"{expected_type}\"")
-        }
-
-        MalformedIpAddr {
-            description("Malformed IP address")
-                display("Malformed IP address")
-        }
-
-        MalformedUuid {
-            description("Malformed UUID")
-                display("Malformed UUID")
-        }
-
-        GclSinkFailed(msg: &'static str) {
-            description("Google Cloud Logging Sink failed")
-                display("Google Cloud Logging Sink failed: {}", msg)
-        }
-
-        GclTypeMismatch(expected: &'static str, actual:value_trait::ValueType) {
-            description("Type in the message does not match Google Cloud Logging API type")
-            display("Type in the message does not match Google Cloud Logging API type. Expected: {}, actual: {:?}", expected, actual)
-        }
-        GoogleCloudStorageError(msg: String) {
-            description("Google cloud storage error")
-                display("Google cloud storage error: {}", msg)
-        }
-        ObjectStorageError(msg: String) {
-            description("Object storage error")
-                display("{}", msg)
-        }
         PipelineSendError(s: String) {
             description("Pipeline send error")
                 display("Pipeline send error: {}", s)
@@ -413,33 +289,11 @@ pub(crate) fn already_created_error() -> Error {
 pub(crate) fn pipe_send_e<T>(e: crate::channel::SendError<T>) -> Error {
     ErrorKind::PipelineSendError(e.to_string()).into()
 }
-#[allow(clippy::needless_pass_by_value)]
-pub(crate) fn connector_send_err<T>(e: crate::channel::SendError<T>) -> Error {
-    format!("could not send to connector: {e}").into()
-}
-
-pub(crate) fn err_connector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {
-    ErrorKind::InvalidConnectorDefinition(c.to_string(), e.to_string()).into()
-}
-
-pub(crate) fn err_gcs(msg: impl Into<String>) -> Error {
-    ErrorKind::GoogleCloudStorageError(msg.into()).into()
-}
-
-pub(crate) fn err_object_storage(msg: impl Into<String>) -> Error {
-    ErrorKind::ObjectStorageError(msg.into()).into()
-}
 
 #[cfg(test)]
 mod test {
     use super::*;
     use matches::assert_matches;
-
-    #[test]
-    fn test_err_conector_def() {
-        let r = err_connector_def("snot", "badger").0;
-        assert_matches!(r, ErrorKind::InvalidConnectorDefinition(_, _));
-    }
 
     #[test]
     fn test_type_error() {
