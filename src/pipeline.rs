@@ -36,115 +36,6 @@ type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
 type Dests = halfbrown::HashMap<Port<'static>, Vec<(DeployEndpoint, OutputTarget)>>;
 type EventSet = Vec<(Port<'static>, Event)>;
 
-/// Address for a pipeline
-#[derive(Clone)]
-pub struct Addr {
-    addr: Sender<Box<Msg>>,
-    cf_addr: UnboundedSender<CfMsg>,
-    mgmt_addr: Sender<MgmtMsg>,
-    alias: alias::Pipeline,
-}
-
-impl Addr {
-    /// creates a new address
-    #[must_use]
-    pub(crate) fn new(
-        addr: Sender<Box<Msg>>,
-        cf_addr: UnboundedSender<CfMsg>,
-        mgmt_addr: Sender<MgmtMsg>,
-        alias: alias::Pipeline,
-    ) -> Self {
-        Self {
-            addr,
-            cf_addr,
-            mgmt_addr,
-            alias,
-        }
-    }
-
-    /// send a contraflow insight message back down the pipeline
-    pub(crate) fn send_insight(&self, event: Event) -> Result<()> {
-        use CfMsg::Insight;
-        self.cf_addr.send(Insight(event)).map_err(pipe_send_e)
-    }
-
-    /// send a data-plane message to the pipeline
-    pub(crate) async fn send(&self, msg: Box<Msg>) -> Result<()> {
-        self.addr.send(msg).await.map_err(pipe_send_e)
-    }
-
-    pub(crate) async fn send_mgmt(&self, msg: MgmtMsg) -> Result<()> {
-        self.mgmt_addr.send(msg).await.map_err(pipe_send_e)
-    }
-
-    pub(crate) async fn stop(&self) -> Result<()> {
-        self.send_mgmt(MgmtMsg::Stop).await
-    }
-
-    pub(crate) async fn start(&self) -> Result<()> {
-        self.send_mgmt(MgmtMsg::Start).await
-    }
-    pub(crate) async fn pause(&self) -> Result<()> {
-        self.send_mgmt(MgmtMsg::Pause).await
-    }
-    pub(crate) async fn resume(&self) -> Result<()> {
-        self.send_mgmt(MgmtMsg::Resume).await
-    }
-}
-
-impl fmt::Debug for Addr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Pipeline({})", self.alias)
-    }
-}
-
-/// contraflow message
-#[derive(Debug)]
-pub enum CfMsg {
-    /// insight
-    Insight(Event),
-}
-
-/// Input targets
-#[derive(Debug)]
-pub(crate) enum InputTarget {
-    /// another pipeline
-    Pipeline(Box<Addr>),
-    /// a connector
-    Source(connectors::source::SourceAddr),
-}
-
-impl InputTarget {
-    fn send_insight(&self, insight: Event) -> Result<()> {
-        match self {
-            InputTarget::Pipeline(addr) => addr.send_insight(insight),
-            InputTarget::Source(addr) => addr.send(SourceMsg::Cb(insight.cb, insight.id)),
-        }
-    }
-}
-
-/// Output targets
-#[derive(Debug)]
-pub(crate) enum OutputTarget {
-    /// another pipeline
-    Pipeline(Box<Addr>),
-    /// a connector
-    Sink(connectors::sink::SinkAddr),
-}
-
-impl From<Addr> for OutputTarget {
-    fn from(p: Addr) -> Self {
-        Self::Pipeline(Box::new(p))
-    }
-}
-impl TryFrom<connectors::Addr> for OutputTarget {
-    type Error = crate::errors::Error;
-
-    fn try_from(addr: connectors::Addr) -> Result<Self> {
-        Ok(Self::Sink(addr.sink.ok_or("Connector has no sink")?))
-    }
-}
-
 pub(crate) fn spawn(
     pipeline_alias: alias::Pipeline,
     config: &tremor_pipeline::query::Query,
@@ -187,45 +78,6 @@ pub(crate) fn spawn(
         tick_handler,
     ));
     Ok(addr)
-}
-
-/// control plane message
-#[derive(Debug)]
-pub(crate) enum MgmtMsg {
-    /// connect a target to an input port
-    ConnectInput {
-        /// port to connect in
-        port: Port<'static>,
-        /// url of the input to connect
-        endpoint: DeployEndpoint,
-        /// sends the result
-        tx: Sender<Result<()>>,
-        /// the target that connects to the `in` port
-        target: InputTarget,
-        /// should we send insights to this input
-        is_transactional: bool,
-    },
-    /// connect a target to an output port
-    ConnectOutput {
-        /// the port to connect to
-        port: Port<'static>,
-        /// the url of the output instance
-        endpoint: DeployEndpoint,
-        /// sends the result
-        tx: Sender<Result<()>>,
-        /// the actual target addr
-        target: OutputTarget,
-    },
-    /// start the pipeline
-    Start,
-    /// pause the pipeline - currently a no-op
-    Pause,
-    /// resume from pause - currently a no-op
-    Resume,
-    /// stop the pipeline
-    Stop,
-    #[cfg(test)]
-    Inspect(Sender<report::StatusReport>),
 }
 
 #[cfg(test)]
@@ -306,20 +158,6 @@ mod report {
             }
         }
     }
-}
-
-/// an input dataplane message for this pipeline
-#[derive(Debug)]
-pub enum Msg {
-    /// an event
-    Event {
-        /// the event
-        event: Event,
-        /// the port the event came in from
-        input: Port<'static>,
-    },
-    /// a signal
-    Signal(Event),
 }
 
 /// wrapper for all possible messages handled by the pipeline task

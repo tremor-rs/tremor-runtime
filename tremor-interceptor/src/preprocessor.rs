@@ -23,7 +23,7 @@ mod textual_length_prefixed;
 pub(crate) mod prelude {
     pub use super::Preprocessor;
     pub use crate::errors::Result;
-    pub use tremor_common::{default_false, default_true};
+    pub use tremor_common::default_true;
     pub use tremor_value::Value;
     pub use value_trait::prelude::*;
 }

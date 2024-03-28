@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::impls::gcl;
-use crate::connectors::impls::otel;
 use crate::errors::Result;
 use crate::version::VERSION;
+use tremor_connectors::impls::gcl;
+use tremor_connectors::impls::otel;
 use tremor_script::registry::Registry;
 use tremor_script::FN_REGISTRY;
 use tremor_script::{tremor_const_fn, tremor_fn};

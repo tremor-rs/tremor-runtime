@@ -17,4 +17,3 @@ mod se;
 
 pub use de::structurize;
 pub use se::to_value;
-pub use se::Serializer;
