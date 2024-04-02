@@ -31,6 +31,8 @@ value-trait = "0.8"
 rand = "0.8"
 bytes = "1.5.0"
 memchr = "2.6"
+anyhow = { version = "1.0", default-features = false }
+thiserror = { version = "1.0", default-features = false }
 
 [dev-dependencies]
 proptest = "1.4"

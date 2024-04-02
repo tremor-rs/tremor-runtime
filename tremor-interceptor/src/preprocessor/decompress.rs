@@ -61,7 +61,7 @@ impl Preprocessor for Gzip {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         use libflate::gzip::MultiDecoder;
         let mut decoder = MultiDecoder::new(data)?;
         let mut decompressed = Vec::new();
@@ -82,7 +82,7 @@ impl Preprocessor for Zlib {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         use libflate::zlib::Decoder;
         let mut decoder = Decoder::new(data)?;
         let mut decompressed = Vec::new();
@@ -103,7 +103,7 @@ impl Preprocessor for Xz2 {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         use xz2::read::XzDecoder as Decoder;
         let mut decoder = Decoder::new(data);
         let mut decompressed = Vec::new();
@@ -124,7 +124,7 @@ impl Preprocessor for Snappy {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         use snap::read::FrameDecoder;
         let mut rdr = FrameDecoder::new(data);
         let decompressed_len = snap::raw::decompress_len(data)?;
@@ -146,7 +146,7 @@ impl Preprocessor for Lz4 {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         use lz4::Decoder;
         let mut decoder = Decoder::new(data)?;
         let mut decompressed = Vec::new();
@@ -166,7 +166,7 @@ impl Preprocessor for Zstd {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         let decoded: Vec<u8> = zstd::decode_all(data)?;
         Ok(vec![(decoded, meta)])
     }
@@ -184,7 +184,7 @@ impl Preprocessor for Fingerprinted {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         let r = match data.get(0..6) {
             Some(&[0x1f, 0x8b, _, _, _, _]) => {
                 use libflate::gzip::Decoder;
@@ -234,8 +234,16 @@ impl Preprocessor for Fingerprinted {
 pub(crate) struct Decompress {
     codec: Box<dyn Preprocessor>,
 }
+/// Decompression preprocessor errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Unknown compression algorithm
+    #[error("Unknown compression algorithm: {0}")]
+    UnknownAlgorithm(String),
+}
+
 impl Decompress {
-    pub(crate) fn from_config(config: Option<&Value>) -> Result<Self> {
+    pub(crate) fn from_config(config: Option<&Value>) -> Result<Self, super::Error> {
         let codec: Box<dyn Preprocessor> = match config.get_str("algorithm") {
             Some("gzip") => Box::<Gzip>::default(),
             Some("zlib") => Box::<Zlib>::default(),
@@ -244,7 +252,12 @@ impl Decompress {
             Some("lz4") => Box::<Lz4>::default(),
             Some("zstd") => Box::<Zstd>::default(),
             Some("autodetect") | None => Box::<Fingerprinted>::default(),
-            Some(other) => return Err(format!("Unknown decompression algorithm: {other}").into()),
+            Some(other) => {
+                return Err(super::Error::InvalidConfig(
+                    "decompress",
+                    Error::UnknownAlgorithm(other.to_string()).into(),
+                ))
+            }
         };
         Ok(Decompress { codec })
     }
@@ -258,7 +271,7 @@ impl Preprocessor for Decompress {
         ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         self.codec.process(ingest_ns, data, meta)
     }
 }
@@ -281,7 +294,7 @@ mod test {
         }
     } // Assert pre and post processors have a sensible default() ctor
 
-    fn assert_simple_symmetric(internal: &[u8], algo: &str) -> Result<()> {
+    fn assert_simple_symmetric(internal: &[u8], algo: &str) -> anyhow::Result<()> {
         let config = literal!({ "algorithm": algo });
         let mut pre = super::Decompress::from_config(Some(&config))?;
         let mut post = post::compress::Compress::from_config(Some(&config))?;
@@ -306,7 +319,7 @@ mod test {
         Ok(())
     }
 
-    fn assert_fingerprinted_symmetric(internal: &[u8], algo: &str) -> Result<()> {
+    fn assert_fingerprinted_symmetric(internal: &[u8], algo: &str) -> anyhow::Result<()> {
         let config_pre = literal!({ "algorithm": "autodetect" });
         let mut pre = super::Decompress::from_config(Some(&config_pre))?;
 
@@ -332,84 +345,84 @@ mod test {
     }
 
     #[test]
-    fn test_gzip() -> Result<()> {
+    fn test_gzip() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "gzip")?;
         Ok(())
     }
 
     #[test]
-    fn test_gzip_fingerprinted() -> Result<()> {
+    fn test_gzip_fingerprinted() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_fingerprinted_symmetric(int, "gzip")?;
         Ok(())
     }
 
     #[test]
-    fn test_zlib() -> Result<()> {
+    fn test_zlib() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "zlib")?;
         Ok(())
     }
 
     #[test]
-    fn test_zlib_fingerprinted() -> Result<()> {
+    fn test_zlib_fingerprinted() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_fingerprinted_symmetric(int, "zlib")?;
         Ok(())
     }
 
     #[test]
-    fn test_snappy() -> Result<()> {
+    fn test_snappy() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "snappy")?;
         Ok(())
     }
 
     #[test]
-    fn test_snappy_fingerprinted() -> Result<()> {
+    fn test_snappy_fingerprinted() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_fingerprinted_symmetric(int, "snappy")?;
         Ok(())
     }
 
     #[test]
-    fn test_xz2() -> Result<()> {
+    fn test_xz2() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "xz2")?;
         Ok(())
     }
 
     #[test]
-    fn test_xz2_fingerprinted() -> Result<()> {
+    fn test_xz2_fingerprinted() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_fingerprinted_symmetric(int, "xz2")?;
         Ok(())
     }
 
     #[test]
-    fn test_lz4() -> Result<()> {
+    fn test_lz4() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "lz4")?;
         Ok(())
     }
 
     #[test]
-    fn test_lz4_fingerprinted() -> Result<()> {
+    fn test_lz4_fingerprinted() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_fingerprinted_symmetric(int, "lz4")?;
         Ok(())
     }
 
     #[test]
-    fn test_zstd() -> Result<()> {
+    fn test_zstd() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "zstd")?;
         Ok(())
     }
 
     #[test]
-    fn test_zstd_fingerprinted() -> Result<()> {
+    fn test_zstd_fingerprinted() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_fingerprinted_symmetric(int, "zstd")?;
         Ok(())

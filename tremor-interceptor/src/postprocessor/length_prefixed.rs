@@ -19,7 +19,6 @@ use std::io::Write;
 use byteorder::{BigEndian, WriteBytesExt};
 
 use super::Postprocessor;
-use crate::errors::Result;
 
 #[derive(Clone, Default)]
 pub(crate) struct LengthPrefixed {}
@@ -28,7 +27,12 @@ impl Postprocessor for LengthPrefixed {
         "length-prefix"
     }
 
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         let mut res = Vec::with_capacity(data.len() + 8);
         res.write_u64::<BigEndian>(data.len() as u64)?;
         res.write_all(data)?;

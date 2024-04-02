@@ -33,7 +33,7 @@ impl Preprocessor for LengthPrefixed {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         self.buffer.extend(data);
 
         let mut res = Vec::new();

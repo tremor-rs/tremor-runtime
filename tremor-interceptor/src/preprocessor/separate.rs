@@ -59,7 +59,6 @@
 //! ```
 
 use super::prelude::*;
-use crate::errors::{ErrorKind, Result};
 use log::trace;
 use memchr::memchr_iter;
 use serde::{Deserialize, Serialize};
@@ -102,20 +101,32 @@ impl Default for Separate {
     }
 }
 
+/// Separate preprocessor error
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    /// Invalid Seperator
+    #[error("Invalid 'separator': \"{0}\", must be 1 byte.")]
+    InvalidSeparator(String),
+    //Input data is out of bounds
+    #[error("Invalid input data: out of bounds")]
+    InputOutOfBound,
+    /// Maximum length exceeded
+    #[error("Discarded fragment of length {0} since total length of {1} exceeds maximum allowed length of {2}")]
+    ExceedsMaxLength(usize, usize, usize),
+}
+
 impl Separate {
-    pub fn from_config(config: &ConfigMap) -> Result<Self> {
+    pub fn from_config(config: &ConfigMap) -> Result<Self, super::Error> {
         if let Some(raw_config) = config {
-            let config = Config::new(raw_config)?;
+            let config = Config::new(raw_config)
+                .map_err(|e| super::Error::InvalidConfig("seperate", e.into()))?;
+
             let separator = {
                 if config.separator.len() != 1 {
-                    return Err(ErrorKind::InvalidConfiguration(
-                        String::from("split preprocessor"),
-                        format!(
-                            "Invalid 'separator': \"{}\", must be 1 byte.",
-                            config.separator
-                        ),
-                    )
-                    .into());
+                    return Err(super::Error::InvalidConfig(
+                        "split",
+                        Error::InvalidSeparator(config.separator).into(),
+                    ));
                 }
                 config.separator.as_bytes()[0]
             };
@@ -153,19 +164,18 @@ impl Separate {
             .unwrap_or_default()
     }
 
-    fn save_fragment(&mut self, v: &[u8]) -> Result<()> {
+    fn save_fragment(&mut self, v: &[u8]) -> Result<(), Error> {
         let total_fragment_length = self.buffer.len() + v.len();
         if self.exceeds_max_length(total_fragment_length) {
             // exceeding the max_length
             // since we are not saving the current fragment, anything that was saved earlier is
             // useless now so clear the buffer
             self.buffer.clear();
-            Err(format!(
-                "Discarded fragment of length {} since total length of {} exceeds maximum allowed length of {}",
+            Err(Error::ExceedsMaxLength(
                 v.len(),
                 total_fragment_length,
                 self.max_length.map(NonZeroUsize::get).unwrap_or_default(),
-            ).into())
+            ))
         } else {
             self.buffer.extend_from_slice(v);
             // TODO evaluate if the overhead of trace logging is worth it
@@ -177,16 +187,15 @@ impl Separate {
         }
     }
 
-    fn complete_fragment(&mut self, v: &[u8]) -> Result<Vec<u8>> {
+    fn complete_fragment(&mut self, v: &[u8]) -> Result<Vec<u8>, Error> {
         let total_fragment_length = self.buffer.len() + v.len();
         if self.exceeds_max_length(total_fragment_length) {
             self.buffer.clear();
-            Err(format!(
-                "Discarded fragment of length {} since total length of {} exceeds maximum allowed chunk size of {}",
+            Err(Error::ExceedsMaxLength(
                 v.len(),
                 total_fragment_length,
                 self.max_length.map(NonZeroUsize::get).unwrap_or_default(),
-            ).into())
+            ))
         } else {
             let mut result = Vec::with_capacity(self.buffer.capacity());
             self.buffer.extend_from_slice(v);
@@ -212,7 +221,7 @@ impl Preprocessor for Separate {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         // split incoming bytes by specifed separator
         let separator = self.separator;
         let mut events = Vec::with_capacity(self.parts_per_chunk);
@@ -224,7 +233,7 @@ impl Preprocessor for Separate {
                 // ALLOW
                 let first_fragment = data
                     .get(last_idx..first_fragment_idx)
-                    .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?;
+                    .ok_or(Error::InputOutOfBound)?;
                 if !self.buffer.is_empty() {
                     events.push((self.complete_fragment(first_fragment)?, meta.clone()));
                 // invalid lines are ignored (and logged about here)
@@ -236,7 +245,7 @@ impl Preprocessor for Separate {
                 for fragment_idx in split_points.by_ref() {
                     let fragment = data
                         .get(last_idx..fragment_idx)
-                        .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?;
+                        .ok_or(Error::InputOutOfBound)?;
                     if self.is_valid_chunk(fragment) {
                         events.push((fragment.to_vec(), meta.clone()));
                     }
@@ -246,10 +255,7 @@ impl Preprocessor for Separate {
                     // this is the last line and since it did not end in a line boundary, it
                     // needs to be remembered for later (when more data arrives)
                     // invalid lines are ignored (and logged about here)
-                    self.save_fragment(
-                        data.get(last_idx..)
-                            .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?,
-                    )?;
+                    self.save_fragment(data.get(last_idx..).ok_or(Error::InputOutOfBound)?)?;
                 }
             } else {
                 // if there's no other fragment, or if data did not end in a separator boundary
@@ -260,7 +266,7 @@ impl Preprocessor for Separate {
                 if !self.exceeds_max_length(split_point - last_idx) {
                     events.push((
                         data.get(last_idx..split_point)
-                            .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?
+                            .ok_or(Error::InputOutOfBound)?
                             .to_vec(),
                         meta.clone(),
                     ));
@@ -270,9 +276,7 @@ impl Preprocessor for Separate {
             // push the rest out, if finished or not
             if last_idx <= data.len() {
                 events.push((
-                    data.get(last_idx..)
-                        .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?
-                        .to_vec(),
+                    data.get(last_idx..).ok_or(Error::InputOutOfBound)?.to_vec(),
                     meta,
                 ));
             }
@@ -287,7 +291,7 @@ impl Preprocessor for Separate {
         &mut self,
         data: Option<&[u8]>,
         meta: Option<Value<'static>>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         let mut tmp = 0_u64;
         if let Some(data) = data {
             self.process(&mut tmp, data, meta.clone().unwrap_or_else(Value::object))
@@ -314,10 +318,9 @@ mod test {
     use tremor_value::literal;
 
     use super::*;
-    use crate::errors::Result;
 
     #[test]
-    fn from_config() -> Result<()> {
+    fn from_config() -> anyhow::Result<()> {
         let config = Some(literal!({
             "separator": "\n",
             "max_length": 12345,
@@ -344,7 +347,7 @@ mod test {
     }
 
     #[test]
-    fn test6() -> Result<()> {
+    fn test6() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
@@ -391,7 +394,7 @@ mod test {
     }
 
     #[test]
-    fn test5() -> Result<()> {
+    fn test5() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
@@ -429,7 +432,7 @@ mod test {
     }
 
     #[test]
-    fn test4() -> Result<()> {
+    fn test4() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
@@ -465,7 +468,7 @@ mod test {
     }
 
     #[test]
-    fn test3() -> Result<()> {
+    fn test3() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
@@ -493,7 +496,7 @@ mod test {
     }
 
     #[test]
-    fn test2() -> Result<()> {
+    fn test2() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
 
         let mut i = 0_u64;
@@ -516,7 +519,7 @@ mod test {
     }
 
     #[test]
-    fn test1() -> Result<()> {
+    fn test1() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
 
         let mut i = 0_u64;
@@ -532,7 +535,7 @@ mod test {
     }
 
     #[test]
-    fn test_non_default_separator() -> Result<()> {
+    fn test_non_default_separator() -> anyhow::Result<()> {
         let mut pp = Separate::new(b'\0', 10, true);
         let mut i = 0_u64;
 
@@ -547,7 +550,7 @@ mod test {
     }
 
     #[test]
-    fn test_empty_data() -> Result<()> {
+    fn test_empty_data() -> anyhow::Result<()> {
         let mut pp = Separate::default();
         let mut i = 0_u64;
         assert!(pp.process(&mut i, b"", Value::object())?.is_empty());
@@ -555,7 +558,7 @@ mod test {
     }
 
     #[test]
-    fn test_empty_data_after_buffer() -> Result<()> {
+    fn test_empty_data_after_buffer() -> anyhow::Result<()> {
         let mut pp = Separate::default();
         let mut i = 0_u64;
         assert!(pp.process(&mut i, b"a", Value::object())?.is_empty());
@@ -564,7 +567,7 @@ mod test {
     }
 
     #[test]
-    fn test_split_split_split() -> Result<()> {
+    fn test_split_split_split() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
@@ -582,7 +585,7 @@ mod test {
     }
 
     #[test]
-    fn test_split_buffer_split() -> Result<()> {
+    fn test_split_buffer_split() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
@@ -601,7 +604,7 @@ mod test {
     }
 
     #[test]
-    fn test_split_buffer_split_buffer() -> Result<()> {
+    fn test_split_buffer_split_buffer() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
@@ -623,7 +626,7 @@ mod test {
     }
 
     #[test]
-    fn test_split_buffer_buffer_split() -> Result<()> {
+    fn test_split_buffer_buffer_split() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
@@ -641,7 +644,7 @@ mod test {
     }
 
     #[test]
-    fn test_leftovers() -> Result<()> {
+    fn test_leftovers() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut ingest_ns = 0_u64;
 
@@ -664,7 +667,7 @@ mod test {
     }
 
     #[test]
-    fn test_max_length_unbuffered() -> Result<()> {
+    fn test_max_length_unbuffered() -> anyhow::Result<()> {
         let mut pp = Separate::new(DEFAULT_SEPARATOR, 0, false);
         let mut ingest_ns = 0_u64;
 
@@ -680,7 +683,7 @@ mod test {
     }
 
     #[test]
-    fn from_config_len() -> Result<()> {
+    fn from_config_len() -> anyhow::Result<()> {
         let config = Some(literal!({
             "separator": "\n",
             "max_length": 12345
@@ -702,7 +705,7 @@ mod test {
     }
 
     #[test]
-    fn test_finish_chain_unbuffered() -> Result<()> {
+    fn test_finish_chain_unbuffered() -> anyhow::Result<()> {
         let mut ingest_ns = 0;
         let config = Some(literal!({
             "separator": "|",
@@ -725,7 +728,7 @@ mod test {
     }
 
     #[test]
-    fn test_finish_chain_buffered() -> Result<()> {
+    fn test_finish_chain_buffered() -> anyhow::Result<()> {
         let mut ingest_ns = 0;
         let config = Some(literal!({
             "separator": "|",
