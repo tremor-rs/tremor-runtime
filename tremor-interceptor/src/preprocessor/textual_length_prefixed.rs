@@ -15,7 +15,6 @@
 //! Extracts the message based on prefixed message length given in ascii digits which is followed by a space as used in [RFC 5425](https://tools.ietf.org/html/rfc5425#section-4.3) for TLS/TCP transport for syslog
 
 use super::prelude::*;
-use crate::errors::Result;
 use bytes::{Buf, BytesMut};
 
 #[derive(Clone, Default, Debug)]
@@ -33,7 +32,7 @@ impl Preprocessor for TextualLengthPrefixed {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         self.buffer.extend(data);
 
         let mut res = Vec::new();

@@ -21,13 +21,26 @@ pub(crate) mod length_prefixed;
 pub(crate) mod separate;
 pub(crate) mod textual_length_prefixed;
 
-use crate::errors::Result;
 use log::error;
 use std::default::Default;
 use tremor_common::time::nanotime;
 /// Set of Postprocessors
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
 use std::{mem, str};
+
+/// postprocessor error
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Postprocessor not found
+    #[error("{0} Postprocessor not found.")]
+    NotFound(String),
+    /// Invalid Config
+    #[error("{0} Invalid config: {1}")]
+    InvalidConfig(&'static str, anyhow::Error),
+    /// Missing Config
+    #[error("{0} Missing config")]
+    MissingConfig(&'static str),
+}
 
 /// Configuration for a postprocessor
 pub type Config = tremor_config::NameWithConfig;
@@ -42,7 +55,12 @@ pub trait Postprocessor: Send + Sync {
     /// # Errors
     ///
     ///   * Errors if the data could not be processed
-    fn process(&mut self, ingres_ns: u64, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
+    fn process(
+        &mut self,
+        ingres_ns: u64,
+        egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>>;
 
     /// Finish execution of this postprocessor.
     ///
@@ -51,7 +69,7 @@ pub trait Postprocessor: Send + Sync {
     ///
     /// # Errors
     ///   * if the postprocessor could not be finished correctly
-    fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+    fn finish(&mut self, _data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
         Ok(vec![])
     }
 }
@@ -62,7 +80,7 @@ pub trait Postprocessor: Send + Sync {
 ///
 ///   * Errors if the postprocessor is not known
 
-pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Postprocessor>> {
+pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Postprocessor>, Error> {
     match config.name.as_str() {
         "chunk" => Ok(Box::new(chunk::Chunk::from_config(config.config.as_ref())?)),
         "compress" => Ok(Box::new(compress::Compress::from_config(
@@ -76,7 +94,7 @@ pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Postprocessor>> {
         "textual-length-prefixed" => {
             Ok(Box::<textual_length_prefixed::TextualLengthPrefixed>::default())
         }
-        name => Err(format!("Postprocessor '{name}' not found.").into()),
+        name => Err(Error::NotFound(name.to_string())),
     }
 }
 
@@ -85,7 +103,7 @@ pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Postprocessor>> {
 ///
 /// # Errors
 ///   * if the postprocessor with `name` is not known
-pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
+pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>, Error> {
     lookup_with_config(&Config::from(name))
 }
 
@@ -94,7 +112,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
 /// # Errors
 ///
 ///   * If any postprocessor is not known.
-pub fn make_postprocessors(postprocessors: &[Config]) -> Result<Postprocessors> {
+pub fn make_postprocessors(postprocessors: &[Config]) -> Result<Postprocessors, Error> {
     postprocessors.iter().map(lookup_with_config).collect()
 }
 
@@ -107,8 +125,8 @@ pub fn postprocess(
     postprocessors: &mut [Box<dyn Postprocessor>], // We are borrowing a dyn box as we don't want to pass ownership.
     ingres_ns: u64,
     data: Vec<u8>,
-    alias: &str,
-) -> Result<Vec<Vec<u8>>> {
+    _alias: &str,
+) -> anyhow::Result<Vec<Vec<u8>>> {
     let egress_ns = nanotime();
     let mut data = vec![data];
     let mut data1 = Vec::new();
@@ -116,9 +134,7 @@ pub fn postprocess(
     for pp in postprocessors {
         data1.clear();
         for d in &data {
-            let mut r = pp
-                .process(ingres_ns, egress_ns, d)
-                .map_err(|e| format!("[Connector::{alias}] Postprocessor error {e}"))?;
+            let mut r = pp.process(ingres_ns, egress_ns, d)?;
             data1.append(&mut r);
         }
         mem::swap(&mut data, &mut data1);
@@ -132,7 +148,10 @@ pub fn postprocess(
 /// # Errors
 ///
 /// * If a postprocessor failed
-pub fn finish(postprocessors: &mut [Box<dyn Postprocessor>], alias: &str) -> Result<Vec<Vec<u8>>> {
+pub fn finish(
+    postprocessors: &mut [Box<dyn Postprocessor>],
+    alias: &str,
+) -> anyhow::Result<Vec<Vec<u8>>> {
     if let Some((head, tail)) = postprocessors.split_first_mut() {
         let mut data = match head.finish(None) {
             Ok(d) => d,
@@ -195,7 +214,7 @@ mod test {
     }
 
     #[test]
-    fn test_lookup_compression() -> Result<()> {
+    fn test_lookup_compression() -> anyhow::Result<()> {
         for c in COMPRESSION {
             let config = literal!({"name": "compress", "config":{"algorithm": c}});
             let config = NameWithConfig::try_from(&config)?;
@@ -208,22 +227,25 @@ mod test {
     }
 
     #[test]
-    fn base64() -> Result<()> {
+    fn base64() -> anyhow::Result<()> {
         let mut post = base64::Base64 {};
         let data: [u8; 0] = [];
 
-        assert_eq!(Ok(vec![vec![]]), post.process(0, 0, &data));
+        assert_eq!(post.process(0, 0, &data).ok(), Some(vec![vec![]]));
 
-        assert_eq!(Ok(vec![b"Cg==".to_vec()]), post.process(0, 0, b"\n"));
+        assert_eq!(post.process(0, 0, b"\n").ok(), Some(vec![b"Cg==".to_vec()]));
 
-        assert_eq!(Ok(vec![b"c25vdA==".to_vec()]), post.process(0, 0, b"snot"));
+        assert_eq!(
+            post.process(0, 0, b"snot").ok(),
+            Some(vec![b"c25vdA==".to_vec()])
+        );
 
         assert!(post.finish(None)?.is_empty());
         Ok(())
     }
 
     #[test]
-    fn textual_length_prefix_postp() -> Result<()> {
+    fn textual_length_prefix_postp() -> anyhow::Result<()> {
         let mut post = textual_length_prefixed::TextualLengthPrefixed {};
         let data = vec![1_u8, 2, 3];
         let encoded = post.process(42, 23, &data)?.pop().unwrap_or_default();
@@ -245,13 +267,13 @@ mod test {
             _ingres_ns: u64,
             _egress_ns: u64,
             data: &[u8],
-        ) -> Result<Vec<Vec<u8>>> {
+        ) -> anyhow::Result<Vec<Vec<u8>>> {
             let mut data = data.to_vec();
             data.reverse();
             Ok(vec![data])
         }
 
-        fn finish(&mut self, data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+        fn finish(&mut self, data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
             if let Some(data) = data {
                 let mut data = data.to_vec();
                 data.reverse();
@@ -275,11 +297,11 @@ mod test {
             _ingres_ns: u64,
             _egress_ns: u64,
             _data: &[u8],
-        ) -> Result<Vec<Vec<u8>>> {
-            Err("nah".into())
+        ) -> anyhow::Result<Vec<Vec<u8>>> {
+            Err(anyhow::format_err!("nah"))
         }
 
-        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+        fn finish(&mut self, _data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
             Ok(vec![])
         }
     }
@@ -297,17 +319,17 @@ mod test {
             _ingres_ns: u64,
             _egress_ns: u64,
             _data: &[u8],
-        ) -> Result<Vec<Vec<u8>>> {
+        ) -> anyhow::Result<Vec<Vec<u8>>> {
             Ok(vec![b"snot".to_vec()]) // NOTE has to be non-empty for finish err to trigger in tests
         }
 
-        fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
-            Err("nah".into())
+        fn finish(&mut self, _data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
+            Err(anyhow::format_err!("nah"))
         }
     }
 
     #[test]
-    fn postprocess_ok() -> Result<()> {
+    fn postprocess_ok() -> anyhow::Result<()> {
         let mut posties: Vec<Box<dyn Postprocessor>> = vec![
             Box::<Reverse>::default(),
             Box::<separate::Separate>::default(),

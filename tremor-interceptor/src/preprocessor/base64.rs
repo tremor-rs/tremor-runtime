@@ -14,7 +14,7 @@
 
 //! Decodes base64 encoded data to the raw bytes.
 use super::prelude::*;
-use tremor_common::base64::{Engine, BASE64};
+use tremor_common::base64;
 
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Base64 {}
@@ -28,7 +28,7 @@ impl Preprocessor for Base64 {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
-        Ok(vec![(BASE64.decode(data)?, meta)])
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
+        Ok(vec![(base64::decode(data)?, meta)])
     }
 }

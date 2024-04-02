@@ -15,7 +15,6 @@
 //! Prefixes the data with the length of the event data in bytes as an unsigned 64 bit big-endian integer.
 
 use super::Postprocessor;
-use crate::errors::Result;
 use std::io::Write;
 
 #[derive(Clone, Default)]
@@ -25,7 +24,12 @@ impl Postprocessor for TextualLengthPrefixed {
         "textual-length-prefixed"
     }
 
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         let size = data.len();
         let mut digits: Vec<u8> = size.to_string().into_bytes();
         let mut res = Vec::with_capacity(digits.len() + 1 + size);

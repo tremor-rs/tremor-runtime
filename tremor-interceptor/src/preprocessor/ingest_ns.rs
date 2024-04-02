@@ -17,8 +17,17 @@
 use super::prelude::*;
 use byteorder::{BigEndian, ReadBytesExt};
 
+/// Extracts the ingest timestamp from the first 8 bytes of the message and removes it from the message.
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ExtractIngestTs {}
+
+/// `ExtractIngestTs` error
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    /// Message too small
+    #[error("Extract Ingest Ts Preprocessor: < 8 byte")]
+    MessageTooSmall,
+}
 impl Preprocessor for ExtractIngestTs {
     fn name(&self) -> &str {
         "ingest-ts"
@@ -29,13 +38,13 @@ impl Preprocessor for ExtractIngestTs {
         ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         use std::io::Cursor;
         if let Some(d) = data.get(8..) {
             *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
             Ok(vec![(d.to_vec(), meta)])
         } else {
-            Err("Extract Ingest Ts Preprocessor: < 8 byte".into())
+            Err(Error::MessageTooSmall.into())
         }
     }
 }
