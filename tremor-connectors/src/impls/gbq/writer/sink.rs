@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::google::ChannelFactory;
 use crate::{
-    google::{AuthInterceptor, TokenProvider},
     impls::gbq::writer::Config,
     prelude::*,
+    utils::google::{AuthInterceptor, ChannelFactory, TokenProvider},
 };
 use futures::{stream, StreamExt};
 use googapis::google::cloud::bigquery::storage::v1::{
@@ -29,9 +28,11 @@ use googapis::google::cloud::bigquery::storage::v1::{
 };
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
-use std::collections::hash_map::Entry;
-use std::marker::PhantomData;
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    marker::PhantomData,
+    time::Duration,
+};
 use tokio::time::timeout;
 use tonic::{
     codegen::InterceptedService,
@@ -42,7 +43,7 @@ pub(crate) struct TonicChannelFactory;
 
 #[async_trait::async_trait]
 impl ChannelFactory<Channel> for TonicChannelFactory {
-    async fn make_channel(&self, connect_timeout: Duration) -> Result<Channel> {
+    async fn make_channel(&self, connect_timeout: Duration) -> anyhow::Result<Channel> {
         let tls_config = ClientTlsConfig::new()
             .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
             .domain_name("bigquerystorage.googleapis.com");
@@ -55,6 +56,14 @@ impl ChannelFactory<Channel> for TonicChannelFactory {
                 .await?,
         )
     }
+}
+
+/// GBQ Error
+#[derive(Debug, thiserror::Error)]
+pub enum GbqError {
+    /// Missing Schema
+    #[error("Schema for table {0} was not provided")]
+    GbqSchemaNotProvided(String),
 }
 
 struct ConnectedWriteStream {
@@ -196,26 +205,23 @@ fn map_field(
     )
 }
 
-fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> {
+fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<(), TryTypeError> {
     let tag = field.tag;
 
     match field.table_type {
         TableType::Double => prost::encoding::double::encode(
             tag,
-            &val.as_f64()
-                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("f64", val.value_type()))?,
+                &val.try_as_f64()?,
             result,
         ),
         TableType::Int64 => prost::encoding::int64::encode(
             tag,
-            &val.as_i64()
-                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("i64", val.value_type()))?,
+            &val.try_as_i64()?,
             result,
         ),
         TableType::Bool => prost::encoding::bool::encode(
             tag,
-            &val.as_bool()
-                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("bool", val.value_type()))?,
+            &val.try_as_bool()?,
             result,
         ),
         TableType::String
@@ -229,17 +235,14 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
         | TableType::Geography => {
             prost::encoding::string::encode(
                 tag,
-                &val.as_str()
-                    .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("string", val.value_type()))?
-                    .to_string(),
+                &val.try_as_str()?.to_string()
+                    ,
                 result,
             );
         }
         TableType::Struct => {
             let mut struct_buf: Vec<u8> = vec![];
-            for (k, v) in val
-                .as_object()
-                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("object", val.value_type()))?
+            for (k, v) in val.try_as_object()?
             {
                 let subfield_description = field.subfields.get(&k.to_string());
 
@@ -259,11 +262,7 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
         TableType::Bytes => {
             prost::encoding::bytes::encode(
                 tag,
-                &Vec::from(
-                    val.as_bytes().ok_or_else(|| {
-                        ErrorKind::BigQueryTypeMismatch("bytes", val.value_type())
-                    })?,
-                ),
+                &val.try_as_bytes()?.to_vec(),
                 result,
             );
         }
@@ -292,19 +291,17 @@ impl JsonToProtobufMapping {
         }
     }
 
-    pub fn map(&self, value: &Value) -> Result<Vec<u8>> {
-        if let Some(obj) = value.as_object() {
-            let mut result = Vec::with_capacity(obj.len());
+    pub fn map(&self, value: &Value) -> Result<Vec<u8>, TryTypeError> {
+        let obj = value.try_as_object()?;
+        let mut result = Vec::with_capacity(obj.len());
 
-            for (key, val) in obj {
-                let k: &str = key;
-                if let Some(field) = self.fields.get(k) {
-                    encode_field(val, field, &mut result)?;
-                }
+        for (key, val) in obj {
+            let k: &str = key;
+            if let Some(field) = self.fields.get(k) {
+                encode_field(val, field, &mut result)?;
             }
-            return Ok(result);
         }
-        Err(ErrorKind::BigQueryTypeMismatch("object", value.value_type()).into())
+        Ok(result)
     }
 
     pub fn descriptor(&self) -> &DescriptorProto {
@@ -344,7 +341,7 @@ where
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let request_size_limit = self.config.request_size_limit;
 
         let request_data = self
@@ -355,10 +352,10 @@ where
             warn!("{ctx} The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
         }
 
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "BigQuery",
-            "The client is not connected",
-        ))?;
+        let client = self
+            .client
+            .as_mut()
+            .ok_or(GenericImplementationError::ClientNotAvailable("BigQuery"))?;
         for request in request_data {
             let req_timeout = Duration::from_nanos(self.config.request_timeout);
             let append_response =
@@ -427,7 +424,7 @@ where
         Ok(SinkReply::ACK)
     }
 
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         info!("{ctx} Connecting to BigQuery");
 
         let channel = self
@@ -496,7 +493,7 @@ where
         event: Event,
         ctx: &SinkContext,
         request_size_limit: usize,
-    ) -> Result<Vec<AppendRowsRequest>> {
+    ) -> anyhow::Result<Vec<AppendRowsRequest>> {
         let mut request_data: Vec<AppendRowsRequest> = Vec::new();
         let mut requests: HashMap<_, Vec<_>> = HashMap::new();
 
@@ -574,11 +571,11 @@ where
         &mut self,
         table_id: String,
         ctx: &SinkContext,
-    ) -> Result<&ConnectedWriteStream> {
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "BigQuery",
-            "The client is not connected",
-        ))?;
+    ) -> anyhow::Result<&ConnectedWriteStream> {
+        let client = self
+            .client
+            .as_mut()
+            .ok_or(GenericImplementationError::ClientNotAvailable("BigQuery"))?;
 
         match self.write_streams.entry(table_id.clone()) {
             Entry::Occupied(entry) => {
@@ -606,9 +603,8 @@ where
                 let mapping = JsonToProtobufMapping::new(
                     &stream
                         .table_schema
-                        .as_ref()
-                        .ok_or_else(|| ErrorKind::GbqSchemaNotProvided(table_id))?
                         .clone()
+                        .ok_or_else(|| GbqError::GbqSchemaNotProvided(table_id))?
                         .fields,
                     ctx,
                 );
@@ -1128,7 +1124,7 @@ mod test {
     }
 
     #[test]
-    pub fn can_map_json_to_protobuf() -> Result<()> {
+    pub fn can_map_json_to_protobuf() -> anyhow::Result<()> {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
@@ -1173,7 +1169,7 @@ mod test {
     }
 
     #[test]
-    fn map_field_ignores_fields_that_are_not_in_definition() -> Result<()> {
+    fn map_field_ignores_fields_that_are_not_in_definition() -> anyhow::Result<()> {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
@@ -1219,7 +1215,7 @@ mod test {
     }
 
     #[test]
-    fn map_field_ignores_struct_fields_that_are_not_in_definition() -> Result<()> {
+    fn map_field_ignores_struct_fields_that_are_not_in_definition() -> anyhow::Result<()> {
         let (rx, _tx) = bounded(1024);
 
         let ctx = SinkContext::new(
@@ -1331,7 +1327,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn sink_fails_if_config_is_missing() -> Result<()> {
+    async fn sink_fails_if_config_is_missing() -> anyhow::Result<()> {
         let config = literal!({
             "config": {}
         });
@@ -1346,7 +1342,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn on_event_fails_if_client_is_not_conected() -> Result<()> {
+    async fn on_event_fails_if_client_is_not_conected() -> anyhow::Result<()> {
         let (rx, _tx) = bounded(1024);
         let config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
@@ -1385,7 +1381,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn on_event_fails_if_write_stream_is_not_conected() -> Result<()> {
+    async fn on_event_fails_if_write_stream_is_not_conected() -> anyhow::Result<()> {
         let (rx, _tx) = bounded(1024);
         let config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
@@ -1428,7 +1424,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn fails_on_error_response() -> Result<()> {
+    pub async fn fails_on_error_response() -> anyhow::Result<()> {
         let mut buffer_write_stream = vec![];
         let mut buffer_append_rows_response = vec![];
         WriteStream {
@@ -1530,7 +1526,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn splits_large_requests() -> Result<()> {
+    pub async fn splits_large_requests() -> anyhow::Result<()> {
         let mut buffer_write_stream = vec![];
         let mut buffer_append_rows_response = vec![];
         WriteStream {

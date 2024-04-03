@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
 use std::io::Write;
 use tremor_common::base64::{Engine, BASE64};
 
@@ -34,7 +33,7 @@ pub(crate) enum Auth {
 
 impl Auth {
     /// Prepare a HTTP autheorization header value given the auth strategy
-    pub fn as_header_value(&self) -> Result<Option<String>> {
+    pub fn as_header_value(&self) -> anyhow::Result<Option<String>> {
         match self {
             Auth::Gcp => {
                 let t = gouth::Token::new()?;

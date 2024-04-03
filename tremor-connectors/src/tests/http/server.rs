@@ -97,7 +97,7 @@ async fn harness_dflt(scheme: &str) -> Result<(ConnectorHarness, String, u16)> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_server_test_basic() -> Result<()> {
+async fn http_server_test_basic() -> anyhow::Result<()> {
     // retry until the http server is actually up
     let start = Instant::now();
     let timeout = Duration::from_secs(30);
@@ -170,7 +170,7 @@ async fn http_server_test_basic() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_server_test_query() -> Result<()> {
+async fn http_server_test_query() -> anyhow::Result<()> {
     // send patch request
     // with text/plain body
     // and return the request meta and body as a json (codec picked up from connector config)
@@ -241,7 +241,7 @@ async fn http_server_test_query() -> Result<()> {
     Ok(())
 }
 #[tokio::test(flavor = "multi_thread")]
-async fn http_server_test_chunked() -> Result<()> {
+async fn http_server_test_chunked() -> anyhow::Result<()> {
     // TODO: test batched event with chunked encoding
     let (connector, url, _port) = harness_dflt("http").await?;
     let req = Request::builder()
@@ -327,7 +327,7 @@ async fn http_server_test_chunked() -> Result<()> {
 
 #[allow(clippy::too_many_lines)]
 #[tokio::test(flavor = "multi_thread")]
-async fn https_server_test() -> Result<()> {
+async fn https_server_test() -> anyhow::Result<()> {
     setup_for_tls();
     let cert_file = "./tests/localhost.cert";
     let key_file = "./tests/localhost.key";

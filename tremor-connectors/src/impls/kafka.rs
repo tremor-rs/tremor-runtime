@@ -288,7 +288,7 @@
 pub(crate) mod consumer;
 pub(crate) mod producer;
 
-use crate::prelude::*;
+use crate::{errors::error_connector_def, prelude::*};
 use beef::Cow;
 use rdkafka::{error::KafkaError, ClientContext, Statistics};
 use rdkafka_sys::RDKafkaErrorCode;
@@ -307,8 +307,23 @@ use tremor_value::Value;
 
 const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
+#[derive(Debug, Clone, thiserror::Error)]
+enum Error {
+    #[error("Unknown stats client_type \"{0}\"")]
+    UnknownStatsClient(String),
+    #[error("not an int value")]
+    InvalidInt,
+    #[error("Provided rdkafka_option that will be overwritten: {0}")]
+    OptionOverwritten(String),
+    #[error("Cannot enable `retry_failed_events` and `enable.auto.commit` and `enable.auto.offset.store` at the same time.")]
+    CommitConfigConflict,
+}
+
 /// verify broker host:port pairs in kafka connector configs
-fn verify_brokers(alias: &alias::Connector, brokers: &[String]) -> Result<(String, Option<u16>)> {
+fn verify_brokers(
+    alias: &alias::Connector,
+    brokers: &[String],
+) -> Result<(String, Option<u16>), crate::Error> {
     let mut first_broker: Option<(String, Option<u16>)> = None;
     for broker in brokers {
         match broker.split(':').collect::<Vec<_>>().as_slice() {
@@ -317,17 +332,17 @@ fn verify_brokers(alias: &alias::Connector, brokers: &[String]) -> Result<(Strin
             }
             [host, port] => {
                 let port: u16 = port.parse().map_err(|_| {
-                    err_connector_def(alias, &format!("Invalid broker: {host}:{port}"))
+                    error_connector_def(alias, &format!("Invalid broker: {host}:{port}"))
                 })?;
                 first_broker.get_or_insert_with(|| ((*host).to_string(), Some(port)));
             }
             b => {
                 let e = format!("Invalid broker: {}", b.join(":"));
-                return Err(err_connector_def(alias, &e));
+                return Err(error_connector_def(alias, &e));
             }
         }
     }
-    first_broker.ok_or_else(|| err_connector_def(alias, "Missing brokers."))
+    first_broker.ok_or_else(|| error_connector_def(alias, "Missing brokers."))
 }
 
 /// Returns `true` if the error denotes a failed connect attempt
@@ -419,7 +434,7 @@ where
     }
 
     // TODO: add full connector id to tags
-    fn handle_stats(&self, stats: Statistics) -> Result<()> {
+    fn handle_stats(&self, stats: Statistics) -> anyhow::Result<()> {
         let metrics_payload = match stats.client_type.as_str() {
             Self::PRODUCER => {
                 let timestamp = u64::try_from(stats.time)? * 1_000_000_000;
@@ -457,7 +472,7 @@ where
                 make_metrics_payload(Self::KAFKA_CONSUMER_STATS, fields, tags, timestamp)
             }
             other => {
-                return Err(format!("Unknown stats client_type \"{other}\"").into());
+                return Err(Error::UnknownStatsClient(other.to_string()).into());
             }
         };
         self.metrics_tx.send(metrics_payload)?;
@@ -553,7 +568,7 @@ fn is_fatal_error(e: &KafkaError) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{ClientContext, TremorRDKafkaContext};
-    use crate::{channel::bounded, errors::Result, unit_tests::FakeContext};
+    use crate::{channel::bounded, unit_tests::FakeContext};
     use rdkafka::Statistics;
     use std::{
         collections::HashMap,
@@ -565,7 +580,7 @@ mod tests {
     use tremor_value::literal;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn context_on_connection_loss() -> Result<()> {
+    async fn context_on_connection_loss() -> anyhow::Result<()> {
         let (ctx_tx, mut ctx_rx) = bounded(1);
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, _metrics_rx) = broadcast(1);
@@ -589,7 +604,7 @@ mod tests {
     }
 
     #[test]
-    fn metrics_tx() -> Result<()> {
+    fn metrics_tx() -> anyhow::Result<()> {
         let (ctx_tx, _ctx_rx) = bounded(1);
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, mut metrics_rx) = broadcast(1);

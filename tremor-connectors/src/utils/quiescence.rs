@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, Result};
 use event_listener::Event;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+
+#[derive(Debug, Clone, thiserror::Error)]
+enum Error {
+    #[error("Invalid state {0}")]
+    InvalidState(u32),
+}
 
 #[derive(Debug)]
 struct Inner {
@@ -89,7 +94,7 @@ impl QuiescenceBeacon {
     }
 
     /// pause both reading and writing
-    pub fn pause(&mut self) -> Result<()> {
+    pub fn pause(&mut self) -> anyhow::Result<()> {
         match self.0.state.compare_exchange(
             Inner::RUNNING,
             Inner::PAUSED,
@@ -102,7 +107,7 @@ impl QuiescenceBeacon {
             // TODO: should we error on those?
             // Err(Inner::STOP_ALL) => Err(Error::from("failed to pause from state STOP_ALL")),
             // Err(Inner::STOP_READING) => Err(Error::from("failed to pause from state STOP_READING")),
-            Err(e) => Err(Error::from(format!("Invalid state {e}"))),
+            Err(e) => Err(Error::InvalidState(e)),
         }?;
         Ok(())
     }
@@ -110,7 +115,7 @@ impl QuiescenceBeacon {
     /// Resume both reading and writing.
     ///
     /// Has no effect if not currently paused.
-    pub fn resume(&mut self) -> Result<()> {
+    pub fn resume(&mut self) -> anyhow::Result<()> {
         match self.0.state.compare_exchange(
             Inner::PAUSED,
             Inner::RUNNING,
@@ -123,7 +128,7 @@ impl QuiescenceBeacon {
             // TODO: should we error on those?
             // Err(Inner::STOP_READING) => Err(Error::from("Can't resume from STOP_READING")),
             // Err(Inner::STOP_ALL) => Err(Error::from("Can't resume from STOP_ALL")),
-            Err(e) => Err(Error::from(format!("Invalid state {e}"))),
+            Err(e) => Err(Error::InvalidState(e)),
         }?;
 
         self.0.resume_event.notify(Self::MAX_LISTENERS); // we might have been paused, so notify here
@@ -140,13 +145,12 @@ impl QuiescenceBeacon {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::Result;
     use futures::pin_mut;
     use std::{task::Poll, time::Duration};
     use tokio::time::timeout;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn quiescence_pause_resume() -> Result<()> {
+    async fn quiescence_pause_resume() -> anyhow::Result<()> {
         let beacon = QuiescenceBeacon::default();
         let mut ctrl_beacon = beacon.clone();
         assert!(beacon.continue_reading().await);

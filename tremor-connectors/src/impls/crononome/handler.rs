@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::prelude::*;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use serde_yaml::Value as YamlValue;
@@ -41,8 +40,8 @@ pub(crate) struct CronEntryInt {
 }
 
 impl TryFrom<CronEntry> for CronEntryInt {
-    type Error = crate::errors::Error;
-    fn try_from(entry: CronEntry) -> Result<Self> {
+    type Error = anyhow::Error;
+    fn try_from(entry: CronEntry) -> anyhow::Result<Self> {
         let payload = if let Some(yaml_payload) = entry.payload {
             // We use this to translate a yaml value (payload in) to tremor value (payload out)
             let mut payload = simd_json::to_vec(&yaml_payload)?;
@@ -60,8 +59,8 @@ impl TryFrom<CronEntry> for CronEntryInt {
     }
 }
 impl TryFrom<Value<'static>> for CronEntryInt {
-    type Error = crate::errors::Error;
-    fn try_from(entry: Value) -> Result<Self> {
+    type Error = anyhow::Error;
+    fn try_from(entry: Value) -> anyhow::Result<Self> {
         let entry: CronEntry = tremor_value::structurize(entry)?;
         Self::try_from(entry)
     }
@@ -268,7 +267,7 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    fn test_deserialize_cron_entry() -> Result<()> {
+    fn test_deserialize_cron_entry() -> anyhow::Result<()> {
         let mut s = b"{\"name\": \"test\", \"expr\": \"* 0 0 * * * *\"}".to_vec();
         let entry = CronEntryInt::try_from(simd_json::from_slice::<CronEntry>(s.as_mut_slice())?)?;
         assert_eq!("test", entry.name);
@@ -277,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_cron_entry_error() -> Result<()> {
+    fn test_deserialize_cron_entry_error() -> anyhow::Result<()> {
         let mut s = b"{\"name\": \"test\", \"expr\": \"snot snot\"}".to_vec();
         let entry: CronEntry = simd_json::from_slice(s.as_mut_slice())?;
         assert_eq!("test", entry.name);
@@ -289,7 +288,7 @@ mod tests {
     // and lead to frequent issues with the test being flaky or unrelaibale
     #[cfg(not(feature = "tarpaulin-exclude"))]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_tpq_fill_drain() -> Result<()> {
+    async fn test_tpq_fill_drain() -> anyhow::Result<()> {
         use chrono::prelude::Utc;
         let mut tpq = TemporalPriorityQueue::default();
         let n1 = TemporalItem {
@@ -324,7 +323,7 @@ mod tests {
     // and lead to frequent issues with the test being flaky or unrelaibale
     #[cfg(not(feature = "tarpaulin-exclude"))]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_tpq_fill_pop() -> Result<()> {
+    async fn test_tpq_fill_pop() -> anyhow::Result<()> {
         use chrono::prelude::Utc;
         let mut tpq = TemporalPriorityQueue::default();
         let n1 = TemporalItem {
@@ -360,7 +359,7 @@ mod tests {
     // and lead to frequent issues with the test being flaky or unrelaibale
     #[cfg(not(feature = "tarpaulin-exclude"))]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_cq_fill_drain_refill() -> Result<()> {
+    async fn test_cq_fill_drain_refill() -> anyhow::Result<()> {
         let mut cq = ChronomicQueue::default();
         // Dates before Jan 1st 1970 are invalid
         let n1 = CronEntryInt::try_from(literal!({
@@ -395,7 +394,7 @@ mod tests {
     // and lead to frequent issues with the test being flaky or unrelaibale
     #[cfg(not(feature = "tarpaulin-exclude"))]
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_cq_fill_pop_refill() -> Result<()> {
+    async fn test_cq_fill_pop_refill() -> anyhow::Result<()> {
         let mut cq = ChronomicQueue::default();
         // Dates before Jan 1st 1970 are invalid
         let n1 = CronEntryInt::try_from(literal!({

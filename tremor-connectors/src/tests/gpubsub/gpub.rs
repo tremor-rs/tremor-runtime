@@ -32,7 +32,7 @@ use tremor_value::{literal, Value};
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
-async fn no_connection() -> Result<()> {
+async fn no_connection() -> anyhow::Result<()> {
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
@@ -51,7 +51,7 @@ async fn no_connection() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
-async fn no_hostname() -> Result<()> {
+async fn no_hostname() -> anyhow::Result<()> {
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
@@ -72,7 +72,7 @@ async fn no_hostname() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
-async fn simple_publish() -> Result<()> {
+async fn simple_publish() -> anyhow::Result<()> {
     let runner = Cli::docker();
 
     let (pubsub, pubsub_args) =
@@ -176,7 +176,7 @@ async fn simple_publish() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
-async fn simple_publish_with_timeout() -> Result<()> {
+async fn simple_publish_with_timeout() -> anyhow::Result<()> {
     let runner = Cli::docker();
 
     let (pubsub, pubsub_args) =

@@ -321,11 +321,14 @@ impl<'value> Value<'value> {
     /// # Errors
     /// if the value is not a byte array or string
     #[inline]
-    pub fn try_as_bytes(&self) -> Result<&[u8]> {
+    pub fn try_as_bytes(&self) -> std::result::Result<&[u8], TryTypeError> {
         match self {
             Value::Bytes(bs) => Ok(bs),
             Value::String(bs) => Ok(bs.as_bytes()),
-            _ => Err(Error::ExpectedBytes),
+            _ => Err(TryTypeError {
+                got: self.value_type(),
+                expected: ValueType::Custom("bytes"),
+            }),
         }
     }
 

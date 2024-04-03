@@ -14,20 +14,20 @@
 
 pub(crate) use crate::{
     channel::{bounded, Receiver, Sender},
-    errors::{err_connector_def, Error, Kind as ErrorKind, Result},
+    errors::{Error, GenericImplementationError},
     metrics::make_metrics_payload,
     qsize,
     sink::{
         channel_sink::{ChannelSink, ChannelSinkRuntime},
-        AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkAck, SinkAddr,
-        SinkContext, SinkManagerBuilder, SinkReply, SinkRuntime, StreamWriter,
+        AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkAck, SinkContext,
+        SinkManagerBuilder, SinkReply, SinkRuntime, StreamWriter,
     },
     source::{
-        ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext,
-        SourceManagerBuilder, SourceReply, StreamReader,
+        ChannelSource, ChannelSourceRuntime, Source, SourceContext, SourceManagerBuilder,
+        SourceReply, StreamReader,
     },
     spawn_task,
-    utils::{hostname, reconnect::Attempt},
+    utils::hostname,
     CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context, StreamDone,
     StreamIdGen, ACCEPT_TIMEOUT,
 };
@@ -42,7 +42,10 @@ pub use tremor_config::NameWithConfig;
 pub(crate) use tremor_pipeline::Event;
 pub use tremor_pipeline::{CbAction, EventOriginUri, DEFAULT_STREAM_ID};
 pub(crate) use tremor_script::prelude::*;
-pub use tremor_system::killswitch::{KillSwitch, ShutdownMode};
+pub(crate) use tremor_system::connector::sink::Addr as SinkAddr;
+pub(crate) use tremor_system::connector::source::Addr as SourceAddr;
+pub(crate) use tremor_system::connector::Attempt;
+pub(crate) use tremor_system::killswitch::{KillSwitch, ShutdownMode};
 /// default buf size used for reading from files and streams (sockets etc)
 ///
 /// equals default chunk size for `BufReader`

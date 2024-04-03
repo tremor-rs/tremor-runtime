@@ -53,7 +53,7 @@ fn default_image() -> GenericImage {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
-async fn connector_elastic() -> Result<()> {
+async fn connector_elastic() -> anyhow::Result<()> {
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
     let image = RunnableImage::from(
@@ -473,7 +473,7 @@ async fn connector_elastic() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
-async fn elastic_routing() -> Result<()> {
+async fn elastic_routing() -> anyhow::Result<()> {
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
     let image = RunnableImage::from(
@@ -794,7 +794,7 @@ async fn elastic_routing() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
-async fn auth_basic() -> Result<()> {
+async fn auth_basic() -> anyhow::Result<()> {
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
@@ -855,7 +855,7 @@ async fn auth_basic() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
-async fn auth_api_key() -> Result<()> {
+async fn auth_api_key() -> anyhow::Result<()> {
     let docker = clients::Cli::default();
     let port = super::free_port::find_free_tcp_port().await?;
     let password = "snot";
@@ -932,7 +932,7 @@ async fn auth_api_key() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
-async fn auth_client_cert() -> Result<()> {
+async fn auth_client_cert() -> anyhow::Result<()> {
     setup_for_tls();
 
     let tests_dir = {
@@ -1069,7 +1069,7 @@ async fn auth_client_cert() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 #[allow(clippy::cast_possible_truncation)]
-async fn elastic_https() -> Result<()> {
+async fn elastic_https() -> anyhow::Result<()> {
     setup_for_tls();
 
     let tests_dir = {
@@ -1186,7 +1186,7 @@ async fn elastic_https() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
-async fn elastic_https_invalid_url() -> Result<()> {
+async fn elastic_https_invalid_url() -> anyhow::Result<()> {
     let connector_config = literal!({
         "reconnect": {
             "retry": {
@@ -1212,7 +1212,7 @@ async fn elastic_https_invalid_url() -> Result<()> {
     Ok(())
 }
 
-async fn wait_for_es(elastic: &Elasticsearch) -> Result<()> {
+async fn wait_for_es(elastic: &Elasticsearch) -> anyhow::Result<()> {
     // wait for the image to be reachable
 
     let wait_for = Duration::from_secs(60); // that shit takes a while
@@ -1234,7 +1234,7 @@ async fn wait_for_es(elastic: &Elasticsearch) -> Result<()> {
     Ok(())
 }
 
-async fn send_one_event(harness: &mut ConnectorHarness) -> Result<()> {
+async fn send_one_event(harness: &mut ConnectorHarness) -> anyhow::Result<()> {
     let index = "fumbleschlonz";
     let data = literal!({"snot": "badger"});
     let meta = literal!({

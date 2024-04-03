@@ -284,7 +284,7 @@ mod conversion;
 
 use std::fmt::{self, Display, Formatter};
 
-use crate::prelude::*;
+use crate::{errors::GenericImplementationError, prelude::*};
 
 use clickhouse_rs::{
     errors::Error as CError,
@@ -307,7 +307,7 @@ impl ConnectorBuilder for Builder {
         _config: &ConnectorConfig,
         connector_config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = ClickhouseConfig::new(connector_config)?;
 
         Ok(Box::new(Clickhouse { config }))
@@ -324,7 +324,7 @@ impl Connector for Clickhouse {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let db_url = self.connection_url();
         let columns = self
             .config
@@ -414,7 +414,7 @@ pub(crate) struct ClickhouseSink {
 
 #[async_trait::async_trait]
 impl Sink for ClickhouseSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let pool = Pool::new(self.db_url.as_str());
         let handle = match pool.get_handle().await {
             Ok(handle) => handle,
@@ -424,7 +424,7 @@ impl Sink for ClickhouseSink {
                         ctx.notifier().connection_lost().await?;
                         Ok(false)
                     }
-                    _ => Err(Error::from(e)),
+                    _ => Err(e.into()),
                 }
             }
         };
@@ -441,11 +441,11 @@ impl Sink for ClickhouseSink {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let handle = self
             .handle
             .as_mut()
-            .ok_or_else(|| Error::from(ErrorKind::NoClickHouseClientAvailable))?;
+            .ok_or_else(|| GenericImplementationError::ClientNotAvailable("clickhouse"))?;
 
         let mut block = Block::with_capacity(event.len());
 
@@ -469,12 +469,10 @@ impl ClickhouseSink {
     fn clickhouse_row_of(
         columns: &[(String, DummySqlType)],
         input: &tremor_value::Value,
-    ) -> Result<Vec<(String, clickhouse_rs::types::Value)>> {
+    ) -> anyhow::Result<Vec<(String, clickhouse_rs::types::Value)>> {
         let mut rslt = Vec::new();
 
-        let object = input
-            .as_object()
-            .ok_or_else(|| Error::from(ErrorKind::ExpectedObjectEvent(input.value_type())))?;
+        let object = input.try_as_object()?;
 
         for (column_name, expected_type) in columns {
             // If the value is not present, then we can replace it by null.

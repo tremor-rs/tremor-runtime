@@ -19,7 +19,7 @@ use tremor_pipeline::Event;
 use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn udp_no_bind() -> Result<()> {
+async fn udp_no_bind() -> anyhow::Result<()> {
     let server_defn = literal!({
       "codec": "string",
       "config": {
@@ -63,7 +63,7 @@ async fn udp_no_bind() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn udp_bind() -> Result<()> {
+async fn udp_bind() -> anyhow::Result<()> {
     let server_defn = literal!({
       "codec": "string",
       "config": {
@@ -109,7 +109,7 @@ async fn udp_bind() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn bind_connect_ipv4_ipv6() -> Result<()> {
+async fn bind_connect_ipv4_ipv6() -> anyhow::Result<()> {
     let config = literal!({
         "codec": "string",
         "config": {
@@ -125,7 +125,7 @@ async fn bind_connect_ipv4_ipv6() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn connect_ipv4() -> Result<()> {
+async fn connect_ipv4() -> anyhow::Result<()> {
     let config = literal!({
         "codec": "string",
         "config": {
@@ -142,7 +142,7 @@ async fn connect_ipv4() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn connect_ipv6() -> Result<()> {
+async fn connect_ipv6() -> anyhow::Result<()> {
     let config = literal!({
         "codec": "string",
         "config": {

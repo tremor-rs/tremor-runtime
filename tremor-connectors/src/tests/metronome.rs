@@ -19,7 +19,7 @@ use tremor_value::prelude::*;
 
 #[allow(clippy::cast_possible_truncation)]
 #[tokio::test(flavor = "multi_thread")]
-async fn connector_metronome_routing() -> Result<()> {
+async fn connector_metronome_routing() -> anyhow::Result<()> {
     let defn = literal!({
       "config": {
         "interval": Duration::from_secs(1).as_nanos() as u64

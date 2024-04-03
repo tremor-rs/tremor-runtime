@@ -14,15 +14,13 @@
 
 #![allow(dead_code)]
 
+use super::common::Error;
 use super::{
     common::{self, EMPTY},
     id,
     resource::{self, resource_to_pb},
 };
-use crate::{
-    prelude::*,
-    utils::pb::{maybe_int_to_pbi32, maybe_int_to_pbu32, maybe_int_to_pbu64, maybe_string_to_pb},
-};
+use crate::{prelude::*, utils::pb::maybe_string_to_pb};
 use tremor_otelapis::opentelemetry::proto::{
     collector::trace::v1::ExportTraceServiceRequest,
     trace::v1::{
@@ -58,18 +56,24 @@ pub(crate) fn span_events_to_json(pb: Vec<Event>) -> Value<'static> {
         .collect()
 }
 
-pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>> {
+pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>, Error> {
     json.as_array()
         .unwrap_or(&EMPTY)
         .iter()
         .map(|json| {
             Ok(Event {
                 name: maybe_string_to_pb(json.get("name"))?,
-                time_unix_nano: maybe_int_to_pbu64(json.get("time_unix_nano"))?,
+                time_unix_nano: {
+                    let data = json.get("time_unix_nano");
+                    data.try_as_u64()
+                }?,
                 attributes: common::maybe_key_value_list_to_pb(json.get("attributes"))
                     .unwrap_or_default(),
-                dropped_attributes_count: maybe_int_to_pbu32(json.get("dropped_attributes_count"))
-                    .unwrap_or_default(),
+                dropped_attributes_count: {
+                    let data = json.get("dropped_attributes_count");
+                    data.try_as_u32()
+                }
+                .unwrap_or_default(),
             })
         })
         .collect()
@@ -89,7 +93,7 @@ pub(crate) fn span_links_to_json(pb: Vec<Link>) -> Value<'static> {
         .collect()
 }
 
-pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>> {
+pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>, Error> {
     json.as_array()
         .unwrap_or(&EMPTY)
         .iter()
@@ -99,25 +103,32 @@ pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>> {
                 trace_id: id::hex_trace_id_to_pb(json.get("trace_id"))?,
                 trace_state: maybe_string_to_pb(json.get("trace_state"))?,
                 attributes: common::maybe_key_value_list_to_pb(json.get("attributes"))?,
-                dropped_attributes_count: maybe_int_to_pbu32(json.get("dropped_attributes_count"))?,
+                dropped_attributes_count: {
+                    let data = json.get("dropped_attributes_count");
+                    data.try_as_u32()
+                }?,
             })
         })
         .collect()
 }
 
-pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>> {
+pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>, Error> {
     if json.is_none() {
         return Ok(None);
     }
-    let json = json
-        .as_object()
-        .ok_or("Unable to map json value to pb trace status")?;
+    let json = json.try_as_object()?;
 
     // This is generated code in the pb stub code deriving from otel proto files
     #[allow(deprecated)]
     Ok(Some(Status {
-        code: maybe_int_to_pbi32(json.get("code"))?,
-        deprecated_code: maybe_int_to_pbi32(json.get("deprecated_code"))?,
+        code: {
+            let data = json.get("code");
+            data.try_as_i32()
+        }?,
+        deprecated_code: {
+            let data = json.get("deprecated_code");
+            data.try_as_i32()
+        }?,
         message: maybe_string_to_pb(json.get("message"))?,
     }))
 }
@@ -142,25 +153,44 @@ fn span_to_json(span: Span) -> Value<'static> {
     })
 }
 
-pub(crate) fn span_to_pb(span: &Value<'_>) -> Result<Span> {
+pub(crate) fn span_to_pb(span: &Value<'_>) -> Result<Span, Error> {
     Ok(Span {
         name: maybe_string_to_pb(span.get("name"))?,
-        start_time_unix_nano: maybe_int_to_pbu64(span.get("start_time_unix_nano"))?,
-        end_time_unix_nano: maybe_int_to_pbu64(span.get("end_time_unix_nano"))?,
+        start_time_unix_nano: {
+            let data = span.get("start_time_unix_nano");
+            data.try_as_u64()
+        }?,
+        end_time_unix_nano: {
+            let data = span.get("end_time_unix_nano");
+            data.try_as_u64()
+        }?,
         status: status_to_pb(span.get("status"))?,
-        kind: maybe_int_to_pbi32(span.get("kind")).unwrap_or_default(),
+        kind: {
+            let data = span.get("kind");
+            data.try_as_i32()
+        }
+        .unwrap_or_default(),
         parent_span_id: id::hex_parent_span_id_to_pb(span.get("parent_span_id"))
             .unwrap_or_default(),
         span_id: id::hex_span_id_to_pb(span.get("span_id"))?,
         trace_id: id::hex_trace_id_to_pb(span.get("trace_id"))?,
         trace_state: maybe_string_to_pb(span.get("trace_state"))?,
         attributes: common::maybe_key_value_list_to_pb(span.get("attributes"))?,
-        dropped_attributes_count: maybe_int_to_pbu32(span.get("dropped_attributes_count"))
-            .unwrap_or_default(),
-        dropped_events_count: maybe_int_to_pbu32(span.get("dropped_events_count"))
-            .unwrap_or_default(),
-        dropped_links_count: maybe_int_to_pbu32(span.get("dropped_links_count"))
-            .unwrap_or_default(),
+        dropped_attributes_count: {
+            let data = span.get("dropped_attributes_count");
+            data.try_as_u32()
+        }
+        .unwrap_or_default(),
+        dropped_events_count: {
+            let data = span.get("dropped_events_count");
+            data.try_as_u32()
+        }
+        .unwrap_or_default(),
+        dropped_links_count: {
+            let data = span.get("dropped_links_count");
+            data.try_as_u32()
+        }
+        .unwrap_or_default(),
         events: span_events_to_pb(span.get("events"))?,
         links: span_links_to_pb(span.get("links"))?,
     })
@@ -186,9 +216,9 @@ pub(crate) fn instrumentation_library_spans_to_json(
 
 pub(crate) fn instrumentation_library_spans_to_pb(
     data: Option<&Value<'_>>,
-) -> Result<Vec<InstrumentationLibrarySpans>> {
+) -> Result<Vec<InstrumentationLibrarySpans>, Error> {
     data.as_array()
-        .ok_or("Invalid json mapping for InstrumentationLibrarySpans")?
+        .ok_or(Error::InvalidMapping("InstrumentationLibrarySpans"))?
         .iter()
         .filter_map(Value::as_object)
         .map(|data| {
@@ -198,7 +228,7 @@ pub(crate) fn instrumentation_library_spans_to_pb(
                 .unwrap_or(&EMPTY)
                 .iter()
                 .map(span_to_pb)
-                .collect::<Result<_>>()?;
+                .collect::<Result<_, _>>()?;
 
             Ok(InstrumentationLibrarySpans {
                 instrumentation_library: data
@@ -233,9 +263,9 @@ pub(crate) fn resource_spans_to_json(request: ExportTraceServiceRequest) -> Valu
     literal!({ "trace": json })
 }
 
-pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceSpans>> {
+pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceSpans>, Error> {
     json.get_array("trace")
-        .ok_or("Invalid json mapping for otel trace message - cannot convert to pb")?
+        .ok_or(Error::InvalidMapping("ResourceSpans"))?
         .iter()
         .filter_map(Value::as_object)
         .map(|json| {
@@ -250,7 +280,7 @@ pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Resou
                 resource: json.get("resource").map(resource_to_pb).transpose()?,
             })
         })
-        .collect()
+        .collect::<Result<_, Error>>()
 }
 
 #[cfg(test)]
@@ -266,7 +296,7 @@ mod tests {
 
     #[test]
     #[allow(deprecated)]
-    fn status() -> Result<()> {
+    fn status() -> anyhow::Result<()> {
         let pb = Status {
             deprecated_code: 0,
             message: "everything is snot".into(),
@@ -301,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn span_event() -> Result<()> {
+    fn span_event() -> anyhow::Result<()> {
         let pb = vec![Event {
             time_unix_nano: 0,
             name: "badger".into(),
@@ -334,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn span_link() -> Result<()> {
+    fn span_link() -> anyhow::Result<()> {
         let nanotime = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanotime);
         let span_id_json = id::hex_id_to_json(&span_id_pb);
@@ -375,7 +405,7 @@ mod tests {
 
     #[test]
     #[allow(deprecated)]
-    fn instrument_library_spans() -> Result<()> {
+    fn instrument_library_spans() -> anyhow::Result<()> {
         let nanotime = tremor_common::time::nanotime();
         let parent_span_id_json = id::random_span_id_value(nanotime);
         let parent_span_id_pb = id::hex_span_id_to_pb(Some(&parent_span_id_json))?;
@@ -451,7 +481,7 @@ mod tests {
     }
 
     #[test]
-    fn resource_spans() -> Result<()> {
+    fn resource_spans() -> anyhow::Result<()> {
         let nanotime = tremor_common::time::nanotime();
         let parent_span_id_json = id::random_span_id_value(nanotime);
         let parent_span_id_pb = id::hex_span_id_to_pb(Some(&parent_span_id_json))?;

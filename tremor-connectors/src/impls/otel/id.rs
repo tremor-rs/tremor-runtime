@@ -14,6 +14,7 @@
 
 #![allow(dead_code)]
 
+use super::common::{self, Error};
 use crate::prelude::*;
 use ::rand::Rng;
 use std::fmt::Write;
@@ -61,11 +62,11 @@ pub(crate) fn random_trace_id_array(ingest_ns_seed: u64) -> Value<'static> {
         .collect()
 }
 
-pub(crate) fn hex_parent_span_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
+pub(crate) fn hex_parent_span_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>, common::Error> {
     hex_id_to_pb("parent span", data, 8, true)
 }
 
-pub(crate) fn hex_span_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
+pub(crate) fn hex_span_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>, common::Error> {
     hex_id_to_pb("span", data, 8, false)
 }
 
@@ -77,7 +78,7 @@ pub(crate) fn hex_id_to_json(data: &[u8]) -> Value<'static> {
     }))
 }
 
-pub(crate) fn hex_trace_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
+pub(crate) fn hex_trace_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>, common::Error> {
     hex_id_to_pb("trace", data, 16, false)
 }
 
@@ -86,22 +87,23 @@ fn hex_id_to_pb(
     data: Option<&Value<'_>>,
     len_bytes: usize,
     allow_empty: bool,
-) -> Result<Vec<u8>> {
+) -> Result<Vec<u8>, common::Error> {
     let data = if let Some(s) = data.as_str() {
         hex::decode(s)?
     } else if let Some(json) = data.and_then(Value::as_bytes) {
         json.to_vec()
     } else if let Some(arr) = data.as_array() {
-        arr.iter().map(Value::as_u8).collect::<Option<Vec<u8>>>().ok_or_else(|| format!(
-            "Invalid {kind} id ( wrong array element ) - values must be between 0 and 255 - cannot convert to pb"
-        ))?
+        arr.iter()
+            .map(Value::as_u8)
+            .collect::<Option<Vec<u8>>>()
+            .ok_or_else(|| Error::InvalidArrayContent(kind.to_string()))?
     } else {
-        return Err(format!("Cannot convert json value to otel pb {kind} id").into());
+        return Err(Error::FaildToConvert(kind.to_string()).into());
     };
     if (allow_empty && data.is_empty()) || data.len() == len_bytes {
         Ok(data)
     } else {
-        Err(format!("Invalid {kind} id ( wrong array length ) - cannot convert to pb",).into())
+        Err(Error::InvalidLength(kind.to_string()).into())
     }
 }
 
@@ -114,7 +116,7 @@ pub mod test {
     use proptest::proptest;
 
     #[test]
-    fn test_utilities() -> Result<()> {
+    fn test_utilities() -> anyhow::Result<()> {
         let nanos = tremor_common::time::nanotime();
         let span_bytes = random_span_id_bytes(nanos);
         let trace_bytes = random_trace_id_bytes(nanos);

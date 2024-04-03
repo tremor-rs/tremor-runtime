@@ -15,14 +15,12 @@
 pub(crate) mod meta;
 mod sink;
 
-use crate::errors::Error;
-use crate::google::{GouthTokenProvider, TokenSrc};
 use crate::impls::gcl::writer::sink::{GclSink, TonicChannelFactory};
 use crate::prelude::*;
+use crate::utils::google::{GouthTokenProvider, TokenSrc};
 use googapis::google::api::MonitoredResource;
 use googapis::google::logging::r#type::LogSeverity;
 use serde::Deserialize;
-use simd_json::OwnedValue;
 use std::collections::HashMap;
 use tonic::transport::Channel;
 use tremor_common::alias;
@@ -158,13 +156,11 @@ impl Config {
         self.default_log_name()
     }
 
-    pub(crate) fn log_severity(&self, meta: Option<&Value>) -> Result<i32> {
+    pub(crate) fn log_severity(&self, meta: Option<&Value>) -> Result<i32, TryTypeError> {
         // Override for a specific per event severity
         if let Some(has_meta) = meta {
             if let Some(log_severity) = has_meta.get("log_severity") {
-                return log_severity
-                    .as_i32()
-                    .ok_or_else(|| "log_severity is not an integer".into());
+                return log_severity.try_as_i32();
             };
         }
 
@@ -188,45 +184,30 @@ impl tremor_config::Impl for Config {}
 
 fn value_to_monitored_resource(
     from: Option<&simd_json::OwnedValue>,
-) -> Result<Option<MonitoredResource>> {
+) -> Result<Option<MonitoredResource>, TryTypeError> {
     match from {
         None => Ok(None),
         Some(from) => {
-            let vt = from.value_type();
-            match from {
-                // Consider refactoring for unwrap_or_default when #1819 is resolved
-                OwnedValue::Object(from) => {
-                    let kind = from.get("type");
-                    let kind = kind.as_str();
-                    let maybe_labels = from.get("labels");
-                    let labels: HashMap<String, String> = match maybe_labels {
-                        None => HashMap::new(),
-                        Some(labels) => labels
-                            .as_object()
-                            .ok_or_else(|| {
-                                Error::from(ErrorKind::GclTypeMismatch("Value::Object", vt))
-                            })?
-                            .iter()
-                            .map(|(key, value)| {
-                                let key = key.to_string();
-                                let value = value.to_string();
-                                (key, value)
-                            })
-                            .collect(),
-                    };
-                    Ok(Some(MonitoredResource {
-                        r#type: match kind {
-                            None => String::new(),
-                            Some(kind) => kind.to_string(),
-                        },
-                        labels,
-                    }))
-                }
-                _otherwise => Err(Error::from(ErrorKind::GclTypeMismatch(
-                    "Value::Object",
-                    from.value_type(),
-                ))),
-            }
+            let kind = from
+                .get_str("type")
+                .map(ToString::to_string)
+                .unwrap_or_default();
+            let maybe_labels = from.try_get_object("labels")?;
+            let labels: HashMap<String, String> = match maybe_labels {
+                None => HashMap::new(),
+                Some(labels) => labels
+                    .iter()
+                    .map(|(key, value)| {
+                        let key = key.to_string();
+                        let value = value.to_string();
+                        (key, value)
+                    })
+                    .collect(),
+            };
+            Ok(Some(MonitoredResource {
+                r#type: kind,
+                labels,
+            }))
         }
     }
 }
@@ -244,7 +225,7 @@ impl Connector for Gcl {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = GclSink::<GouthTokenProvider, Channel>::new(
             self.config.clone(),
             builder.reply_tx(),
@@ -271,7 +252,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         Ok(Box::new(Gcl {
             config: Config::new(raw)?,
         }))
@@ -281,9 +262,10 @@ impl ConnectorBuilder for Builder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use simd_json::OwnedValue;
 
     #[test]
-    fn value_to_monitored_resource_conversion() -> Result<()> {
+    fn value_to_monitored_resource_conversion() -> anyhow::Result<()> {
         let mut ok_count = 0;
         let from: OwnedValue = literal!({
             "type": "gce_instance".to_string(),
@@ -303,7 +285,7 @@ mod tests {
             );
             ok_count += 1;
         } else {
-            return Err("Skipped test asserts due to serialization error".into());
+            anyhow::bail!("Skipped test asserts due to serialization error");
         }
 
         let from: OwnedValue = literal!({
@@ -315,7 +297,7 @@ mod tests {
             assert_eq!(0, value.labels.len());
             ok_count += 1;
         } else {
-            return Err("Skipped test asserts due to serialization error".into());
+            anyhow::bail!("Skipped test asserts due to serialization error");
         }
 
         let from: OwnedValue = literal!({

@@ -552,6 +552,10 @@ where
 }
 pub type Kind = ErrorKind;
 
+// FIXME: This is a workaround for the fact that error_chain doesn't support sync send
+unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
+
 error_chain! {
     foreign_links {
         Grok(grok::Error);

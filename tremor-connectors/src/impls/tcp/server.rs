@@ -14,7 +14,7 @@
 use super::{TcpDefaults, TcpReader, TcpWriter};
 use crate::{
     channel::{bounded, Receiver, Sender},
-    errors::{already_created_error, empty_error, err_connector_def},
+    errors::error_connector_def,
     prelude::*,
     sink::channel_sink::ChannelSinkMsg,
     utils::{
@@ -73,10 +73,10 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> crate::errors::Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         if config.url.port().is_none() {
-            return Err(err_connector_def(id, "Missing port for TCP server"));
+            return Err(error_connector_def(id, "Missing port for TCP server").into());
         }
         let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
             Some(tls_config.to_server_config()?)
@@ -112,7 +112,7 @@ impl Connector for TcpServer {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let sink_runtime = ChannelSinkRuntime::new(self.sink_tx.clone());
         let source = TcpServerSource::new(
             self.config.clone(),
@@ -127,13 +127,15 @@ impl Connector for TcpServer {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         // we use this constructor as we need the sink channel already when creating the source
         let sink = ChannelSink::from_channel_no_meta(
             resolve_connection_meta,
             builder.reply_tx(),
             self.sink_tx.clone(),
-            self.sink_rx.take().ok_or_else(already_created_error)?,
+            self.sink_rx
+                .take()
+                .ok_or(GenericImplementationError::AlreadyConnected)?,
             self.sink_is_connected.clone(),
         );
         Ok(Some(builder.spawn(sink, ctx)))
@@ -177,7 +179,7 @@ impl TcpServerSource {
 #[async_trait::async_trait()]
 impl Source for TcpServerSource {
     #[allow(clippy::too_many_lines)]
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let path = vec![self.config.url.port_or_dflt().to_string()];
         let accept_ctx = ctx.clone();
         let buf_size = self.config.buf_size;
@@ -312,11 +314,19 @@ impl Source for TcpServerSource {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.connection_rx.recv().await.ok_or_else(empty_error)?)
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        Ok(self
+            .connection_rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?)
     }
 
-    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         if let Some(accept_task) = self.accept_task.take() {
             // stop acceptin' new connections
             accept_task.abort();

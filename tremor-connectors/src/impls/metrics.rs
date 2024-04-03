@@ -181,6 +181,12 @@ impl MetricsConnector {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Invalid metrics data")]
+    InvalidMetricsData,
+}
+
 /// builder for the metrics connector
 
 #[derive(Debug, Default)]
@@ -195,14 +201,18 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _config: &ConnectorConfig,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         Ok(Box::new(MetricsConnector::new()))
     }
 }
 
 #[async_trait::async_trait()]
 impl Connector for MetricsConnector {
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(
+        &mut self,
+        _ctx: &ConnectorContext,
+        _attempt: &Attempt,
+    ) -> anyhow::Result<bool> {
         Ok(true)
     }
 
@@ -210,7 +220,7 @@ impl Connector for MetricsConnector {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = MetricsSource::new(self.tx.subscribe());
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -219,7 +229,7 @@ impl Connector for MetricsConnector {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = MetricsSink::new(self.tx.clone());
         Ok(Some(builder.spawn(sink, ctx)))
     }
@@ -249,7 +259,11 @@ impl MetricsSource {
 
 #[async_trait::async_trait()]
 impl Source for MetricsSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         loop {
             match self.rx.recv().await {
                 Ok(msg) => {
@@ -295,7 +309,7 @@ impl MetricsSink {
 }
 
 /// verify a value for conformance with the required metrics event format
-pub(crate) fn verify_metrics_value(value: &Value<'_>) -> Result<()> {
+pub(crate) fn verify_metrics_value(value: &Value<'_>) -> anyhow::Result<()> {
     value
         .as_object()
         .and_then(|obj| {
@@ -317,7 +331,7 @@ pub(crate) fn verify_metrics_value(value: &Value<'_>) -> Result<()> {
                 None
             }
         })
-        .ok_or_else(|| ErrorKind::InvalidMetricsData.into())
+        .ok_or_else(|| Error::InvalidMetricsData.into())
 }
 
 /// passing events through to the source channel
@@ -335,7 +349,7 @@ impl Sink for MetricsSink {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         // verify event format
         for (value, _meta) in event.value_meta_iter() {
             verify_metrics_value(value)?;

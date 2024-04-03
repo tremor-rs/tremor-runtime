@@ -128,7 +128,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         let origin_uri = EventOriginUri {
             scheme: "tremor-metronome".to_string(),
@@ -160,7 +160,7 @@ impl Connector for Metronome {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = MetronomeSource::new(self.interval, self.origin_uri.clone());
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -186,11 +186,15 @@ impl MetronomeSource {
 
 #[async_trait::async_trait()]
 impl Source for MetronomeSource {
-    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.next = nanotime() + self.interval_ns;
         Ok(true)
     }
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let now = nanotime();
         // we need to wait here before we continue to fulfill the interval conditions
         if now < self.next {
@@ -227,7 +231,7 @@ mod tests {
     use crate::{config::Reconnect, prelude::*};
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn missing_config() -> Result<()> {
+    async fn missing_config() -> anyhow::Result<()> {
         let alias = alias::Connector::new("flow", "connector");
         let builder = super::Builder::default();
         let connector_config = super::ConnectorConfig {
@@ -240,13 +244,10 @@ mod tests {
             metrics_interval_s: Some(5),
         };
         let kill_switch = KillSwitch::dummy();
-        assert!(matches!(
-            builder
-                .build(&alias, &connector_config, &kill_switch)
-                .await
-                .err(),
-            Some(Error(ErrorKind::MissingConfiguration(_), _))
-        ));
+        assert!(builder
+            .build(&alias, &connector_config, &kill_switch)
+            .await
+            .is_err(),);
         Ok(())
     }
 }

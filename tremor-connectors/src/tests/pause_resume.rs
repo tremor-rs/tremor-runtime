@@ -17,10 +17,8 @@ use std::time::Duration;
 
 use super::ConnectorHarness;
 use crate::{
-    errors::Result,
     function_name,
     impls::{tcp, udp},
-    source::SourceMsg,
 };
 
 use tokio::sync::oneshot;
@@ -28,11 +26,11 @@ use tokio::{
     io::AsyncWriteExt,
     net::{TcpStream, UdpSocket},
 };
-use tremor_system::instance::State;
+use tremor_system::{connector::source, instance::State};
 use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn udp_pause_resume() -> Result<()> {
+async fn udp_pause_resume() -> anyhow::Result<()> {
     let free_port = super::free_port::find_free_udp_port().await?;
 
     let server_addr = format!("127.0.0.1:{free_port}");
@@ -67,7 +65,7 @@ async fn udp_pause_resume() -> Result<()> {
     harness.wait_for_state(State::Paused).await?;
     // ensure the source has applied the state change
     let (tx, rx) = oneshot::channel();
-    harness.send_to_source(SourceMsg::Synchronize(tx))?;
+    harness.send_to_source(source::Msg::Synchronize(tx))?;
     rx.await?;
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
@@ -85,7 +83,7 @@ async fn udp_pause_resume() -> Result<()> {
 
     // ensure the source has applied the state change
     let (tx, rx) = oneshot::channel();
-    harness.send_to_source(SourceMsg::Synchronize(tx))?;
+    harness.send_to_source(source::Msg::Synchronize(tx))?;
     rx.await?;
     // receive the data sent during pause
     // first line, continueing the stuff from last send
@@ -121,7 +119,7 @@ async fn udp_pause_resume() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn tcp_server_pause_resume() -> Result<()> {
+async fn tcp_server_pause_resume() -> anyhow::Result<()> {
     let free_port = super::free_port::find_free_tcp_port().await?;
 
     let server_addr = format!("127.0.0.1:{free_port}");
@@ -158,7 +156,7 @@ async fn tcp_server_pause_resume() -> Result<()> {
 
     // ensure the source has applied the state change
     let (tx, rx) = oneshot::channel();
-    harness.send_to_source(SourceMsg::Synchronize(tx))?;
+    harness.send_to_source(source::Msg::Synchronize(tx))?;
     rx.await?;
 
     // send some more data
@@ -177,7 +175,7 @@ async fn tcp_server_pause_resume() -> Result<()> {
 
     // ensure the source has applied the state change
     let (tx, rx) = oneshot::channel();
-    harness.send_to_source(SourceMsg::Synchronize(tx))?;
+    harness.send_to_source(source::Msg::Synchronize(tx))?;
     rx.await?;
 
     // receive the data sent during pause

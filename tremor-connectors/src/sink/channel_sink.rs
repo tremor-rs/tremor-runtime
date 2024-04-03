@@ -15,7 +15,7 @@
 //! Sink implementation that keeps track of multiple streams and keeps channels to send to each stream
 
 use crate::channel::{bounded, Receiver, Sender};
-use crate::{errors::Result, prelude::*, Context, StreamDone};
+use crate::{prelude::*, Context, StreamDone};
 use bimap::BiMap;
 use either::Either;
 use std::collections::HashMap;
@@ -253,8 +253,11 @@ where
     /// This will cause the writer to stop as its receiving channel will be closed.
     /// The writer should receive an error when the channel is empty, so we safely drain all messages.
     /// We will get a double `RemoveStream` message, but this is fine
-    async fn unregister_stream_writer(&mut self, stream: u64) -> Result<()> {
-        Ok(self.tx.send(ChannelSinkMsg::RemoveStream(stream)).await?)
+    async fn unregister_stream_writer(&mut self, stream: u64) -> anyhow::Result<()> {
+        self.tx
+            .send(ChannelSinkMsg::RemoveStream(stream))
+            .await
+            .map_err(|_| anyhow::anyhow!("Error sending RemoveStream msg to ChannelSink"))
     }
 }
 
@@ -274,7 +277,7 @@ where
         connection_meta: Option<T>,
         ctx: &C,
         mut writer: W,
-    ) -> JoinHandle<Result<()>>
+    ) -> JoinHandle<anyhow::Result<()>>
     where
         W: StreamWriter + 'static,
         C: Context + Send + Sync + 'static,
@@ -335,7 +338,12 @@ where
             }
             let error = match writer.on_done(stream).await {
                 Err(e) => Some(e),
-                Ok(StreamDone::ConnectorClosed) => ctx.notifier().connection_lost().await.err(),
+                Ok(StreamDone::ConnectorClosed) => ctx
+                    .notifier()
+                    .connection_lost()
+                    .await
+                    .err()
+                    .map(anyhow::Error::from),
                 Ok(_) => None,
             };
             if let Some(e) = error {
@@ -343,8 +351,8 @@ where
             }
             stream_sink_tx
                 .send(ChannelSinkMsg::RemoveStream(stream))
-                .await?;
-            Result::Ok(())
+                .await
+                .map_err(|_| anyhow::anyhow!("Error sending RemoveStream msg to ChannelSink"))
         })
     }
 }
@@ -375,7 +383,7 @@ where
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         // clean up
         // make sure channels for the given event are added to avoid stupid errors
         // due to channels not yet handled
@@ -458,7 +466,7 @@ where
         signal: Event,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         match signal.kind.as_ref() {
             Some(SignalKind::Tick) => {
                 self.handle_channels(ctx, serializer, true);

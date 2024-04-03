@@ -14,7 +14,6 @@
 
 //! TLS utilities
 
-use crate::errors::{Error, Kind as ErrorKind, Result};
 use futures::Future;
 use hyper::server::{
     accept::Accept,
@@ -69,23 +68,37 @@ pub(crate) struct TLSClientConfig {
     pub(crate) key: Option<PathBuf>,
 }
 
+/// TLS Errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Invalid certificate
+    #[error("Invalid certificate file: {0}")]
+    InvalidCertificate(String),
+    /// Certificate not found
+    #[error("Certificate file does not exist: {0}")]
+    CertificateNotFound(String),
+    /// Invalid private key
+    #[error("Invalid private key file: {0}")]
+    InvalidPrivateKey(String),
+    #[error(transparent)]
+    TremorCommon(#[from] tremor_common::Error),
+    #[error(transparent)]
+    TLS(#[from] rustls::Error),
+    #[error(transparent)]
+    IO(#[from] io::Error),
+}
+
 /// Load the passed certificates file
-fn load_certs(path: &Path) -> Result<Vec<Certificate>> {
+fn load_certs(path: &Path) -> Result<Vec<Certificate>, Error> {
     let certfile = tremor_common::file::open(path)?;
     let mut reader = BufReader::new(certfile);
     certs(&mut reader)
-        .map_err(|_| {
-            Error::from(ErrorKind::TLSError(format!(
-                "Invalid certificate in {}",
-                path.display()
-            )))
-        })
+        .map_err(|_| Error::InvalidCertificate(path.to_string_lossy().to_string()))
         .and_then(|certs| {
             if certs.is_empty() {
-                Err(Error::from(ErrorKind::TLSError(format!(
-                    "No valid TLS certificates found in {}",
-                    path.display()
-                ))))
+                Err(Error::CertificateNotFound(
+                    path.to_string_lossy().to_string(),
+                ))
             } else {
                 Ok(certs.into_iter().map(Certificate).collect())
             }
@@ -93,18 +106,14 @@ fn load_certs(path: &Path) -> Result<Vec<Certificate>> {
 }
 
 /// Load the passed private key file
-fn load_keys(path: &Path) -> Result<PrivateKey> {
+fn load_keys(path: &Path) -> Result<PrivateKey, Error> {
     // prefer to load pkcs8 keys
     // this will only error if we have invalid pkcs8 key base64 or we couldnt read the file.
     let keyfile = tremor_common::file::open(path)?;
     let mut reader = BufReader::new(keyfile);
 
-    let certs = pkcs8_private_keys(&mut reader).map_err(|_e| {
-        Error::from(ErrorKind::TLSError(format!(
-            "Invalid PKCS8 Private key in {}",
-            path.display()
-        )))
-    })?;
+    let certs = pkcs8_private_keys(&mut reader)
+        .map_err(|_e| Error::InvalidPrivateKey(path.to_string_lossy().to_string()))?;
     let mut keys: Vec<PrivateKey> = certs.into_iter().map(PrivateKey).collect();
 
     // only attempt to load as RSA keys if file has no pkcs8 keys
@@ -112,26 +121,18 @@ fn load_keys(path: &Path) -> Result<PrivateKey> {
         let keyfile = tremor_common::file::open(path)?;
         let mut reader = BufReader::new(keyfile);
         keys = rsa_private_keys(&mut reader)
-            .map_err(|_e| {
-                Error::from(ErrorKind::TLSError(format!(
-                    "Invalid RSA Private key in {}",
-                    path.display()
-                )))
-            })?
+            .map_err(|_e| Error::InvalidPrivateKey(path.to_string_lossy().to_string()))?
             .into_iter()
             .map(PrivateKey)
             .collect();
     }
 
-    keys.into_iter().next().ok_or_else(|| {
-        Error::from(ErrorKind::TLSError(format!(
-            "No valid private keys (RSA or PKCS8) found in {}",
-            path.display()
-        )))
-    })
+    keys.into_iter()
+        .next()
+        .ok_or_else(|| Error::InvalidPrivateKey(path.to_string_lossy().to_string()))
 }
 impl TLSServerConfig {
-    pub(crate) fn to_server_config(&self) -> Result<ServerConfig> {
+    pub(crate) fn to_server_config(&self) -> Result<ServerConfig, Error> {
         let certs = load_certs(&self.cert)?;
 
         let key = load_keys(&self.key)?;
@@ -148,11 +149,11 @@ impl TLSServerConfig {
 impl TLSClientConfig {
     /// if we have a cafile configured, we only load it, and no other ca certificates
     /// if there is no cafile configured, we load the default webpki-roots from Mozilla
-    pub(crate) fn to_client_connector(&self) -> Result<TlsConnector> {
+    pub(crate) fn to_client_connector(&self) -> Result<TlsConnector, Error> {
         let tls_config = self.to_client_config()?;
         Ok(TlsConnector::from(Arc::new(tls_config)))
     }
-    pub(crate) fn to_client_config(&self) -> Result<ClientConfig> {
+    pub(crate) fn to_client_config(&self) -> Result<ClientConfig, Error> {
         let roots = if let Some(cafile) = self.cafile.as_ref() {
             let mut roots = RootCertStore::empty();
             let certfile = tremor_common::file::open(cafile)?;
@@ -162,12 +163,8 @@ impl TLSClientConfig {
                 Item::X509Certificate(cert) => Some(Certificate(cert)),
                 _ => None,
             });
-            cert.and_then(|cert| roots.add(&cert).ok()).ok_or_else(|| {
-                Error::from(ErrorKind::TLSError(format!(
-                    "Invalid certificate in {}",
-                    cafile.display()
-                )))
-            })?;
+            cert.and_then(|cert| roots.add(&cert).ok())
+                .ok_or_else(|| Error::InvalidCertificate(cafile.to_string_lossy().to_string()))?;
             roots
         } else {
             SYSTEM_ROOT_CERTS.clone()
@@ -312,7 +309,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn load_certs_invalid() -> Result<()> {
+    fn load_certs_invalid() -> anyhow::Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
         file.write_all(b"Brueghelflinsch\n")?;
         let path = file.into_temp_path();
@@ -321,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn load_certs_empty() -> Result<()> {
+    fn load_certs_empty() -> anyhow::Result<()> {
         let file = tempfile::NamedTempFile::new()?;
         let path = file.into_temp_path();
         assert!(load_certs(&path).is_err());
@@ -329,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn load_keys_invalid() -> Result<()> {
+    fn load_keys_invalid() -> anyhow::Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
         file.write_all(
             b"-----BEGIN PRIVATE KEY-----\nStrumpfenpfart\n-----END PRIVATE KEY-----\n",
@@ -340,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn load_keys_empty() -> Result<()> {
+    fn load_keys_empty() -> anyhow::Result<()> {
         let file = tempfile::NamedTempFile::new()?;
         let path = file.into_temp_path();
         assert!(load_keys(&path).is_err());
@@ -348,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn client_config() -> Result<()> {
+    fn client_config() -> anyhow::Result<()> {
         setup_for_tls();
 
         let tls_config = TLSClientConfig {

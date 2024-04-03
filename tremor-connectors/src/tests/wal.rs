@@ -22,7 +22,7 @@ use tremor_pipeline::{CbAction, Event, EventIdGenerator};
 use tremor_value::{literal, prelude::*, Value};
 
 #[tokio::test(flavor = "multi_thread")]
-async fn wal() -> Result<()> {
+async fn wal() -> anyhow::Result<()> {
     let temp_dir = tempfile::Builder::new().tempdir()?;
     let temp_path = temp_dir.into_path();
 

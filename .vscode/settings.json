@@ -130,6 +130,7 @@
     "wintel"
   ],
   "rust-analyzer.linkedProjects": [
-    "./Cargo.toml"
+    "./Cargo.toml",
+    "./tremor-connectors/Cargo.toml"
   ]
 }

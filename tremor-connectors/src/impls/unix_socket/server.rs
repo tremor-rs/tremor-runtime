@@ -31,7 +31,6 @@
 use super::{UnixSocketReader, UnixSocketWriter};
 use crate::{
     channel::{bounded, Receiver, Sender},
-    errors::{already_created_error, empty_error},
     prelude::*,
     sink::channel_sink::ChannelSinkMsg,
 };
@@ -71,7 +70,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let (sink_tx, sink_rx) = bounded(qsize());
         Ok(Box::new(UnixSocketServer {
@@ -117,7 +116,7 @@ impl Connector for UnixSocketServer {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let sink_runtime = ChannelSinkRuntime::new(self.sink_tx.clone());
         let source = UnixSocketSource::new(
             self.config.clone(),
@@ -131,12 +130,14 @@ impl Connector for UnixSocketServer {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = ChannelSink::from_channel_no_meta(
             resolve_connection_meta,
             builder.reply_tx(),
             self.sink_tx.clone(),
-            self.sink_rx.take().ok_or_else(already_created_error)?,
+            self.sink_rx
+                .take()
+                .ok_or(GenericImplementationError::AlreadyConnected)?,
             self.sink_is_connected.clone(),
         );
         Ok(Some(builder.spawn(sink, ctx)))
@@ -173,7 +174,7 @@ impl UnixSocketSource {
 
 #[async_trait::async_trait()]
 impl Source for UnixSocketSource {
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         if let Some(listener_task) = self.listener_task.take() {
             listener_task.abort();
         }
@@ -258,11 +259,19 @@ impl Source for UnixSocketSource {
         }));
         Ok(true)
     }
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.connection_rx.recv().await.ok_or_else(empty_error)?)
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        Ok(self
+            .connection_rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?)
     }
 
-    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         if let Some(listener_task) = self.listener_task.take() {
             // stop acceptin' new connections
             listener_task.abort();

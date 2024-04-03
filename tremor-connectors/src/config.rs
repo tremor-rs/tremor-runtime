@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::prelude::*;
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use simd_json::ValueType;
 use tremor_common::alias;
@@ -111,9 +112,11 @@ impl Connector {
     pub(crate) fn from_defn(
         alias: &alias::Connector,
         defn: &ast::ConnectorDefinition<'static>,
-    ) -> crate::Result<Self> {
+    ) -> anyhow::Result<Self> {
         let aggr_reg = tremor_script::registry::aggr();
-        let reg = &*FN_REGISTRY.read()?;
+        let reg = &*FN_REGISTRY
+            .read()
+            .map_err(|_| anyhow!("Can't lock registry"))?;
 
         let mut helper = Helper::new(reg, &aggr_reg);
         let params = defn.params.clone();
@@ -128,16 +131,16 @@ impl Connector {
         connector_alias: &alias::Connector,
         connector_type: ConnectorType,
         connector_config: &Value<'static>,
-    ) -> crate::Result<Self> {
+    ) -> anyhow::Result<Self> {
         fn validate_type(
             v: &Value,
             k: &str,
             t: ValueType,
             connector_alias: &alias::Connector,
-        ) -> Result<()> {
+        ) -> Result<(), Error> {
             if v.get(k).is_some() && v.get(k).map(Value::value_type) != Some(t) {
-                return Err(ErrorKind::InvalidConnectorDefinition(
-                    connector_alias.to_string(),
+                return Err(Error::InvalidDefinition(
+                    connector_alias.clone(),
                     format!(
                         "Expected type {t:?} for key {k} but got {:?}",
                         v.get(k).map_or(ValueType::Null, Value::value_type)
@@ -241,10 +244,9 @@ impl Connector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::Result;
 
     #[test]
-    fn test_reconnect_serde() -> Result<()> {
+    fn test_reconnect_serde() -> anyhow::Result<()> {
         assert_eq!("none\n", serde_yaml::to_string(&Reconnect::None)?);
         let none_strategy = "none";
         let reconnect = serde_yaml::from_str::<Reconnect>(none_strategy)?;
@@ -268,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn test_config_builtin_preproc_with_config() -> Result<()> {
+    fn test_config_builtin_preproc_with_config() -> anyhow::Result<()> {
         let c = Connector::from_config(
             &alias::Connector::new("flow", "my_otel_client"),
             ConnectorType::from("otel_client".to_string()),

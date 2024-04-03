@@ -230,7 +230,7 @@ macro_rules! assert_with_request_headers {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_client_request_with_defaults() -> Result<()> {
+async fn http_client_request_with_defaults() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -252,7 +252,7 @@ async fn http_client_request_with_defaults() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_client_request_with_defaults_post() -> Result<()> {
+async fn http_client_request_with_defaults_post() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -274,7 +274,7 @@ async fn http_client_request_with_defaults_post() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_client_request_override_method() -> Result<()> {
+async fn http_client_request_override_method() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -301,7 +301,7 @@ async fn http_client_request_override_method() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_client_request_override_endpoint() -> Result<()> {
+async fn http_client_request_override_endpoint() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -332,7 +332,7 @@ async fn http_client_request_override_endpoint() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_client_request_override_codec() -> Result<()> {
+async fn http_client_request_override_codec() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -370,7 +370,7 @@ async fn http_client_request_override_codec() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_client_request_override_headers() -> Result<()> {
+async fn http_client_request_override_headers() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -416,7 +416,7 @@ async fn http_client_request_override_headers() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_client_request_override_content_type() -> Result<()> {
+async fn http_client_request_override_content_type() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -474,7 +474,7 @@ async fn http_client_request_override_content_type() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_client_request_auth_none() -> Result<()> {
+async fn http_client_request_auth_none() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -532,7 +532,7 @@ async fn http_client_request_auth_none() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn http_client_request_auth_basic() -> Result<()> {
+async fn http_client_request_auth_basic() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -601,7 +601,7 @@ async fn http_client_request_auth_basic() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn chunked() -> Result<()> {
+async fn chunked() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let event = Event {
         data: (
@@ -667,7 +667,7 @@ async fn chunked() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn missing_tls_config_https() -> Result<()> {
+async fn missing_tls_config_https() -> anyhow::Result<()> {
     let target = find_free_tcp_endpoint_str().await?;
     let defn = literal!({
       "config": {
@@ -688,7 +688,7 @@ async fn missing_tls_config_https() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn missing_config() -> Result<()> {
+async fn missing_config() -> anyhow::Result<()> {
     let defn = literal!({
       "codec": "binflux",
     });

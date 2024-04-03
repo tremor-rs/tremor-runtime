@@ -13,26 +13,33 @@
 // limitations under the License.
 
 use super::meta;
-use crate::google::{AuthInterceptor, ChannelFactory, TokenProvider};
-use crate::impls::gcl::writer::Config;
-use crate::prelude::*;
-use crate::sink::concurrency_cap::ConcurrencyCap;
-use crate::utils::pb;
-use googapis::google::logging::v2::log_entry::Payload;
-use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
-use googapis::google::logging::v2::{LogEntry, WriteLogEntriesRequest};
+use crate::{
+    impls::gcl::writer::Config,
+    prelude::*,
+    sink::concurrency_cap::ConcurrencyCap,
+    utils::{
+        google::{AuthInterceptor, ChannelFactory, TokenProvider},
+        pb,
+    },
+};
+use googapis::google::logging::v2::{
+    log_entry::Payload, logging_service_v2_client::LoggingServiceV2Client, LogEntry,
+    WriteLogEntriesRequest,
+};
 use std::time::Duration;
 use tokio::time::timeout;
-use tonic::codegen::InterceptedService;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::Code;
+use tonic::{
+    codegen::InterceptedService,
+    transport::{Certificate, Channel, ClientTlsConfig},
+    Code,
+};
 use tremor_common::time::nanotime;
 
 pub(crate) struct TonicChannelFactory;
 
 #[async_trait::async_trait]
 impl ChannelFactory<Channel> for TonicChannelFactory {
-    async fn make_channel(&self, connect_timeout: Duration) -> Result<Channel> {
+    async fn make_channel(&self, connect_timeout: Duration) -> anyhow::Result<Channel> {
         let tls_config = ClientTlsConfig::new()
             .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
             .domain_name("logging.googleapis.com");
@@ -65,7 +72,7 @@ fn value_to_log_entry(
     config: &Config,
     data: &Value,
     meta: Option<&Value>,
-) -> Result<LogEntry> {
+) -> Result<LogEntry, TryTypeError> {
     Ok(LogEntry {
         log_name: config.log_name(meta),
         resource: super::value_to_monitored_resource(config.resource.as_ref())?,
@@ -133,11 +140,13 @@ where
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "Google Cloud Logging",
-            "The client is not connected",
-        ))?;
+    ) -> anyhow::Result<SinkReply> {
+        let client = self
+            .client
+            .as_mut()
+            .ok_or(GenericImplementationError::ClientNotAvailable(
+                "Google Cloud Logging",
+            ))?;
 
         let mut entries = Vec::with_capacity(event.len());
         for (data, meta) in event.value_meta_iter() {
@@ -210,7 +219,7 @@ where
         Ok(SinkReply::NONE)
     }
 
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         info!("{} Connecting to Google Cloud Logging", ctx);
         let channel = self
             .channel_factory
@@ -338,7 +347,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn on_event_can_send_an_event() -> Result<()> {
+    async fn on_event_can_send_an_event() -> anyhow::Result<()> {
         let (tx, mut rx) = crate::channel::unbounded();
         let (connection_lost_tx, _connection_lost_rx) = bounded(10);
 
@@ -404,7 +413,7 @@ mod test {
     }
 
     #[test]
-    fn fails_if_the_event_is_not_an_object() -> Result<()> {
+    fn fails_if_the_event_is_not_an_object() -> anyhow::Result<()> {
         let now = tremor_common::time::nanotime();
         let data = &literal!("snot");
         let config = Config::new(&literal!({
@@ -423,7 +432,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn sink_succeeds_if_config_is_nearly_empty() -> Result<()> {
+    async fn sink_succeeds_if_config_is_nearly_empty() -> anyhow::Result<()> {
         let config = literal!({
             "config": {
                 "token": {"file": file!().to_string()},
@@ -440,7 +449,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn on_event_fails_if_client_is_not_connected() -> Result<()> {
+    async fn on_event_fails_if_client_is_not_connected() -> anyhow::Result<()> {
         let (rx, _tx) = bounded(1024);
         let (reply_tx, _reply_rx) = crate::channel::unbounded();
         let config = Config::new(&literal!({
@@ -477,7 +486,7 @@ mod test {
     }
 
     #[test]
-    fn log_name_override() -> Result<()> {
+    fn log_name_override() -> anyhow::Result<()> {
         let now = tremor_common::time::nanotime();
         let config: Config = structurize(literal!({
             "token": {"file": file!().to_string()},
@@ -492,7 +501,7 @@ mod test {
     }
 
     #[test]
-    fn log_severity_override() -> Result<()> {
+    fn log_severity_override() -> anyhow::Result<()> {
         let now = tremor_common::time::nanotime();
         let config: Config = structurize(literal!({
             "token": {"file": file!().to_string()},

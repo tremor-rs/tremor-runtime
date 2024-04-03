@@ -12,18 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
-use crate::google::{AuthInterceptor, TokenProvider, TokenSrc};
-use crate::prelude::*;
-use googapis::google::pubsub::v1::publisher_client::PublisherClient;
-use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::time::Duration;
+use crate::{
+    prelude::*,
+    utils::google::{AuthInterceptor, TokenProvider, TokenSrc},
+};
+use googapis::google::pubsub::v1::{
+    publisher_client::PublisherClient, PublishRequest, PubsubMessage,
+};
+use std::{collections::HashMap, marker::PhantomData, time::Duration};
 use tokio::time::timeout;
-use tonic::codegen::InterceptedService;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::Code;
+use tonic::{
+    codegen::InterceptedService,
+    transport::{Certificate, Channel, ClientTlsConfig},
+    Code,
+};
 use tremor_common::url::HttpsDefaults;
 use tremor_pipeline::Event;
 use tremor_value::Value;
@@ -47,10 +49,10 @@ impl tremor_config::Impl for Config {}
 pub(crate) struct Builder {}
 
 #[cfg(all(test, feature = "gcp-integration"))]
-type GpubConnectorWithTokenProvider = GpubConnector<crate::google::tests::TestTokenProvider>;
+type GpubConnectorWithTokenProvider = GpubConnector<crate::utils::google::tests::TestTokenProvider>;
 
 #[cfg(not(all(test, feature = "gcp-integration")))]
-type GpubConnectorWithTokenProvider = GpubConnector<crate::google::GouthTokenProvider>;
+type GpubConnectorWithTokenProvider = GpubConnector<crate::utils::google::GouthTokenProvider>;
 
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
@@ -64,7 +66,7 @@ impl ConnectorBuilder for Builder {
         _config: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
         Ok(Box::new(GpubConnectorWithTokenProvider {
@@ -85,7 +87,7 @@ impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = GpubSink::<T> {
             config: self.config.clone(),
             hostname: self
@@ -93,10 +95,7 @@ impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
                 .url
                 .host_str()
                 .ok_or_else(|| {
-                    ErrorKind::InvalidConfiguration(
-                        "gpubsub-publisher".to_string(),
-                        "Missing hostname".to_string(),
-                    )
+                    Error::InvalidConfiguration(ctx.alias().clone(), "Missing hostname")
                 })?
                 .to_string(),
             client: None,
@@ -104,7 +103,11 @@ impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
         Ok(Some(builder.spawn(sink, ctx)))
     }
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(
+        &mut self,
+        _ctx: &ConnectorContext,
+        _attempt: &Attempt,
+    ) -> anyhow::Result<bool> {
         Ok(true)
     }
 
@@ -122,7 +125,7 @@ struct GpubSink<T: TokenProvider> {
 
 #[async_trait::async_trait()]
 impl<T: TokenProvider> Sink for GpubSink<T> {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.config.url.scheme() == "https" {
@@ -152,11 +155,11 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "PubSub",
-            "The publisher is not connected",
-        ))?;
+    ) -> anyhow::Result<SinkReply> {
+        let client = self
+            .client
+            .as_mut()
+            .ok_or(GenericImplementationError::ClientNotAvailable("PubSub"))?;
 
         let mut messages = Vec::with_capacity(event.len());
 

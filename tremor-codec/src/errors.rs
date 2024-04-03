@@ -34,6 +34,11 @@ impl PartialEq for Error {
     }
 }
 
+// FIXME: This is a workaround for the fact that `error_chain` does not have sync send errors,
+// this is a temporary solution until we can replace `error_chain` with `anyhow`
+unsafe impl Sync for Error {}
+unsafe impl Send for Error {}
+
 error_chain! {
     foreign_links {
         CsvError(csv::Error);

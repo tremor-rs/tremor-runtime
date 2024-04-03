@@ -32,7 +32,7 @@ pub(crate) async fn get_client<D>(
     region: Option<String>,
     endpoint: Option<&Url<D>>,
     path_style_access: bool,
-) -> Result<Client>
+) -> Client
 where
     D: Defaults,
 {
@@ -48,5 +48,5 @@ where
         config_builder = config_builder.endpoint_url(endpoint.to_string());
     }
 
-    Ok(Client::from_conf(config_builder.build()))
+    Client::from_conf(config_builder.build())
 }

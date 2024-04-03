@@ -157,7 +157,7 @@ impl StreamReader for UnixSocketReader {
             meta: Some(self.meta.clone()),
         })
     }
-    async fn read(&mut self, stream: u64) -> Result<SourceReply> {
+    async fn read(&mut self, stream: u64) -> anyhow::Result<SourceReply> {
         let bytes_read = self.stream.read(&mut self.buffer).await?;
         if bytes_read == 0 {
             // EOF
@@ -209,7 +209,7 @@ impl UnixSocketWriter {
 
 #[async_trait::async_trait()]
 impl StreamWriter for UnixSocketWriter {
-    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<&Value>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<&Value>) -> anyhow::Result<()> {
         for chunk in data {
             let slice: &[u8] = &chunk;
             debug!(
@@ -222,7 +222,7 @@ impl StreamWriter for UnixSocketWriter {
         self.stream.flush().await?;
         Ok(())
     }
-    async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&mut self, _stream: u64) -> anyhow::Result<StreamDone> {
         self.stream.shutdown().await?;
         Ok(StreamDone::StreamClosed)
     }

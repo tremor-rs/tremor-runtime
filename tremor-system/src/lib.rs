@@ -74,6 +74,14 @@ pub mod killswitch {
         /// Drain the runtime
         Drain(oneshot::Sender<anyhow::Result<()>>),
     }
+
+    /// Killswitch errors
+    #[derive(Debug, thiserror::Error)]
+    pub enum Error {
+        /// Error stopping all Flows
+        #[error("Error stopping all Flows: {0}")]
+        Send(#[from] mpsc::error::SendError<Msg>),
+    }
     /// for draining and stopping
     #[derive(Debug, Clone)]
     pub struct KillSwitch(mpsc::Sender<Msg>);
@@ -83,7 +91,7 @@ pub mod killswitch {
         ///
         /// # Errors
         /// * if draining or stopping fails
-        pub async fn stop(&self, mode: ShutdownMode) -> anyhow::Result<()> {
+        pub async fn stop(&self, mode: ShutdownMode) -> Result<(), Error> {
             if mode == ShutdownMode::Graceful {
                 let (tx, rx) = oneshot::channel();
                 self.0.send(Msg::Drain(tx)).await?;
@@ -249,7 +257,7 @@ pub mod connector {
     use std::{collections::HashMap, fmt::Display};
 
     use serde::{Deserialize, Serialize};
-    use tokio::sync::mpsc::{error::SendError, Sender};
+    use tokio::sync::mpsc::Sender;
     use tremor_common::{alias, ports::Port};
     use tremor_script::ast::DeployEndpoint;
 
@@ -276,10 +284,44 @@ pub mod connector {
         }
         /// create a new connector result error
         #[must_use]
-        pub fn err(alias: &alias::Connector, err_msg: &'static str) -> Self {
+        pub fn err<E: Into<anyhow::Error>>(alias: &alias::Connector, e: E) -> Self {
             Self {
                 alias: alias.clone(),
-                res: Err(anyhow::Error::msg(err_msg)),
+                res: Err(e.into()),
+            }
+        }
+    }
+
+    /// connector errors
+    #[derive(Debug, thiserror::Error)]
+    pub enum Error {
+        /// Error sending a message to connector
+        #[error("{0} Error sending a message to connector")]
+        SendError(alias::Connector),
+        /// Error sending a message to source
+        #[error("{0} Error sending a message to source")]
+        SourceSendError(alias::Connector),
+        /// Error sending a message to sink
+        #[error("{0} Error sending a message to sink")]
+        SinkSendError(alias::Connector),
+        /// Status report error
+        #[error("{0} Error receiving status report")]
+        StatusReportError(alias::Connector),
+        /// Connect failed Error
+        #[error("{0} Connect failed")]
+        ConnectFailed(alias::Connector),
+    }
+
+    impl Error {
+        /// the alias of the connector
+        #[must_use]
+        pub fn alias(&self) -> &alias::Connector {
+            match self {
+                Self::SourceSendError(alias)
+                | Self::SinkSendError(alias)
+                | Self::StatusReportError(alias)
+                | Self::ConnectFailed(alias)
+                | Self::SendError(alias) => alias,
             }
         }
     }
@@ -338,12 +380,21 @@ pub mod connector {
             self.source.as_ref()
         }
 
+        /// The actual sender
+        #[must_use]
+        pub fn sender(&self) -> &Sender<Msg> {
+            &self.sender
+        }
+
         /// send a message
         ///
         /// # Errors
         ///  * If sending failed
-        pub async fn send(&self, msg: Msg) -> Result<(), SendError<Msg>> {
-            self.sender.send(msg).await
+        pub async fn send(&self, msg: Msg) -> Result<(), Error> {
+            self.sender
+                .send(msg)
+                .await
+                .map_err(|_| Error::SendError(self.alias.clone()))
         }
 
         /// send a message to the sink part of the connector.
@@ -351,9 +402,11 @@ pub mod connector {
         ///
         /// # Errors
         ///   * if sending failed
-        pub async fn send_sink(&self, msg: sink::Msg) -> Result<(), SendError<sink::Msg>> {
+        pub async fn send_sink(&self, msg: sink::Msg) -> Result<(), Error> {
             if let Some(sink) = self.sink.as_ref() {
-                sink.send(msg).await?;
+                sink.send(msg)
+                    .await
+                    .map_err(|_| Error::SinkSendError(self.alias.clone()))?;
             }
             Ok(())
         }
@@ -363,9 +416,12 @@ pub mod connector {
         ///
         /// # Errors
         ///   * if sending failed
-        pub fn send_source(&self, msg: source::Msg) -> Result<(), SendError<source::Msg>> {
+        pub fn send_source(&self, msg: source::Msg) -> Result<(), Error> {
             if let Some(source) = self.source.as_ref() {
-                source.addr.send(msg)?;
+                source
+                    .addr
+                    .send(msg)
+                    .map_err(|_| Error::SourceSendError(self.alias.clone()))?;
             }
             Ok(())
         }
@@ -384,35 +440,35 @@ pub mod connector {
         ///
         /// # Errors
         ///   * if sending failed
-        pub async fn stop(&self, sender: Sender<ResultWrapper<()>>) -> Result<(), SendError<Msg>> {
+        pub async fn stop(&self, sender: Sender<ResultWrapper<()>>) -> Result<(), Error> {
             self.send(Msg::Stop(sender)).await
         }
         /// starts the connector
         ///
         /// # Errors
         ///   * if sending failed
-        pub async fn start(&self, sender: Sender<ResultWrapper<()>>) -> Result<(), SendError<Msg>> {
+        pub async fn start(&self, sender: Sender<ResultWrapper<()>>) -> Result<(), Error> {
             self.send(Msg::Start(sender)).await
         }
         /// drains the connector
         ///
         /// # Errors
         ///   * if sending failed
-        pub async fn drain(&self, sender: Sender<ResultWrapper<()>>) -> Result<(), SendError<Msg>> {
+        pub async fn drain(&self, sender: Sender<ResultWrapper<()>>) -> Result<(), Error> {
             self.send(Msg::Drain(sender)).await
         }
         /// pauses the connector
         ///
         /// # Errors
         ///   * if sending failed
-        pub async fn pause(&self) -> Result<(), SendError<Msg>> {
+        pub async fn pause(&self) -> Result<(), Error> {
             self.send(Msg::Pause).await
         }
         /// resumes the connector
         ///
         /// # Errors
         ///   * if sending failed
-        pub async fn resume(&self) -> Result<(), SendError<Msg>> {
+        pub async fn resume(&self) -> Result<(), Error> {
             self.send(Msg::Resume).await
         }
 
@@ -420,10 +476,11 @@ pub mod connector {
         ///
         /// # Errors
         ///   * if sending or receiving failed
-        pub async fn report_status(&self) -> Result<StatusReport, anyhow::Error> {
+        pub async fn report_status(&self) -> Result<StatusReport, Error> {
             let (tx, rx) = tokio::sync::oneshot::channel();
             self.send(Msg::Report(tx)).await?;
-            Ok(rx.await?)
+            rx.await
+                .map_err(|_| Error::StatusReportError(self.alias.clone()))
         }
     }
 
@@ -596,12 +653,12 @@ pub mod connector {
 
     /// surce messages
     pub mod source {
-        use tokio::sync::mpsc::{error::SendError, Sender, UnboundedSender};
+        use tokio::sync::mpsc::{Sender, UnboundedSender};
         use tremor_common::ports::Port;
         use tremor_pipeline::{CbAction, EventId};
         use tremor_script::ast::DeployEndpoint;
 
-        use crate::pipeline;
+        use crate::{connector, pipeline};
 
         use super::Attempt;
 
@@ -613,13 +670,25 @@ pub mod connector {
         }
 
         impl Addr {
+            /// create a new source address
+            #[must_use]
+            pub fn new(addr: UnboundedSender<Msg>) -> Self {
+                Self { addr }
+            }
             /// send a message
             ///
             /// # Errors
             ///  * If sending failed
-            pub fn send(&self, msg: Msg) -> Result<(), SendError<Msg>> {
-                self.addr.send(msg)
+            pub fn send(&self, msg: Msg) -> Result<(), Error> {
+                self.addr.send(msg).map_err(|_| Error::SendError)
             }
+        }
+        /// Source Addr errors
+        #[derive(Debug, thiserror::Error)]
+        pub enum Error {
+            /// Error sending a message to source
+            #[error("Error sending a message to source")]
+            SendError,
         }
 
         #[derive(Debug)]
@@ -651,7 +720,7 @@ pub mod connector {
             /// stop the source
             Stop(Sender<Result<(), anyhow::Error>>),
             /// drain the source - bears a sender for sending out a SourceDrained status notification
-            Drain(Sender<Msg>),
+            Drain(Sender<connector::Msg>),
             /// FIXME: #[cfg(test)]
             Synchronize(tokio::sync::oneshot::Sender<()>),
         }
@@ -668,23 +737,32 @@ pub mod connector {
 
         use super::Attempt;
 
+        /// Sink Addr errors
+        #[derive(Debug, thiserror::Error)]
+        pub enum Error {
+            /// Error sending a message to source
+            #[error("Error sending a message to sink")]
+            SendError,
+        }
+
         /// address of a connector sink
         #[derive(Clone, Debug)]
         pub struct Addr {
             /// the actual sender
             addr: Sender<Msg>,
         }
-
         impl Addr {
+            /// create a new sink address
+            #[must_use]
+            pub fn new(addr: Sender<Msg>) -> Self {
+                Self { addr }
+            }
             /// send a message
             ///
             /// # Errors
             ///  * If sending failed
-            pub async fn send(
-                &self,
-                msg: Msg,
-            ) -> Result<(), tokio::sync::mpsc::error::SendError<Msg>> {
-                self.addr.send(msg).await
+            pub async fn send(&self, msg: Msg) -> Result<(), Error> {
+                self.addr.send(msg).await.map_err(|_| Error::SendError)
             }
         }
 

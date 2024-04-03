@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::Error;
 use crate::{
     impls::s3::auth,
     prelude::*,
@@ -91,7 +92,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let mut config = Config::new(config)?;
         config.normalize(id);
         Ok(Box::new(S3Connector { config }))
@@ -109,7 +110,7 @@ impl Connector for S3Connector {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         match self.config.mode {
             Mode::Yolo => {
                 let sink_impl = S3ObjectStorageSinkImpl::yolo(self.config.clone());
@@ -165,10 +166,8 @@ impl S3ObjectStorageSinkImpl {
         }
     }
 
-    fn get_client(&self) -> Result<&S3Client> {
-        self.client
-            .as_ref()
-            .ok_or_else(|| ErrorKind::S3Error("no s3 client available".to_string()).into())
+    fn get_client(&self) -> Result<&S3Client, Error> {
+        self.client.as_ref().ok_or(Error::NoClient)
     }
 }
 
@@ -205,7 +204,7 @@ impl ObjectStorageBuffer for S3Buffer {
         }
     }
 
-    fn mark_done_until(&mut self, _idx: usize) -> Result<()> {
+    fn mark_done_until(&mut self, _idx: usize) -> anyhow::Result<()> {
         // no-op
         Ok(())
     }
@@ -224,28 +223,25 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
     fn buffer_size(&self) -> usize {
         self.config.buffer_size
     }
-    async fn connect(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn connect(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         self.client = Some(
             auth::get_client(
                 self.config.aws_region.clone(),
                 self.config.url.as_ref(),
                 self.config.path_style_access,
             )
-            .await?,
+            .await,
         );
         Ok(())
     }
 
-    async fn bucket_exists(&mut self, bucket: &str) -> Result<bool> {
+    async fn bucket_exists(&mut self, bucket: &str) -> anyhow::Result<bool> {
         self.get_client()?
             .head_bucket()
             .bucket(bucket)
             .send()
             .await
-            .map_err(|e| {
-                let msg = format!("Failed to access Bucket `{bucket}`: {e}");
-                Error::from(ErrorKind::S3Error(msg))
-            })?;
+            .map_err(|e| Error::BucketAccess(bucket.to_string(), e.into()))?;
         Ok(true)
     }
 
@@ -254,7 +250,7 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
         object_id: &ObjectId,
         event: &Event,
         _ctx: &SinkContext,
-    ) -> Result<S3Upload> {
+    ) -> anyhow::Result<S3Upload> {
         let resp = self
             .get_client()?
             .create_multipart_upload()
@@ -265,12 +261,9 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
 
         //let upload = CurrentUpload::new(resp.)
 
-        let upload_id = resp.upload_id.ok_or_else(|| {
-            ErrorKind::S3Error(format!(
-                "Failed to start upload for s3://{}: upload id not found in response.",
-                &object_id
-            ))
-        })?;
+        let upload_id = resp
+            .upload_id
+            .ok_or_else(|| Error::UploadStart(object_id.to_string()))?;
         let upload = S3Upload::new(object_id.clone(), upload_id, event);
 
         Ok(upload)
@@ -280,7 +273,7 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
         data: BufferPart,
         upload: &mut S3Upload,
         ctx: &SinkContext,
-    ) -> Result<usize> {
+    ) -> anyhow::Result<usize> {
         let end = data.end();
         upload.part_number += 1; // the upload part number needs to be >= 1, so we increment before uploading
 
@@ -321,7 +314,7 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
         mut upload: S3Upload,
         final_part: BufferPart,
         ctx: &SinkContext,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         debug_assert!(
             !upload.failed,
             "finish may only be called for non-failed uploads"
@@ -383,7 +376,7 @@ impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
         Ok(())
     }
 
-    async fn fail_upload(&mut self, upload: S3Upload, ctx: &SinkContext) -> Result<()> {
+    async fn fail_upload(&mut self, upload: S3Upload, ctx: &SinkContext) -> anyhow::Result<()> {
         let S3Upload {
             object_id,
             upload_id,
@@ -477,7 +470,7 @@ mod tests {
     use tremor_value::literal;
 
     #[test]
-    fn config_defaults() -> Result<()> {
+    fn config_defaults() -> anyhow::Result<()> {
         let config = literal!({});
         let res = Config::new(&config)?;
         assert!(res.aws_region.is_none());

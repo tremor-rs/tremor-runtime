@@ -150,3 +150,15 @@
 mod auth;
 pub(crate) mod reader;
 pub(crate) mod streamer;
+
+#[derive(thiserror::Error, Debug)]
+enum Error {
+    #[error("Source sender not initialized")]
+    NoSource,
+    #[error("No s3 client available")]
+    NoClient,
+    #[error("Failed to start upload for `{0}`")]
+    UploadStart(String),
+    #[error("Failed to access bucket `{0}`: {1}")]
+    BucketAccess(String, anyhow::Error),
+}

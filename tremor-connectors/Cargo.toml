@@ -22,14 +22,15 @@ halfbrown = { version = "0.2", default-features = false }
 tokio = { version = "1.34", default-features = false }
 simd-json = { version = "0.13", default-features = false }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-error-chain = { version = "0.12", default-features = false }
 url = { version = "2.5", default-features = false }
 async-trait = { version = "0.1", default-features = false }
 log = { version = "0.4", features = ["kv_unstable"] }
 tokio-stream = { version = "0.1", default-features = false }
 bimap = { version = "0.6", default-features = false, features = ["serde"] }
 hostname = { version = "0.3", default-features = false }
+thiserror = { version = "1.0", default-features = false }
 anyhow = { version = "1.0", default-features = false }
+event-listener = { version = "5", default-features = false }
 
 
 # shared

@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::google::{AuthInterceptor, TokenProvider};
-use crate::prelude::*;
 use crate::{
     channel::{bounded, Receiver, Sender},
-    google::TokenSrc,
+    prelude::*,
+    utils::google::{AuthInterceptor, TokenProvider, TokenSrc},
 };
 use beef::generic::Cow;
 use futures::StreamExt;
@@ -77,10 +76,10 @@ fn default_max_outstanding_bytes() -> i64 {
 pub(crate) struct Builder {}
 
 #[cfg(all(test, feature = "gcp-integration"))]
-type GSubWithTokenProvider = GSub<crate::google::tests::TestTokenProvider>;
+type GSubWithTokenProvider = GSub<crate::utils::google::tests::TestTokenProvider>;
 
 #[cfg(not(all(test, feature = "gcp-integration")))]
-type GSubWithTokenProvider = GSub<crate::google::GouthTokenProvider>;
+type GSubWithTokenProvider = GSub<crate::utils::google::GouthTokenProvider>;
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
@@ -94,7 +93,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         let url = Url::<HttpsDefaults>::parse(config.url.as_str())?;
         let client_id = format!(
@@ -120,7 +119,7 @@ struct GSub<T> {
 }
 
 type PubSubClient<T> = SubscriberClient<InterceptedService<Channel, AuthInterceptor<T>>>;
-type AsyncTaskMessage = Result<(u64, PubsubMessage)>;
+type AsyncTaskMessage = anyhow::Result<(u64, PubsubMessage)>;
 
 struct GSubSource<T: TokenProvider> {
     config: Config,
@@ -153,7 +152,7 @@ async fn consumer_task<T: TokenProvider>(
     sender: Sender<AsyncTaskMessage>,
     config: Config,
     ack_receiver: async_std::channel::Receiver<u64>,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let mut ack_counter = 0;
     let ack_deadline = Duration::from_nanos(config.ack_deadline);
     let max_outstanding_messages = config.max_outstanding_messages;
@@ -224,7 +223,7 @@ async fn consumer_task<T: TokenProvider>(
                     attempt += 1;
                     if attempt >= MAX_RETRIES {
                         info!("{ctx} Got `Unavailable` for {MAX_RETRIES} times. Bailing out!");
-                        return Err(Error::from(status));
+                        return Err(status.into());
                     }
                     info!(
                         "{ctx} ERROR: {status}. Waiting for {}s for a retry...",
@@ -237,7 +236,7 @@ async fn consumer_task<T: TokenProvider>(
                     continue 'retry;
                 }
                 Err(s) => {
-                    return Err(Error::from(s));
+                    return Err(s.into());
                 }
             };
 
@@ -287,7 +286,7 @@ fn pubsub_metadata(
 
 #[async_trait::async_trait]
 impl<T: TokenProvider + 'static> Source for GSubSource<T> {
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.url.scheme() == "https" {
@@ -354,12 +353,19 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        let receiver = self.receiver.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "PubSub",
-            "The receiver is not connected",
-        ))?;
-        let (ack_id, pubsub_message) = receiver.recv().await.ok_or("The channel is closed")??;
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        let receiver = self
+            .receiver
+            .as_mut()
+            .ok_or(GenericImplementationError::ClientNotAvailable("PubSub"))?;
+        let (ack_id, pubsub_message) = receiver
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)??;
         *pull_id = ack_id;
         Ok(SourceReply::Data {
             origin_uri: EventOriginUri::default(),
@@ -389,14 +395,16 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
         true
     }
 
-    async fn ack(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+    async fn ack(
+        &mut self,
+        _stream_id: u64,
+        pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         let sender = self
             .ack_sender
             .as_mut()
-            .ok_or(ErrorKind::ClientNotAvailable(
-                "PubSub",
-                "The client is not connected",
-            ))?;
+            .ok_or(GenericImplementationError::ClientNotAvailable("PubSub"))?;
         sender.send(pull_id).await?;
 
         Ok(())
@@ -409,7 +417,7 @@ impl<T: TokenProvider + 'static> Connector for GSub<T> {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = GSubSource::<T>::new(
             self.config.clone(),
             self.url.clone(),

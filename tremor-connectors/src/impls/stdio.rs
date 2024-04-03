@@ -97,7 +97,7 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _raw_config: &ConnectorConfig,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         Ok(Box::new(StdStreamConnector {}))
     }
 }
@@ -126,7 +126,11 @@ impl StdStreamSource {
 
 #[async_trait::async_trait()]
 impl Source for StdStreamSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let reply = if self.done {
             SourceReply::Finished
         } else {
@@ -189,10 +193,10 @@ impl Sink for StdStreamSink {
         &mut self,
         input: &str,
         event: tremor_pipeline::Event,
-        _ctx: &SinkContext,
+        ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, meta, event.ingest_ns).await?;
             for chunk in data {
@@ -201,7 +205,7 @@ impl Sink for StdStreamSink {
                     "stderr" => self.stderr.write_all(&chunk).await?,
                     _ => {
                         return Err(
-                            "{} is not a valid port, use one of `in`, `stdout` or `stderr`".into(),
+                            crate::Error::InvalidPort(ctx.alias().clone(), input.into()).into()
                         )
                     }
                 }
@@ -228,7 +232,7 @@ impl Connector for StdStreamConnector {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = StdStreamSink {
             stdout: stdout(),
             stderr: stderr(),
@@ -240,7 +244,7 @@ impl Connector for StdStreamConnector {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = StdStreamSource::new();
         Ok(Some(builder.spawn(source, ctx)))
     }

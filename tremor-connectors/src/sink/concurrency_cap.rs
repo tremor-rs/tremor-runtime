@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::{AsyncSinkReply, ReplySender};
-use crate::errors::Result;
 use crate::sink::ContraflowData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -44,7 +43,7 @@ impl ConcurrencyCap {
 
     /// increment the counter and return a guard for safely counting down
     /// wrapped inside an enum to check whether we exceeded the maximum or not
-    pub(crate) fn inc_for(&self, event: &Event) -> Result<CounterGuard> {
+    pub(crate) fn inc_for(&self, event: &Event) -> anyhow::Result<CounterGuard> {
         let num = self.counter.fetch_add(1, Ordering::AcqRel);
         let guard = CounterGuard(num, self.clone(), ContraflowData::from(event));
         if num == self.cap {
@@ -57,7 +56,7 @@ impl ConcurrencyCap {
         Ok(guard)
     }
 
-    fn dec_with(&self, cf_data: &ContraflowData) -> Result<()> {
+    fn dec_with(&self, cf_data: &ContraflowData) -> anyhow::Result<()> {
         let num = self.counter.fetch_sub(1, Ordering::AcqRel);
         if num == self.cap {
             // we crossed max - send an open
@@ -86,7 +85,7 @@ mod tests {
     use crate::channel::unbounded;
 
     #[test]
-    fn concurrency_cap() -> Result<()> {
+    fn concurrency_cap() -> anyhow::Result<()> {
         let (tx, mut rx) = unbounded();
         let cap = ConcurrencyCap::new(2, tx);
         let event1 = Event::default();

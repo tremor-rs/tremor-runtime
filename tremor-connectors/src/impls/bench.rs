@@ -212,6 +212,7 @@ use tremor_common::{
     file,
     time::nanotime,
 };
+use tremor_system::connector::source;
 use xz2::read::XzDecoder;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -258,7 +259,7 @@ impl tremor_config::Impl for Config {}
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
-fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
+fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> anyhow::Result<Vec<u8>> {
     if base64 {
         Ok(BASE64.decode(data)?)
     } else {
@@ -275,7 +276,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
         let mut source_data_file = file::open(&config.path)?;
         let mut data = vec![];
@@ -295,13 +296,13 @@ impl ConnectorBuilder for Builder {
             // split into sized chunks
             data.chunks(chunk_size)
                 .map(|e| decode(config.base64, e))
-                .collect::<Result<_>>()?
+                .collect::<anyhow::Result<_>>()?
         } else {
             // split into lines
             BufReader::new(data.as_slice())
                 .lines()
                 .map(|e| decode(config.base64, e?))
-                .collect::<Result<_>>()?
+                .collect::<anyhow::Result<_>>()?
         };
         let num_elements = elements.len();
         let stop_after_events = config.iters.map(|i| i * num_elements);
@@ -365,7 +366,7 @@ impl Connector for Bench {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<source::Addr>> {
         let source = Blaster {
             acc: self.acc.clone(),
             origin_uri: self.origin_uri.clone(),
@@ -382,7 +383,7 @@ impl Connector for Bench {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = Blackhole::new(&self.config, self.stop_after, self.kill_switch.clone());
         Ok(Some(builder.spawn(sink, ctx)))
     }
@@ -404,7 +405,7 @@ struct Blaster {
 
 #[async_trait::async_trait]
 impl Source for Blaster {
-    async fn on_start(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_start(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         self.stop_at = self
             .stop_after
             .seconds
@@ -413,7 +414,11 @@ impl Source for Blaster {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         if self.finished {
             return Ok(SourceReply::Finished);
         }
@@ -516,7 +521,7 @@ impl Sink for Blackhole {
         ctx: &SinkContext,
         event_serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         if !self.finished {
             let now_ns = nanotime();
 
@@ -556,7 +561,7 @@ impl Sink for Blackhole {
         _signal: Event,
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let now_ns = nanotime();
         if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at) {
             self.finish(ctx)?;
@@ -566,7 +571,7 @@ impl Sink for Blackhole {
 }
 
 impl Blackhole {
-    fn finish(&mut self, ctx: &SinkContext) -> Result<()> {
+    fn finish(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         // avoid printing twice
         if self.finished {
             return Ok(());
@@ -600,7 +605,7 @@ impl Blackhole {
         mut writer: W,
         quantile_precision: usize,
         ticks_per_half: u32,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         fn write_extra_data<T1: Display, T2: Display, W: Write>(
             writer: &mut W,
             label1: &str,

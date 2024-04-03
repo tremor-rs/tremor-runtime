@@ -27,7 +27,7 @@ use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 
 #[tokio::test(flavor = "multi_thread")]
-async fn server_event_routing() -> Result<()> {
+async fn server_event_routing() -> anyhow::Result<()> {
     let free_port = free_port::find_free_tcp_port().await?;
 
     let server_addr = format!("127.0.0.1:{free_port}");
@@ -105,7 +105,7 @@ async fn server_event_routing() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn client_disconnect() -> Result<()> {
+async fn client_disconnect() -> anyhow::Result<()> {
     let free_port = free_port::find_free_tcp_port().await?;
 
     let server_addr = format!("127.0.0.1:{free_port}");

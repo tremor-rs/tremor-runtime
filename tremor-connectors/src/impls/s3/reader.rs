@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::auth;
+use super::Error;
 use crate::prelude::*;
 use aws_sdk_s3::{primitives::ByteStream, types::Object, Client as S3Client};
-use std::error::Error as StdError;
 use std::sync::Arc;
 use tokio::task::{self, JoinHandle};
 
@@ -98,7 +98,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
 
         // TODO: display a warning if chunksize lesser than some quantity
@@ -113,7 +113,7 @@ impl ConnectorBuilder for Builder {
 struct S3Reader {
     config: Config,
     tx: Option<crate::channel::Sender<SourceReply>>,
-    handles: Vec<JoinHandle<Result<()>>>,
+    handles: Vec<JoinHandle<anyhow::Result<()>>>,
 }
 
 #[async_trait::async_trait]
@@ -122,14 +122,14 @@ impl Connector for S3Reader {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let (tx, rx) = crate::channel::bounded(qsize());
         let source = ChannelSource::from_channel(tx.clone(), rx, Arc::default());
         self.tx = Some(tx);
         Ok(Some(builder.spawn(source, ctx)))
     }
 
-    async fn connect(&mut self, ctx: &ConnectorContext, _attemp: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &ConnectorContext, _attemp: &Attempt) -> anyhow::Result<bool> {
         // cancelling handles from previous connection, if any
         for handle in self.handles.drain(..) {
             handle.abort();
@@ -139,7 +139,7 @@ impl Connector for S3Reader {
             self.config.url.as_ref(),
             self.config.path_style_access,
         )
-        .await?;
+        .await;
 
         // Check the existence of the bucket.
         client
@@ -147,17 +147,7 @@ impl Connector for S3Reader {
             .bucket(self.config.bucket.clone())
             .send()
             .await
-            .map_err(|e| {
-                let msg = if let Some(err) = e.source() {
-                    format!(
-                        "Failed to access Bucket \"{}\": {err}.",
-                        &self.config.bucket
-                    )
-                } else {
-                    format!("Failed to access Bucket \"{}\".", &self.config.bucket)
-                };
-                Error::from(ErrorKind::S3Error(msg))
-            })?;
+            .map_err(|e| Error::BucketAccess(self.config.bucket.clone(), e.into()))?;
 
         let (tx_key, rx_key) = async_channel::bounded(qsize());
 
@@ -167,10 +157,7 @@ impl Connector for S3Reader {
             let rx = rx_key.clone();
             let bucket = self.config.bucket.clone();
 
-            let tx = self
-                .tx
-                .clone()
-                .ok_or_else(|| ErrorKind::S3Error("source sender not initialized".to_string()))?;
+            let tx = self.tx.clone().ok_or(Error::NoSource)?;
             let origin_uri = EventOriginUri {
                 scheme: URL_SCHEME.to_string(),
                 host: hostname(),
@@ -204,7 +191,7 @@ impl Connector for S3Reader {
         CodecReq::Required
     }
 
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> anyhow::Result<()> {
         // stop all handles
         for handle in self.handles.drain(..) {
             handle.abort();
@@ -218,17 +205,15 @@ async fn fetch_keys_task(
     bucket: String,
     prefix: Option<String>,
     sender: async_channel::Sender<KeyPayload>,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let fetch_keys = |continuation_token: Option<String>| async {
-        Result::<_>::Ok(
-            client
-                .list_objects_v2()
-                .bucket(bucket.clone())
-                .set_prefix(prefix.clone())
-                .set_continuation_token(continuation_token)
-                .send()
-                .await?,
-        )
+        client
+            .list_objects_v2()
+            .bucket(bucket.clone())
+            .set_prefix(prefix.clone())
+            .set_continuation_token(continuation_token)
+            .send()
+            .await
     };
 
     // fetch first page of keys.
@@ -285,7 +270,7 @@ impl S3Instance {
         &self,
         key: Option<String>,
         range: Option<String>,
-    ) -> Result<ByteStream> {
+    ) -> anyhow::Result<ByteStream> {
         Ok(self
             .client
             .get_object()
@@ -302,7 +287,7 @@ impl S3Instance {
     /// depending on `multipart_threshold` it downloads the object as one or in ranges.
     ///
     /// The received data is sent to the `ChannelSource` channel.
-    async fn start(self) -> Result<()> {
+    async fn start(self) -> anyhow::Result<()> {
         while let Ok(KeyPayload {
             object_data,
             stream,
@@ -330,7 +315,7 @@ impl S3Instance {
         Ok(())
     }
 
-    async fn fetch_no_multipart(&self, stream: u64, object_data: Object) -> Result<()> {
+    async fn fetch_no_multipart(&self, stream: u64, object_data: Object) -> anyhow::Result<()> {
         let key = object_data.key().map(ToString::to_string);
         let mut obj_stream = self.fetch_object_stream(key.clone(), None).await?;
 
@@ -350,7 +335,7 @@ impl S3Instance {
         }
         Ok(())
     }
-    async fn fetch_multipart(&self, stream: u64, object_data: Object) -> Result<()> {
+    async fn fetch_multipart(&self, stream: u64, object_data: Object) -> anyhow::Result<()> {
         // Fetch multipart.
         let mut fetched_bytes = 0; // represent the next byte to fetch.
         let size = object_data.size().unwrap_or(0);

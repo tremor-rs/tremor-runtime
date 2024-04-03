@@ -19,7 +19,7 @@ use tremor_value::literal;
 use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn file_connector() -> Result<()> {
+async fn file_connector() -> anyhow::Result<()> {
     let input_path = Path::new(file!())
         .parent()
         .ok_or("bad path")?

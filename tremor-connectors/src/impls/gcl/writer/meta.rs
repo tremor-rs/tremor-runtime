@@ -124,15 +124,11 @@ pub(crate) fn span_id(meta: Option<&Value>) -> String {
     get_or_default(meta, "span_id")
 }
 
-pub(crate) fn trace_sampled(meta: Option<&Value>) -> Result<bool> {
+pub(crate) fn trace_sampled(meta: Option<&Value>) -> Result<bool, TryTypeError> {
     // Override for a specific per event severity
-    if let Some(has_meta) = meta {
-        if let Some(trace_sampled) = has_meta.get("trace_sampled") {
-            return trace_sampled
-                .as_bool()
-                .ok_or_else(|| "trace_sampled is not a boolean".into());
-        };
-    }
+    if let Some(trace_sampled) = meta.get("trace_sampled") {
+        return trace_sampled.try_as_bool();
+    };
 
     Ok(false)
 }
@@ -166,7 +162,7 @@ mod test {
     use tremor_value::structurize;
 
     #[test]
-    fn config_with_defaults_no_overrides() -> Result<()> {
+    fn config_with_defaults_no_overrides() -> anyhow::Result<()> {
         let config: Config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
         }))?;
@@ -184,7 +180,7 @@ mod test {
     }
 
     #[test]
-    fn config_with_defaults_and_overrides() -> Result<()> {
+    fn config_with_defaults_and_overrides() -> anyhow::Result<()> {
         let config: Config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
         }))?;
@@ -207,7 +203,7 @@ mod test {
     }
 
     #[test]
-    fn default_log_name_test() -> Result<()> {
+    fn default_log_name_test() -> anyhow::Result<()> {
         let empty_config: Config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
         }))?;
@@ -227,7 +223,7 @@ mod test {
     }
 
     #[test]
-    fn log_name_overrides() -> Result<()> {
+    fn log_name_overrides() -> anyhow::Result<()> {
         let empty_config: Config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
         }))?;
@@ -240,7 +236,7 @@ mod test {
     }
 
     #[test]
-    fn log_severity_overrides() -> Result<()> {
+    fn log_severity_overrides() -> anyhow::Result<()> {
         let mut empty_config: Config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
         }))?;
@@ -343,7 +339,7 @@ mod test {
     }
 
     #[test]
-    fn default_labels_test() -> Result<()> {
+    fn default_labels_test() -> anyhow::Result<()> {
         // NOTE labels are disjoin in GCL
         //      Common labels are sent once per batch of events
         //      Metadata override ( per event ) labels are per event
@@ -421,7 +417,7 @@ mod test {
     }
 
     #[test]
-    fn trace_sampled_overrides() -> Result<()> {
+    fn trace_sampled_overrides() -> anyhow::Result<()> {
         let meta = literal!({
             "trace_sampled": true
         });

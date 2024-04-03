@@ -11,15 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing perm
 use super::ConnectorHarness;
-use crate::{errors::Result, function_name, impls::bench, prelude::KillSwitch, sink::SinkMsg};
+use crate::{function_name, impls::bench, prelude::KillSwitch};
 use std::{io::Write, time::Duration};
 use tempfile::NamedTempFile;
 use tokio::time::timeout;
 use tremor_common::ports::IN;
+use tremor_system::connector::sink;
 use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn stop_after_events() -> Result<()> {
+async fn stop_after_events() -> anyhow::Result<()> {
     let mut file = NamedTempFile::new()?;
     file.write_all(b"{}\n")?;
     file.write_all(b"\"snot\"\n")?;
@@ -53,7 +54,7 @@ async fn stop_after_events() -> Result<()> {
         for _ in 0..6 {
             let event = bg_out.get_event().await?;
             bg_addr
-                .send_sink(SinkMsg::Event { event, port: IN })
+                .send_sink(sink::Msg::Event { event, port: IN })
                 .await?;
         }
         Result::Ok(())
@@ -66,7 +67,7 @@ async fn stop_after_events() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn stop_after_secs() -> Result<()> {
+async fn stop_after_secs() -> anyhow::Result<()> {
     let mut file = NamedTempFile::new()?;
     file.write_all(b"{}\n")?;
     file.write_all(b"\"snot\"\n")?;
@@ -100,11 +101,11 @@ async fn stop_after_secs() -> Result<()> {
         loop {
             let event = match harness.out()?.get_event().await {
                 Ok(r) => r,
-                Err(e) => return Result::<()>::Err(e),
+                Err(e) => return anyhow::Result::<()>::Err(e),
             };
             if let Err(e) = harness
                 .addr
-                .send_sink(SinkMsg::Event { event, port: IN })
+                .send_sink(sink::Msg::Event { event, port: IN })
                 .await
             {
                 error!("Error sending event to sink: {e}");
@@ -115,7 +116,7 @@ async fn stop_after_secs() -> Result<()> {
     // the bench connector should trigger the kill switch
     let two_secs = Duration::from_secs(2);
     let msg = timeout(two_secs, rx.recv()).await?.expect("failed to recv");
-    assert!(matches!(msg, tremor_system::KillSwitchMsg::Stop));
+    assert!(matches!(msg, tremor_system::killswitch::Msg::Stop));
     info!("Flow supervisor finished");
     info!("Harness stopped");
     handle.abort(); // stopping the pipeline after the connector to ensure it is draining the source

@@ -12,108 +12,63 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(dead_code)]
-
-use crate::errors::{Error, ErrorKind, Result};
 use crate::prelude::*;
 use simd_json::StaticNode;
 use std::collections::BTreeMap;
 use tremor_common::base64::{Engine, BASE64};
 use tremor_otelapis::opentelemetry::proto::metrics::v1;
+use value_trait::TryTypeError;
 
-pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
-    if let Some(s) = data.as_str() {
-        Ok(s.to_string())
-    } else if data.is_none() {
+pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String, TryTypeError> {
+    if data.is_none() {
         Ok(String::new())
     } else {
-        Err("Expected an json string to convert to pb string".into())
+        data.try_as_str().map(ToString::to_string)
     }
-}
-
-pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
-    data.map_or_else(
-        || Err("Expected an json u64 to convert to pb u64".into()),
-        |data| {
-            data.as_u64()
-                .ok_or_else(|| Error::from("not coercable to u64"))
-        },
-    )
-}
-
-pub(crate) fn maybe_int_to_pbi32(data: Option<&Value<'_>>) -> Result<i32> {
-    data.as_i32()
-        .ok_or_else(|| Error::from("not coercable to i32"))
-}
-
-pub(crate) fn maybe_int_to_pbi64(data: Option<&Value<'_>>) -> Result<i64> {
-    data.as_i64()
-        .ok_or_else(|| Error::from("not coercable to i64"))
-}
-
-pub(crate) fn maybe_int_to_pbu32(data: Option<&Value<'_>>) -> Result<u32> {
-    data.as_u32()
-        .ok_or_else(|| Error::from("not coercable to u32"))
-}
-
-pub(crate) fn maybe_double_to_pb(data: Option<&Value<'_>>) -> Result<f64> {
-    data.as_f64()
-        .ok_or_else(|| Error::from("not coercable to f64"))
 }
 
 pub(crate) trait FromValue: Sized {
-    fn maybe_from_value(data: Option<&Value<'_>>) -> Result<Option<Self>> {
+    fn maybe_from_value(data: Option<&Value<'_>>) -> Result<Option<Self>, TryTypeError> {
         data.map(|d| Self::from_value(d)).transpose()
     }
-    fn from_value(data: &Value<'_>) -> Result<Self>;
+    fn from_value(data: &Value<'_>) -> Result<Self, TryTypeError>;
 }
 
 impl FromValue for v1::exemplar::Value {
-    fn from_value(data: &Value<'_>) -> Result<Self> {
-        Ok(v1::exemplar::Value::AsDouble(
-            data.as_f64()
-                .ok_or_else(|| Error::from("not coercable to f64"))?,
-        ))
+    fn from_value(data: &Value<'_>) -> Result<Self, TryTypeError> {
+        Ok(v1::exemplar::Value::AsDouble(data.try_as_f64()?))
     }
 }
 
 impl FromValue for v1::number_data_point::Value {
-    fn from_value(data: &Value<'_>) -> Result<Self> {
-        Ok(v1::number_data_point::Value::AsDouble(
-            data.as_f64()
-                .ok_or_else(|| Error::from("not coercable to f64"))?,
-        ))
+    fn from_value(data: &Value<'_>) -> Result<Self, TryTypeError> {
+        Ok(v1::number_data_point::Value::AsDouble(data.try_as_f64()?))
     }
 }
 
-pub(crate) fn maybe_bool_to_pb(data: Option<&Value<'_>>) -> Result<bool> {
-    data.as_bool()
-        .ok_or_else(|| Error::from("not coercable to bool"))
-}
-
-pub(crate) fn maybe_from_value<T: FromValue>(data: Option<&Value<'_>>) -> Result<Option<T>> {
+pub(crate) fn maybe_from_value<T: FromValue>(
+    data: Option<&Value<'_>>,
+) -> Result<Option<T>, TryTypeError> {
     T::maybe_from_value(data)
 }
 
-pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>> {
-    json.as_array()
-        .ok_or("Unable to map json value to repeated f64 pb")?
+pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>, TryTypeError> {
+    json.try_as_array()?
         .iter()
         .map(Some)
-        .map(maybe_double_to_pb)
+        .map(|v| v.try_as_f64())
         .collect()
 }
 
-pub(crate) fn u64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<u64>> {
-    json.as_array()
-        .ok_or("Unable to map json value to repeated u64 pb")?
+pub(crate) fn u64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<u64>, TryTypeError> {
+    json.try_as_array()?
         .iter()
         .map(Some)
-        .map(maybe_int_to_pbu64)
+        .map(|v| v.try_as_u64())
         .collect()
 }
 
-pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value> {
+pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value, TryTypeError> {
     use prost_types::value::Kind;
     Ok(match json {
         Value::Static(StaticNode::Null) => prost_types::Value {
@@ -163,7 +118,7 @@ pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value> {
     })
 }
 
-pub(crate) fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Struct> {
+pub(crate) fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Struct, TryTypeError> {
     use prost_types::value::Kind;
 
     if json.is_object() {
@@ -174,10 +129,10 @@ pub(crate) fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Str
             return Ok(s);
         }
     }
-    Err(Error::from(ErrorKind::GclTypeMismatch(
-        "Value::Object",
-        json.value_type(),
-    )))
+    Err(TryTypeError {
+        expected: ValueType::Object,
+        got: json.value_type(),
+    })
 }
 
 #[cfg(test)]
@@ -189,11 +144,6 @@ mod test {
     use std::f64;
     use tremor_value::literal;
 
-    #[test]
-    fn error_checks() {
-        assert!(maybe_double_to_pb(None).is_err());
-    }
-
     // NOTE This is incomplete with respect to possible mappings of json values
     // to basic builtin protocol buffer types, but sufficient for the needs of
     // the OpenTelemetry bindings.
@@ -204,13 +154,6 @@ mod test {
     //
     // If this disposition changes - the tests below and this comment should also
     // change. Warning to our future selves!
-
-    #[test]
-    fn boolean() -> Result<()> {
-        assert!(maybe_bool_to_pb(Some(&Value::from(true)))?);
-        assert!(!maybe_bool_to_pb(Some(&Value::from(false)))?);
-        Ok(())
-    }
 
     prop_compose! {
         fn fveci()(vec in prop::collection::vec(prop::num::f64::POSITIVE | prop::num::f64::NEGATIVE, 1..3))
@@ -237,48 +180,8 @@ mod test {
             prop_assert_eq!(pb.len(), arb_string.len());
         }
 
-        #[test]
-        fn prop_pb_u64(arb_int in prop::num::u64::ANY) {
-            let json = Value::from(arb_int);
-            let pb = maybe_int_to_pbu64(Some(&json))?;
-            // TODO error on i64?
-            prop_assert_eq!(arb_int, pb);
-        }
 
-        #[test]
-        fn prop_pb_i64(arb_int in prop::num::i64::ANY) {
-            let json = Value::from(arb_int);
-            let pb = maybe_int_to_pbi64(Some(&json))?;
-            // TODO error on i64?
-            prop_assert_eq!(arb_int, pb);
-        }
 
-        #[test]
-        fn prop_pb_u32(arb_int in prop::num::u32::ANY) {
-
-            let json = Value::from(arb_int);
-            let pb = maybe_int_to_pbu32(Some(&json))?;
-            prop_assert_eq!(arb_int, pb);
-
-        }
-
-        #[test]
-        fn prop_pb_i32(arb_int in prop::num::i32::ANY) {
-
-            let json = Value::from(arb_int);
-            let pb = maybe_int_to_pbi32(Some(&json))?;
-            prop_assert_eq!(arb_int, pb);
-        }
-
-        #[allow(clippy::float_cmp)]
-        #[test]
-        fn prop_pb_f64(
-            arb_int in prop::num::f64::POSITIVE | prop::num::f64::NEGATIVE,
-        ) {
-            let json = Value::from(arb_int);
-            let pb = maybe_double_to_pb(Some(&json))?;
-            prop_assert_eq!(arb_int, pb);
-        }
 
         #[test]
         fn prop_pb_f64_repeated((vec, _index) in fveci()) {
@@ -298,30 +201,12 @@ mod test {
     }
 
     #[test]
-    fn bad_boolean() {
-        assert!(maybe_bool_to_pb(Some(&Value::from("snot"))).is_err());
-    }
-
-    #[test]
     fn bad_string() {
         // NOTE no coercion, no casting
         assert!(maybe_string_to_pb(Some(&Value::from(false))).is_err());
 
         // NOTE We allow None for string and map to pb default of "" ( empty string )
         assert_eq!(maybe_string_to_pb(None).ok(), Some(String::new()));
-    }
-
-    #[test]
-    fn bad_int_numerics() {
-        assert!(maybe_int_to_pbu64(Some(&Value::from(false))).is_err());
-        assert!(maybe_int_to_pbi64(Some(&Value::from(false))).is_err());
-        assert!(maybe_int_to_pbu32(Some(&Value::from(false))).is_err());
-        assert!(maybe_int_to_pbi32(Some(&Value::from(false))).is_err());
-    }
-
-    #[test]
-    fn bad_double_numerics() {
-        assert!(maybe_double_to_pb(Some(&Value::from(false))).is_err());
     }
 
     #[test]
@@ -338,17 +223,12 @@ mod test {
         //
         // As such attempting to convert a non-existent value is an
         // error by construction
-        assert!(maybe_bool_to_pb(None).is_err());
-        assert!(maybe_int_to_pbu64(None).is_err());
-        assert!(maybe_int_to_pbi64(None).is_err());
-        assert!(maybe_int_to_pbu32(None).is_err());
-        assert!(maybe_int_to_pbi32(None).is_err());
         assert!(f64_repeated_to_pb(None).is_err());
         assert!(u64_repeated_to_pb(None).is_err());
     }
 
     #[test]
-    fn prost_value_mappings() -> Result<()> {
+    fn prost_value_mappings() -> anyhow::Result<()> {
         use prost_types::value::Kind;
         let v = value_to_prost_value(&literal!(null))?;
         assert_eq!(Some(Kind::NullValue(0)), v.kind);
