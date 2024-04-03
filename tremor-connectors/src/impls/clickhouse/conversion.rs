@@ -12,29 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::DummySqlType;
+use chrono_tz::Tz;
+pub(super) use clickhouse_rs::types::Value as CValue;
+use either::Either;
 use std::{
     net::{Ipv4Addr, Ipv6Addr},
     str::FromStr,
     sync::Arc,
 };
-
-use chrono_tz::Tz;
-pub(super) use clickhouse_rs::types::Value as CValue;
-use either::Either;
 use tremor_value::Value as TValue;
 use uuid::Uuid;
 use value_trait::prelude::*;
 
-use super::DummySqlType;
-use crate::errors::{Error, ErrorKind, Result};
-
 const UTC: Tz = Tz::UTC;
+
+/// Error for clickhouse conversion
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Malformed IP address")]
+    MalformedIpAddr,
+    #[error("Malformed UUID")]
+    MalformedUuid,
+    #[error("Unexpected event format: column `{column}` is of type `{expected_type}`, but the event has type `{actual_type}`")]
+    UnexpectedEventFormat {
+        column: String,
+        expected_type: DummySqlType,
+        actual_type: ValueType,
+    },
+}
 
 pub(super) fn convert_value(
     column_name: &str,
     value: &TValue,
     expected_type: &DummySqlType,
-) -> Result<CValue> {
+) -> Result<CValue, Error> {
     let context = ConversionContext {
         column_name,
         value,
@@ -49,7 +61,7 @@ pub(super) fn convert_value(
             wrap_getter_error(context, ValueAsContainer::as_array)?
                 .iter()
                 .map(|value| convert_value(column_name, value, expected_inner_type))
-                .collect::<Result<Vec<_>>>()
+                .collect::<Result<Vec<_>, _>>()
                 .map(|converted_array| {
                     CValue::Array(
                         expected_inner_type.as_ref().into(),
@@ -99,21 +111,21 @@ pub(super) fn convert_value(
             //
             // ... But it does work!
             |[a, b, c, d]| CValue::Ipv4([d, c, b, a]),
-            ErrorKind::MalformedIpAddr,
+            Error::MalformedIpAddr,
         ),
 
         DummySqlType::Ipv6 => convert_string_or_array(
             context,
             |ip: Ipv6Addr| ip.octets(),
             CValue::Ipv6,
-            ErrorKind::MalformedIpAddr,
+            Error::MalformedIpAddr,
         ),
 
         DummySqlType::Uuid => convert_string_or_array(
             context,
             Uuid::into_bytes,
             CValue::Uuid,
-            ErrorKind::MalformedUuid,
+            Error::MalformedUuid,
         ),
 
         DummySqlType::DateTime => get_and_wrap(context, ValueAsScalar::as_u32, |timestamp| {
@@ -154,17 +166,15 @@ struct ConversionContext<'config, 'event> {
 fn wrap_getter_error<'config, 'event, Getter, Output>(
     context: ConversionContext<'config, 'event>,
     f: Getter,
-) -> Result<Output>
+) -> Result<Output, Error>
 where
     Getter: FnOnce(&'event TValue<'event>) -> Option<Output>,
     Output: 'event,
 {
-    f(context.value).ok_or_else(|| {
-        Error::from(ErrorKind::UnexpectedEventFormat(
-            context.column_name.to_string(),
-            context.expected_type.to_string(),
-            context.value.value_type(),
-        ))
+    f(context.value).ok_or_else(|| Error::UnexpectedEventFormat {
+        column: context.column_name.to_string(),
+        expected_type: context.expected_type.clone(),
+        actual_type: context.value.value_type(),
     })
 }
 
@@ -172,7 +182,7 @@ fn get_and_wrap<'config, 'event, Getter, Mapper, Output>(
     context: ConversionContext<'config, 'event>,
     getter: Getter,
     wrapper: Mapper,
-) -> Result<CValue>
+) -> Result<CValue, Error>
 where
     Getter: FnOnce(&'event TValue<'event>) -> Option<Output>,
     Mapper: FnOnce(Output) -> CValue,
@@ -185,8 +195,8 @@ fn convert_string_or_array<Output, Getter, Variant, const N: usize>(
     context: ConversionContext,
     extractor: Getter,
     variant: Variant,
-    error: ErrorKind,
-) -> Result<CValue>
+    error: Error,
+) -> Result<CValue, Error>
 where
     Output: FromStr,
     Getter: FnOnce(Output) -> [u8; N],
@@ -222,11 +232,11 @@ where
             .map(variant)
             .map_err(|_| Error::from(error))
     } else {
-        Err(Error::from(ErrorKind::UnexpectedEventFormat(
-            context.column_name.to_string(),
-            context.expected_type.to_string(),
-            context.value.value_type(),
-        )))
+        Err(Error::from(Error::UnexpectedEventFormat {
+            column: context.column_name.to_string(),
+            expected_type: context.expected_type.clone(),
+            actual_type: context.value.value_type(),
+        }))
     }
 }
 

@@ -13,14 +13,17 @@
 // limitations under the License.
 
 use crate::{
-    errors::{empty_error, err_connector_def},
+    errors::error_connector_def,
     impls::http::{
         meta::{consolidate_mime, content_type, extract_request_meta, HeaderValueValue},
         utils::RequestId,
     },
     prelude::*,
-    utils::tls,
-    utils::{mime::MimeCodecMap, tls::TLSServerConfig},
+    utils::{
+        mime::MimeCodecMap,
+        socket,
+        tls::{self, TLSServerConfig},
+    },
 };
 use dashmap::DashMap;
 use halfbrown::{Entry, HashMap};
@@ -76,12 +79,12 @@ impl ConnectorBuilder for Builder {
         _raw_config: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let tls_server_config = config.tls.clone();
 
         if tls_server_config.is_some() && config.url.scheme() != "https" {
-            return Err(err_connector_def(id, Self::HTTPS_REQUIRED));
+            return Err(error_connector_def(id, Self::HTTPS_REQUIRED).into());
         }
         let origin_uri = EventOriginUri {
             scheme: "http-server".to_string(),
@@ -133,7 +136,7 @@ impl Connector for HttpServer {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let (request_tx, request_rx) = bounded(qsize());
         let source = HttpServerSource {
             url: self.config.url.clone(),
@@ -154,7 +157,7 @@ impl Connector for HttpServer {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = HttpServerSink::new(self.inflight.clone(), self.codec_map.clone());
         Ok(Some(builder.spawn(sink, ctx)))
     }
@@ -174,7 +177,7 @@ struct HttpServerSource {
 
 #[async_trait::async_trait()]
 impl Source for HttpServerSource {
-    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         if let Some(accept_task) = self.server_task.take() {
             // stop acceptin' new connections
             accept_task.abort();
@@ -182,7 +185,7 @@ impl Source for HttpServerSource {
         Ok(())
     }
 
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let host = self.url.host_or_local().to_string();
         let port = self.url.port().unwrap_or_else(|| {
             if self.url.scheme() == "https" {
@@ -210,7 +213,10 @@ impl Source for HttpServerSource {
             .map(Arc::new);
 
         let server_context = HttpServerState::new(tx, ctx.clone(), "http");
-        let addr = (host, port).to_socket_addrs()?.next().ok_or("no address")?;
+        let addr = (host, port)
+            .to_socket_addrs()?
+            .next()
+            .ok_or(socket::Error::InvalidAddress(host, port))?;
 
         // Server task - this is the main receive loop for http server instances
         self.server_task = Some(spawn_task(ctx.clone(), async move {
@@ -275,13 +281,21 @@ impl Source for HttpServerSource {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let RawRequestData {
             data,
             request_meta,
             content_type,
             response_channel,
-        } = self.request_rx.recv().await.ok_or_else(empty_error)?;
+        } = self
+            .request_rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
 
         // assign request id, set pull_id
         let request_id = RequestId::new(self.request_counter);
@@ -366,7 +380,7 @@ impl Sink for HttpServerSink {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
         let min_pull_id = event
             .id
@@ -521,7 +535,7 @@ impl Sink for HttpServerSink {
         _signal: Event,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         // clean out closed channels
         self.inflight.retain(|_key, sender| !sender.is_closed());
         Ok(SinkReply::NONE)
@@ -544,7 +558,7 @@ impl SinkResponse {
         tx: oneshot::Sender<Response<Body>>,
         http_meta: Option<&Value>,
         codec_map: &MimeCodecMap,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         let mut response = Response::builder();
 
         // build response headers and status etc.
@@ -603,7 +617,7 @@ impl SinkResponse {
             }
         });
         tx.send(response.body(body)?)
-            .map_err(|_| "Error sending response")?;
+            .map_err(|_| anyhow::anyhow!("failed to send response"))?;
         Ok(Self {
             request_id,
             chunk_tx,
@@ -617,7 +631,7 @@ impl SinkResponse {
         meta: &'event Value<'event>,
         ingest_ns: u64,
         serializer: &mut EventSerializer,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let chunks = serializer
             .serialize_for_stream_with_codec(
                 value,
@@ -630,7 +644,7 @@ impl SinkResponse {
         self.append_data(chunks).await
     }
 
-    async fn append_data(&mut self, chunks: Vec<Vec<u8>>) -> Result<()> {
+    async fn append_data(&mut self, chunks: Vec<Vec<u8>>) -> anyhow::Result<()> {
         for chunk in chunks {
             self.chunk_tx.send(chunk).await?;
         }
@@ -639,7 +653,7 @@ impl SinkResponse {
 
     /// Consume self and finalize and send the response.
     /// In the chunked case we have already sent it before.
-    async fn finalize(mut self, serializer: &mut EventSerializer) -> Result<()> {
+    async fn finalize(mut self, serializer: &mut EventSerializer) -> anyhow::Result<()> {
         // finalize the stream
         let rest = serializer.finish_stream(self.request_id.get())?;
         if !rest.is_empty() {
@@ -696,7 +710,7 @@ async fn _handle_request(
     context: &mut HttpServerState,
     _addr: SocketAddr,
     req: Request<Body>,
-) -> Result<Response<Body>> {
+) -> anyhow::Result<Response<Body>> {
     let request_meta = extract_request_meta(&req, context.scheme)?;
     let content_type =
         content_type(Some(req.headers()))?.map(|mime| mime.essence_str().to_string());

@@ -213,7 +213,7 @@ where
             meta: Some(self.meta.clone()),
         })
     }
-    async fn read(&mut self, stream: u64) -> Result<SourceReply> {
+    async fn read(&mut self, stream: u64) -> anyhow::Result<SourceReply> {
         let bytes_read = self.wrapped_stream.read(&mut self.buffer).await?;
         if bytes_read == 0 {
             // EOF
@@ -282,14 +282,14 @@ impl<S> StreamWriter for TcpWriter<S>
 where
     S: tokio::io::AsyncWrite + std::marker::Unpin + std::marker::Sync + std::marker::Send,
 {
-    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<&Value>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<&Value>) -> anyhow::Result<()> {
         for chunk in data {
             let slice: &[u8] = &chunk;
             self.wrapped_stream.write_all(slice).await?;
         }
         Ok(())
     }
-    async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&mut self, _stream: u64) -> anyhow::Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }
 }

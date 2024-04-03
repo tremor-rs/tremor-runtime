@@ -231,7 +231,7 @@
 
 use super::http::auth::Auth;
 use crate::{
-    errors::{err_connector_def, Error, Result},
+    errors::{error_connector_def, GenericImplementationError},
     impls::http::utils::Header,
     prelude::*,
     sink::concurrency_cap::ConcurrencyCap,
@@ -258,6 +258,19 @@ use tremor_common::time::nanotime;
 use tremor_value::utils::sorted_serialize;
 use tremor_value::value::StaticValue;
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("No elasticsearch client available.")]
+    NoClient,
+    #[error("Invalid Response from ES: No \"items\" or not an array: {0}")]
+    InvalidResponse(String),
+    #[error("Invalid `$elastic.action` {0}")]
+    InvalidAction(String),
+    #[error("Missing field `$elastic._id`")]
+    MissingId,
+    #[error("Invalid value for `$elastic.refresh`: {0}")]
+    InvalidRefresh(String),
+}
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
@@ -313,10 +326,10 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
         if config.nodes.is_empty() {
-            Err(err_connector_def(id, "empty nodes provided"))
+            Err(error_connector_def(id, "empty nodes provided").into())
         } else {
             let tls_config = match config.tls.as_ref() {
                 Some(Either::Left(tls_config)) => Some(tls_config.clone()),
@@ -327,7 +340,7 @@ impl ConnectorBuilder for Builder {
                 for node_url in &config.nodes {
                     if node_url.scheme() != "https" {
                         let e = format!("Node URL '{node_url}' needs 'https' scheme with tls.");
-                        return Err(err_connector_def(id, &e));
+                        return Err(error_connector_def(id, &e).into());
                     }
                 }
             }
@@ -396,13 +409,13 @@ impl Connector for Elastic {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = ElasticSource {
             source_is_connected: self.source_is_connected.clone(),
             response_rx: self
                 .response_rx
                 .take()
-                .ok_or("Elasticsearch source can only be created once.")?,
+                .ok_or(GenericImplementationError::AlreadyConnected)?,
         };
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -411,7 +424,7 @@ impl Connector for Elastic {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = ElasticSink::new(
             self.response_tx.clone(),
             builder.reply_tx(),
@@ -431,11 +444,19 @@ struct ElasticSource {
 
 #[async_trait::async_trait]
 impl Source for ElasticSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.response_rx.recv().await.ok_or("channel broken")?)
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        Ok(self
+            .response_rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?)
     }
 
-    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
         // we will not send responses to out/err if we are not connected and this is determined by this variable
         self.source_is_connected.store(true, Ordering::Release);
@@ -546,7 +567,7 @@ impl ElasticSink {
 
 #[async_trait::async_trait()]
 impl Sink for ElasticSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let mut clients = Vec::with_capacity(self.config.nodes.len());
         for node in &self.config.nodes {
             let conn_pool = SingleNodeConnectionPool::new(node.url().clone());
@@ -620,7 +641,7 @@ impl Sink for ElasticSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         if event.is_empty() {
             debug!("{ctx} Received empty event. Won't send it to ES");
             return Ok(SinkReply::NONE);
@@ -646,7 +667,7 @@ impl Sink for ElasticSink {
             let default_index = self.config.index.clone();
             let task_ctx = ctx.clone();
             task::spawn(async move {
-                let r: Result<Value> = async {
+                let r: Result<Value, _> = async {
                     // build bulk request (we can't do that in a separate function)
                     let mut ops = BulkOperations::new();
                     // per request options - extract from event metadata (ignoring batched)
@@ -666,7 +687,7 @@ impl Sink for ElasticSink {
                         .await
                         .and_then(Response::error_for_status_code)?;
                     let value = response.json::<StaticValue>().await?;
-                    Ok(value.into_value())
+                    anyhow::Ok(value.into_value())
                 }
                 .await;
                 match r {
@@ -702,17 +723,14 @@ impl Sink for ElasticSink {
                 }
                 drop(guard);
 
-                Result::Ok(())
+                anyhow::Ok(())
             });
             Ok(SinkReply::NONE)
         } else {
             // shouldn't happen actually
             error!("{} No elasticsearch client available.", &ctx);
             handle_error(
-                Error::from(ErrorKind::ClientNotAvailable(
-                    "elastic",
-                    "No elasticsearch client available.",
-                )),
+                GenericImplementationError::ClientNotAvailable("elastic"),
                 &event,
                 &self.origin_uri,
                 &self.response_tx,
@@ -741,7 +759,7 @@ async fn handle_response(
     elastic_origin_uri: &EventOriginUri,
     response_tx: Sender<SourceReply>,
     include_payload: bool,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let correlation_values = event.correlation_metas();
     let payload_iter = event.value_iter();
     if let Some(items) = response
@@ -812,10 +830,9 @@ async fn handle_response(
             response_tx.send(source_reply).await?;
         }
     } else {
-        return Err(Error::from(format!(
-            "Invalid Response from ES: No \"items\" or not an array: {}",
-            String::from_utf8(sorted_serialize(&response)?)?
-        )));
+        return Err(
+            Error::InvalidResponse(String::from_utf8(sorted_serialize(&response)?)?).into(),
+        );
     }
     // ack the event
     Ok(())
@@ -830,9 +847,9 @@ async fn handle_error<E>(
     elastic_origin_uri: &EventOriginUri,
     response_tx: &Sender<SourceReply>,
     include_payload: bool,
-) -> Result<()>
+) -> anyhow::Result<()>
 where
-    E: std::error::Error,
+    E: Display + Send + Sync + 'static,
 {
     let e_str = e.to_string();
     let mut meta = literal!({
@@ -860,7 +877,7 @@ where
     Ok(())
 }
 
-fn send_ack(event: Event, start: u64, reply_tx: &ReplySender) -> Result<()> {
+fn send_ack(event: Event, start: u64, reply_tx: &ReplySender) -> anyhow::Result<()> {
     if event.transactional {
         reply_tx.send(AsyncSinkReply::Ack(
             ContraflowData::from(event),
@@ -870,7 +887,7 @@ fn send_ack(event: Event, start: u64, reply_tx: &ReplySender) -> Result<()> {
     Ok(())
 }
 
-fn send_fail(event: Event, reply_tx: &ReplySender) -> Result<()> {
+fn send_fail(event: Event, reply_tx: &ReplySender) -> anyhow::Result<()> {
     if event.transactional {
         reply_tx.send(AsyncSinkReply::Fail(ContraflowData::from(event)))?;
     }
@@ -895,7 +912,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         }
     }
 
-    fn insert_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+    fn insert_op(&self, data: &Value, ops: &mut BulkOperations) -> anyhow::Result<()> {
         // index is the default action
         match self.get_action().unwrap_or("index") {
             "index" => self.insert_index_op(data, ops),
@@ -909,11 +926,11 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                     self.insert_update_op(data, ops)
                 }
             }
-            other => Err(Error::from(format!("Invalid `$elastic.action` {other}"))),
+            other => Err(Error::InvalidAction(other.to_string()).into()),
         }
     }
 
-    fn insert_index_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+    fn insert_index_op(&self, data: &Value, ops: &mut BulkOperations) -> anyhow::Result<()> {
         let mut op = BulkOperation::index(data);
         if let Some(id) = self.get_id() {
             op = op.id(id);
@@ -939,15 +956,15 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         if let Some(pipeline) = self.get_pipeline() {
             op = op.pipeline(pipeline);
         }
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
-    fn insert_delete_op(&self, ops: &mut BulkOperations) -> Result<()> {
+    fn insert_delete_op(&self, ops: &mut BulkOperations) -> anyhow::Result<()> {
         let mut op: BulkDeleteOperation<()> = self
             .get_id()
             .map(BulkOperation::delete)
-            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+            .ok_or(Error::MissingId)?;
         if let Some(index) = self.get_index() {
             op = op.index(index);
         }
@@ -967,18 +984,18 @@ impl<'a, 'value> ESMeta<'a, 'value> {
             op = op.routing(routing);
         }
 
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
-    fn insert_create_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+    fn insert_create_op(&self, data: &Value, ops: &mut BulkOperations) -> anyhow::Result<()> {
         // create requires an `_id` here, which is not according to spec
         // Actually `_id` should be completely optional here
         // See: https://github.com/elastic/elasticsearch-rs/issues/190
         let mut op = self
             .get_id()
             .map(|id| BulkOperation::create(id, data))
-            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+            .ok_or(Error::MissingId)?;
         if let Some(index) = self.get_index() {
             op = op.index(index);
         }
@@ -988,23 +1005,23 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         if let Some(routing) = self.get_routing() {
             op = op.routing(routing);
         }
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
     // avoid a `.clone_static()` for the `raw` case
-    fn insert_raw_update_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+    fn insert_raw_update_op(&self, data: &Value, ops: &mut BulkOperations) -> anyhow::Result<()> {
         let mut op = self
             .get_id()
             .map(|id| BulkOperation::update(id, data))
-            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+            .ok_or(Error::MissingId)?;
 
         op = self.apply_update_params(op);
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
-    fn insert_update_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+    fn insert_update_op(&self, data: &Value, ops: &mut BulkOperations) -> anyhow::Result<()> {
         let mut op = self
             .get_id()
             .map(|id| {
@@ -1013,10 +1030,10 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                 let src = literal!({ "doc": data.clone() });
                 BulkOperation::update(id, src)
             })
-            .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+            .ok_or(Error::MissingId)?;
 
         op = self.apply_update_params(op);
-        ops.push(op).map_err(Error::from)?;
+        ops.push(op)?;
         Ok(())
     }
 
@@ -1059,7 +1076,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
     fn apply_to<'bulk, 'meta, T>(
         &'meta self,
         mut bulk: Bulk<'bulk, 'meta, T>,
-    ) -> Result<Bulk<'bulk, 'meta, T>>
+    ) -> Result<Bulk<'bulk, 'meta, T>, Error>
     where
         T: elasticsearch::http::request::Body,
     {
@@ -1133,16 +1150,14 @@ impl<'a, 'value> ESMeta<'a, 'value> {
     }
 
     /// supported values: `true`, `false`, `"wait_for"`
-    fn get_refresh(&self) -> Result<Option<Refresh>> {
+    fn get_refresh(&self) -> Result<Option<Refresh>, Error> {
         let refresh = self.meta.get("refresh");
         if let Some(b) = refresh.as_bool() {
             Ok(Some(if b { Refresh::True } else { Refresh::False }))
         } else if refresh.as_str() == Some("wait_for") {
             Ok(Some(Refresh::WaitFor))
         } else if let Some(other) = refresh {
-            Err(Error::from(format!(
-                "Invalid value for `$elastic.refresh`: {other}",
-            )))
+            Err(Error::InvalidRefresh(other.to_string()))
         } else {
             Ok(None)
         }
@@ -1158,7 +1173,7 @@ enum CertValidation {
 }
 
 impl CertValidation {
-    fn as_certificate_validation(&self) -> Result<Option<CertificateValidation>> {
+    fn as_certificate_validation(&self) -> anyhow::Result<Option<CertificateValidation>> {
         let res = match self {
             Self::Default => Some(CertificateValidation::Default),
             Self::Full(data) => {
@@ -1178,7 +1193,7 @@ mod tests {
     use elasticsearch::http::request::Body;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn connector_builder_empty_nodes() -> Result<()> {
+    async fn connector_builder_empty_nodes() -> anyhow::Result<()> {
         let config = literal!({
             "config": {
                 "nodes": []
@@ -1204,7 +1219,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn connector_builder_invalid_url() -> Result<()> {
+    async fn connector_builder_invalid_url() -> anyhow::Result<()> {
         let config = literal!({
             "config": {
                 "nodes": [
@@ -1231,7 +1246,7 @@ mod tests {
     }
 
     #[test]
-    fn es_meta_update() -> Result<()> {
+    fn es_meta_update() -> anyhow::Result<()> {
         // update
         let meta = literal!({
             "elastic": {
@@ -1294,7 +1309,7 @@ mod tests {
     }
 
     #[test]
-    fn es_meta_index() -> Result<()> {
+    fn es_meta_index() -> anyhow::Result<()> {
         // index
         let meta = literal!({
             "elastic": {
@@ -1366,7 +1381,7 @@ mod tests {
     }
 
     #[test]
-    fn es_meta_delete() -> Result<()> {
+    fn es_meta_delete() -> anyhow::Result<()> {
         let meta = literal!({
             "elastic": {
                 "action": "delete",

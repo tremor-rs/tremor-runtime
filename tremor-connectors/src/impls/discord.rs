@@ -71,7 +71,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
 
         let origin_uri = EventOriginUri {
@@ -117,10 +117,14 @@ impl Connector for Discord {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         // the source is listening for events formatted as `Value` from the discord client
         let source = DiscordSource {
-            rx: self.message_channel.1.take().ok_or("No message channel")?,
+            rx: self
+                .message_channel
+                .1
+                .take()
+                .ok_or(GenericImplementationError::ChannelEmpty)?,
             origin_uri: self.origin_uri.clone(),
         };
         Ok(Some(builder.spawn(source, ctx)))
@@ -131,7 +135,7 @@ impl Connector for Discord {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         // the sink is forwarding events to the discord client where they are decoded
         // into discord events and sent out
         let sink = DiscordSink {
@@ -140,7 +144,11 @@ impl Connector for Discord {
         Ok(Some(builder.spawn(sink, ctx)))
     }
 
-    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(
+        &mut self,
+        ctx: &ConnectorContext,
+        _attempt: &Attempt,
+    ) -> anyhow::Result<bool> {
         if let Some(rx) = self.reply_rx.take() {
             let token = self.config.token.clone();
 
@@ -157,9 +165,7 @@ impl Connector for Discord {
                 rx: RwLock::new(Some(rx)),
             });
 
-            let mut client = client
-                .await
-                .map_err(|e| Error::from(format!("Err discord creating client: {e}")))?;
+            let mut client = client.await?;
             // set up new client task
             self.client_task = Some(spawn_task(
                 ctx.clone(),
@@ -183,16 +189,16 @@ impl Sink for DiscordSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         for v in event.value_iter() {
-            if self.tx.send(v.clone_static()).await.is_err() {
+            if let Err(e) = self.tx.send(v.clone_static()).await {
                 error!(
                     "{} Discord Client unreachable. Initiating Reconnect...",
                     &ctx
                 );
                 ctx.notifier().connection_lost().await?;
                 // return here to avoid notifying the notifier multiple times
-                return Err("Discord unreachable.".into());
+                return Err(e.into());
             }
         }
         Ok(SinkReply::NONE)
@@ -210,8 +216,13 @@ struct DiscordSource {
 #[async_trait::async_trait()]
 impl Source for DiscordSource {
     #[allow(clippy::option_if_let_else)]
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        self.rx
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        Ok(self
+            .rx
             .recv()
             .await
             .map(|data| SourceReply::Structured {
@@ -220,7 +231,7 @@ impl Source for DiscordSource {
                 stream: DEFAULT_STREAM_ID,
                 port: None,
             })
-            .ok_or_else(|| Error::from("channel closed"))
+            .ok_or(GenericImplementationError::ChannelEmpty)?)
     }
 
     fn is_transactional(&self) -> bool {

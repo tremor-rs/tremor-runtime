@@ -129,7 +129,7 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         config: &ConnectorConfig,
         kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = match config.config.as_ref() {
             Some(raw_config) => Config::new(raw_config)?,
             None => Config::default(),
@@ -154,7 +154,7 @@ impl Connector for Exit {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = self.clone();
 
         Ok(Some(builder.spawn(sink, ctx)))
@@ -182,7 +182,7 @@ impl Sink for Exit {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         if self.done {
             debug!("{ctx} Already exited.");
         } else if let Some((value, _meta)) = event.value_meta_iter().next() {

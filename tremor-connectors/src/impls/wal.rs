@@ -73,7 +73,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
 
         let event_origin_uri = EventOriginUri {
@@ -113,7 +113,11 @@ impl qwal::Entry for Payload {
 
 #[async_trait::async_trait]
 impl Source for WalSource {
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         // This is a busy loop until we get data to avoid hogging the cpu
         // TODO: improve this by adding  notifyer on write
         loop {
@@ -131,12 +135,22 @@ impl Source for WalSource {
         }
     }
 
-    async fn ack(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+    async fn ack(
+        &mut self,
+        _stream_id: u64,
+        pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         self.wal.lock().await.ack(pull_id).await?;
         Ok(())
     }
 
-    async fn fail(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+    async fn fail(
+        &mut self,
+        _stream_id: u64,
+        _pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         self.wal.lock().await.revert().await?;
         Ok(())
     }
@@ -167,7 +181,7 @@ impl Sink for WalSink {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         self.wal.lock().await.push(Payload(event)).await?;
         Ok(SinkReply::NONE)
     }
@@ -179,7 +193,7 @@ impl Connector for Wal {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = WalSource {
             wal: self.wal.clone(),
             origin_uri: self.event_origin_uri.clone(),
@@ -191,14 +205,14 @@ impl Connector for Wal {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = WalSink {
             wal: self.wal.clone(),
         };
         Ok(Some(builder.spawn(sink, ctx)))
     }
 
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> anyhow::Result<()> {
         self.wal.lock().await.preserve_ack().await?;
         Ok(())
     }

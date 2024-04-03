@@ -23,7 +23,7 @@ use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 
 #[tokio::test(flavor = "multi_thread")]
-async fn unix_socket() -> Result<()> {
+async fn unix_socket() -> anyhow::Result<()> {
     let temp_file = tempfile::Builder::new().tempfile()?;
     let temp_path = temp_file.into_temp_path();
     let socket_path = temp_path.to_path_buf();

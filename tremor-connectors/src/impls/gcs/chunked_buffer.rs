@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{err_gcs, Result};
+use super::Error;
 use crate::utils::object_storage::{BufferPart, ObjectStorageBuffer};
 
 /// This structure is similar to a Vec<u8>, but with some special methods.
@@ -53,18 +53,16 @@ impl ObjectStorageBuffer for ChunkedBuffer {
         })
     }
 
-    fn mark_done_until(&mut self, position: usize) -> Result<()> {
+    fn mark_done_until(&mut self, position: usize) -> anyhow::Result<()> {
         if position < self.buffer_start {
-            return Err(err_gcs(format!(
-                "Buffer was marked as done at index {position} which is not in memory anymore"
-            )));
+            return Err(Error::InvalidBuffer(position).into());
         }
 
         let bytes_to_remove = position - self.buffer_start;
         self.data = Vec::from(
             self.data
                 .get(bytes_to_remove..)
-                .ok_or_else(|| err_gcs("Not enough data in the buffer"))?,
+                .ok_or(Error::NotEnoughData)?,
         );
         self.buffer_start += bytes_to_remove;
 
@@ -111,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    pub fn chunked_buffer_marking_as_done_removes_data() -> Result<()> {
+    pub fn chunked_buffer_marking_as_done_removes_data() -> anyhow::Result<()> {
         let mut buffer = ChunkedBuffer::new(10);
         buffer.write((1..=15).collect::<Vec<u8>>());
 
@@ -128,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    pub fn chunked_buffer_returns_all_the_data_in_the_final_block() -> Result<()> {
+    pub fn chunked_buffer_returns_all_the_data_in_the_final_block() -> anyhow::Result<()> {
         let mut buffer = ChunkedBuffer::new(10);
         buffer.write((1..=16).collect::<Vec<u8>>());
 

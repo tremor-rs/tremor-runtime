@@ -246,7 +246,7 @@ where
             meta: Some(self.meta.clone()),
         })
     }
-    async fn read(&mut self, stream: u64) -> Result<SourceReply> {
+    async fn read(&mut self, stream: u64) -> anyhow::Result<SourceReply> {
         let mut is_binary = false;
         match self.stream.next().await {
             Some(Ok(message)) => {
@@ -345,7 +345,7 @@ impl<S> StreamWriter for WsWriter<S>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Sync + Send + Unpin,
 {
-    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<&Value>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<&Value>) -> anyhow::Result<()> {
         for chunk in data {
             if let Some(meta) = &meta {
                 // If metadata is set, check for a binary framing flag
@@ -366,7 +366,7 @@ where
         }
         Ok(())
     }
-    async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&mut self, _stream: u64) -> anyhow::Result<StreamDone> {
         self.sink.close().await?;
         Ok(StreamDone::StreamClosed)
     }

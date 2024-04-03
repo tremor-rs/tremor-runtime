@@ -16,7 +16,6 @@
 //! Sending events from tremor to a kafka topic
 
 use crate::{
-    errors::empty_error,
     impls::kafka::{is_fatal_error, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT},
     prelude::*,
     utils::task_id,
@@ -36,6 +35,12 @@ use tokio::{
 use tremor_common::time::nanotime;
 
 const KAFKA_PRODUCER_META_KEY: &str = "kafka_producer";
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("The producer {0} is not available")]
+    ProducerNotAvailable(alias::Connector),
+}
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -78,7 +83,7 @@ impl ConnectorBuilder for Builder {
         config: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let metrics_interval_s = config.metrics_interval_s;
         let config = Config::new(raw_config)?;
 
@@ -130,7 +135,7 @@ impl Connector for KafkaProducerConnector {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = KafkaProducerSink::new(
             self.config.clone(),
             self.producer_config.clone(),
@@ -175,11 +180,11 @@ impl Sink for KafkaProducerSink {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let producer = self
             .producer
             .as_ref()
-            .ok_or_else(|| ErrorKind::ProducerNotAvailable(ctx.alias().to_string()))?;
+            .ok_or_else(|| Error::ProducerNotAvailable(ctx.alias().clone()))?;
         let transactional = event.transactional;
         let mut delivery_futures: Vec<DeliveryFuture> = if transactional {
             Vec::with_capacity(event.len())
@@ -253,7 +258,7 @@ impl Sink for KafkaProducerSink {
         Ok(SinkReply::NONE)
     }
 
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         // enforce cleaning out the previous producer
         // We might lose some in flight messages
         if let Some(old_producer) = self.producer.take() {
@@ -283,7 +288,7 @@ impl Sink for KafkaProducerSink {
             }
             Ok(None) => {
                 // receive error - we cannot tell what happened, better error here to trigger a retry
-                Err(empty_error())
+                Err(GenericImplementationError::ChannelEmpty.into())
             }
             Ok(Some(kafka_error)) => {
                 // we received an error from rdkafka - fail it big time
@@ -292,7 +297,7 @@ impl Sink for KafkaProducerSink {
         }
     }
 
-    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         if let Some(producer) = self.producer.take() {
             let wait_secs = Duration::from_secs(1);
             if producer.in_flight_count() > 0 {
@@ -331,7 +336,7 @@ async fn wait_for_delivery(
     start: u64,
     futures: Vec<DeliveryFuture>,
     reply_tx: ReplySender,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let cb = match futures::future::try_join_all(futures).await {
         Ok(results) => {
             if let Some((kafka_error, _)) = results.into_iter().find_map(std::result::Result::err) {

@@ -14,20 +14,17 @@
 
 /// reconnect logic and execution for connectors
 use crate::{
-    config::Reconnect,
-    errors::{empty_error, Result},
-    sink::SinkMsg,
-    source::SourceMsg,
-    Addr, Connectivity, Connector, ConnectorContext, Context, Msg,
+    config::Reconnect, errors::Error, Connectivity, Connector, ConnectorContext, Context, Msg,
 };
 use futures::future::FutureExt;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use std::{fmt::Display, time::Duration};
+use std::time::Duration;
 use tokio::{
     sync::mpsc::{channel as bounded, Sender},
     task::{self, JoinHandle},
 };
 use tremor_common::alias;
+use tremor_system::connector::{self, sink, source, Attempt};
 
 #[derive(Debug, PartialEq, Clone)]
 enum ShouldRetry {
@@ -140,7 +137,7 @@ pub(crate) struct ReconnectRuntime {
     attempt: Attempt,
     interval_ms: Option<u64>,
     strategy: Box<dyn ReconnectStrategy>,
-    addr: Addr,
+    addr: connector::Addr,
     notifier: ConnectionLostNotifier,
     retry_task: Option<JoinHandle<()>>,
     alias: alias::Connector,
@@ -151,17 +148,19 @@ pub(crate) struct ReconnectRuntime {
 ///
 /// This will change the connector state properly and trigger a new reconnect attempt (according to the configured logic)
 #[derive(Clone)]
-pub(crate) struct ConnectionLostNotifier(Sender<Msg>);
+pub(crate) struct ConnectionLostNotifier(alias::Connector, Sender<Msg>);
 
 impl ConnectionLostNotifier {
     /// constructor
-    pub(crate) fn new(tx: Sender<Msg>) -> Self {
-        Self(tx)
+    pub(crate) fn new(alias: &alias::Connector, tx: Sender<Msg>) -> Self {
+        Self(alias.clone(), tx)
     }
     /// notify the runtime that this connector lost its connection
-    pub(crate) async fn connection_lost(&self) -> Result<()> {
-        self.0.send(Msg::ConnectionLost).await?;
-        Ok(())
+    pub(crate) async fn connection_lost(&self) -> Result<(), Error> {
+        self.1
+            .send(Msg::ConnectionLost)
+            .await
+            .map_err(|_| Error::ConnectionLostNotifier(self.0.clone()))
     }
 }
 
@@ -171,19 +170,19 @@ impl ReconnectRuntime {
     }
     /// constructor
     pub(crate) fn new(
-        connector_addr: &Addr,
+        connector_addr: &connector::Addr,
         notifier: ConnectionLostNotifier,
         config: &Reconnect,
     ) -> Self {
         Self::inner(
             connector_addr.clone(),
-            connector_addr.alias.clone(),
+            connector_addr.alias().clone(),
             notifier,
             config,
         )
     }
     fn inner(
-        addr: Addr,
+        addr: connector::Addr,
         alias: alias::Connector,
         notifier: ConnectionLostNotifier,
         config: &Reconnect,
@@ -221,20 +220,24 @@ impl ReconnectRuntime {
         &mut self,
         connector: &mut dyn Connector,
         ctx: &ConnectorContext,
-    ) -> Result<(Connectivity, bool)> {
+    ) -> Result<(Connectivity, bool), Error> {
         let (tx, mut rx) = bounded(2);
         let source_res = if self.addr.has_source() {
             self.addr
-                .send_source(SourceMsg::Connect(tx.clone(), self.attempt))?;
-            rx.recv().map(|r| r.ok_or_else(empty_error)?).await
+                .send_source(source::Msg::Connect(tx.clone(), self.attempt))?;
+            rx.recv()
+                .map(|r| r.ok_or_else(|| Error::ChannelEmpty(self.alias.clone()))?)
+                .await
         } else {
             Ok(true)
         };
         let sink_res = if self.addr.has_sink() {
             self.addr
-                .send_sink(SinkMsg::Connect(tx, self.attempt))
+                .send_sink(sink::Msg::Connect(tx, self.attempt))
                 .await?;
-            rx.recv().map(|r| r.ok_or_else(empty_error)?).await
+            rx.recv()
+                .map(|r| r.ok_or_else(|| Error::ChannelEmpty(self.alias.clone()))?)
+                .await
         } else {
             Ok(true)
         };
@@ -262,7 +265,7 @@ impl ReconnectRuntime {
                     &format!("Error connecting the connector ({})", self.attempt),
                 );
 
-                let will_retry = self.update_and_retry(ctx).await;
+                let will_retry = self.update_and_retry().await;
                 Ok((Connectivity::Disconnected, will_retry))
             }
         }
@@ -270,22 +273,22 @@ impl ReconnectRuntime {
 
     /// update internal state for the current failed connect attempt
     /// and spawn a retry task
-    async fn update_and_retry(&mut self, ctx: &ConnectorContext) -> bool {
+    async fn update_and_retry(&mut self) -> bool {
         // update internal state
         self.attempt.on_failure();
-        self.enqueue_retry(ctx).await
+        self.enqueue_retry().await
     }
 
-    pub(crate) async fn enqueue_retry(&mut self, _ctx: &ConnectorContext) -> bool {
+    pub(crate) async fn enqueue_retry(&mut self) -> bool {
         if let ShouldRetry::No(msg) = self.strategy.should_reconnect(&self.attempt) {
-            warn!("[Connector::{}] Not reconnecting: {}", &self.alias, msg);
+            warn!("[Connector::{}] Not reconnecting: {msg}", &self.alias);
             false
         } else {
             // compute next interval
             let interval = self.strategy.next_interval(self.interval_ms, &self.attempt);
             info!(
-                "[Connector::{}] Reconnecting after {} ms",
-                &self.alias, interval
+                "[Connector::{}] Reconnecting after {interval} ms",
+                &self.alias,
             );
             self.interval_ms = Some(interval);
 
@@ -298,15 +301,12 @@ impl ReconnectRuntime {
             };
             if spawn_retry {
                 let duration = Duration::from_millis(interval);
-                let sender = self.addr.sender.clone();
+                let sender = self.addr.sender().clone();
                 let alias = self.alias.clone();
                 self.retry_task = Some(task::spawn(async move {
                     tokio::time::sleep(duration).await;
                     if sender.send(Msg::Reconnect).await.is_err() {
-                        error!(
-                            "[Connector::{}] Error sending reconnect msg to connector.",
-                            &alias
-                        );
+                        error!("[Connector::{alias}] Error sending reconnect msg to connector.",);
                     }
                 }));
             }
@@ -316,10 +316,12 @@ impl ReconnectRuntime {
     }
 
     #[cfg(test)]
-    pub(crate) async fn await_retry(&mut self) -> Result<()> {
+    pub(crate) async fn await_retry(&mut self) -> anyhow::Result<()> {
         // take the task out to avoid having it be awaited from multiple tasks ?
         if let Some(retry_task) = self.retry_task.take() {
-            retry_task.await?;
+            retry_task
+                .await
+                .map_err(|e| Error::ReconnectJoin(self.alias.clone(), e))?;
         }
         Ok(())
     }
@@ -345,8 +347,12 @@ mod tests {
     }
     #[async_trait::async_trait]
     impl Connector for FakeConnector {
-        async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-            self.answer.ok_or_else(|| "Blergh!".into())
+        async fn connect(
+            &mut self,
+            _ctx: &ConnectorContext,
+            _attempt: &Attempt,
+        ) -> anyhow::Result<bool> {
+            self.answer.ok_or_else(|| anyhow::format_err!("Blergh!"))
         }
 
         fn codec_requirements(&self) -> CodecReq {
@@ -393,16 +399,11 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn failfast_runtime() -> Result<()> {
+    async fn failfast_runtime() -> anyhow::Result<()> {
         let (tx, _rx) = bounded(qsize());
-        let notifier = ConnectionLostNotifier::new(tx.clone());
         let alias = alias::Connector::new("flow", "test");
-        let addr = Addr {
-            alias: alias.clone(),
-            source: None,
-            sink: None,
-            sender: tx.clone(),
-        };
+        let notifier = ConnectionLostNotifier::new(&alias, tx.clone());
+        let addr = connector::Addr::new(alias.clone(), tx.clone(), None, None);
         let config = Reconnect::None;
         let mut runtime = ReconnectRuntime::inner(addr, alias.clone(), notifier, &config);
         let mut connector = FakeConnector {
@@ -425,16 +426,11 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn backoff_runtime() -> Result<()> {
+    async fn backoff_runtime() -> anyhow::Result<()> {
         let (tx, mut rx) = bounded(qsize());
-        let notifier = ConnectionLostNotifier::new(tx.clone());
         let alias = alias::Connector::new("flow", "test");
-        let addr = Addr {
-            alias: alias.clone(),
-            source: None,
-            sink: None,
-            sender: tx.clone(),
-        };
+        let notifier = ConnectionLostNotifier::new(&alias, tx.clone());
+        let addr = connector::Addr::new(alias.clone(), tx.clone(), None, None);
         let config = Reconnect::Retry {
             interval_ms: 10,
             growth_rate: 2.0,
@@ -460,8 +456,9 @@ mod tests {
         // we cannot test exact timings, but we can ensure it behaves as expected
         assert!(matches!(
             timeout(Duration::from_secs(5), rx.recv())
-                .await?
-                .ok_or_else(empty_error)?,
+                .await
+                .expect("timeout")
+                .expect("empty"),
             Msg::Reconnect
         ));
 
@@ -473,8 +470,9 @@ mod tests {
         ));
         assert!(matches!(
             timeout(Duration::from_secs(5), rx.recv())
-                .await?
-                .ok_or_else(empty_error)?,
+                .await
+                .expect("timeout")
+                .expect("empty"),
             Msg::Reconnect
         ));
 

@@ -117,7 +117,7 @@
 
 use crate::{
     channel::{bounded, Receiver, Sender},
-    errors::{already_created_error, err_connector_def},
+    errors::{error_connector_def, GenericImplementationError},
     prelude::*,
 };
 use serde::Deserialize;
@@ -132,6 +132,26 @@ use tremor_codec::{
     json::{Json, Sorted},
     Codec,
 };
+
+/// KV Errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Missing $kv field
+    #[error("Missing `$kv` field for commands")]
+    MissingKvField,
+    /// Invalid Command
+    #[error("Invalid command: {0}")]
+    InvalidCommand(String),
+    /// Sled error
+    #[error("{0}")]
+    Sled(#[from] sled::Error),
+    /// JSON error
+    #[error("{0}")]
+    Json(#[from] tremor_codec::Error),
+    /// CAS Error
+    #[error("CAS error: expected {0} but found {1}.")]
+    Cas(Value<'static>, Value<'static>),
+}
 
 #[derive(Debug)]
 enum Command<'v> {
@@ -195,10 +215,10 @@ enum Command<'v> {
 }
 
 impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
-    type Error = crate::Error;
+    type Error = Error;
 
-    fn try_from(v: &'v Value<'v>) -> Result<Self> {
-        let v = v.get("kv").ok_or("Missing `$kv` field for commands")?;
+    fn try_from(v: &'v Value<'v>) -> Result<Self, Error> {
+        let v = v.get("kv").ok_or(Error::MissingKvField)?;
         if let Some(key) = v.get_bytes("get").map(<[u8]>::to_vec) {
             Ok(Command::Get { key })
         } else if let Some(key) = v.get_bytes("put").map(<[u8]>::to_vec) {
@@ -218,7 +238,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
                 end: v.get_bytes("end").map(<[u8]>::to_vec),
             })
         } else {
-            Err(format!("Invalid KV command: {v}").into())
+            Err(Error::InvalidCommand(v.to_string()))
         }
     }
 }
@@ -291,10 +311,10 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
         if !PathBuf::from(&config.path).is_dir() {
-            return Err(err_connector_def(id, Builder::INVALID_DIR));
+            return Err(error_connector_def(id, Builder::INVALID_DIR).into());
         }
 
         let (tx, rx) = bounded(qsize());
@@ -323,10 +343,12 @@ impl Connector for Kv {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = ChannelSource::from_channel(
             self.tx.clone(),
-            self.rx.take().ok_or_else(already_created_error)?,
+            self.rx
+                .take()
+                .ok_or(GenericImplementationError::AlreadyConnected)?,
             self.source_is_connected.clone(),
         );
         Ok(Some(builder.spawn(source, ctx)))
@@ -336,7 +358,7 @@ impl Connector for Kv {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let db = sled::open(&self.config.path)?;
         let codec = Json::default();
         let origin_uri = EventOriginUri {
@@ -374,7 +396,11 @@ struct KvSink {
 }
 
 impl KvSink {
-    async fn decode(&mut self, mut v: Option<IVec>, ingest_ns: u64) -> Result<Value<'static>> {
+    async fn decode(
+        &mut self,
+        mut v: Option<IVec>,
+        ingest_ns: u64,
+    ) -> anyhow::Result<Value<'static>> {
         if let Some(v) = v.as_mut() {
             let data: &mut [u8] = v;
             // TODO: We could optimize this
@@ -389,7 +415,7 @@ impl KvSink {
             Ok(Value::const_null())
         }
     }
-    async fn encode<'v>(&mut self, v: &Value<'v>) -> Result<Vec<u8>> {
+    async fn encode<'v>(&mut self, v: &Value<'v>) -> anyhow::Result<Vec<u8>> {
         Ok(self.codec.encode(v, &Value::const_null()).await?)
     }
     async fn execute<'v>(
@@ -398,7 +424,7 @@ impl KvSink {
         op_name: &'static str,
         value: &Value<'v>,
         ingest_ns: u64,
-    ) -> Result<Vec<(Value<'static>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Value<'static>, Value<'static>)>> {
         match cmd {
             Command::Get { key } => self
                 .decode(self.db.get(&key)?, ingest_ns)
@@ -435,8 +461,7 @@ impl KvSink {
                 if let Err(CompareAndSwapError { current, proposed }) =
                     self.db.compare_and_swap(&key, old, Some(vec))?
                 {
-                    Err(format!(
-                        "CAS error: expected {} but found {}.",
+                    Err(Error::Cas(
                         self.decode(proposed, ingest_ns).await?,
                         self.decode(current, ingest_ns).await?,
                     )
@@ -476,7 +501,7 @@ impl Sink for KvSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let ingest_ns = tremor_common::time::nanotime();
         let send_replies = self.source_is_connected.load(Ordering::Acquire);
 
@@ -493,7 +518,7 @@ impl Sink for KvSink {
                 }
                 Err(e) => {
                     error!("{ctx} Invalid KV command: {e}");
-                    Err((None, None, e))
+                    Err((None, None, e.into()))
                 }
             };
             match executed {

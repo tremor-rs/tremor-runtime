@@ -72,7 +72,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let origin_uri = EventOriginUri {
             scheme: "tremor-otel-client".to_string(),
@@ -102,7 +102,7 @@ impl Connector for Client {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = OtelSink {
             origin_uri: self.origin_uri.clone(),
             config: self.config.clone(),
@@ -121,12 +121,9 @@ struct OtelSink {
 
 #[async_trait::async_trait()]
 impl Sink for OtelSink {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let endpoint = self.config.url.to_string();
-        let channel = TonicEndpoint::from_shared(endpoint)
-            .map_err(|e| format!("Unable to connect to remote otel endpoint: {e}"))?
-            .connect()
-            .await?;
+        let channel = TonicEndpoint::from_shared(endpoint)?.connect().await?;
 
         self.remote = Some(RemoteOpenTelemetryEndpoint {
             logs_client: LogsServiceClient::new(channel.clone()),
@@ -143,7 +140,7 @@ impl Sink for OtelSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         if let Some(remote) = &mut self.remote {
             for value in event.value_iter() {
                 let err = if self.config.metrics && value.contains_key("metrics") {
@@ -197,7 +194,7 @@ impl Sink for OtelSink {
         _signal: Event,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         Ok(SinkReply::default())
     }
 
@@ -211,7 +208,7 @@ mod tests {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn otel_client_builder() -> Result<()> {
+    async fn otel_client_builder() -> anyhow::Result<()> {
         let alias = alias::Connector::new("flow", "my_otel_client");
         let with_processors = literal!({
             "config": {

@@ -61,15 +61,13 @@ mod bench;
 // some tests don't use everything and this would generate warnings for those
 // which it shouldn't
 
-use super::{prelude::KillSwitch, sink::SinkMsg};
+use super::prelude::KillSwitch;
 use crate::{
     builtin_connector_types,
     channel::{bounded, unbounded, Receiver, UnboundedReceiver},
-    config,
-    errors::{empty_error, Result},
-    pipeline, qsize,
-    source::SourceMsg,
-    Connectivity, StatusReport,
+    config, pipeline,
+    prelude::GenericImplementationError,
+    qsize, Connectivity, Error,
 };
 use log::{debug, info};
 use std::{
@@ -84,12 +82,16 @@ use tremor_common::{
 };
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta};
-use tremor_system::{contraflow, dataplane, instance::State};
+use tremor_system::{
+    connector::{self, sink, source, StatusReport},
+    contraflow, controlplane, dataplane,
+    instance::State,
+};
 use tremor_value::Value;
 
 /// FIXME
 pub struct ConnectorHarness {
-    addr: crate::Addr,
+    addr: connector::Addr,
     pipes: HashMap<Port<'static>, TestPipeline>,
 }
 
@@ -101,7 +103,7 @@ impl ConnectorHarness {
         kill_switch: KillSwitch,
         input_ports: Vec<Port<'static>>,
         output_ports: Vec<Port<'static>>,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         let alias = alias::Connector::new("test", alias);
         let mut connector_id_gen = ConnectorIdGen::new();
         let mut known_connectors = HashMap::new();
@@ -170,7 +172,7 @@ impl ConnectorHarness {
         id: &str,
         builder: &dyn crate::ConnectorBuilder,
         defn: &Value<'static>,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         Self::new_with_kill_switch(id, builder, defn, KillSwitch::dummy()).await
     }
 
@@ -179,31 +181,34 @@ impl ConnectorHarness {
         builder: &dyn crate::ConnectorBuilder,
         defn: &Value<'static>,
         kill_switch: KillSwitch,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         Self::new_with_ports(id, builder, defn, kill_switch, vec![IN], vec![OUT, ERR]).await
     }
     ///FIXME
 
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self) -> anyhow::Result<()> {
         // start the connector
         let (tx, mut rx) = bounded(1);
         self.addr.start(tx).await?;
-        let cr = rx.recv().await.ok_or_else(empty_error)?;
+        let cr = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         cr.res?;
 
         // send a `CBAction::Restore` to the connector, so it starts pulling data
-        self.send_to_source(SourceMsg::Cb(CbAction::Restore, EventId::default()))?;
+        self.send_to_source(source::Msg::Cb(CbAction::Restore, EventId::default()))?;
         // We introduce a synchronisation step to ensure that the restore has been processed
         // and the sink is treated as connected
-        if self.addr.source.is_some() {
+        if self.addr.has_source() {
             let (tx, rx) = oneshot::channel();
-            self.send_to_source(SourceMsg::Synchronize(tx))?;
+            self.send_to_source(source::Msg::Synchronize(tx))?;
             rx.await?;
         }
 
         // ensure we notify the connector that its sink part is connected
         self.addr
-            .send_sink(SinkMsg::Signal {
+            .send_sink(sink::Msg::Signal {
                 signal: Event::signal_start(SourceId::new(1)),
             })
             .await?;
@@ -211,21 +216,24 @@ impl ConnectorHarness {
         Ok(())
     }
 
-    pub(crate) async fn pause(&self) -> Result<()> {
-        self.addr.send(crate::Msg::Pause).await
+    pub(crate) async fn pause(&self) -> anyhow::Result<()> {
+        Ok(self.addr.send(crate::Msg::Pause).await?)
     }
 
-    pub(crate) async fn resume(&self) -> Result<()> {
-        self.addr.send(crate::Msg::Resume).await
+    pub(crate) async fn resume(&self) -> anyhow::Result<()> {
+        Ok(self.addr.send(crate::Msg::Resume).await?)
     }
 
     /// FIXME
-    pub async fn stop(mut self) -> Result<(Vec<Event>, Vec<Event>)> {
+    pub async fn stop(mut self) -> anyhow::Result<(Vec<Event>, Vec<Event>)> {
         let (tx, mut rx) = bounded(qsize());
         debug!("Stopping harness...");
         self.addr.stop(tx).await?;
         debug!("Waiting for stop result...");
-        let cr = rx.recv().await.ok_or_else(empty_error)?;
+        let cr = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         debug!("Stop result received.");
         cr.res?;
         //self.handle.cancel().await;
@@ -245,7 +253,7 @@ impl ConnectorHarness {
         Ok((out_events, err_events))
     }
 
-    pub(crate) async fn status(&self) -> Result<StatusReport> {
+    pub(crate) async fn status(&self) -> anyhow::Result<StatusReport> {
         let (report_tx, report_rx) = oneshot::channel();
         self.addr.send(crate::Msg::Report(report_tx)).await?;
         Ok(report_rx.await?)
@@ -256,8 +264,8 @@ impl ConnectorHarness {
     /// # Errors
     ///
     /// If communication with the connector fails or we time out without reaching connected state.
-    pub async fn wait_for_connected(&self) -> Result<()> {
-        while self.status().await?.connectivity != Connectivity::Connected {
+    pub async fn wait_for_connected(&self) -> anyhow::Result<()> {
+        while self.status().await?.connectivity() != &Connectivity::Connected {
             // TODO create my own future here that succeeds on poll when status is connected
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
@@ -277,7 +285,7 @@ impl ConnectorHarness {
     //     feature = "http-integration",
     //     feature = "gcp-integration"
     // ))]
-    pub async fn consume_initial_sink_contraflow(&mut self) -> Result<()> {
+    pub async fn consume_initial_sink_contraflow(&mut self) -> anyhow::Result<()> {
         for cf in [
             self.get_pipe(IN)?.get_contraflow().await?,
             self.get_pipe(IN)?.get_contraflow().await?,
@@ -296,27 +304,26 @@ impl ConnectorHarness {
     /// # Errors
     ///
     /// If communication with the connector fails or we time out without reaching the desired state
-    pub(crate) async fn wait_for_state(&self, state: State) -> Result<()> {
-        while self.status().await?.status != state {
+    pub(crate) async fn wait_for_state(&self, state: State) -> anyhow::Result<()> {
+        while self.status().await?.status() != &state {
             // TODO create my own future here that succeeds on poll when status is connected
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         Ok(())
     }
 
-    pub(crate) fn get_pipe<T>(&mut self, port: T) -> Result<&mut TestPipeline>
+    pub(crate) fn get_pipe<T>(&mut self, port: T) -> anyhow::Result<&mut TestPipeline>
     where
         T: Into<Port<'static>>,
     {
         let port = port.into();
-        Ok(self
-            .pipes
+        self.pipes
             .get_mut(&port)
-            .ok_or_else(|| format!("No pipeline connected to port {port}"))?)
+            .ok_or_else(|| anyhow::anyhow!("No pipeline connected to port {port}"))
     }
 
     /// get the out pipeline - if any
-    pub fn out(&mut self) -> Result<&mut TestPipeline> {
+    pub fn out(&mut self) -> anyhow::Result<&mut TestPipeline> {
         self.get_pipe(OUT)
     }
 
@@ -326,7 +333,7 @@ impl ConnectorHarness {
     //     feature = "kafka-integration"
     // ))]
     /// get the err pipeline - if any
-    pub fn err(&mut self) -> Result<&mut TestPipeline> {
+    pub fn err(&mut self) -> anyhow::Result<&mut TestPipeline> {
         self.get_pipe(ERR)
     }
 
@@ -341,23 +348,27 @@ impl ConnectorHarness {
     //     feature = "kafka-integration",
     // ))]
     /// FIXME
-    pub async fn send_to_sink(&self, event: Event, port: Port<'static>) -> Result<()> {
-        self.addr.send_sink(SinkMsg::Event { event, port }).await
+    pub async fn send_to_sink(&self, event: Event, port: Port<'static>) -> anyhow::Result<()> {
+        Ok(self
+            .addr
+            .send_sink(sink::Msg::Event { event, port })
+            .await?)
     }
 
-    pub(crate) fn send_to_source(&self, msg: SourceMsg) -> Result<()> {
-        self.addr.send_source(msg)
+    pub(crate) fn send_to_source(&self, msg: source::Msg) -> anyhow::Result<()> {
+        Ok(self.addr.send_source(msg)?)
     }
 
     // this is only used in integration tests,
     // otherwise this throws an error when compiled for non-integration tests
     #[allow(dead_code)]
-    pub(crate) async fn signal_tick_to_sink(&self) -> Result<()> {
-        self.addr
-            .send_sink(SinkMsg::Signal {
+    pub(crate) async fn signal_tick_to_sink(&self) -> anyhow::Result<()> {
+        Ok(self
+            .addr
+            .send_sink(sink::Msg::Signal {
                 signal: Event::signal_tick(),
             })
-            .await
+            .await?)
     }
 
     #[cfg(any(
@@ -365,7 +376,7 @@ impl ConnectorHarness {
         feature = "wal-integration",
         feature = "gcp-integration"
     ))]
-    pub(crate) fn send_contraflow(&self, cb: CbAction, id: EventId) -> Result<()> {
+    pub(crate) fn send_contraflow(&self, cb: CbAction, id: EventId) -> anyhow::Result<()> {
         self.addr.send_source(SourceMsg::Cb(cb, id))
     }
 }
@@ -381,8 +392,8 @@ pub struct TestPipeline {
 }
 
 impl TestPipeline {
-    pub(crate) async fn stop(&self) -> Result<()> {
-        self.addr.send_mgmt(pipeline::MgmtMsg::Stop).await
+    pub(crate) async fn stop(&self) -> anyhow::Result<()> {
+        Ok(self.addr.send_mgmt(controlplane::Msg::Stop).await?)
     }
     pub(crate) fn new(alias: String) -> Self {
         let flow_id = alias::Flow::new("test");
@@ -396,10 +407,10 @@ impl TestPipeline {
         task::spawn(async move {
             while let Some(msg) = rx_mgmt.recv().await {
                 match msg {
-                    pipeline::MgmtMsg::Stop => {
+                    controlplane::Msg::Stop => {
                         break;
                     }
-                    pipeline::MgmtMsg::ConnectInput { tx, .. } => {
+                    controlplane::Msg::ConnectInput { tx, .. } => {
                         if let Err(e) = tx.send(Ok(())).await {
                             error!("Oh no error in test: {e}");
                         }
@@ -431,10 +442,10 @@ impl TestPipeline {
     //     feature = "http-integration",
     //     feature = "gcp-integration"
     // ))]
-    pub async fn get_contraflow(&mut self) -> Result<Event> {
+    pub async fn get_contraflow(&mut self) -> anyhow::Result<Event> {
         match timeout(Duration::from_secs(20), self.rx_cf.recv())
             .await?
-            .ok_or("No contraflow")?
+            .ok_or(GenericImplementationError::ChannelEmpty)?
         {
             contraflow::Msg::Insight(event) => Ok(event),
         }
@@ -458,7 +469,7 @@ impl TestPipeline {
 
     /// get a single event from the pipeline
     /// wait for an event to arrive
-    pub async fn get_event(&mut self) -> Result<Event> {
+    pub async fn get_event(&mut self) -> anyhow::Result<Event> {
         const TIMEOUT: Duration = Duration::from_secs(120);
         let start = Instant::now();
         loop {
@@ -473,19 +484,19 @@ impl TestPipeline {
                     }
                 }
                 Ok(None) => {
-                    return Err(empty_error());
+                    return Err(GenericImplementationError::ChannelEmpty.into());
                 }
                 Err(_) => {
-                    return Err(format!("Did not receive an event for {TIMEOUT:?}").into());
+                    return Err(GenericImplementationError::Timeout(TIMEOUT).into());
                 }
             }
             if start.elapsed() > TIMEOUT {
-                return Err(format!("Did not receive an event for {TIMEOUT:?}").into());
+                return Err(GenericImplementationError::Timeout(TIMEOUT).into());
             }
         }
     }
 
-    pub(crate) async fn expect_no_event_for(&mut self, duration: Duration) -> Result<()> {
+    pub(crate) async fn expect_no_event_for(&mut self, duration: Duration) -> anyhow::Result<()> {
         let start = Instant::now();
         loop {
             match timeout(duration, self.rx.recv()).await {
@@ -495,13 +506,13 @@ impl TestPipeline {
                 Ok(Some(msg)) => match *msg {
                     dataplane::Msg::Signal(_signal) => (),
                     dataplane::Msg::Event { event, .. } => {
-                        return Err(
-                            format!("Expected no event for {duration:?}, got: {event:?}").into(),
-                        );
+                        return Err(anyhow::anyhow!(
+                            "Expected no event for {duration:?}, got: {event:?}"
+                        ));
                     }
                 },
                 Ok(None) => {
-                    return Err(empty_error());
+                    return Err(GenericImplementationError::ChannelEmpty.into());
                 }
             }
             if start.elapsed() > duration {
@@ -513,8 +524,7 @@ impl TestPipeline {
 
 pub(crate) mod free_port {
 
-    use crate::errors::Result;
-    use std::ops::RangeInclusive;
+    use std::{io, ops::RangeInclusive};
     use tokio::{
         net::{TcpListener, UdpSocket},
         sync::Mutex,
@@ -533,7 +543,7 @@ pub(crate) mod free_port {
             }
         }
 
-        async fn next(&mut self) -> Result<u16> {
+        async fn next(&mut self) -> io::Result<u16> {
             let mut candidate = self.port;
             self.port = self.port.wrapping_add(1);
             loop {
@@ -552,10 +562,10 @@ pub(crate) mod free_port {
         static ref FREE_PORT: Mutex<FreePort> = Mutex::new(FreePort::new());
     }
     /// Find free TCP port for use in test server endpoints
-    pub(crate) async fn find_free_tcp_port() -> Result<u16> {
+    pub(crate) async fn find_free_tcp_port() -> io::Result<u16> {
         FREE_PORT.lock().await.next().await
     }
-    pub(crate) async fn find_free_udp_port() -> Result<u16> {
+    pub(crate) async fn find_free_udp_port() -> io::Result<u16> {
         let socket = UdpSocket::bind("127.0.0.1:0").await?;
         let port = socket.local_addr()?.port();
         drop(socket);

@@ -53,7 +53,7 @@ impl EchoServer {
         mut stream: Stream,
         addr: SocketAddr,
         i_shall_continue: Arc<AtomicBool>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let mut buf = vec![0_u8; 1024];
         while i_shall_continue.load(Ordering::Acquire) {
             match timeout(Duration::from_millis(100), stream.read(&mut buf)).await {
@@ -81,7 +81,7 @@ impl EchoServer {
         Ok(())
     }
 
-    pub(crate) fn run(&mut self) -> Result<()> {
+    pub(crate) fn run(&mut self) -> anyhow::Result<()> {
         let server_run = self.i_shall_run.clone();
         let mut conns = vec![];
         let addr = self.addr.clone();
@@ -141,7 +141,7 @@ impl EchoServer {
         Ok(())
     }
 
-    pub(crate) async fn stop(&mut self) -> Result<()> {
+    pub(crate) async fn stop(&mut self) -> anyhow::Result<()> {
         self.i_shall_run.store(false, Ordering::Release);
         if let Some(handle) = self.handle.take() {
             handle.await??;

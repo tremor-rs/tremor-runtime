@@ -36,7 +36,7 @@ use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn no_connection() -> Result<()> {
+async fn no_connection() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-connection");
     let mut env = EnvHelper::new();
     env.set_var("AWS_ACCESS_KEY_ID", MINIO_ROOT_USER);
@@ -64,7 +64,7 @@ async fn no_connection() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn no_credentials() -> Result<()> {
+async fn no_credentials() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-credentials");
 
     let docker = clients::Cli::default();
@@ -102,7 +102,7 @@ async fn no_credentials() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn no_region() -> Result<()> {
+async fn no_region() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-region");
 
     let docker = clients::Cli::default();
@@ -141,7 +141,7 @@ async fn no_region() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn no_bucket() -> Result<()> {
+async fn no_bucket() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-bucket");
 
     let docker = clients::Cli::default();
@@ -176,7 +176,7 @@ async fn no_bucket() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn connector_s3_consistent() -> Result<()> {
+async fn connector_s3_consistent() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("tremor");
 
     let docker = clients::Cli::default();
@@ -277,7 +277,7 @@ async fn connector_s3_consistent() -> Result<()> {
     Ok(())
 }
 
-async fn send_to_sink(harness: &ConnectorHarness, event: &Event) -> Result<()> {
+async fn send_to_sink(harness: &ConnectorHarness, event: &Event) -> anyhow::Result<()> {
     harness.send_to_sink(event.clone(), IN).await?;
     Ok(())
 }

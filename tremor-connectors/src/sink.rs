@@ -47,7 +47,7 @@ use tremor_interceptor::postprocessor::{
 };
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
-use tremor_system::connector::sink;
+use tremor_system::connector::{sink, Attempt};
 use tremor_value::Value;
 
 pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
@@ -146,14 +146,14 @@ pub(crate) trait Sink: Send {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply>;
+    ) -> anyhow::Result<SinkReply>;
     /// called when receiving a signal
     async fn on_signal(
         &mut self,
         _signal: Event,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         Ok(SinkReply::default())
     }
 
@@ -182,7 +182,7 @@ pub(crate) trait Sink: Send {
 
     // lifecycle stuff
     /// called when started
-    async fn on_start(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_start(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -193,30 +193,30 @@ pub(crate) trait Sink: Send {
     /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
     ///
     /// Return `Ok(true)` if the connection could be successfully established.
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         Ok(true)
     }
 
     /// called when paused
-    async fn on_pause(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_pause(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// called when resumed
-    async fn on_resume(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_resume(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// called when stopped
-    async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
 
     // connectivity stuff
     /// called when sink lost connectivity
-    async fn on_connection_lost(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_connection_lost(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
     /// called when sink re-established connectivity
-    async fn on_connection_established(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_connection_established(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -237,18 +237,18 @@ pub(crate) trait Sink: Send {
 #[async_trait::async_trait]
 pub(crate) trait StreamWriter: Send + Sync {
     /// write the given data out to the stream
-    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<&Value>) -> Result<()>;
+    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<&Value>) -> anyhow::Result<()>;
     /// handle the stream being done, by error or regular end of stream
     /// This controls the reaction of the runtime:
     /// Should the connector be considered disconnected now? Or is this just one stream amongst many?
-    async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&mut self, _stream: u64) -> anyhow::Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }
 }
 
 #[async_trait::async_trait]
 pub(crate) trait SinkRuntime: Send + Sync {
-    async fn unregister_stream_writer(&mut self, stream: u64) -> Result<()>;
+    async fn unregister_stream_writer(&mut self, stream: u64) -> anyhow::Result<()>;
 }
 /// context for the connector sink
 #[derive(Clone)]
@@ -347,7 +347,7 @@ impl SinkManagerBuilder {
     }
 
     /// spawn your specific sink
-    pub(crate) fn spawn<S>(self, sink: S, ctx: SinkContext) -> SinkAddr
+    pub(crate) fn spawn<S>(self, sink: S, ctx: SinkContext) -> sink::Addr
     where
         S: Sink + Send + 'static,
     {
@@ -355,7 +355,7 @@ impl SinkManagerBuilder {
         let manager = SinkManager::new(sink, ctx, self, sink_rx);
         task::spawn(manager.run());
 
-        SinkAddr { addr: sink_tx }
+        sink::Addr::new(sink_tx)
     }
 }
 
@@ -368,7 +368,7 @@ pub(crate) fn builder(
     alias: &alias::Connector,
 
     metrics_reporter: SinkReporter,
-) -> Result<SinkManagerBuilder> {
+) -> anyhow::Result<SinkManagerBuilder> {
     // resolve codec and processors
     let postprocessor_configs = config.postprocessors.clone().unwrap_or_default();
     let serializer = EventSerializer::new(
@@ -413,19 +413,15 @@ impl EventSerializer {
         postprocessor_configs: Vec<postprocessor::Config>,
         connector_type: &ConnectorType,
         alias: &alias::Connector,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         let codec_config = match default_codec {
             CodecReq::Structured => {
                 if codec_config.is_some() {
-                    return Err(format!(
-                        "The {connector_type} connector {alias} can not be configured with a codec.",
-                    )
-                    .into());
+                    return Err(Error::UnsupportedCodec(alias.clone()).into());
                 }
                 tremor_codec::Config::from("null")
             }
-            CodecReq::Required => codec_config
-                .ok_or_else(|| format!("Missing codec for {connector_type} connector {alias}"))?,
+            CodecReq::Required => codec_config.ok_or_else(|| Error::MissingCodec(alias.clone()))?,
             CodecReq::Optional(opt) => {
                 codec_config.unwrap_or_else(|| tremor_codec::Config::from(opt))
             }
@@ -463,7 +459,7 @@ impl EventSerializer {
         value: &Value<'v>,
         meta: &Value<'v>,
         ingest_ns: u64,
-    ) -> Result<Vec<Vec<u8>>> {
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         self.serialize_for_stream(value, meta, ingest_ns, DEFAULT_STREAM_ID)
             .await
     }
@@ -479,7 +475,7 @@ impl EventSerializer {
 
         ingest_ns: u64,
         stream_id: u64,
-    ) -> Result<Vec<Vec<u8>>> {
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         self.serialize_for_stream_with_codec(value, meta, ingest_ns, stream_id, None)
             .await
     }
@@ -498,7 +494,7 @@ impl EventSerializer {
         ingest_ns: u64,
         stream_id: u64,
         codec_overwrite: Option<&NameWithConfig>,
-    ) -> Result<Vec<Vec<u8>>> {
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         if stream_id == DEFAULT_STREAM_ID {
             // no codec_overwrite for the default stream
             Ok(postprocess(
@@ -539,7 +535,7 @@ impl EventSerializer {
     }
 
     /// remove and flush out any pending data from the stream identified by the given `stream_id`
-    pub(crate) fn finish_stream(&mut self, stream_id: u64) -> Result<Vec<Vec<u8>>> {
+    pub(crate) fn finish_stream(&mut self, stream_id: u64) -> anyhow::Result<Vec<Vec<u8>>> {
         if let Some((mut _codec, mut postprocessors)) = self.streams.remove(&stream_id) {
             Ok(finish(&mut postprocessors, &self.alias)?)
         } else {
@@ -618,7 +614,7 @@ where
         }
     }
     #[allow(clippy::too_many_lines)]
-    async fn run(mut self) -> Result<()> {
+    async fn run(mut self) -> Result<(), Error> {
         use SinkState::{Drained, Draining, Initialized, Paused, Running, Stopped};
         let from_sink = self.reply_rx.map(SinkMsgWrapper::FromSink);
         let to_sink = self.rx.map(SinkMsgWrapper::ToSink);
@@ -627,10 +623,10 @@ where
             match msg_wrapper {
                 SinkMsgWrapper::ToSink(sink_msg) => {
                     match sink_msg {
-                        SinkMsg::Link { mut pipelines } => {
+                        sink::Msg::Link { mut pipelines } => {
                             self.pipelines.append(&mut pipelines);
                         }
-                        SinkMsg::Start if self.state == Initialized => {
+                        sink::Msg::Start if self.state == Initialized => {
                             self.state = Running;
                             self.ctx.swallow_err(
                                 self.sink.on_start(&self.ctx).await,
@@ -644,7 +640,7 @@ where
                             // send CB start to all pipes
                             send_contraflow(&self.pipelines, &self.ctx, cf);
                         }
-                        SinkMsg::Connect(sender, attempt) => {
+                        sink::Msg::Connect(sender, attempt) => {
                             info!("{} Connecting...", &self.ctx);
                             let connect_result = self.sink.connect(&self.ctx, &attempt).await;
                             if let Ok(true) = connect_result {
@@ -655,21 +651,21 @@ where
                                 "Error sending sink connect result",
                             );
                         }
-                        SinkMsg::Resume if self.state == Paused => {
+                        sink::Msg::Resume if self.state == Paused => {
                             self.state = Running;
                             self.ctx.swallow_err(
                                 self.sink.on_resume(&self.ctx).await,
                                 "Error during on_resume",
                             );
                         }
-                        SinkMsg::Pause if self.state == Running => {
+                        sink::Msg::Pause if self.state == Running => {
                             self.state = Paused;
                             self.ctx.swallow_err(
                                 self.sink.on_pause(&self.ctx).await,
                                 "Error during on_pause",
                             );
                         }
-                        SinkMsg::Stop(sender) => {
+                        sink::Msg::Stop(sender) => {
                             info!("{} Stopping...", &self.ctx);
                             self.state = Stopped;
                             self.ctx.swallow_err(
@@ -679,21 +675,21 @@ where
                             // exit control plane
                             break;
                         }
-                        SinkMsg::Drain(_sender) if self.state == Draining => {
+                        sink::Msg::Drain(_sender) if self.state == Draining => {
                             info!(
                                 "{} Ignoring Drain message in {} state",
                                 self.ctx, self.state
                             );
                         }
 
-                        SinkMsg::Drain(sender) if self.state == Drained => {
+                        sink::Msg::Drain(sender) if self.state == Drained => {
                             debug!("{} Sink already Drained.", self.ctx);
                             self.ctx.swallow_err(
                                 sender.send(Msg::SinkDrained).await,
                                 "Error sending SinkDrained message",
                             );
                         }
-                        SinkMsg::Drain(sender) => {
+                        sink::Msg::Drain(sender) => {
                             // send message back if we already received Drain signal from all input pipelines
                             debug!("{} Draining...", self.ctx);
                             self.state = Draining;
@@ -720,7 +716,7 @@ where
                                 );
                             }
                         }
-                        SinkMsg::ConnectionEstablished => {
+                        sink::Msg::ConnectionEstablished => {
                             debug!("{} Connection established", self.ctx);
                             self.ctx.swallow_err(
                                 self.sink.on_connection_established(&self.ctx).await,
@@ -730,7 +726,7 @@ where
                             // send CB restore to all pipes
                             send_contraflow(&self.pipelines, &self.ctx, cf);
                         }
-                        SinkMsg::ConnectionLost => {
+                        sink::Msg::ConnectionLost => {
                             // clean out all pending stream data from EventSerializer - we assume all streams closed at this point
                             self.serializer.clear();
                             self.ctx.swallow_err(
@@ -741,7 +737,7 @@ where
                             let cf = Event::cb_close(nanotime(), self.merged_operator_meta.clone());
                             send_contraflow(&self.pipelines, &self.ctx, cf);
                         }
-                        SinkMsg::Event { event, port } => {
+                        sink::Msg::Event { event, port } => {
                             let cf_builder = ContraflowData::from(&event);
 
                             self.metrics_reporter.increment_in();
@@ -793,7 +789,7 @@ where
                                 }
                             };
                         }
-                        SinkMsg::Signal { signal } => {
+                        sink::Msg::Signal { signal } => {
                             // special treatment
                             match signal.kind {
                                 Some(SignalKind::Drain(source_uid)) => {
@@ -848,7 +844,7 @@ where
                                 }
                             }
                         }
-                        st @ (SinkMsg::Start | SinkMsg::Resume | SinkMsg::Pause) => {
+                        st @ (sink::Msg::Start | sink::Msg::Resume | sink::Msg::Pause) => {
                             info!("{} Ignoring {st:?} message in {}", self.ctx, self.state);
                         }
                     }

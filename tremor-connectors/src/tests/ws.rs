@@ -79,7 +79,7 @@ impl TestClient<WebSocketStream<tokio_rustls::client::TlsStream<TcpStream>>> {
 
         Ok(Self { client })
     }
-    async fn send(&mut self, data: &str) -> Result<()> {
+    async fn send(&mut self, data: &str) -> anyhow::Result<()> {
         let status = self.client.send(Message::Text(data.to_string())).await;
         if status.is_err() {
             Err("Failed to send to ws server".into())
@@ -102,7 +102,7 @@ impl TestClient<WebSocketStream<tokio_rustls::client::TlsStream<TcpStream>>> {
         }
     }
 
-    async fn close(&mut self) -> Result<()> {
+    async fn close(&mut self) -> anyhow::Result<()> {
         info!("Closing Test client...");
         self.client.flush().await?; // ignore errors
         self.client
@@ -125,13 +125,13 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
     }
 
     #[cfg(feature = "flaky-test")]
-    fn ping(&mut self) -> Result<()> {
+    fn ping(&mut self) -> anyhow::Result<()> {
         self.client
             .write_message(Message::Ping(vec![1, 2, 3, 4]))
             .chain_err(|| "Failed to send ping to ws server")
     }
     #[cfg(feature = "flaky-test")]
-    fn pong(&mut self) -> Result<()> {
+    fn pong(&mut self) -> anyhow::Result<()> {
         self.client
             .write_message(Message::Pong(vec![5, 6, 7, 8]))
             .chain_err(|| "Failed to send pong to ws server")
@@ -141,7 +141,7 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
         self.client.read_message().map_err(Error::from)
     }
 
-    fn send(&mut self, data: &str) -> Result<()> {
+    fn send(&mut self, data: &str) -> anyhow::Result<()> {
         self.client
             .send(Message::Text(data.into()))
             .chain_err(|| "Failed to send to ws server")
@@ -163,7 +163,7 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
         }
     }
 
-    fn close(&mut self) -> Result<()> {
+    fn close(&mut self) -> anyhow::Result<()> {
         info!("Closing WS test client...");
         self.client.close(Some(CloseFrame {
             code: CloseCode::Normal,
@@ -257,7 +257,7 @@ impl TestServer {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn ws_client_bad_config() -> Result<()> {
+async fn ws_client_bad_config() -> anyhow::Result<()> {
     setup_for_tls();
 
     let defn = literal!({
@@ -278,7 +278,7 @@ async fn ws_client_bad_config() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn ws_server_text_routing() -> Result<()> {
+async fn ws_server_text_routing() -> anyhow::Result<()> {
     let free_port = find_free_tcp_port().await?;
     let url = format!("ws://localhost:{free_port}");
     info!("url: {url}");
@@ -358,7 +358,7 @@ async fn ws_server_text_routing() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn ws_client_binary_routing() -> Result<()> {
+async fn ws_client_binary_routing() -> anyhow::Result<()> {
     let free_port = find_free_tcp_port().await?;
     let mut ts = TestServer::new("127.0.0.1", free_port);
     ts.start();
@@ -405,7 +405,7 @@ async fn ws_client_binary_routing() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn ws_client_text_routing() -> Result<()> {
+async fn ws_client_text_routing() -> anyhow::Result<()> {
     let free_port = find_free_tcp_port().await?;
     let mut ts = TestServer::new("127.0.0.1", free_port);
     ts.start();
@@ -449,7 +449,7 @@ async fn ws_client_text_routing() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn wss_server_text_routing() -> Result<()> {
+async fn wss_server_text_routing() -> anyhow::Result<()> {
     setup_for_tls();
 
     let free_port = find_free_tcp_port().await?;
@@ -537,7 +537,7 @@ async fn wss_server_text_routing() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn wss_server_binary_routing() -> Result<()> {
+async fn wss_server_binary_routing() -> anyhow::Result<()> {
     setup_for_tls();
 
     let free_port = find_free_tcp_port().await?;
@@ -626,7 +626,7 @@ async fn wss_server_binary_routing() -> Result<()> {
 
 #[cfg(feature = "flaky-test")]
 #[tokio::test(flavor = "multi_thread")]
-async fn server_control_frames() -> Result<()> {
+async fn server_control_frames() -> anyhow::Result<()> {
     let free_port = find_free_tcp_port().await?;
     let url = format!("ws://0.0.0.0:{free_port}");
     let defn = literal!({

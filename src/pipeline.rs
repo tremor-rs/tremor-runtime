@@ -568,7 +568,9 @@ mod tests {
             target: OutputTarget::Pipeline(Box::new(addr2.clone())),
         })
         .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)??;
         let (tx, mut rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectInput {
@@ -579,7 +581,9 @@ mod tests {
                 is_transactional: true,
             })
             .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)??;
         let (tx, mut rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectOutput {
@@ -589,7 +593,9 @@ mod tests {
                 target: OutputTarget::Pipeline(Box::new(addr3.clone())),
             })
             .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)??;
         let (tx, mut rx) = bounded(1);
         addr3
             .send_mgmt(MgmtMsg::ConnectInput {
@@ -600,11 +606,16 @@ mod tests {
                 is_transactional: false,
             })
             .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)??;
         // get a status report from every single one
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let mut report1 = rx.recv().await.ok_or_else(empty_error)?;
+        let mut report1 = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         assert!(report1.inputs.is_empty());
         let mut output1 = report1
             .outputs
@@ -615,7 +626,10 @@ mod tests {
         let output1 = output1.pop().ok_or("no data")?;
         assert_eq!(output1, OutputReport::pipeline("snot2", IN));
         addr2.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let mut report2 = rx.recv().await.ok_or_else(empty_error)?;
+        let mut report2 = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         let input2 = report2.inputs.pop().expect("no input at port in");
         assert_eq!(input2, InputReport::pipeline("snot", OUT));
         let mut output2 = report2
@@ -628,7 +642,10 @@ mod tests {
         assert_eq!(output2, OutputReport::pipeline("snot3", IN));
 
         addr3.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let mut report3 = rx.recv().await.ok_or_else(empty_error)?;
+        let mut report3 = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         assert!(report3.outputs.is_empty());
         let input3 = report3.inputs.pop().expect("no inputs");
         assert_eq!(input3, InputReport::pipeline("snot2", OUT));
@@ -653,14 +670,20 @@ mod tests {
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         assert_eq!(State::Initializing, report.state);
         assert!(report.inputs.is_empty());
         assert!(report.outputs.is_empty());
 
         addr.start().await?;
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         assert_eq!(State::Running, report.state);
         assert!(report.inputs.is_empty());
         assert!(report.outputs.is_empty());
@@ -679,11 +702,16 @@ mod tests {
             is_transactional: true,
         })
         .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)??;
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         assert_eq!(1, report.inputs.len());
         assert_eq!(
             report::InputReport::source("source_01", OUT),
@@ -702,11 +730,16 @@ mod tests {
             target,
         })
         .await?;
-        rx.recv().await.ok_or_else(empty_error)??;
+        rx.recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)??;
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         assert_eq!(1, report.outputs.len());
         assert_eq!(
             Some(&vec![report::OutputReport::sink("sink_01", IN)]),
@@ -720,9 +753,15 @@ mod tests {
         };
         addr.send(Box::new(Msg::Event { event, input: IN })).await?;
 
-        let mut sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
+        let mut sink_msg = sink_rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         while let SinkMsg::Signal { .. } = sink_msg {
-            sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
+            sink_msg = sink_rx
+                .recv()
+                .await
+                .ok_or(GenericImplementationError::ChannelEmpty)?;
         }
         match sink_msg {
             SinkMsg::Event { event, port: _ } => {
@@ -739,7 +778,10 @@ mod tests {
         .await?;
 
         let start = Instant::now();
-        let mut sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
+        let mut sink_msg = sink_rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
 
         while !matches!(sink_msg, SinkMsg::Signal {
                 signal:
@@ -754,12 +796,18 @@ mod tests {
                 "Timed out waiting for drain signal on the sink"
             );
 
-            sink_msg = sink_rx.recv().await.ok_or_else(empty_error)?;
+            sink_msg = sink_rx
+                .recv()
+                .await
+                .ok_or(GenericImplementationError::ChannelEmpty)?;
         }
 
         let event_id = EventId::from_id(1, 1, 1);
         addr.send_insight(Event::cb_ack(0, event_id.clone(), OpMeta::default()))?;
-        let source_msg = source_rx.recv().await.ok_or_else(empty_error)?;
+        let source_msg = source_rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         if let SourceMsg::Cb(cb_action, cb_id) = source_msg {
             assert_eq!(event_id, cb_id);
             assert_eq!(CbAction::Ack, cb_action);
@@ -770,14 +818,20 @@ mod tests {
         // test pause and resume
         addr.pause().await?;
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         assert_eq!(State::Paused, report.state);
         assert_eq!(1, report.inputs.len());
         assert_eq!(1, report.outputs.len());
 
         addr.resume().await?;
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
-        let report = rx.recv().await.ok_or_else(empty_error)?;
+        let report = rx
+            .recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?;
         assert_eq!(State::Running, report.state);
         assert_eq!(1, report.inputs.len());
         assert_eq!(1, report.outputs.len());

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{err_object_storage, Result};
 use crate::prelude::*;
 
 /// mode of operation for object storage connectors
@@ -78,44 +77,39 @@ impl std::fmt::Display for ObjectId {
 pub(crate) const NAME: &str = "name";
 pub(crate) const BUCKET: &str = "bucket";
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("Metadata `${0}.{1}` is invalid or missing.")]
+    MetadataError(String, &'static str),
+    #[error("No upload in progress")]
+    NoUpload,
+}
+
 pub(crate) trait ObjectStorageCommon {
     fn connector_type(&self) -> &str;
     fn default_bucket(&self) -> Option<&String>;
 
-    fn get_bucket_name(&self, meta: Option<&Value>) -> Result<String> {
+    fn get_bucket_name(&self, meta: Option<&Value>) -> Result<String, Error> {
         let res = match (meta.get(BUCKET), self.default_bucket()) {
-            (Some(meta_bucket), _) => meta_bucket.as_str().ok_or_else(|| {
-                err_object_storage(format!(
-                    "Metadata `${}.{BUCKET}` is not a string.",
-                    self.connector_type()
-                ))
-            }),
+            (Some(meta_bucket), _) => meta_bucket
+                .as_str()
+                .ok_or_else(|| Error::MetadataError(self.connector_type().to_string(), BUCKET)),
             (None, Some(default_bucket)) => Ok(default_bucket.as_str()),
-            (None, None) => Err(err_object_storage(format!(
-                "Metadata `${}.{BUCKET}` missing",
-                self.connector_type()
-            ))),
+            (None, None) => Err(Error::MetadataError(
+                self.connector_type().to_string(),
+                BUCKET,
+            )),
         };
 
         res.map(ToString::to_string)
     }
 
-    fn get_object_id(&self, meta: Option<&Value<'_>>) -> Result<ObjectId> {
+    fn get_object_id(&self, meta: Option<&Value<'_>>) -> Result<ObjectId, Error> {
         let name = meta
             .get(NAME)
-            .ok_or_else(|| {
-                err_object_storage(format!(
-                    "`${}.{NAME}` metadata is missing",
-                    self.connector_type()
-                ))
-            })?
+            .ok_or_else(|| Error::MetadataError(self.connector_type().to_string(), NAME))?
             .as_str()
-            .ok_or_else(|| {
-                err_object_storage(format!(
-                    "`${}.{NAME}` metadata is not a string",
-                    self.connector_type()
-                ))
-            })?;
+            .ok_or_else(|| Error::MetadataError(self.connector_type().to_string(), NAME))?;
         let bucket = self.get_bucket_name(meta)?;
         Ok(ObjectId::new(bucket, name))
     }
@@ -154,7 +148,7 @@ pub(crate) trait ObjectStorageBuffer {
     fn new(size: usize) -> Self;
     fn write(&mut self, data: Vec<u8>);
     fn read_current_block(&mut self) -> Option<BufferPart>;
-    fn mark_done_until(&mut self, idx: usize) -> Result<()>;
+    fn mark_done_until(&mut self, idx: usize) -> anyhow::Result<()>;
     /// reset the buffer and return the final part
     fn reset(&mut self) -> BufferPart;
 }
@@ -165,27 +159,27 @@ where
     Upload: ObjectStorageUpload,
 {
     fn buffer_size(&self) -> usize;
-    async fn connect(&mut self, ctx: &SinkContext) -> Result<()>;
-    async fn bucket_exists(&mut self, bucket: &str) -> Result<bool>;
+    async fn connect(&mut self, ctx: &SinkContext) -> anyhow::Result<()>;
+    async fn bucket_exists(&mut self, bucket: &str) -> anyhow::Result<bool>;
     async fn start_upload(
         &mut self,
         object_id: &ObjectId,
         event: &Event,
         ctx: &SinkContext,
-    ) -> Result<Upload>;
+    ) -> anyhow::Result<Upload>;
     async fn upload_data(
         &mut self,
         data: BufferPart,
         upload: &mut Upload,
         ctx: &SinkContext,
-    ) -> Result<usize>;
+    ) -> anyhow::Result<usize>;
     async fn finish_upload(
         &mut self,
         upload: Upload,
         part: BufferPart,
         ctx: &SinkContext,
-    ) -> Result<()>;
-    async fn fail_upload(&mut self, upload: Upload, ctx: &SinkContext) -> Result<()>;
+    ) -> anyhow::Result<()>;
+    async fn fail_upload(&mut self, upload: Upload, ctx: &SinkContext) -> anyhow::Result<()>;
 }
 
 pub(crate) struct ConsistentSink<Impl, Upload, Buffer>
@@ -222,7 +216,7 @@ where
     Upload: ObjectStorageUpload + Send + Sync,
     Impl: ObjectStorageSinkImpl<Upload> + Send + Sync,
 {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.buffers = Buffer::new(self.sink_impl.buffer_size());
         self.sink_impl.connect(ctx).await?;
 
@@ -251,7 +245,7 @@ where
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let res = self.on_event_inner(&event, serializer, ctx).await;
         if let Err(e) = res {
             error!("{ctx} {e}");
@@ -270,7 +264,7 @@ where
         Ok(SinkReply::NONE)
     }
 
-    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         // Commit the final upload.
         self.fail_or_finish_upload(ctx).await?;
         Ok(())
@@ -296,7 +290,7 @@ where
         event: &Event,
         serializer: &mut EventSerializer,
         ctx: &SinkContext,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let mut event_tracked = false;
 
         for (value, meta) in event.value_meta_iter() {
@@ -351,9 +345,7 @@ where
                         .sink_impl
                         .upload_data(
                             data,
-                            self.current_upload
-                                .as_mut()
-                                .ok_or_else(|| err_object_storage("No upload available"))?,
+                            self.current_upload.as_mut().ok_or(Error::NoUpload)?,
                             ctx,
                         )
                         .await?;
@@ -364,7 +356,7 @@ where
         Ok(())
     }
 
-    async fn fail_or_finish_upload(&mut self, ctx: &SinkContext) -> Result<()> {
+    async fn fail_or_finish_upload(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         if let Some(upload) = self.current_upload.take() {
             let final_part = self.buffers.reset();
             if upload.is_failed() {
@@ -413,7 +405,7 @@ where
     Upload: ObjectStorageUpload + Send + Sync,
     Buffer: ObjectStorageBuffer + Send + Sync,
 {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         // clear out the previous upload
         self.current_upload = None;
         self.buffer = Buffer::new(self.sink_impl.buffer_size());
@@ -434,7 +426,7 @@ where
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {
             let sink_meta = ctx.extract_meta(meta);
             let object_id = self.sink_impl.get_object_id(sink_meta)?;
@@ -474,9 +466,7 @@ where
                         self.sink_impl
                             .upload_data(
                                 data,
-                                self.current_upload
-                                    .as_mut()
-                                    .ok_or_else(|| err_object_storage("No upload available"))?,
+                                self.current_upload.as_mut().ok_or(Error::NoUpload)?,
                                 ctx,
                             )
                             .await,
@@ -494,7 +484,7 @@ where
         Ok(SinkReply::ack_or_none(event.transactional))
     }
 
-    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         if let Some(current_upload) = self.current_upload.take() {
             let final_part = self.buffer.reset();
             ctx.swallow_err(

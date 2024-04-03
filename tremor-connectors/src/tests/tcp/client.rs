@@ -27,17 +27,17 @@ use tremor_value::{literal, Value};
 use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn tls_client() -> Result<()> {
+async fn tls_client() -> anyhow::Result<()> {
     setup_for_tls();
     tcp_client_test(true).await
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn tcp_client() -> Result<()> {
+async fn tcp_client() -> anyhow::Result<()> {
     tcp_client_test(false).await
 }
 
-async fn tcp_client_test(use_tls: bool) -> Result<()> {
+async fn tcp_client_test(use_tls: bool) -> anyhow::Result<()> {
     let free_port = free_port::find_free_tcp_port().await?;
 
     let server_addr = format!("localhost:{free_port}");

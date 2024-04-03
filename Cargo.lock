@@ -2045,6 +2045,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-listener"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b5fb89194fa3cad959b833185b3063ba881dbfc7030680b314250779fb4cc91"
+dependencies = [
+ "concurrent-queue",
+ "pin-project-lite 0.2.13",
+]
+
+[[package]]
 name = "event-listener-strategy"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6196,7 +6206,7 @@ dependencies = [
  "dashmap",
  "either",
  "elasticsearch",
- "error-chain",
+ "event-listener 5.2.0",
  "file-mode",
  "futures",
  "googapis",
@@ -6233,6 +6243,7 @@ dependencies = [
  "socket2 0.5.5",
  "tempfile",
  "test-case",
+ "thiserror",
  "tokio",
  "tokio-rustls 0.24.1",
  "tokio-stream",
@@ -6274,6 +6285,7 @@ dependencies = [
 name = "tremor-interceptor"
 version = "0.13.0-rc.16"
 dependencies = [
+ "anyhow",
  "byteorder",
  "bytes",
  "error-chain",
@@ -6286,6 +6298,7 @@ dependencies = [
  "serde",
  "simd-json",
  "snap",
+ "thiserror",
  "tremor-common",
  "tremor-config",
  "tremor-value",
@@ -6480,6 +6493,7 @@ dependencies = [
  "anyhow",
  "log",
  "serde",
+ "thiserror",
  "tokio",
  "tremor-common",
  "tremor-pipeline",

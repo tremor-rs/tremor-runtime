@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
 use gouth::Token;
 use simd_json::OwnedValue;
 use simd_json_derive::Serialize;
@@ -30,7 +29,7 @@ pub(crate) trait ChannelFactory<
         > + Clone,
 >
 {
-    async fn make_channel(&self, connect_timeout: Duration) -> Result<TChannel>;
+    async fn make_channel(&self, connect_timeout: Duration) -> anyhow::Result<TChannel>;
 }
 
 /// Token Source
@@ -50,7 +49,7 @@ impl TokenSrc {
     pub(crate) fn dummy() -> Self {
         TokenSrc::Env
     }
-    pub(crate) fn to_token(&self) -> Result<Token> {
+    pub(crate) fn to_token(&self) -> anyhow::Result<Token> {
         Ok(match self {
             TokenSrc::Json(json) => {
                 let json = json.json_string()?;
@@ -247,7 +246,7 @@ PX8efvDMhv16QqDFF0k80d0=
 -----END PRIVATE KEY-----";
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn gouth_token() -> Result<()> {
+    async fn gouth_token() -> anyhow::Result<()> {
         let mut file = tempfile::NamedTempFile::new()?;
 
         let port = crate::tests::free_port::find_free_tcp_port().await?;
@@ -320,7 +319,7 @@ PX8efvDMhv16QqDFF0k80d0=
     }
 
     #[test]
-    fn interceptor_can_add_the_auth_header() -> Result<()> {
+    fn interceptor_can_add_the_auth_header() -> anyhow::Result<()> {
         let mut interceptor = AuthInterceptor {
             token_provider: TestTokenProvider::new_with_token(Arc::new("test".to_string())),
         };

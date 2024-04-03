@@ -110,7 +110,7 @@
 //! | [Validate pipeline to pipeline](https://github.com/tremor-rs/tremor-runtime/tree/main/tremor-cli/tests/integration/cb-pipeline-to-pipeline)  | All required circuit breaker events are received and processed correctly |
 //! | [Validate auto-acknowledged sinks](https://github.com/tremor-rs/tremor-runtime/tree/main/tremor-cli/tests/integration/cb-with-auto-ack-sink) | All required circuit breaker events are received and processed correctly |
 
-use crate::prelude::*;
+use crate::{errors::GenericImplementationError, prelude::*};
 use halfbrown::HashMap;
 use std::{path::PathBuf, time::Duration};
 use tokio::{
@@ -119,6 +119,11 @@ use tokio::{
 };
 use tremor_common::asy::file::open;
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("No file to write")]
+    NoFile,
+}
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
@@ -151,12 +156,13 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &alias::Connector,
+        alias: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
         kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
-        let config = Config::new(raw)?;
+    ) -> anyhow::Result<Box<dyn Connector>> {
+        let config =
+            Config::new(raw).map_err(|e| crate::errors::Error::ValueError(alias.clone(), e))?;
         Ok(Box::new(Cb {
             config,
             kill_switch: kill_switch.clone(),
@@ -190,11 +196,11 @@ impl Connector for Cb {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         if self.config.paths.is_empty() {
-            return Err(ErrorKind::InvalidConfiguration(
-                ctx.alias().to_string(),
-                "\"paths\" config missing".to_string(),
+            return Err(crate::Error::InvalidConfiguration(
+                ctx.alias().clone(),
+                "`paths` config missing",
             )
             .into());
         }
@@ -206,7 +212,7 @@ impl Connector for Cb {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = CbSink {};
         Ok(Some(builder.spawn(sink, ctx)))
     }
@@ -223,7 +229,7 @@ impl Sink for CbSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {
             if let Some(cb) = ctx.extract_meta(meta).or_else(|| ctx.extract_meta(value)) {
                 let cb_cmds = if let Some(array) = cb.as_array() {
@@ -335,7 +341,7 @@ impl CbSource {
         config: &Config,
         _alias: &alias::Connector,
         kill_switch: KillSwitch,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         let mut files = vec![];
         for path in &config.paths {
             let file = open(path).await?;
@@ -361,7 +367,11 @@ impl CbSource {
 
 #[async_trait::async_trait()]
 impl Source for CbSource {
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         if self.files.is_empty() {
             info!("{ctx} finished.");
             self.finished = true;
@@ -383,7 +393,7 @@ impl Source for CbSource {
             }
             tokio::task::spawn(async move {
                 kill_switch.stop(ShutdownMode::Graceful).await?;
-                Result::Ok(())
+                anyhow::Ok(())
             });
 
             Ok(SourceReply::Finished)
@@ -392,7 +402,7 @@ impl Source for CbSource {
             let file = self
                 .files
                 .get_mut(idx) // this is safe as we do the module above
-                .ok_or(ErrorKind::ClientNotAvailable("cb", "No file available"))?;
+                .ok_or(GenericImplementationError::ClientNotAvailable("cb"))?;
             let res = if let Some(line) = file.next_line().await? {
                 self.num_sent += 1;
                 self.last_sent
@@ -423,16 +433,21 @@ impl Source for CbSource {
         }
     }
 
-    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_trigger(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         self.received_cbs.trigger += 1;
         Ok(())
     }
-    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         self.received_cbs.restore += 1;
         Ok(())
     }
 
-    async fn ack(&mut self, stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+    async fn ack(
+        &mut self,
+        stream_id: u64,
+        pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         self.received_cbs
             .ack
             .entry(stream_id)
@@ -441,7 +456,12 @@ impl Source for CbSource {
         Ok(())
     }
 
-    async fn fail(&mut self, stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+    async fn fail(
+        &mut self,
+        stream_id: u64,
+        pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<()> {
         self.received_cbs
             .fail
             .entry(stream_id)

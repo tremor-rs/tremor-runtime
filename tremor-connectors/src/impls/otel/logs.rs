@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(dead_code)]
-
 use crate::{
-    errors::Result,
     impls::otel::{
         common::{
             self, instrumentation_library_to_pb, maybe_instrumentation_library_to_json, EMPTY,
@@ -31,30 +28,26 @@ use tremor_otelapis::opentelemetry::proto::{
 };
 use tremor_value::{literal, prelude::*, Value};
 
-fn affirm_traceflags_valid(traceflags: u32) -> Result<u32> {
+use super::common::Error;
+
+fn affirm_traceflags_valid(traceflags: u32) -> Result<u32, Error> {
     if (traceflags == 128) || (traceflags == 0) {
         Ok(traceflags)
     } else {
-        Err(
-            format!("The `traceflags` is invalid, expected: 0b10000000, actual: {traceflags}",)
-                .into(),
-        )
+        Err(Error::InvalidTraceFlags(traceflags))
     }
 }
 
-fn affirm_severity_number_valid(severity_number: i32) -> Result<i32> {
+fn affirm_severity_number_valid(severity_number: i32) -> Result<i32, Error> {
     if (0..=24).contains(&severity_number) {
         // NOTE `0` implies unspecified severity
         Ok(severity_number)
     } else {
-        Err(
-            format!("The `severity_number` is NOT in the valid range 0 <= {severity_number} <= 24")
-                .into(),
-        )
+        Err(Error::InvalidSeverityNumber(severity_number))
     }
 }
 
-fn log_record_to_json(log: LogRecord) -> Result<Value<'static>> {
+fn log_record_to_json(log: LogRecord) -> Result<Value<'static>, Error> {
     Ok(literal!({
         "name": log.name,
         "time_unix_nano": log.time_unix_nano,
@@ -70,14 +63,14 @@ fn log_record_to_json(log: LogRecord) -> Result<Value<'static>> {
 }
 pub(crate) fn instrumentation_library_logs_to_json(
     pb: Vec<InstrumentationLibraryLogs>,
-) -> Result<Value<'static>> {
+) -> Result<Value<'static>, Error> {
     pb.into_iter()
         .map(|data| {
             let logs = data
                 .logs
                 .into_iter()
                 .map(log_record_to_json)
-                .collect::<Result<Value>>()?;
+                .collect::<Result<Value, _>>()?;
 
             let mut e = literal!({ "logs": logs, "schema_url": data.schema_url });
             if let Some(il) = data.instrumentation_library {
@@ -89,38 +82,53 @@ pub(crate) fn instrumentation_library_logs_to_json(
         .collect()
 }
 
-pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord> {
+pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord, Error> {
     Ok(LogRecord {
         // value of 0 indicates unknown or missing timestamp
-        time_unix_nano: pb::maybe_int_to_pbu64(log.get("time_unix_nano")).unwrap_or_default(),
+        time_unix_nano: {
+            let data = log.get("time_unix_nano");
+            data.try_as_u64()
+        }
+        .unwrap_or_default(),
 
         // severity value is optional - default to 0 if not specified
-        severity_number: pb::maybe_int_to_pbi32(log.get("severity_number"))
-            .ok()
-            .and_then(|sn| affirm_severity_number_valid(sn).ok())
-            .unwrap_or_default(),
+        severity_number: {
+            let data = log.get("severity_number");
+            data.try_as_i32()
+        }
+        .ok()
+        .map(affirm_severity_number_valid)
+        .transpose()?
+        .unwrap_or_default(),
         // defined as optional - fallback to an empty string
         severity_text: pb::maybe_string_to_pb(log.get("severity_text")).unwrap_or_default(),
         // name is defined as optional - fallback to empty string
         name: pb::maybe_string_to_pb(log.get("name")).unwrap_or_default(),
         body: log.get("body").map(common::any_value_to_pb),
         flags: affirm_traceflags_valid(
-            pb::maybe_int_to_pbu32(log.get("flags")).unwrap_or_default(),
+            {
+                let data = log.get("flags");
+                data.try_as_u32()
+            }
+            .unwrap_or_default(),
         )?,
         // span_id and trace_id are optional - fallback to empty bytes
         span_id: id::hex_span_id_to_pb(log.get("span_id")).unwrap_or_default(),
         trace_id: id::hex_trace_id_to_pb(log.get("trace_id")).unwrap_or_default(),
-        dropped_attributes_count: pb::maybe_int_to_pbu32(log.get("dropped_attributes_count"))
-            .unwrap_or_default(),
+        dropped_attributes_count: {
+            let data = log.get("dropped_attributes_count");
+            data.try_as_u32()
+        }
+        .unwrap_or_default(),
         attributes: common::maybe_key_value_list_to_pb(log.get("attributes")).unwrap_or_default(),
     })
 }
 
 pub(crate) fn maybe_instrumentation_library_logs_to_pb(
     data: Option<&Value<'_>>,
-) -> Result<Vec<InstrumentationLibraryLogs>> {
+) -> Result<Vec<InstrumentationLibraryLogs>, Error> {
     data.as_array()
-        .ok_or("Invalid json mapping for InstrumentationLibraryLogs")?
+        .ok_or(Error::InvalidMapping("InstrumentationLibraryLogs"))?
         .iter()
         .filter_map(Value::as_object)
         .map(|ill| {
@@ -130,7 +138,7 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
                 .unwrap_or(&EMPTY)
                 .iter()
                 .map(log_record_to_pb)
-                .collect::<Result<Vec<_>>>()?;
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(InstrumentationLibraryLogs {
                 schema_url: ill
@@ -148,7 +156,9 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
         .collect()
 }
 
-pub(crate) fn resource_logs_to_json(request: ExportLogsServiceRequest) -> Result<Value<'static>> {
+pub(crate) fn resource_logs_to_json(
+    request: ExportLogsServiceRequest,
+) -> Result<Value<'static>, Error> {
     let logs = request
         .resource_logs
         .into_iter()
@@ -162,14 +172,14 @@ pub(crate) fn resource_logs_to_json(request: ExportLogsServiceRequest) -> Result
             };
             Ok(base)
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
 
     Ok(literal!({ "logs": logs }))
 }
 
-pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>> {
+pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>, Error> {
     json.get_array("logs")
-        .ok_or("Missing `logs` array")?
+        .ok_or(Error::MissingField("logs"))?
         .iter()
         .filter_map(Value::as_object)
         .map(|data| {
@@ -198,7 +208,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn instrumentation_library_logs() -> Result<()> {
+    fn instrumentation_library_logs() -> anyhow::Result<()> {
         let nanos = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanos);
         let span_id_json = id::hex_id_to_json(&span_id_pb);
@@ -253,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn resource_logs() -> Result<()> {
+    fn resource_logs() -> anyhow::Result<()> {
         let nanos = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanos);
         let span_id_json = id::hex_id_to_json(&span_id_pb);
@@ -326,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn resource_logs_severity_unspecified_regression() -> Result<()> {
+    fn resource_logs_severity_unspecified_regression() -> anyhow::Result<()> {
         let nanos = tremor_common::time::nanotime();
         let span_id_pb = id::random_span_id_bytes(nanos);
         let span_id_json = id::hex_id_to_json(&span_id_pb);

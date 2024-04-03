@@ -14,7 +14,7 @@
 
 use crate::{
     channel::{bounded, Receiver, Sender},
-    errors::{empty_error, err_connector_def},
+    errors::error_connector_def,
     impls::http::{
         auth::Auth,
         meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder},
@@ -117,7 +117,7 @@ impl ConnectorBuilder for Builder {
         _connector_config: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
 
         let tls_client_config = match config.tls.as_ref() {
@@ -129,10 +129,10 @@ impl ConnectorBuilder for Builder {
             Some(Either::Right(false)) | None => None,
         };
         if config.url.scheme() == "https" && tls_client_config.is_none() {
-            return Err(err_connector_def(
+            return Err(error_connector_def(
                     id,
                     "missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config.",
-                ));
+                ).into());
         }
         let (response_tx, response_rx) = bounded(qsize());
         let mime_codec_map = Arc::new(if let Some(codec_map) = config.mime_mapping.clone() {
@@ -173,10 +173,13 @@ impl Connector for Client {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = HttpRequestSource {
             source_is_connected: self.source_is_connected.clone(),
-            rx: self.response_rx.take().ok_or("source already created")?,
+            rx: self
+                .response_rx
+                .take()
+                .ok_or(GenericImplementationError::AlreadyConnected)?,
         };
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -185,7 +188,7 @@ impl Connector for Client {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = HttpRequestSink::new(
             self.response_tx.clone(),
             builder.reply_tx(),
@@ -210,8 +213,17 @@ struct HttpRequestSource {
 
 #[async_trait::async_trait()]
 impl Source for HttpRequestSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        self.rx.recv().await.ok_or_else(empty_error)
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        _ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
+        anyhow::Ok(
+            self.rx
+                .recv()
+                .await
+                .ok_or(GenericImplementationError::ChannelEmpty)?,
+        )
     }
 
     fn is_transactional(&self) -> bool {
@@ -223,7 +235,7 @@ impl Source for HttpRequestSource {
         false
     }
 
-    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_cb_restore(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
         // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
         // we will not send responses to out/err if we are not connected and this is determined by this variable
         self.source_is_connected.store(true, Ordering::Release);
@@ -283,7 +295,7 @@ impl HttpRequestSink {
 
 #[async_trait::async_trait()]
 impl Sink for HttpRequestSink {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let https = if let Some(tls_config) = self.tls_client_config.clone() {
             HttpsConnectorBuilder::new()
                 .with_tls_config(tls_config)
@@ -314,7 +326,7 @@ impl Sink for HttpRequestSink {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         // constrain to max concurrency - propagate CB close on hitting limit
         let guard = self.concurrency_cap.inc_for(&event)?;
 
@@ -441,7 +453,7 @@ impl Sink for HttpRequestSink {
                     }
                 }
                 drop(guard);
-                Result::Ok(())
+                anyhow::Ok(())
             });
 
             // if we have a chunked request we still gotta do some work (sending the chunks)

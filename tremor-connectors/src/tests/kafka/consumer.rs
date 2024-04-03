@@ -44,7 +44,7 @@ use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
-async fn transactional_retry() -> Result<()> {
+async fn transactional_retry() -> anyhow::Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
@@ -269,7 +269,7 @@ async fn transactional_retry() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 
-async fn custom_no_retry() -> Result<()> {
+async fn custom_no_retry() -> anyhow::Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
@@ -479,7 +479,7 @@ async fn custom_no_retry() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 
-async fn performance() -> Result<()> {
+async fn performance() -> anyhow::Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
@@ -689,7 +689,7 @@ async fn performance() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
-async fn connector_kafka_consumer_unreachable() -> Result<()> {
+async fn connector_kafka_consumer_unreachable() -> anyhow::Result<()> {
     let kafka_port = free_port::find_free_tcp_port().await?;
     let connector_config = literal!({
         "reconnect": {
@@ -725,7 +725,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn invalid_rdkafka_options() -> Result<()> {
+async fn invalid_rdkafka_options() -> anyhow::Result<()> {
     let kafka_port = free_port::find_free_tcp_port().await?;
     let broker = format!("127.0.0.1:{kafka_port}");
     let topic = "tremor_test_pause_resume";
@@ -770,7 +770,7 @@ async fn invalid_rdkafka_options() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
-async fn connector_kafka_consumer_pause_resume() -> Result<()> {
+async fn connector_kafka_consumer_pause_resume() -> anyhow::Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
@@ -864,7 +864,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
-async fn transactional_store_offset_handling() -> Result<()> {
+async fn transactional_store_offset_handling() -> anyhow::Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
@@ -1063,7 +1063,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
-async fn transactional_commit_offset_handling() -> Result<()> {
+async fn transactional_commit_offset_handling() -> anyhow::Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
@@ -1315,7 +1315,7 @@ async fn create_topic(
     topic: &str,
     partitions: i32,
     repl: TopicReplication<'_>,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let mut admin_config = ClientConfig::new();
     admin_config
         .set("client.id", "test-admin")

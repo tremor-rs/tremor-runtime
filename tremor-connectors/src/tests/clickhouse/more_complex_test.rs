@@ -82,7 +82,7 @@ macro_rules! assert_row_equals {
 
 #[allow(clippy::too_many_lines)]
 #[tokio::test(flavor = "multi_thread")]
-async fn test() -> Result<()> {
+async fn test() -> anyhow::Result<()> {
     let docker = clients::Cli::docker();
 
     // The following lines spin up a regular ClickHouse container and wait for
@@ -367,7 +367,7 @@ async fn test() -> Result<()> {
     Ok(())
 }
 
-async fn create_table(port: u16) -> Result<()> {
+async fn create_table(port: u16) -> anyhow::Result<()> {
     let db_host = utils::DB_HOST;
     let db_url = format!("tcp://{db_host}:{port}/");
     let request = "create table if not exists t (

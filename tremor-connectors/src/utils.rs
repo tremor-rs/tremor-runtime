@@ -31,6 +31,10 @@ pub(crate) mod reconnect;
 pub(crate) mod socket;
 /// Transport Level Security facilities
 pub(crate) mod tls;
+
+/// google  utilities
+#[cfg(feature = "gcp")]
+pub(crate) mod google;
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub(crate) struct ConnectionMeta {
     pub(crate) host: String,
@@ -101,17 +105,9 @@ pub(crate) fn task_id() -> String {
 #[must_use]
 pub fn hostname() -> String {
     hostname::get()
-        .map_err(crate::errors::Error::from)
-        .and_then(|hostname| {
-            hostname.into_string().map_err(|os_string| {
-                crate::errors::ErrorKind::Msg(format!(
-                    "Invalid hostname: {}",
-                    os_string.to_string_lossy()
-                ))
-                .into()
-            })
-        })
-        .unwrap_or_else(|_| "tremor_host.local".to_string())
+        .ok()
+        .and_then(|hostname| hostname.into_string().ok())
+        .unwrap_or_else(|| "tremor_host.local".to_string())
 }
 
 #[cfg(test)]

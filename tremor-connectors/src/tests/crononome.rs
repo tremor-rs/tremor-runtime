@@ -17,7 +17,7 @@ use crate::{connectors::impls::crononome, errors::Result};
 use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn connector_crononome_routing() -> Result<()> {
+async fn connector_crononome_routing() -> anyhow::Result<()> {
     let defn = literal!({
     "config": {
         "entries":[{

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{common::OtelDefaults, logs, metrics, trace};
-use crate::{errors::already_created_error, prelude::*};
+use crate::prelude::*;
 use async_std::channel::{bounded, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
@@ -45,7 +45,7 @@ pub(crate) struct Server {
     #[allow(dead_code)]
     id: String,
     origin_uri: EventOriginUri,
-    accept_task: Option<JoinHandle<Result<()>>>,
+    accept_task: Option<JoinHandle<anyhow::Result<()>>>,
     tx: Sender<OpenTelemetryEvents>,
     rx: Option<Receiver<OpenTelemetryEvents>>,
 }
@@ -72,7 +72,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let origin_uri = EventOriginUri {
             scheme: "tremor-otel-server".to_string(),
             host: "localhost".to_string(),
@@ -101,11 +101,14 @@ impl Connector for Server {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = OtelSource {
             origin_uri: self.origin_uri.clone(),
             config: self.config.clone(),
-            rx: self.rx.take().ok_or_else(already_created_error)?,
+            rx: self
+                .rx
+                .take()
+                .ok_or(GenericImplementationError::AlreadyConnected)?,
         };
         Ok(Some(builder.spawn(source, ctx)))
     }
@@ -114,21 +117,21 @@ impl Connector for Server {
         &mut self,
         _ctx: SinkContext,
         _builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         Ok(None)
     }
 
-    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let host = self
-            .config
-            .url
-            .host_str()
-            .ok_or("Missing host for otel server")?;
-        let port = self
-            .config
-            .url
-            .port()
-            .ok_or("Missing prot for otel server")?;
+    async fn connect(
+        &mut self,
+        ctx: &ConnectorContext,
+        _attempt: &Attempt,
+    ) -> anyhow::Result<bool> {
+        let host = self.config.url.host_str().ok_or_else(|| {
+            crate::Error::InvalidConfiguration(ctx.alias().clone(), "Missing host for otel server")
+        })?;
+        let port = self.config.url.port().ok_or_else(|| {
+            crate::Error::InvalidConfiguration(ctx.alias().clone(), "Missing port for otel server")
+        })?;
         let endpoint = format!("{host}:{port}").parse()?;
 
         if let Some(previous_handle) = self.accept_task.take() {
@@ -153,7 +156,11 @@ struct OtelSource {
 
 #[async_trait::async_trait()]
 impl Source for OtelSource {
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let (data, remote) = match self.rx.recv().await? {
             OpenTelemetryEvents::Metrics(metrics, remote) if self.config.metrics => {
                 (metrics::resource_metrics_to_json(metrics), remote)
@@ -199,7 +206,7 @@ mod tests {
     // use http_types::Method;
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn otel_client_builder() -> Result<()> {
+    async fn otel_client_builder() -> anyhow::Result<()> {
         let alias = alias::Connector::new("test", "my_otel_server");
         let with_processors = literal!({
             "config": {

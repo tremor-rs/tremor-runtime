@@ -23,7 +23,7 @@ pub(crate) const CONTAINER_VERSION: &str = "22.3.3.44";
 pub(crate) const SERVER_PORT: u16 = 9000;
 
 // Blocks the task until calling GET on `url` returns an HTTP 200.
-pub(super) async fn wait_for_ok(port: u16) -> Result<()> {
+pub(super) async fn wait_for_ok(port: u16) -> anyhow::Result<()> {
     let wait_for = Duration::from_secs(60);
     let start = Instant::now();
 
@@ -40,7 +40,7 @@ pub(super) async fn wait_for_ok(port: u16) -> Result<()> {
     Ok(())
 }
 
-pub(super) async fn test_status_endpoint(port: u16) -> Result<()> {
+pub(super) async fn test_status_endpoint(port: u16) -> anyhow::Result<()> {
     Pool::new(format!("tcp://{DB_HOST}:{port}/?connection_timeout=100ms&send_retries=1&retry_timeout=1s&ping_timeout=100ms"))
         .get_handle()
         .await

@@ -160,7 +160,9 @@ impl FlowSupervisor {
                 task::spawn(async move {
                     while expected_stops > 0 {
                         log_error!(
-                            rx.recv().await.ok_or_else(empty_error)?,
+                            rx.recv()
+                                .await
+                                .ok_or(GenericImplementationError::ChannelEmpty)?,
                             "Error during Stopping: {e}"
                         );
                         expected_stops = expected_stops.saturating_sub(1);

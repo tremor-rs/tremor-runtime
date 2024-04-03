@@ -22,12 +22,24 @@ use crate::{
 };
 use either::Either;
 use http::{
-    header::{self, HeaderName},
+    header::{self, HeaderName, ToStrError},
     HeaderMap, Uri,
 };
 use hyper::{header::HeaderValue, Body, Method, Request, Response};
 use mime::Mime;
 use tremor_value::Value;
+
+/// HTTP Connector Errors
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Invalid HTTP Method")]
+    InvalidMethod,
+    #[error("Invalid HTTP URL")]
+    InvalidUrl,
+    #[error("Request already consumed")]
+    RequestAlreadyConsumed,
+}
 
 /// Utility for building an HTTP request from a possibly batched event
 /// and some configuration values
@@ -95,15 +107,15 @@ impl HttpRequestBuilder {
         meta: Option<&Value>,
         codec_map: &MimeCodecMap,
         config: &client::Config,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         let request_meta = meta.get("request");
         let method = if let Some(method_v) = request_meta.get("method") {
-            Method::from_bytes(method_v.as_bytes().ok_or("Invalid HTTP Method")?)?
+            Method::from_bytes(method_v.as_bytes().ok_or(Error::InvalidMethod)?)?
         } else {
             config.method.0.clone()
         };
         let uri: Uri = if let Some(url_v) = request_meta.get("url") {
-            url_v.as_str().ok_or("Invalid HTTP URL")?.parse()?
+            url_v.as_str().ok_or(Error::InvalidUrl)?.parse()?
         } else {
             config.url.to_string().parse()?
         };
@@ -175,7 +187,7 @@ impl HttpRequestBuilder {
         meta: &'event Value<'event>,
         ingest_ns: u64,
         serializer: &mut EventSerializer,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let chunks = serializer
             .serialize_for_stream_with_codec(
                 value,
@@ -188,21 +200,24 @@ impl HttpRequestBuilder {
         self.append_data(chunks).await
     }
 
-    async fn append_data(&mut self, chunks: Vec<Vec<u8>>) -> Result<()> {
+    async fn append_data(&mut self, chunks: Vec<Vec<u8>>) -> anyhow::Result<()> {
         for chunk in chunks {
             self.chunk_tx.send(chunk).await?;
         }
         Ok(())
     }
 
-    pub(super) fn take_request(&mut self) -> Result<Request<Body>> {
-        Ok(self.request.take().ok_or("Request already consumed")?)
+    pub(super) fn take_request(&mut self) -> Result<Request<Body>, Error> {
+        self.request.take().ok_or(Error::RequestAlreadyConsumed)
     }
     /// Finalize and send the response.
     /// In the chunked case we have already sent it before.
     ///
     /// After calling this function this instance shouldn't be used anymore
-    pub(super) async fn finalize(&mut self, serializer: &mut EventSerializer) -> Result<()> {
+    pub(super) async fn finalize(
+        &mut self,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
         // finalize the stream
         let rest = serializer.finish_stream(self.request_id.get())?;
         if !rest.is_empty() {
@@ -214,9 +229,7 @@ impl HttpRequestBuilder {
 /// Extract the content type from the headers
 /// Errors:
 /// FIXME: if the content type is not a valid string
-pub fn content_type(
-    headers: Option<&HeaderMap>,
-) -> std::result::Result<Option<Mime>, Box<dyn std::error::Error + Send + Sync + 'static>> {
+pub fn content_type(headers: Option<&HeaderMap>) -> anyhow::Result<Option<Mime>> {
     if let Some(headers) = headers {
         let header_content_type = headers
             .get(hyper::header::CONTENT_TYPE)
@@ -257,7 +270,7 @@ pub(crate) fn consolidate_mime(
     (codec_overwrite, content_type)
 }
 
-fn extract_headers(headers: &HeaderMap) -> Result<Value<'static>> {
+fn extract_headers(headers: &HeaderMap) -> Result<Value<'static>, ToStrError> {
     headers
         .keys()
         .map(|name| {
@@ -269,16 +282,16 @@ fn extract_headers(headers: &HeaderMap) -> Result<Value<'static>> {
                     .get_all(name)
                     .iter()
                     .map(|v| Ok(Value::from(v.to_str()?.to_string())))
-                    .collect::<Result<Value<'static>>>()?,
+                    .collect::<Result<Value<'static>, ToStrError>>()?,
             ))
         })
-        .collect::<Result<Value<'static>>>()
+        .collect::<Result<Value<'static>, ToStrError>>()
 }
 /// Extract request metadata
 pub(super) fn extract_request_meta(
     request: &Request<Body>,
     scheme: &'static str,
-) -> Result<Value<'static>> {
+) -> Result<Value<'static>, ToStrError> {
     // collect header values into an array for each header
     let headers: Value<'static> = extract_headers(request.headers())?;
 
@@ -292,7 +305,9 @@ pub(super) fn extract_request_meta(
 }
 
 /// extract response metadata
-pub(super) fn extract_response_meta<B>(response: &Response<B>) -> Result<Value<'static>> {
+pub(super) fn extract_response_meta<B>(
+    response: &Response<B>,
+) -> Result<Value<'static>, ToStrError> {
     // collect header values into an array for each header
     let headers = extract_headers(response.headers())?;
 
@@ -307,7 +322,7 @@ pub(super) fn extract_response_meta<B>(response: &Response<B>) -> Result<Value<'
 mod test {
     use super::*;
     #[tokio::test(flavor = "multi_thread")]
-    async fn builder() -> Result<()> {
+    async fn builder() -> anyhow::Result<()> {
         let request_id = RequestId::new(42);
         let meta = None;
         let codec_map = MimeCodecMap::default();

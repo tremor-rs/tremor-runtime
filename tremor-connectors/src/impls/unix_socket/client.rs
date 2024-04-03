@@ -15,8 +15,8 @@
 use super::UnixSocketReader;
 use crate::{
     channel::{bounded, Receiver, Sender},
-    errors::{Kind as ErrorKind, Result},
     prelude::*,
+    utils::socket,
 };
 use std::{path::PathBuf, sync::Arc};
 use tokio::{
@@ -50,7 +50,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         conf: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(conf)?;
         let (source_tx, source_rx) = bounded(qsize());
         Ok(Box::new(Client {
@@ -77,13 +77,13 @@ impl Connector for Client {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         // this source is wired up to the ending channel that is forwarding data received from the TCP (or TLS) connection
         let source = ChannelSource::from_channel(
             self.source_tx.clone(),
             self.source_rx
                 .take()
-                .ok_or_else(crate::errors::already_created_error)?,
+                .ok_or(GenericImplementationError::AlreadyConnected)?,
             Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
         );
         Ok(Some(builder.spawn(source, ctx)))
@@ -93,7 +93,7 @@ impl Connector for Client {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = UnixSocketSink::new(self.config.clone(), self.source_tx.clone());
         Ok(Some(builder.spawn(sink, ctx)))
     }
@@ -115,11 +115,8 @@ impl UnixSocketSink {
         }
     }
 
-    async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
-        let stream = self
-            .writer
-            .as_mut()
-            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+    async fn write(&mut self, data: Vec<Vec<u8>>) -> anyhow::Result<()> {
+        let stream = self.writer.as_mut().ok_or(socket::Error::NoSocket)?;
         for chunk in data {
             let slice: &[u8] = chunk.as_slice();
             stream.write_all(slice).await?;
@@ -132,7 +129,7 @@ impl UnixSocketSink {
 
 #[async_trait::async_trait()]
 impl Sink for UnixSocketSink {
-    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let path = PathBuf::from(&self.config.path);
         if !path.exists() {
             return Err(std::io::Error::new(
@@ -173,7 +170,7 @@ impl Sink for UnixSocketSink {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
         for (value, meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, meta, ingest_ns).await?;

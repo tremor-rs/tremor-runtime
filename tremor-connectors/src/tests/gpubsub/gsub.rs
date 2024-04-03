@@ -31,7 +31,7 @@ use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
-async fn no_connection() -> Result<()> {
+async fn no_connection() -> anyhow::Result<()> {
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
@@ -49,7 +49,11 @@ async fn no_connection() -> Result<()> {
     Ok(())
 }
 
-async fn create_subscription(endpoint: String, topic: &str, subscription: &str) -> Result<()> {
+async fn create_subscription(
+    endpoint: String,
+    topic: &str,
+    subscription: &str,
+) -> anyhow::Result<()> {
     let channel = Channel::from_shared(endpoint)?.connect().await?;
     let mut publisher = PublisherClient::new(channel.clone());
     publisher
@@ -94,7 +98,7 @@ async fn create_subscription(endpoint: String, topic: &str, subscription: &str) 
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
-async fn simple_subscribe() -> Result<()> {
+async fn simple_subscribe() -> anyhow::Result<()> {
     let runner = Cli::docker();
 
     let (pubsub, pubsub_args) =

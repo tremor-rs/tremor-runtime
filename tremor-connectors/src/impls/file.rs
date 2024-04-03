@@ -146,6 +146,12 @@ use tremor_common::asy::file;
 
 const URL_SCHEME: &str = "tremor-file";
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("No file available")]
+    NoFile,
+}
+
 /// how to open the given file for writing
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase", deny_unknown_fields)]
@@ -221,7 +227,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         Ok(Box::new(File { config }))
     }
@@ -233,7 +239,7 @@ impl Connector for File {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         if self.config.mode == Mode::Read {
             Ok(None)
         } else {
@@ -246,7 +252,7 @@ impl Connector for File {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         if self.config.mode == Mode::Read {
             let source = FileSource::new(self.config.clone());
             Ok(Some(builder.spawn(source, ctx)))
@@ -293,7 +299,7 @@ impl FileSource {
 
 #[async_trait::async_trait]
 impl Source for FileSource {
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.meta = ctx.meta(literal!({
             "path": self.config.path.display().to_string()
         }));
@@ -312,14 +318,15 @@ impl Source for FileSource {
         };
         Ok(true)
     }
-    async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(
+        &mut self,
+        _pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> anyhow::Result<SourceReply> {
         let reply = if self.eof {
             SourceReply::Finished
         } else {
-            let reader = self
-                .reader
-                .as_mut()
-                .ok_or_else(|| Error::from("No file available."))?;
+            let reader = self.reader.as_mut().ok_or(Error::NoFile)?;
             let bytes_read = reader.read(&mut self.buf).await?;
             if bytes_read == 0 {
                 self.eof = true;
@@ -344,7 +351,7 @@ impl Source for FileSource {
         Ok(reply)
     }
 
-    async fn on_stop(&mut self, ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SourceContext) -> anyhow::Result<()> {
         if let Some(mut file) = self.underlying_file.take() {
             if let Err(e) = file.flush().await {
                 error!("{} Error flushing file: {}", &ctx, e);
@@ -382,7 +389,7 @@ impl FileSink {
 
 #[async_trait::async_trait]
 impl Sink for FileSink {
-    async fn connect(&mut self, _ctx: &SinkContext, attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, attempt: &Attempt) -> anyhow::Result<bool> {
         let mode = if attempt.is_first() || attempt.success() == 0 {
             &self.config.mode
         } else {
@@ -409,11 +416,8 @@ impl Sink for FileSink {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
-        let file = self
-            .file
-            .as_mut()
-            .ok_or_else(|| Error::from("No file available."))?;
+    ) -> anyhow::Result<SinkReply> {
+        let file = self.file.as_mut().ok_or(Error::NoFile)?;
         let ingest_ns = event.ingest_ns;
         for (value, meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, meta, ingest_ns).await?;
@@ -443,7 +447,7 @@ impl Sink for FileSink {
         false
     }
 
-    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         if let Some(file) = self.file.take() {
             if let Err(e) = file.sync_all().await {
                 error!("{} Error flushing file: {}", &ctx, e);

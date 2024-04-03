@@ -29,7 +29,7 @@ use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn connector_s3_no_connection() -> Result<()> {
+async fn connector_s3_no_connection() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-connection");
     let mut env = EnvHelper::new();
     env.set_var("AWS_ACCESS_KEY_ID", MINIO_ROOT_USER);
@@ -56,7 +56,7 @@ async fn connector_s3_no_connection() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn connector_s3_no_credentials() -> Result<()> {
+async fn connector_s3_no_credentials() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-credentials");
 
     let docker = clients::Cli::default();
@@ -96,7 +96,7 @@ async fn connector_s3_no_credentials() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn connector_s3_no_region() -> Result<()> {
+async fn connector_s3_no_region() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-region");
 
     let docker = clients::Cli::default();
@@ -134,7 +134,7 @@ async fn connector_s3_no_region() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn connector_s3_no_bucket() -> Result<()> {
+async fn connector_s3_no_bucket() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-bucket");
 
     let docker = clients::Cli::default();
@@ -168,7 +168,7 @@ async fn connector_s3_no_bucket() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
-async fn connector_s3_reader() -> Result<()> {
+async fn connector_s3_reader() -> anyhow::Result<()> {
     static SMALL_FILE: [u8; 256] = [b'A'; 256];
     static HUGE_FILE: [u8; 4096] = [b'Z'; 4096];
     let bucket_name = random_bucket_name("tremor");

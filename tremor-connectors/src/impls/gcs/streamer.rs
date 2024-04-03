@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::Error;
 use crate::{
-    errors::err_gcs,
-    google::TokenSrc,
     impls::gcs::{
         chunked_buffer::ChunkedBuffer,
         resumable_upload_client::{
@@ -23,9 +22,12 @@ use crate::{
         },
     },
     prelude::*,
-    utils::object_storage::{
-        BufferPart, ConsistentSink, Mode, ObjectId, ObjectStorageCommon, ObjectStorageSinkImpl,
-        ObjectStorageUpload, YoloSink,
+    utils::{
+        google::TokenSrc,
+        object_storage::{
+            BufferPart, ConsistentSink, Mode, ObjectId, ObjectStorageCommon, ObjectStorageSinkImpl,
+            ObjectStorageUpload, YoloSink,
+        },
     },
 };
 use std::time::Duration;
@@ -118,7 +120,7 @@ impl ConnectorBuilder for Builder {
         _config: &ConnectorConfig,
         connector_config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let mut config = Config::new(connector_config)?;
         config.normalize(alias);
 
@@ -136,7 +138,7 @@ impl Connector for GCSStreamerConnector {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let token = self.config.token.clone();
         let client_factory = Box::new(move |config: &Config| {
             let http_client = create_client(Duration::from_nanos(config.connect_timeout));
@@ -230,7 +232,7 @@ impl ObjectStorageUpload for GCSUpload {
     }
 }
 
-type UploadClientFactory<Client> = Box<dyn Fn(&Config) -> Result<Client> + Send + Sync>;
+type UploadClientFactory<Client> = Box<dyn Fn(&Config) -> anyhow::Result<Client> + Send + Sync>;
 
 struct GCSObjectStorageSinkImpl<Client: ResumableUploadClient> {
     config: Config,
@@ -279,15 +281,12 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
     fn buffer_size(&self) -> usize {
         self.config.buffer_size
     }
-    async fn connect(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn connect(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         self.upload_client = Some((self.upload_client_factory)(&self.config)?);
         Ok(())
     }
-    async fn bucket_exists(&mut self, bucket: &str) -> Result<bool> {
-        let client = self
-            .upload_client
-            .as_mut()
-            .ok_or_else(|| err_gcs("No client available"))?;
+    async fn bucket_exists(&mut self, bucket: &str) -> anyhow::Result<bool> {
+        let client = self.upload_client.as_mut().ok_or(Error::NoClient)?;
         client.bucket_exists(&self.config.url, bucket).await
     }
     async fn start_upload(
@@ -295,11 +294,8 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
         object_id: &ObjectId,
         event: &Event,
         _ctx: &SinkContext,
-    ) -> Result<GCSUpload> {
-        let client = self
-            .upload_client
-            .as_mut()
-            .ok_or_else(|| err_gcs("No client available"))?;
+    ) -> anyhow::Result<GCSUpload> {
+        let client = self.upload_client.as_mut().ok_or(Error::NoClient)?;
         let session_uri = client
             .start_upload(&self.config.url, object_id.clone())
             .await?;
@@ -312,11 +308,8 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
         data: BufferPart,
         upload: &mut GCSUpload,
         ctx: &SinkContext,
-    ) -> Result<usize> {
-        let client = self
-            .upload_client
-            .as_mut()
-            .ok_or_else(|| err_gcs("No client available"))?;
+    ) -> anyhow::Result<usize> {
+        let client = self.upload_client.as_mut().ok_or(Error::NoClient)?;
         debug!(
             "{ctx} Uploading bytes {}-{} for {}",
             data.start(),
@@ -330,15 +323,12 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
         upload: GCSUpload,
         part: BufferPart,
         ctx: &SinkContext,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         debug_assert!(
             !upload.failed,
             "finish may only be called for non-failed uploads"
         );
-        let client = self
-            .upload_client
-            .as_mut()
-            .ok_or_else(|| err_gcs("No client available"))?;
+        let client = self.upload_client.as_mut().ok_or(Error::NoClient)?;
 
         let GCSUpload {
             object_id,
@@ -365,7 +355,7 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
         }
         res
     }
-    async fn fail_upload(&mut self, upload: GCSUpload, ctx: &SinkContext) -> Result<()> {
+    async fn fail_upload(&mut self, upload: GCSUpload, ctx: &SinkContext) -> anyhow::Result<()> {
         let GCSUpload {
             object_id,
             session_uri,
@@ -374,10 +364,7 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
             transactional,
             ..
         } = upload;
-        let client = self
-            .upload_client
-            .as_mut()
-            .ok_or_else(|| err_gcs("No client available"))?;
+        let client = self.upload_client.as_mut().ok_or(Error::NoClient)?;
         if let (Some(reply_tx), true) = (self.reply_tx.as_ref(), transactional) {
             ctx.swallow_err(
                 reply_tx.send(AsyncSinkReply::Fail(ContraflowData::new(
@@ -402,7 +389,6 @@ pub(crate) mod tests {
     use crate::{
         channel::{bounded, unbounded},
         config::Reconnect,
-        errors::err_gcs,
         impls::gcs::{resumable_upload_client::ResumableUploadClient, streamer::Mode},
         reconnect::ConnectionLostNotifier,
         utils::{
@@ -411,6 +397,7 @@ pub(crate) mod tests {
         },
     };
     use halfbrown::HashMap;
+    use http::StatusCode;
     use std::sync::atomic::AtomicUsize;
     use tremor_common::ids::{ConnectorIdGen, SinkId};
     use tremor_pipeline::EventId;
@@ -453,9 +440,9 @@ pub(crate) mod tests {
             &mut self,
             url: &Url<HttpsDefaults>,
             file_id: ObjectId,
-        ) -> Result<url::Url> {
+        ) -> anyhow::Result<url::Url> {
             if self.inject_failure {
-                return Err(err_gcs("Error on start_upload"));
+                return Err(Error::Upload(StatusCode::INTERNAL_SERVER_ERROR).into());
             }
             let count = self.counter.fetch_add(1, Ordering::AcqRel);
             let mut session_uri = url.url().clone();
@@ -463,9 +450,9 @@ pub(crate) mod tests {
             self.running.insert(session_uri.clone(), (file_id, vec![]));
             Ok(session_uri)
         }
-        async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> Result<usize> {
+        async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> anyhow::Result<usize> {
             if self.inject_failure {
-                return Err(err_gcs("Error on upload_data"));
+                return Err(Error::Upload(StatusCode::INTERNAL_SERVER_ERROR).into());
             }
             if let Some((_file_id, buffers)) = self.running.get_mut(url) {
                 let end = part.start + part.len();
@@ -473,37 +460,39 @@ pub(crate) mod tests {
                 // TODO: create mode where it always keeps some bytes
                 Ok(end)
             } else {
-                Err("upload not found".into())
+                Err(crate::utils::object_storage::Error::NoUpload.into())
             }
         }
-        async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> Result<()> {
+        async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> anyhow::Result<()> {
             if self.inject_failure {
-                return Err(err_gcs("Error on finish_upload"));
+                return Err(Error::Upload(StatusCode::INTERNAL_SERVER_ERROR).into());
             }
             if let Some((file_id, mut buffers)) = self.running.remove(url) {
                 buffers.push(part);
                 self.finished.insert(url.clone(), (file_id, buffers));
                 Ok(())
             } else {
-                Err("upload not found".into())
+                Err(crate::utils::object_storage::Error::NoUpload.into())
             }
         }
-        async fn delete_upload(&mut self, url: &url::Url) -> Result<()> {
+        async fn delete_upload(&mut self, url: &url::Url) -> anyhow::Result<()> {
             // we don't fail on delete, as we want to see the effect of deletion in our tests
             if let Some(upload) = self.running.remove(url) {
                 self.deleted.insert(url.clone(), upload);
                 Ok(())
             } else {
-                Err("upload not found".into())
+                Err(crate::utils::object_storage::Error::NoUpload.into())
             }
         }
         async fn bucket_exists(
             &mut self,
             _url: &Url<HttpsDefaults>,
-            _bucket: &str,
-        ) -> Result<bool> {
+            bucket: &str,
+        ) -> anyhow::Result<bool> {
             if self.inject_failure {
-                return Err(err_gcs("Error on bucket_exists"));
+                return Err(
+                    Error::Bucket(bucket.to_string(), StatusCode::INTERNAL_SERVER_ERROR).into(),
+                );
             }
             Ok(true)
         }
@@ -540,7 +529,7 @@ pub(crate) mod tests {
 
     #[allow(clippy::too_many_lines)] // this is a test
     #[tokio::test(flavor = "multi_thread")]
-    async fn yolo_happy_path() -> Result<()> {
+    async fn yolo_happy_path() -> anyhow::Result<()> {
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
 
         let config = Config {
@@ -570,7 +559,7 @@ pub(crate) mod tests {
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
+            ConnectionLostNotifier::new(&alias, connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
             Some(tremor_codec::Config::from("json")),
@@ -609,15 +598,15 @@ pub(crate) mod tests {
         assert_eq!(1, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, mut buffers) = uploads.pop().ok_or("no data")?;
+        let (file_id, mut buffers) = uploads.pop().expect("no data");
         assert_eq!(ObjectId::new("yolo", "happy.txt"), file_id);
         assert_eq!(2, buffers.len());
-        let buffer = buffers.pop().ok_or("no data")?;
+        let buffer = buffers.pop().expect("no data");
         assert_eq!(10, buffer.start);
         assert_eq!(10, buffer.len());
         assert_eq!("badg\",\"er\"".as_bytes(), &buffer.data);
 
-        let buffer = buffers.pop().ok_or("no data")?;
+        let buffer = buffers.pop().expect("no data");
         assert_eq!(0, buffer.start);
         assert_eq!(10, buffer.len());
         assert_eq!("{\"snot\":[\"".as_bytes(), &buffer.data);
@@ -680,30 +669,30 @@ pub(crate) mod tests {
         assert_eq!(2, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, mut buffers) = uploads.pop().ok_or("no data")?;
+        let (file_id, mut buffers) = uploads.pop().expect("no data");
         assert_eq!(ObjectId::new("yolo", "sad.txt"), file_id);
         assert_eq!(2, buffers.len());
 
-        let buffer = buffers.pop().ok_or("no data")?;
+        let buffer = buffers.pop().expect("no data");
         assert_eq!(10, buffer.start);
         assert_eq!(10, buffer.len());
         assert_eq!("e,false,nu".as_bytes(), &buffer.data);
 
-        let buffer = buffers.pop().ok_or("no data")?;
+        let buffer = buffers.pop().expect("no data");
         assert_eq!(0, buffer.start);
         assert_eq!(10, buffer.len());
         assert_eq!("[1,2,3,tru".as_bytes(), &buffer.data);
 
         let mut finished = upload_client(&mut sink).finished_uploads();
         assert_eq!(1, finished.len());
-        let (file_id, mut buffers) = finished.pop().ok_or("no data")?;
+        let (file_id, mut buffers) = finished.pop().expect("no data");
         assert_eq!(ObjectId::new("yolo", "happy.txt"), file_id);
         assert_eq!(4, buffers.len());
-        let buffer = buffers.pop().ok_or("no data")?;
+        let buffer = buffers.pop().expect("no data");
         assert_eq!(30, buffer.start);
         assert_eq!("adger\"".as_bytes(), &buffer.data);
 
-        let buffer = buffers.pop().ok_or("no data")?;
+        let buffer = buffers.pop().expect("no data");
         assert_eq!(20, buffer.start);
         assert_eq!("]}\"snot\"\"b".as_bytes(), &buffer.data);
 
@@ -714,10 +703,10 @@ pub(crate) mod tests {
         // we finish outstanding upload upon stop
         let mut finished = upload_client(&mut sink).finished_uploads();
         assert_eq!(2, finished.len());
-        let (file_id, mut buffers) = finished.pop().ok_or("no data")?;
+        let (file_id, mut buffers) = finished.pop().expect("no data");
         assert_eq!(ObjectId::new("yolo", "sad.txt"), file_id);
         assert_eq!(3, buffers.len());
-        let last = buffers.pop().ok_or("no data")?;
+        let last = buffers.pop().expect("no data");
         assert_eq!(20, last.start);
         assert_eq!("ll]".as_bytes(), &last.data);
 
@@ -726,7 +715,7 @@ pub(crate) mod tests {
 
     #[allow(clippy::too_many_lines)] // this is a test
     #[tokio::test(flavor = "multi_thread")]
-    async fn yolo_on_failure() -> Result<()> {
+    async fn yolo_on_failure() -> anyhow::Result<()> {
         // ensure that failures on calls to google don't fail events
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
@@ -755,7 +744,7 @@ pub(crate) mod tests {
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
+            ConnectionLostNotifier::new(&alias, connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
             Some(tremor_codec::Config::from("json")),
@@ -821,7 +810,7 @@ pub(crate) mod tests {
         assert_eq!(1, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
+        let (file_id, buffers) = uploads.pop().expect("no data");
         assert_eq!(ObjectId::new("failure", "test.txt"), file_id);
         assert!(buffers.is_empty());
         assert!(upload_client(&mut sink).finished_uploads().is_empty());
@@ -854,7 +843,7 @@ pub(crate) mod tests {
         assert_eq!(1, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
+        let (file_id, buffers) = uploads.pop().expect("no data");
         assert_eq!(ObjectId::new("failure", "test.txt"), file_id);
         assert!(buffers.is_empty());
         assert!(upload_client(&mut sink).finished_uploads().is_empty());
@@ -883,7 +872,7 @@ pub(crate) mod tests {
         assert_eq!(1, upload_client(&mut sink).count());
         let mut uploads = upload_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
+        let (file_id, buffers) = uploads.pop().expect("no data");
         assert_eq!(ObjectId::new("failure", "test.txt"), file_id);
         assert!(buffers.is_empty());
         assert!(upload_client(&mut sink).finished_uploads().is_empty());
@@ -900,7 +889,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn yolo_invalid_event() -> Result<()> {
+    async fn yolo_invalid_event() -> anyhow::Result<()> {
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
             url: Url::default(),
@@ -928,7 +917,7 @@ pub(crate) mod tests {
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
+            ConnectionLostNotifier::new(&alias, connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
             Some(tremor_codec::Config::from("json")),
@@ -990,7 +979,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn yolo_bucket_exists_error() -> Result<()> {
+    async fn yolo_bucket_exists_error() -> anyhow::Result<()> {
         let upload_client_factory = Box::new(|_config: &Config| {
             let mut client = TestUploadClient::default();
             client.inject_failure(true);
@@ -1022,7 +1011,7 @@ pub(crate) mod tests {
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
+            ConnectionLostNotifier::new(&alias, connection_lost_tx),
         );
 
         // simulate sink lifecycle
@@ -1045,7 +1034,7 @@ pub(crate) mod tests {
     }
     #[allow(clippy::too_many_lines)] // this is a test
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn consistent_happy_path() -> Result<()> {
+    pub async fn consistent_happy_path() -> anyhow::Result<()> {
         let (reply_tx, mut reply_rx) = unbounded();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
@@ -1075,7 +1064,7 @@ pub(crate) mod tests {
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
+            ConnectionLostNotifier::new(&alias, connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
             Some(tremor_codec::Config::from("json")),
@@ -1110,7 +1099,7 @@ pub(crate) mod tests {
         // verify it started the upload upon first request
         let mut uploads = test_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
+        let (file_id, buffers) = uploads.pop().expect("no data");
         assert_eq!(ObjectId::new("woah", "test.txt"), file_id);
         assert!(buffers.is_empty());
         assert_eq!(1, test_client(&mut sink).count());
@@ -1139,18 +1128,18 @@ pub(crate) mod tests {
         // verify it did upload some parts
         let mut uploads = test_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, mut buffers) = uploads.pop().ok_or("no data")?;
+        let (file_id, mut buffers) = uploads.pop().expect("no data");
         assert_eq!(ObjectId::new("woah", "test.txt"), file_id);
         assert_eq!(3, buffers.len());
-        let part = buffers.pop().ok_or("no data")?;
+        let part = buffers.pop().expect("no data");
         assert_eq!(20, part.start);
         assert_eq!(10, part.len());
         assert_eq!("qrstuvwxyz".as_bytes(), &part.data);
-        let part = buffers.pop().ok_or("no data")?;
+        let part = buffers.pop().expect("no data");
         assert_eq!(10, part.start);
         assert_eq!(10, part.len());
         assert_eq!("ghijklmnop".as_bytes(), &part.data);
-        let part = buffers.pop().ok_or("no data")?;
+        let part = buffers.pop().expect("no data");
         assert_eq!(0, part.start);
         assert_eq!(10, part.len());
         assert_eq!("{}[\"abcdef".as_bytes(), &part.data);
@@ -1181,7 +1170,7 @@ pub(crate) mod tests {
 
         let mut uploads = test_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
+        let (file_id, buffers) = uploads.pop().expect("no data");
         assert_eq!(ObjectId::new("woah2", "test.txt"), file_id);
         assert!(buffers.is_empty());
 
@@ -1190,11 +1179,11 @@ pub(crate) mod tests {
         // 1 finished upload
         let mut finished = test_client(&mut sink).finished_uploads();
         assert_eq!(1, finished.len());
-        let (file_id, mut buffers) = finished.pop().ok_or("no data")?;
+        let (file_id, mut buffers) = finished.pop().expect("no data");
 
         assert_eq!(ObjectId::new("woah", "test.txt"), file_id);
         assert_eq!(4, buffers.len());
-        let last = buffers.pop().ok_or("no data")?;
+        let last = buffers.pop().expect("no data");
         assert_eq!(30, last.start);
         assert_eq!(2, last.len());
         assert_eq!("\"]".as_bytes(), &last.data);
@@ -1232,7 +1221,7 @@ pub(crate) mod tests {
 
         let mut uploads = test_client(&mut sink).running_uploads();
         assert_eq!(1, uploads.len());
-        let (file_id, buffers) = uploads.pop().ok_or("no data")?;
+        let (file_id, buffers) = uploads.pop().expect("no data");
         assert_eq!(ObjectId::new("woah2", "test5.txt"), file_id);
         assert!(buffers.is_empty());
 
@@ -1241,11 +1230,11 @@ pub(crate) mod tests {
         // 2 finished uploads
         let mut finished = test_client(&mut sink).finished_uploads();
         assert_eq!(2, finished.len());
-        let (file_id, mut buffers) = finished.pop().ok_or("no data")?;
+        let (file_id, mut buffers) = finished.pop().expect("no data");
 
         assert_eq!(ObjectId::new("woah2", "test.txt"), file_id);
         assert_eq!(1, buffers.len());
-        let last = buffers.pop().ok_or("no data")?;
+        let last = buffers.pop().expect("no data");
         assert_eq!(0, last.start);
         assert_eq!(2, last.len());
         assert_eq!("42".as_bytes(), &last.data);
@@ -1269,7 +1258,7 @@ pub(crate) mod tests {
 
     #[allow(clippy::too_many_lines)] // this is a test
     #[tokio::test(flavor = "multi_thread")]
-    async fn consistent_on_failure() -> Result<()> {
+    async fn consistent_on_failure() -> anyhow::Result<()> {
         let (reply_tx, mut reply_rx) = unbounded();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
         let config = Config {
@@ -1299,7 +1288,7 @@ pub(crate) mod tests {
             alias.clone(),
             "gcs_streamer".into(),
             QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
+            ConnectionLostNotifier::new(&alias, connection_lost_tx),
         );
         let mut serializer = EventSerializer::new(
             Some(tremor_codec::Config::from("json")),
@@ -1425,7 +1414,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn connector_yolo_mode() -> Result<()> {
+    async fn connector_yolo_mode() -> anyhow::Result<()> {
         let config = literal!({
             "token": {"file": file!().to_string()},
             "mode": "yolo"
@@ -1453,7 +1442,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn connector_consistent_mode() -> Result<()> {
+    async fn connector_consistent_mode() -> anyhow::Result<()> {
         let config = literal!({
             "token": {"file": file!().to_string()},
             "mode": "consistent"

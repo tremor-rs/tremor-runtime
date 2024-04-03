@@ -101,7 +101,9 @@ impl Flow {
     pub async fn report_status(&self) -> Result<StatusReport> {
         let (tx, mut rx) = bounded(1);
         self.addr.send(Msg::Report(tx)).await?;
-        rx.recv().await.ok_or_else(empty_error)?
+        rx.recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?
     }
 
     /// get the Address used to send messages of a connector within this flow, identified by `connector_id`
@@ -114,7 +116,9 @@ impl Flow {
         self.addr
             .send(Msg::GetConnector(connector_alias, tx))
             .await?;
-        rx.recv().await.ok_or_else(empty_error)?
+        rx.recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?
     }
 
     /// Get the Addresses of all connectors of this flow
@@ -124,7 +128,9 @@ impl Flow {
     pub async fn get_connectors(&self) -> Result<Vec<connectors::Addr>> {
         let (tx, mut rx) = bounded(1);
         self.addr.send(Msg::GetConnectors(tx)).await?;
-        rx.recv().await.ok_or_else(empty_error)?
+        rx.recv()
+            .await
+            .ok_or(GenericImplementationError::ChannelEmpty)?
     }
 
     /// Pause this flow and all connectors in it.
@@ -263,7 +269,7 @@ async fn link(
 
             timeout(TIMEOUT, rx.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or(GenericImplementationError::ChannelEmpty)?
                 .map_err(|e| error_generic(link, from, &e))?;
         }
         ConnectStmt::PipelineToConnector { from, to, .. } => {
@@ -293,7 +299,7 @@ async fn link(
             pipeline.send_mgmt(msg).await?;
             timeout(TIMEOUT, rx.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or(GenericImplementationError::ChannelEmpty)?
                 .map_err(|e| error_generic(link, from, &e))?;
 
             // then link the connector to the pipeline
@@ -308,7 +314,7 @@ async fn link(
             connector.send(msg).await?;
             timeout(TIMEOUT, rx.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or(GenericImplementationError::ChannelEmpty)?
                 .map_err(|e| error_generic(link, to, &e))?;
         }
         ConnectStmt::PipelineToPipeline { from, to, .. } => {
@@ -341,12 +347,12 @@ async fn link(
             from_pipeline.send_mgmt(msg_from).await?;
             timeout(TIMEOUT, rx_from.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or(GenericImplementationError::ChannelEmpty)?
                 .map_err(|e| error_generic(link, to, &e))?;
             to_pipeline.send_mgmt(msg_to).await?;
             timeout(TIMEOUT, rx_to.recv())
                 .await?
-                .ok_or_else(empty_error)?
+                .ok_or(GenericImplementationError::ChannelEmpty)?
                 .map_err(|e| error_generic(link, from, &e))?;
         }
     }

@@ -14,9 +14,11 @@
 
 mod sink;
 
-use crate::google::{GouthTokenProvider, TokenSrc};
-use crate::impls::gbq::writer::sink::{GbqSink, TonicChannelFactory};
-use crate::prelude::*;
+use crate::{
+    impls::gbq::writer::sink::{GbqSink, TonicChannelFactory},
+    prelude::*,
+    utils::google::{GouthTokenProvider, TokenSrc},
+};
 
 #[derive(Deserialize, Clone)]
 pub(crate) struct Config {
@@ -48,7 +50,7 @@ impl Connector for Gbq {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = GbqSink::<GouthTokenProvider, _, _>::new(
             self.config.clone(),
             Box::new(TonicChannelFactory),
@@ -74,7 +76,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         Ok(Box::new(Gbq { config }))
     }
@@ -91,7 +93,7 @@ mod tests {
     use crate::{metrics::SinkReporter, utils::quiescence::QuiescenceBeacon};
 
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn can_spawn_sink() -> Result<()> {
+    pub async fn can_spawn_sink() -> anyhow::Result<()> {
         let mut connector = Gbq {
             config: Config {
                 table_id: "test".into(),
@@ -101,25 +103,22 @@ mod tests {
                 token: TokenSrc::dummy(),
             },
         };
+        let alias = alias::Connector::new("a", "b");
 
         let sink_address = connector
             .create_sink(
                 SinkContext::new(
                     SinkId::default(),
-                    alias::Connector::new("a", "b"),
+                    alias.clone(),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
-                    ConnectionLostNotifier::new(crate::channel::bounded(128).0),
+                    ConnectionLostNotifier::new(&alias, crate::channel::bounded(128).0),
                 ),
                 builder(
                     &ConnectorConfig::default(),
                     CodecReq::Structured,
-                    &alias::Connector::new("a", "b"),
-                    SinkReporter::new(
-                        alias::Connector::new("a", "b"),
-                        broadcast::channel(1).0,
-                        None,
-                    ),
+                    &alias,
+                    SinkReporter::new(alias, broadcast::channel(1).0, None),
                 )?,
             )
             .await?;

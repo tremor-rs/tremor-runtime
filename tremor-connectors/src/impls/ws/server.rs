@@ -33,6 +33,16 @@ use tokio_tungstenite::accept_async;
 
 const URL_SCHEME: &str = "tremor-ws-server";
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Source runtime not initialized")]
+    NoSource,
+    #[error("Sink runtime not initialized")]
+    NoSink,
+    #[error("Invalid URL")]
+    InvalidUrl,
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
@@ -73,7 +83,7 @@ impl ConnectorBuilder for Builder {
         _: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,
-    ) -> crate::errors::Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
         let tls_server_config = config
@@ -122,7 +132,7 @@ impl WsServer {
 
 #[async_trait::async_trait()]
 impl Connector for WsServer {
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> anyhow::Result<()> {
         if let Some(accept_task) = self.accept_task.take() {
             // stop acceptin' new connections
             accept_task.abort();
@@ -134,7 +144,7 @@ impl Connector for WsServer {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
         let source = ChannelSource::new(Arc::new(AtomicBool::from(false)));
         self.source_runtime = Some(source.runtime());
@@ -145,7 +155,7 @@ impl Connector for WsServer {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = ChannelSink::new_with_meta(
             resolve_connection_meta,
             builder.reply_tx(),
@@ -157,18 +167,16 @@ impl Connector for WsServer {
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(
+        &mut self,
+        ctx: &ConnectorContext,
+        _attempt: &Attempt,
+    ) -> anyhow::Result<bool> {
         // TODO: this can be simplified as the connect can be moved into the source
         let path = vec![self.config.url.port_or_dflt().to_string()];
 
-        let source_runtime = self
-            .source_runtime
-            .clone()
-            .ok_or("Source runtime not initialized")?;
-        let sink_runtime = self
-            .sink_runtime
-            .clone()
-            .ok_or("sink runtime not initialized")?;
+        let source_runtime = self.source_runtime.clone().ok_or(Error::NoSource)?;
+        let sink_runtime = self.sink_runtime.clone().ok_or(Error::NoSink)?;
 
         // cancel last accept task if necessary, this will drop the previous listener
         if let Some(previous_handle) = self.accept_task.take() {
@@ -185,7 +193,7 @@ impl Connector for WsServer {
             self.config
                 .url
                 .set_port(Some(port))
-                .map_err(|()| "Invalid URL")?;
+                .map_err(|()| Error::InvalidUrl)?;
         }
         let listener = tcp_server_socket(
             &self.config.url,

@@ -90,7 +90,8 @@
 pub(crate) mod client;
 pub(crate) mod server;
 
-use crate::prelude::{default_false, default_true, Defaults, Error, Result};
+use crate::prelude::{default_false, default_true, Defaults};
+use crate::utils::socket::Error;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::{lookup_host, UdpSocket};
 use tremor_common::url::Url;
@@ -108,7 +109,7 @@ const UDP_IPV6_UNSPECIFIED: &str = "[::]:0";
 pub(crate) async fn udp_socket<D: Defaults>(
     url: &Url<D>,
     options: &UdpSocketOptions,
-) -> Result<UdpSocket> {
+) -> Result<UdpSocket, Error> {
     let host_port = (url.host_or_local(), url.port_or_dflt());
     let mut last_err = None;
     for addr in lookup_host(host_port).await? {
@@ -116,7 +117,7 @@ pub(crate) async fn udp_socket<D: Defaults>(
         // the bind operation is also not awaited or anything in `UdpSocket::bind`, so this is fine here
         let socket_addr = sock_addr
             .as_socket()
-            .ok_or_else(|| format!("Invalid address {}:{}", host_port.0, host_port.1))?;
+            .ok_or_else(|| Error::InvalidAddress(host_port.0.to_string(), host_port.1))?;
         let sock = Socket::new(
             Domain::for_address(socket_addr),
             Type::DGRAM,
@@ -137,10 +138,7 @@ pub(crate) async fn udp_socket<D: Defaults>(
             }
         }
     }
-    Err(last_err.map_or_else(
-        || Error::from("could not resolve to any addresses"),
-        Error::from,
-    ))
+    Err(last_err.map_or_else(|| Error::CouldNotResolve.into(), Error::from))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -164,7 +162,7 @@ impl Default for UdpSocketOptions {
 
 impl UdpSocketOptions {
     /// apply the given config to `sock`
-    fn apply_to(&self, sock: &Socket) -> Result<()> {
+    fn apply_to(&self, sock: &Socket) -> Result<(), Error> {
         sock.set_reuse_port(self.so_reuseport)?;
         sock.set_reuse_address(self.so_reuseaddr)?;
         Ok(())

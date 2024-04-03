@@ -31,7 +31,7 @@ const MINIO_ROOT_USER: &str = "tremor";
 const MINIO_ROOT_PASSWORD: &str = "snot_badger";
 const MINIO_REGION: &str = "eu-central-1";
 
-async fn wait_for_s3(port: u16) -> Result<()> {
+async fn wait_for_s3(port: u16) -> anyhow::Result<()> {
     let s3_client: Client = get_client(port);
 
     let wait_for = Duration::from_secs(60);
@@ -47,7 +47,7 @@ async fn wait_for_s3(port: u16) -> Result<()> {
     Ok(())
 }
 
-async fn wait_for_bucket(bucket: &str, client: Client) -> Result<()> {
+async fn wait_for_bucket(bucket: &str, client: Client) -> anyhow::Result<()> {
     let wait_for = Duration::from_secs(10);
     let start = Instant::now();
 
@@ -61,7 +61,7 @@ async fn wait_for_bucket(bucket: &str, client: Client) -> Result<()> {
     Ok(())
 }
 
-async fn create_bucket(bucket: &str, http_port: u16) -> Result<()> {
+async fn create_bucket(bucket: &str, http_port: u16) -> anyhow::Result<()> {
     let client = get_client(http_port);
     client.create_bucket().bucket(bucket).send().await?;
     wait_for_bucket(bucket, client).await?;

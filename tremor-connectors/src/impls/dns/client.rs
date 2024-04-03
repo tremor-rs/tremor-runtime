@@ -22,6 +22,16 @@ use trust_dns_resolver::{
     TokioAsyncResolver,
 };
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("Metadata `$dns.lookup` missing or invalid")]
+    Metadata,
+    #[error("No DNS resolver available")]
+    NoResolvers,
+    #[error("Invalid or unsupported record type: {0}")]
+    InvalidRecordType(String),
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
@@ -36,7 +46,7 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _raw_config: &ConnectorConfig,
         _kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
+    ) -> anyhow::Result<Box<dyn Connector>> {
         let (tx, rx) = bounded(128);
         Ok(Box::new(Client {
             tx,
@@ -62,13 +72,13 @@ impl Connector for Client {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         // this is a dumb source that is simply forwarding `SourceReply`s it receives from the sink
         let source = ChannelSource::from_channel(
             self.tx.clone(),
             self.rx
                 .take()
-                .ok_or("Tried to create a source from a connector that has already been used")?,
+                .ok_or(GenericImplementationError::AlreadyConnected)?,
             self.source_is_connected.clone(),
         );
         Ok(Some(builder.spawn(source, ctx)))
@@ -78,7 +88,7 @@ impl Connector for Client {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         // issues DNS queries and forwards the responses to the source
         let sink = DnsSink::new(self.tx.clone(), self.source_is_connected.clone());
         Ok(Some(builder.spawn(sink, ctx)))
@@ -113,13 +123,9 @@ impl DnsSink {
         name: &str,
         record_type: Option<RecordType>,
         correlation: Option<&Value<'event>>,
-    ) -> Result<EventPayload> {
+    ) -> anyhow::Result<EventPayload> {
         // check if we have a resolver
-        let resolver = self
-            .resolver
-            .as_ref()
-            .ok_or_else(|| Error::from("No DNS resolver available"))?;
-
+        let resolver = self.resolver.as_ref().ok_or(Error::NoResolvers)?;
         let data = if let Some(record_type) = record_type {
             // type lookup
             lookup_to_value(&resolver.lookup(name, record_type).await?)
@@ -138,7 +144,7 @@ impl DnsSink {
 }
 #[async_trait::async_trait]
 impl Sink for DnsSink {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.resolver = Some(TokioAsyncResolver::tokio_from_system_conf()?);
         Ok(true)
     }
@@ -149,16 +155,16 @@ impl Sink for DnsSink {
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
+    ) -> anyhow::Result<SinkReply> {
         let source_is_connected = self.source_is_connected.load(Ordering::Acquire);
         for (_, m) in event.value_meta_iter() {
             // verify incoming request and extract DNS query params
             let dns_meta = m.get("dns");
-            let lookup = dns_meta.get("lookup").ok_or("Invalid DNS request")?;
+            let lookup = dns_meta.get("lookup").ok_or(Error::Metadata)?;
             let name = lookup
                 .as_str()
                 .or_else(|| lookup.get_str("name"))
-                .ok_or("Invalid DNS request: Metadata `$dns.lookup` missing")?;
+                .ok_or(Error::Metadata)?;
             let record_type = lookup.get_str("type").map(str_to_record_type).transpose()?;
             // issue DNS query
             let (port, payload) = match self.query(name, record_type, m.get("correlation")).await {
@@ -197,7 +203,7 @@ impl Sink for DnsSink {
     }
 }
 
-fn str_to_record_type(s: &str) -> Result<RecordType> {
+fn str_to_record_type(s: &str) -> Result<RecordType, Error> {
     match s {
         "A" => Ok(RecordType::A),
         "AAAA" => Ok(RecordType::AAAA),
@@ -223,7 +229,7 @@ fn str_to_record_type(s: &str) -> Result<RecordType> {
         "TLSA" => Ok(RecordType::TLSA),
         "TXT" => Ok(RecordType::TXT),
         "ZERO" => Ok(RecordType::ZERO),
-        other => Err(format!("Invalid or unsupported record type: {other}").into()),
+        other => Err(Error::InvalidRecordType(other.to_string()).into()),
     }
 }
 

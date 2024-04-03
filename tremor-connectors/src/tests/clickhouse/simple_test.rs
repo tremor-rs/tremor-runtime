@@ -36,7 +36,7 @@ use tremor_value::literal;
 // Once all these events are inserted, we use the regular ClickHouse client to
 // ensure that all the data was actually written.
 #[tokio::test(flavor = "multi_thread")]
-async fn simple_insertion() -> Result<()> {
+async fn simple_insertion() -> anyhow::Result<()> {
     let docker = clients::Cli::docker();
 
     // The following lines spin up a regular ClickHouse container and wait for
@@ -183,7 +183,7 @@ async fn simple_insertion() -> Result<()> {
     Ok(())
 }
 
-async fn create_table(port: u16, table: &str) -> Result<()> {
+async fn create_table(port: u16, table: &str) -> anyhow::Result<()> {
     let db_host = utils::DB_HOST;
     let db_url = format!("tcp://{db_host}:{port}/");
     let request = format!("create table if not exists {table} ( age UInt64 ) Engine=Memory");

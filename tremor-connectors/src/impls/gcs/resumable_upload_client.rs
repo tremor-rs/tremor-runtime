@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::Error;
 use crate::{
-    errors::err_gcs,
-    google::TokenSrc,
-    prelude::{Result, Url},
+    prelude::Url,
+    utils::google::TokenSrc,
     utils::object_storage::{BufferPart, ObjectId},
 };
 #[cfg(not(test))]
@@ -36,11 +36,15 @@ pub(crate) trait ResumableUploadClient {
         &mut self,
         url: &Url<HttpsDefaults>,
         file_id: ObjectId,
-    ) -> Result<url::Url>;
-    async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> Result<usize>;
-    async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> Result<()>;
-    async fn delete_upload(&mut self, url: &url::Url) -> Result<()>;
-    async fn bucket_exists(&mut self, url: &Url<HttpsDefaults>, bucket: &str) -> Result<bool>;
+    ) -> anyhow::Result<url::Url>;
+    async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> anyhow::Result<usize>;
+    async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> anyhow::Result<()>;
+    async fn delete_upload(&mut self, url: &url::Url) -> anyhow::Result<()>;
+    async fn bucket_exists(
+        &mut self,
+        url: &Url<HttpsDefaults>,
+        bucket: &str,
+    ) -> anyhow::Result<bool>;
 }
 
 pub(crate) trait BackoffStrategy {
@@ -75,12 +79,12 @@ impl BackoffStrategy for ExponentialBackoffRetryStrategy {
 async fn retriable_request<
     TClient: HttpClientTrait,
     TBackoffStrategy: BackoffStrategy,
-    TMakeRequest: Fn() -> Result<hyper::Request<hyper::Body>>,
+    TMakeRequest: Fn() -> anyhow::Result<hyper::Request<hyper::Body>>,
 >(
     backoff_strategy: &TBackoffStrategy,
     client: &mut TClient,
     make_request: TMakeRequest,
-) -> Result<Response<Body>> {
+) -> anyhow::Result<Response<Body>> {
     let max_retries = backoff_strategy.max_retries();
     for i in 1..=max_retries {
         let request = make_request();
@@ -127,9 +131,7 @@ async fn retriable_request<
         }
     }
 
-    Err(err_gcs(format!(
-        "Request still failing after {max_retries} retries"
-    )))
+    Err(Error::RequestFailed(max_retries).into())
 }
 
 pub(crate) struct DefaultClient<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy> {
@@ -143,7 +145,11 @@ pub(crate) struct DefaultClient<TClient: HttpClientTrait, TBackoffStrategy: Back
 impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
     ResumableUploadClient for DefaultClient<TClient, TBackoffStrategy>
 {
-    async fn bucket_exists(&mut self, url: &Url<HttpsDefaults>, bucket: &str) -> Result<bool> {
+    async fn bucket_exists(
+        &mut self,
+        url: &Url<HttpsDefaults>,
+        bucket: &str,
+    ) -> anyhow::Result<bool> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let url = format!("{url}b/{bucket}");
             Ok(Request::builder()
@@ -167,10 +173,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             let body_string = String::from_utf8(data)?;
             // assuming error
             error!("Error checking that bucket exists: {body_string}",);
-            return Err(err_gcs(format!(
-                "Check if bucket {bucket} exists failed with {} status",
-                response.status()
-            )));
+            return Err(Error::Bucket(bucket.to_string(), status).into());
         }
     }
 
@@ -178,7 +181,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
         &mut self,
         url: &Url<HttpsDefaults>,
         file_id: ObjectId,
-    ) -> Result<url::Url> {
+    ) -> anyhow::Result<url::Url> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             Self::create_upload_start_request(
                 #[cfg(not(test))]
@@ -197,22 +200,19 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             let body_string = String::from_utf8(data)?;
             error!("Error from Google Cloud Storage: {body_string}",);
 
-            return Err(err_gcs(format!(
-                "Start upload failed with {} status",
-                response.status()
-            )));
+            return Err(Error::Upload(response.status()).into());
         }
 
         Ok(url::Url::parse(
             response
                 .headers()
                 .get("Location")
-                .ok_or_else(|| err_gcs("Missing Location header".to_string()))?
+                .ok_or(Error::MissingLocationHeader)?
                 .to_str()?,
         )?)
     }
 
-    async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> Result<usize> {
+    async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> anyhow::Result<usize> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let request = Request::builder()
                 .method(Method::PUT)
@@ -241,16 +241,13 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             }
             let body_string = String::from_utf8(data)?;
             error!("Error from Google Cloud Storage: {body_string}",);
-            return Err(err_gcs(format!(
-                "Start upload failed with status {}",
-                response.status()
-            )));
+            return Err(Error::Upload(response.status()).into());
         }
 
         let raw_range = response
             .headers()
             .get(header::RANGE)
-            .ok_or_else(|| err_gcs("No range header"))?;
+            .ok_or(Error::MissingOrInvalidRangeHeader)?;
         let raw_range = raw_range.to_str()?;
 
         // Range format: bytes=0-262143
@@ -258,14 +255,14 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             .get(
                 raw_range
                     .find('-')
-                    .ok_or_else(|| err_gcs("Did not find a - in the Range header"))?
+                    .ok_or(Error::MissingOrInvalidRangeHeader)?
                     + 1..,
             )
-            .ok_or_else(|| err_gcs("Unable to get the end of the Range"))?;
+            .ok_or(Error::MissingOrInvalidRangeHeader)?;
         Ok(range_end.parse()?)
     }
 
-    async fn delete_upload(&mut self, url: &url::Url) -> Result<()> {
+    async fn delete_upload(&mut self, url: &url::Url) -> anyhow::Result<()> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let request = Request::builder()
                 .method(Method::DELETE)
@@ -286,14 +283,11 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             let body_string = String::from_utf8(data)?;
 
             error!("Error from Google Cloud Storage while cancelling an upload: {body_string}",);
-            Err(err_gcs(format!(
-                "Delete upload failed with status {}",
-                response.status()
-            )))
+            Err(Error::Delete(response.status()).into())
         }
     }
 
-    async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> Result<()> {
+    async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> anyhow::Result<()> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let request = Request::builder()
                 .method(Method::PUT)
@@ -323,10 +317,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
 
             error!("Error from Google Cloud Storage: {body_string}");
 
-            return Err(err_gcs(format!(
-                "Finish upload failed with status {}",
-                response.status()
-            )));
+            return Err(Error::Upload(response.status()).into());
         }
 
         Ok(())
@@ -342,7 +333,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy>
         client: TClient,
         backoff_strategy: TBackoffStrategy,
         token: &TokenSrc,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             #[cfg(not(test))]
             token: token.to_token()?,
@@ -355,7 +346,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy>
     fn create_upload_start_request(
         url: &Url<HttpsDefaults>,
         file: &ObjectId,
-    ) -> Result<Request<Body>> {
+    ) -> anyhow::Result<Request<Body>> {
         let url = format!(
             "{}/b/{}/o?name={}&uploadType=resumable",
             url,
@@ -375,7 +366,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy>
         token: &Token,
         url: &Url<HttpsDefaults>,
         file: &ObjectId,
-    ) -> Result<Request<Body>> {
+    ) -> anyhow::Result<Request<Body>> {
         let url = format!(
             "{}/b/{}/o?name={}&uploadType=resumable",
             url,
@@ -408,12 +399,12 @@ pub(crate) fn create_client(_connect_timeout: Duration) -> GcsHttpClient {
 
 #[async_trait::async_trait]
 pub(crate) trait HttpClientTrait: Send + Sync {
-    async fn request(&self, req: hyper::Request<Body>) -> Result<hyper::Response<Body>>;
+    async fn request(&self, req: hyper::Request<Body>) -> anyhow::Result<hyper::Response<Body>>;
 }
 
 #[async_trait::async_trait]
 impl HttpClientTrait for GcsHttpClient {
-    async fn request(&self, req: Request<Body>) -> Result<Response<Body>> {
+    async fn request(&self, req: Request<Body>) -> anyhow::Result<Response<Body>> {
         Ok(self.request(req).await?)
     }
 }
@@ -426,7 +417,8 @@ mod tests {
     use std::sync::Arc;
 
     pub(crate) struct MockHttpClient {
-        pub handle_request: Box<dyn Fn(Request<Body>) -> Result<Response<Body>> + Send + Sync>,
+        pub handle_request:
+            Box<dyn Fn(Request<Body>) -> anyhow::Result<Response<Body>> + Send + Sync>,
         pub simulate_failure: Arc<AtomicBool>,
         pub simulate_transport_failure: Arc<AtomicBool>,
     }
@@ -439,7 +431,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl HttpClientTrait for MockHttpClient {
-        async fn request(&self, req: Request<Body>) -> Result<Response<Body>> {
+        async fn request(&self, req: Request<Body>) -> anyhow::Result<Response<Body>> {
             if self
                 .simulate_transport_failure
                 .swap(false, Ordering::AcqRel)
@@ -460,7 +452,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn can_bucket_exists() -> Result<()> {
+    async fn can_bucket_exists() -> anyhow::Result<()> {
         let client = MockHttpClient {
             handle_request: Box::new(|req| {
                 assert_eq!(req.uri().path(), "/b/snot");
@@ -489,7 +481,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn can_start_upload() -> Result<()> {
+    pub async fn can_start_upload() -> anyhow::Result<()> {
         let client = MockHttpClient {
             handle_request: Box::new(|req| {
                 assert_eq!(req.uri().path(), "/upload/b/bucket/o");
@@ -524,7 +516,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn can_delete_upload() -> Result<()> {
+    pub async fn can_delete_upload() -> anyhow::Result<()> {
         let client = MockHttpClient {
             handle_request: Box::new(|req| {
                 assert_eq!(req.method(), Method::DELETE);
@@ -556,7 +548,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn can_upload_data() -> Result<()> {
+    pub async fn can_upload_data() -> anyhow::Result<()> {
         let client = MockHttpClient {
             handle_request: Box::new(|mut req| {
                 let mut body: Vec<u8> = Vec::new();
@@ -600,7 +592,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn upload_data_fails_on_failed_request() -> Result<()> {
+    pub async fn upload_data_fails_on_failed_request() -> anyhow::Result<()> {
         let client = MockHttpClient {
             handle_request: Box::new(|_req| {
                 Ok(Response::builder()
@@ -629,7 +621,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn can_finish_upload() -> Result<()> {
+    pub async fn can_finish_upload() -> anyhow::Result<()> {
         let client = MockHttpClient {
             handle_request: Box::new(|req| {
                 assert_eq!(
@@ -662,7 +654,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn retries_on_server_error() -> Result<()> {
+    async fn retries_on_server_error() -> anyhow::Result<()> {
         let request_handled = Arc::new(AtomicBool::new(false));
         let request_handled_clone = request_handled.clone();
 
@@ -717,7 +709,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn retries_on_request_creation_failure() -> Result<()> {
+    async fn retries_on_request_creation_failure() -> anyhow::Result<()> {
         let request_handled = Arc::new(AtomicBool::new(false));
         let request_handled_clone = request_handled.clone();
 
@@ -730,7 +722,7 @@ mod tests {
             },
             || {
                 if !request_handled_clone.swap(true, Ordering::Acquire) {
-                    return Err("boo".into());
+                    anyhow::bail!("boo");
                 }
 
                 Ok(Request::builder()

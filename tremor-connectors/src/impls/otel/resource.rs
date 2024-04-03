@@ -15,7 +15,8 @@
 #![allow(dead_code)]
 
 use super::common;
-use crate::{prelude::*, utils::pb};
+use super::common::Error;
+use crate::prelude::*;
 use tremor_otelapis::opentelemetry::proto::resource::v1::Resource;
 
 pub(crate) fn resource_to_json(pb: Resource) -> Value<'static> {
@@ -25,13 +26,14 @@ pub(crate) fn resource_to_json(pb: Resource) -> Value<'static> {
     })
 }
 
-pub(crate) fn resource_to_pb(json: &Value<'_>) -> Result<Resource> {
-    let json = json
-        .as_object()
-        .ok_or("Invalid json mapping for Resource")?;
+pub(crate) fn resource_to_pb(json: &Value<'_>) -> Result<Resource, Error> {
+    let json = json.as_object().ok_or(Error::InvalidMapping("Resource"))?;
     Ok(Resource {
-        dropped_attributes_count: pb::maybe_int_to_pbu32(json.get("dropped_attributes_count"))
-            .unwrap_or_default(),
+        dropped_attributes_count: {
+            let data = json.get("dropped_attributes_count");
+            data.try_as_u32()
+        }
+        .unwrap_or_default(),
         attributes: common::maybe_key_value_list_to_pb(json.get("attributes"))?,
     })
 }
@@ -43,7 +45,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resource() -> Result<()> {
+    fn resource() -> anyhow::Result<()> {
         let pb = Resource {
             attributes: vec![KeyValue {
                 key: "snot".into(),
