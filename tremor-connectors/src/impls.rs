@@ -61,17 +61,17 @@ pub mod kafka;
 pub mod kv;
 /// Home of the famous metrics collector
 #[cfg(feature = "metrics")]
-pub(crate) mod metrics;
+pub mod metrics;
 /// Metronome
 #[cfg(feature = "metronome")]
 pub mod metronome;
 /// Never send any events and swallow all events it receives into the void.
 #[cfg(feature = "null")]
-pub(crate) mod null;
+pub mod null;
 
 /// `WebSockets`
 #[cfg(feature = "websockets")]
-pub(crate) mod ws;
+pub mod ws;
 
 /// `OpenTelemetry`
 #[cfg(feature = "otel")]

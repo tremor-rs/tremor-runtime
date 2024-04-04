@@ -38,7 +38,7 @@ const URL_SCHEME: &str = "tremor-ws-client";
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
-    url: Url<super::WsDefaults>,
+    url: Url<super::Defaults>,
     #[serde(default)]
     socket_options: TcpSocketOptions,
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
@@ -47,8 +47,9 @@ pub(crate) struct Config {
 
 impl tremor_config::Impl for Config {}
 
+/// The WS Client connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 impl Builder {
     const MISSING_HOST: &'static str = "Invalid `url` - host missing";

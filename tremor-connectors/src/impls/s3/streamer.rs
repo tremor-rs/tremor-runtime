@@ -76,8 +76,9 @@ impl Config {
 
 impl tremor_config::Impl for Config {}
 
+/// S3 streamer Connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {

@@ -122,9 +122,12 @@
 //! ### Payload structure
 //! The raw payload will be passed as is to the codec
 
-pub(crate) mod consumer;
-pub(crate) mod producer;
 use crate::prelude::*;
+
+/// Google PubSub consumer
+pub mod consumer;
+/// Google PubSub producer
+pub mod producer;
 
 #[allow(clippy::unwrap_used)]
 fn default_endpoint() -> Url<HttpsDefaults> {

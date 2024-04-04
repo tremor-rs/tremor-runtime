@@ -113,10 +113,10 @@ use tokio::{
 use tremor_value::Value;
 
 /// unix domain socket server
-pub(crate) mod server;
+pub mod server;
 
 /// unix domain socket client
-pub(crate) mod client;
+pub mod client;
 
 struct UnixSocketReader {
     stream: ReadHalf<UnixStream>,

@@ -68,8 +68,9 @@ pub(crate) struct Config {
 
 impl tremor_config::Impl for Config {}
 
+/// Kafka Producer Connector
 #[derive(Default, Debug)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {

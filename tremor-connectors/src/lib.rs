@@ -34,8 +34,8 @@ pub mod sink;
 /// source parts
 pub mod source;
 
-#[macro_use]
-pub(crate) mod utils;
+/// Generic connector utilities
+pub mod utils;
 
 /// connector configuration
 pub mod config;
@@ -45,8 +45,7 @@ pub mod errors;
 
 mod channel;
 
-#[cfg(test)]
-pub mod tests;
+pub mod harness;
 
 #[macro_use]
 extern crate log;
@@ -1078,34 +1077,6 @@ where
             debug!("{ctx} Connector loop finished.");
         }
     })
-}
-
-#[macro_use]
-mod macros {
-    // stolen from https://github.com/popzxc/stdext-rs and slightly adapted
-    #[cfg(test)]
-    #[macro_export]
-    macro_rules! function_name {
-        () => {{
-            // Okay, this is ugly, I get it. However, this is the best we can get on a stable rust.
-            fn f() {}
-            fn type_name_of<T>(_: T) -> &'static str {
-                std::any::type_name::<T>()
-            }
-            let mut name = type_name_of(f);
-            if let Some(stripped) = name.strip_suffix("::f") {
-                name = stripped;
-            };
-            while let Some(stripped) = name.strip_suffix("::{{closure}}") {
-                name = stripped;
-            }
-            if let Some(last) = name.split("::").last() {
-                last
-            } else {
-                name
-            }
-        }};
-    }
 }
 
 #[cfg(test)]

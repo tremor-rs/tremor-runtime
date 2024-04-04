@@ -58,9 +58,9 @@ pub(crate) struct TcpServer {
     /// marker that the sink is connected
     sink_is_connected: Arc<AtomicBool>,
 }
-
+/// TCP server connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {

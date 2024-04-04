@@ -9,7 +9,7 @@ readme = "README.md"
 version = "0.13.0-rc.16"
 
 [dependencies]
-tokio = { version = "1", default-features = false }
+tokio = { version = "1", default-features = false, features = ["fs"] }
 rand = { version = "0.8", default-features = false, features = ["small_rng"] }
 beef = { version = "0.5", default-features = false, features = ["impl_serde"] }
 serde = { version = "1", default-features = false, features = ["derive"] }

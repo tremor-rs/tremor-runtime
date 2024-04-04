@@ -618,9 +618,9 @@ mod test {
     use super::*;
     use crate::{
         google::{tests::TestTokenProvider, TokenSrc},
+        harness::Harness,
         impls::gbq,
         reconnect::ConnectionLostNotifier,
-        tests::ConnectorHarness,
         utils::quiescence::QuiescenceBeacon,
     };
     use bytes::Bytes;
@@ -1326,9 +1326,7 @@ mod test {
             "config": {}
         });
 
-        let result =
-            ConnectorHarness::new(function_name!(), &gbq::writer::Builder::default(), &config)
-                .await;
+        let result = Harness::new("test", &gbq::writer::Builder::default(), &config).await;
 
         assert!(result.is_err());
 

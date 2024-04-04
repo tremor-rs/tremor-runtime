@@ -87,8 +87,10 @@
 //! end;
 //! ```
 
-pub(crate) mod client;
-pub(crate) mod server;
+/// UDP client and server connectors
+pub mod client;
+/// UDP server connector
+pub mod server;
 
 use crate::prelude::{default_false, default_true, Defaults};
 use crate::utils::socket::Error;

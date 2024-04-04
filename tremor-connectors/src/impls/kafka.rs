@@ -285,8 +285,10 @@
 //! [librdkafka configuration options]: https://github.com/edenhill/librdkafka/blob/v1.8.2/CONFIGURATION.md
 //! [librkafka]: https://github.com/edenhill/librdkafka
 
-pub(crate) mod consumer;
-pub(crate) mod producer;
+/// Kafka consumer connector
+pub mod consumer;
+/// Kafka producer connector
+pub mod producer;
 
 use crate::{errors::error_connector_def, prelude::*};
 use beef::Cow;

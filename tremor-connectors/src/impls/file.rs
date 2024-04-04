@@ -211,7 +211,7 @@ pub(crate) struct File {
 
 /// builder for file connector
 #[derive(Default, Debug)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 impl Builder {}
 

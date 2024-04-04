@@ -252,8 +252,8 @@ where
 mod test {
     #![allow(clippy::cast_possible_wrap)]
     use super::*;
+    use crate::harness::Harness;
     use crate::impls::gcl;
-    use crate::tests::ConnectorHarness;
     use crate::ConnectionLostNotifier;
     use crate::{channel::bounded, connector::google::TokenSrc};
     use crate::{google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon};
@@ -439,9 +439,7 @@ mod test {
             }
         });
 
-        let result =
-            ConnectorHarness::new(function_name!(), &gcl::writer::Builder::default(), &config)
-                .await;
+        let result = Harness::new("test", &gcl::writer::Builder::default(), &config).await;
 
         assert!(result.is_ok());
 

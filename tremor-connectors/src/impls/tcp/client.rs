@@ -59,8 +59,9 @@ pub(crate) struct TcpClient {
     source_rx: Option<Receiver<SourceReply>>,
 }
 
+/// TCP client builder
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 impl Builder {
     const MISSING_PORT: &'static str = "Missing port for TCP client";

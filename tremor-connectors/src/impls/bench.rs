@@ -256,8 +256,9 @@ fn default_significant_figures() -> u8 {
 
 impl tremor_config::Impl for Config {}
 
+/// Builder for the bench connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> anyhow::Result<Vec<u8>> {
     if base64 {

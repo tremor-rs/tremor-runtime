@@ -197,11 +197,11 @@
 //! being tagged with the `$correlation` value set in the corresponding request.
 
 /// HTTP auth helper
-pub(crate) mod auth;
+pub mod auth;
 /// HTTP client connector
 pub mod client;
 /// HTTP metadata helper
-pub(crate) mod meta;
+pub mod meta;
 /// HTTP server connect
 pub mod server;
 /// HTTP utils
