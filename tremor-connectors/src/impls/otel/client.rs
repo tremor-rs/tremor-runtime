@@ -87,9 +87,9 @@ impl ConnectorBuilder for Builder {
 
 #[derive(Clone)]
 pub(crate) struct RemoteOpenTelemetryEndpoint {
-    logs_client: LogsServiceClient<TonicChannel>,
-    metrics_client: MetricsServiceClient<TonicChannel>,
-    trace_client: TraceServiceClient<TonicChannel>,
+    logs: LogsServiceClient<TonicChannel>,
+    metrics: MetricsServiceClient<TonicChannel>,
+    trace: TraceServiceClient<TonicChannel>,
 }
 
 #[async_trait::async_trait]
@@ -126,9 +126,9 @@ impl Sink for OtelSink {
         let channel = TonicEndpoint::from_shared(endpoint)?.connect().await?;
 
         self.remote = Some(RemoteOpenTelemetryEndpoint {
-            logs_client: LogsServiceClient::new(channel.clone()),
-            metrics_client: MetricsServiceClient::new(channel.clone()),
-            trace_client: TraceServiceClient::new(channel),
+            logs: LogsServiceClient::new(channel.clone()),
+            metrics: MetricsServiceClient::new(channel.clone()),
+            trace: TraceServiceClient::new(channel),
         });
 
         Ok(true)
@@ -150,7 +150,7 @@ impl Sink for OtelSink {
                             "Error converting payload to otel metrics",
                         )?,
                     };
-                    remote.metrics_client.export(request).await.err()
+                    remote.metrics.export(request).await.err()
                 } else if self.config.logs && value.contains_key("logs") {
                     let request = ExportLogsServiceRequest {
                         resource_logs: ctx.bail_err(
@@ -158,7 +158,7 @@ impl Sink for OtelSink {
                             "Error converting payload to otel logs",
                         )?,
                     };
-                    remote.logs_client.export(request).await.err()
+                    remote.logs.export(request).await.err()
                 } else if self.config.trace && value.contains_key("trace") {
                     let request = ExportTraceServiceRequest {
                         resource_spans: ctx.bail_err(
@@ -166,7 +166,7 @@ impl Sink for OtelSink {
                             "Error converting payload to otel span",
                         )?,
                     };
-                    remote.trace_client.export(request).await.err()
+                    remote.trace.export(request).await.err()
                 } else {
                     warn!("{ctx} Invalid or disabled otel payload: {value}");
                     None

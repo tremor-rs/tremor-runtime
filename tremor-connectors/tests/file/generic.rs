@@ -42,7 +42,7 @@ async fn file_connector() -> anyhow::Result<()> {
     let event = harness.out()?.get_event().await?;
     assert_eq!(1, event.len());
     let value = event.data.suffix().value();
-    let meta = event.data.suffix().meta();
+    let _meta = event.data.suffix().meta();
 
     // value
     assert_eq!(Some("snot"), value.as_str());

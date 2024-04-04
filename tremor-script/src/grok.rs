@@ -130,12 +130,10 @@ mod tests {
         let raw: String = raw.to_string();
         let codec = Pattern::new(&pat).expect("bad pattern");
         let decoded = codec.matches(raw.as_bytes());
-        decoded
-            .map(|j| {
-                assert_eq!(j, json);
-                true
-            })
-            .unwrap_or_default()
+        decoded.is_ok_and(|j| {
+            assert_eq!(j, json);
+            true
+        })
     }
 
     #[test]

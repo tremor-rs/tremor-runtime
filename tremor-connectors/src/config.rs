@@ -251,11 +251,11 @@ mod tests {
         let none_strategy = "none";
         let reconnect = serde_yaml::from_str::<Reconnect>(none_strategy)?;
         assert!(matches!(reconnect, Reconnect::None));
-        let retry = r#"
+        let retry = r"
         !retry
         interval_ms: 123
         growth_rate: 1.234567
-        "#;
+        ";
         let reconnect = serde_yaml::from_str::<Reconnect>(retry)?;
         assert!(matches!(
             reconnect,

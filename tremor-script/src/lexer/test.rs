@@ -38,49 +38,49 @@ macro_rules! lex_ok {
 fn interpolate() {
     lex_ok! {
         r#"  "" "#,
-        r#"  ~ "# => Token::DQuote,
-        r#"   ~ "# => Token::DQuote,
+        r"  ~ " => Token::DQuote,
+        r"   ~ " => Token::DQuote,
     };
     lex_ok! {
         r#"  "hello" "#,
-        r#"  ~ "# => Token::DQuote,
-        r#"   ~~~~~ "# => Token::StringLiteral("hello".into()),
-        r#"        ~ "# => Token::DQuote,
+        r"  ~ " => Token::DQuote,
+        r"   ~~~~~ " => Token::StringLiteral("hello".into()),
+        r"        ~ " => Token::DQuote,
     };
     lex_ok! {
         r#"  "hello #{7}" "#,
-        r#"  ~ "# => Token::DQuote,
-        r#"   ~~~~~~ "# => Token::StringLiteral("hello ".into()),
-        r#"         ~~ "# => Token::Interpol,
-        r#"           ~ "# => Token::IntLiteral(7),
-        r#"            ~ "# => Token::RBrace,
-        r#"             ~ "# => Token::DQuote,
+        r"  ~ " => Token::DQuote,
+        r"   ~~~~~~ " => Token::StringLiteral("hello ".into()),
+        r"         ~~ " => Token::Interpol,
+        r"           ~ " => Token::IntLiteral(7),
+        r"            ~ " => Token::RBrace,
+        r"             ~ " => Token::DQuote,
 
     };
     // We can't use `r#""#` for the string since we got a a `"#` in it
     lex_ok! {
         "  \"#{7} hello\" ",
-        r#"  ~ "# => Token::DQuote,
-        r#"   ~~ "# => Token::Interpol,
-        r#"     ~ "# => Token::IntLiteral(7),
-        r#"      ~ "# => Token::RBrace,
-        r#"       ~~~~~~ "# => Token::StringLiteral(" hello".into()),
-        r#"             ~ "# => Token::DQuote,
+        r"  ~ " => Token::DQuote,
+        r"   ~~ " => Token::Interpol,
+        r"     ~ " => Token::IntLiteral(7),
+        r"      ~ " => Token::RBrace,
+        r"       ~~~~~~ " => Token::StringLiteral(" hello".into()),
+        r"             ~ " => Token::DQuote,
 
     };
     lex_ok! {
         r#"  "hello #{ "snot #{7}" }" "#,
-        r#"  ~ "# => Token::DQuote,
-        r#"   ~~~~~~ "# => Token::StringLiteral("hello ".into()),
-        r#"         ~~ "# => Token::Interpol,
-        r#"            ~ "# => Token::DQuote,
-        r#"             ~~~~~ "# => Token::StringLiteral("snot ".into()),
-        r#"                  ~~ "# => Token::Interpol,
-        r#"                    ~ "# => Token::IntLiteral(7),
-        r#"                     ~ "# => Token::RBrace,
-        r#"                      ~ "# => Token::DQuote,
-        r#"                        ~ "# => Token::RBrace,
-        r#"                         ~ "# => Token::DQuote,
+        r"  ~ " => Token::DQuote,
+        r"   ~~~~~~ " => Token::StringLiteral("hello ".into()),
+        r"         ~~ " => Token::Interpol,
+        r"            ~ " => Token::DQuote,
+        r"             ~~~~~ " => Token::StringLiteral("snot ".into()),
+        r"                  ~~ " => Token::Interpol,
+        r"                    ~ " => Token::IntLiteral(7),
+        r"                     ~ " => Token::RBrace,
+        r"                      ~ " => Token::DQuote,
+        r"                        ~ " => Token::RBrace,
+        r"                         ~ " => Token::DQuote,
     };
 }
 
@@ -357,88 +357,88 @@ fn delimiters() {
 fn string() {
     lex_ok! {
         r#" "\n" "#,
-        r#" ~    "# => Token::DQuote,
-        r#"  ~~  "# => Token::StringLiteral("\n".into()),
-        r#"    ~ "# => Token::DQuote,
+        r" ~    " => Token::DQuote,
+        r"  ~~  " => Token::StringLiteral("\n".into()),
+        r"    ~ " => Token::DQuote,
     };
     lex_ok! {
         r#" "\r" "#,
-        r#" ~    "# => Token::DQuote,
-        r#"  ~~  "# => Token::StringLiteral("\r".into()),
-        r#"    ~ "# => Token::DQuote,
+        r" ~    " => Token::DQuote,
+        r"  ~~  " => Token::StringLiteral("\r".into()),
+        r"    ~ " => Token::DQuote,
     };
     lex_ok! {
         r#" "\t" "#,
-        r#" ~    "# => Token::DQuote,
-        r#"  ~~  "# => Token::StringLiteral("\t".into()),
-        r#"    ~ "# => Token::DQuote,
+        r" ~    " => Token::DQuote,
+        r"  ~~  " => Token::StringLiteral("\t".into()),
+        r"    ~ " => Token::DQuote,
     };
     lex_ok! {
          r#" "\\" "#,
-         r#" ~    "# => Token::DQuote,
-         r#"  ~~  "# => Token::StringLiteral("\\".into()),
-         r#"    ~ "# => Token::DQuote,
+         r" ~    " => Token::DQuote,
+         r"  ~~  " => Token::StringLiteral("\\".into()),
+         r"    ~ " => Token::DQuote,
     };
     lex_ok! {
         r#" "\"" "#,
-        r#" ~    "# => Token::DQuote,
-        r#"  ~~  "# => Token::StringLiteral("\"".into()),
-        r#"    ~ "# => Token::DQuote,
+        r" ~    " => Token::DQuote,
+        r"  ~~  " => Token::StringLiteral("\"".into()),
+        r"    ~ " => Token::DQuote,
     };
     lex_ok! {
         r#" "{" "#,
-        r#" ~    "# => Token::DQuote,
-        r#"  ~  "# => Token::StringLiteral("{".into()),
-        r#"   ~ "# => Token::DQuote,
+        r" ~    " => Token::DQuote,
+        r"  ~  " => Token::StringLiteral("{".into()),
+        r"   ~ " => Token::DQuote,
     };
     lex_ok! {
         r#" "}" "#,
-        r#" ~    "# => Token::DQuote,
-        r#"  ~  "# => Token::StringLiteral("}".into()),
-        r#"   ~ "# => Token::DQuote,
+        r" ~    " => Token::DQuote,
+        r"  ~  " => Token::StringLiteral("}".into()),
+        r"   ~ " => Token::DQuote,
     };
     lex_ok! {
         r#" "{}" "#,
-        r#" ~    "# => Token::DQuote,
-        r#"  ~~  "# => Token::StringLiteral("{}".into()),
-        r#"    ~ "# => Token::DQuote,
+        r" ~    " => Token::DQuote,
+        r"  ~~  " => Token::StringLiteral("{}".into()),
+        r"    ~ " => Token::DQuote,
     };
     lex_ok! {
         r#" "}" "#,
-        r#" ~    "# => Token::DQuote,
-        r#"  ~   "# => Token::StringLiteral("}".into()),
-        r#"   ~  "# => Token::DQuote,
+        r" ~    " => Token::DQuote,
+        r"  ~   " => Token::StringLiteral("}".into()),
+        r"   ~  " => Token::DQuote,
     };
 
     lex_ok! {
         r#" "a\nb}}" "#,
-        r#" ~        "# => Token::DQuote,
-        r#"  ~~~~~~  "# => Token::StringLiteral("a\nb}}".into()),
-        r#"        ~ "# => Token::DQuote,
+        r" ~        " => Token::DQuote,
+        r"  ~~~~~~  " => Token::StringLiteral("a\nb}}".into()),
+        r"        ~ " => Token::DQuote,
     };
 
     lex_ok! {
         r#" "\"\"" "#,
-        r#" ~      "# => Token::DQuote,
-        r#"  ~~~~  "# => Token::StringLiteral("\"\"".into()),
-        r#"      ~ "# => Token::DQuote,
+        r" ~      " => Token::DQuote,
+        r"  ~~~~  " => Token::StringLiteral("\"\"".into()),
+        r"      ~ " => Token::DQuote,
     };
 
     lex_ok! {
         r#" "\\\"" "#,
-        r#" ~      "# => Token::DQuote,
-        r#"  ~~~~  "# => Token::StringLiteral("\\\"".into()),
-        r#"      ~ "# => Token::DQuote,
+        r" ~      " => Token::DQuote,
+        r"  ~~~~  " => Token::StringLiteral("\\\"".into()),
+        r"      ~ " => Token::DQuote,
     };
 
     lex_ok! {
         r#" "\"\"""\"\"" "#,
-        r#" ~            "# => Token::DQuote,
-        r#"  ~~~~        "# => Token::StringLiteral("\"\"".into()),
-        r#"      ~       "# => Token::DQuote,
-        r#"       ~      "# => Token::DQuote,
-        r#"        ~~~~  "# => Token::StringLiteral("\"\"".into()),
-        r#"            ~ "# => Token::DQuote,
+        r" ~            " => Token::DQuote,
+        r"  ~~~~        " => Token::StringLiteral("\"\"".into()),
+        r"      ~       " => Token::DQuote,
+        r"       ~      " => Token::DQuote,
+        r"        ~~~~  " => Token::StringLiteral("\"\"".into()),
+        r"            ~ " => Token::DQuote,
     };
     //lex_ko! { r#" "\\\" "#, " ~~~~~ " => ErrorKind::UnterminatedStringLiteral { start: Location::new(1,2,2), end: Location::new(1,7,7) } }
 }
@@ -449,9 +449,9 @@ fn heredoc(){
     lex_ok! {
         r#""""
               """"#,
-        r#"~~~"# => Token::HereDocStart,
-        r#"~~~~~~~~~~~~~~"# => Token::HereDocLiteral("              ".into()),
-        r#"              ~~~"# => Token::HereDocEnd,
+        r"~~~" => Token::HereDocStart,
+        r"~~~~~~~~~~~~~~" => Token::HereDocLiteral("              ".into()),
+        r"              ~~~" => Token::HereDocEnd,
     };
 
 }
@@ -460,11 +460,11 @@ fn heredoc(){
 fn test_preprocessor() {
     lex_ok! {
         r#"use "foo.tremor" ;"#,
-        r#"~~~               "# => Token::Use,
-        r#"    ~             "# => Token::DQuote,
-        r#"     ~~~~~~~~~~   "# => Token::StringLiteral("foo.tremor".into()),
-        r#"               ~  "# => Token::DQuote,
-        r#"                 ~"# => Token::Semi,
+        r"~~~               " => Token::Use,
+        r"    ~             " => Token::DQuote,
+        r"     ~~~~~~~~~~   " => Token::StringLiteral("foo.tremor".into()),
+        r"               ~  " => Token::DQuote,
+        r"                 ~" => Token::Semi,
     };
 }
 

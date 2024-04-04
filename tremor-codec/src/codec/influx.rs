@@ -212,7 +212,7 @@ mod tests {
                 literal!({
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
-                    "fields": {"temperature_str": r#"too hot/cold"#},
+                    "fields": {"temperature_str": "too hot/cold"},
                     "timestamp": 1_465_839_830_100_400_200_i64
                 }),
                 "case 6"

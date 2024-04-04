@@ -170,13 +170,13 @@ mod test {
         };
         assert_eq!(
             c.to_string(),
-            r#"
+            r"
 ### const test
 
 *type*: Null
 
 hello
-"#
+"
         );
     }
 
@@ -190,11 +190,11 @@ hello
         };
         assert_eq!(
             c.to_string(),
-            r#"
+            r"
 ### fn_test(snot, badger)
 
 hello
-"#
+"
         );
     }
 
@@ -206,11 +206,11 @@ hello
         };
         assert_eq!(
             c.print_with_name(&c.name),
-            r#"
+            r"
 # test mod
 
 hello
-"#
+"
         );
     }
 
@@ -222,11 +222,11 @@ hello
         };
         assert_eq!(
             q.to_string(),
-            r#"
+            r"
 ### test query
 
 hello
-"#
+"
         );
     }
 }

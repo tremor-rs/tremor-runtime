@@ -810,7 +810,7 @@ impl<'input> Lexer<'input> {
     /// used with `filter_map(Result::ok)` for example.
     pub fn tokenize_until_err(self) -> impl Iterator<Item = Spanned<'input>> {
         // i wanna use map_while here, but it is still unstable :(
-        self.scan((), |_, item| item.ok()).fuse()
+        self.scan((), |(), item| item.ok()).fuse()
     }
 
     /// Create a new lexer from the source string
@@ -1138,14 +1138,15 @@ impl<'input> Lexer<'input> {
         let mut end = start;
 
         loop {
-            match self.bump().ok_or_else(|| {
+            let next_char = self.bump().ok_or_else(|| {
                 let range = Span::new(start, end);
                 ErrorKind::UnterminatedIdentLiteral(
                     range.expand_lines(2),
                     range,
                     UnfinishedToken::new(range, format!("`{string}")),
                 )
-            })? {
+            })?;
+            match next_char {
                 (mut end, '`') => {
                     // we got to bump end by one so we claim the tailing `"`
                     let e = end;
@@ -1202,12 +1203,13 @@ impl<'input> Lexer<'input> {
             if let Some((end, '"')) = self.lookahead() {
                 self.bump();
                 // We don't allow anything tailing the initial `"""`
-                match self.bump().ok_or_else(|| {
+                let next_char = self.bump().ok_or_else(|| {
                     let tkn = self.slice_until_eol(start).unwrap_or(r#"""""#).into();
                     let inner = Span::new(start, end);
                     let outer = inner.expand_lines(2);
                     ErrorKind::UnterminatedHereDoc(outer, inner, UnfinishedToken::new(inner, tkn))
-                })? {
+                })?;
+                match next_char {
                     (mut newline_loc, '\n') => {
                         res = vec![spanned(start, end + '"', Token::HereDocStart)]; // (0, vec![]))];
                         string = String::new();

@@ -146,7 +146,7 @@ mod tests {
         let (world, handle) = World::start(WorldConfig::default()).await?;
         let troy_file = tempfile::NamedTempFile::new()?;
         troy_file.as_file().write_all(
-            r#"
+            r"
         define flow my_flow
         flow
             define pipeline foo
@@ -154,7 +154,7 @@ mod tests {
                 select event from in into out;
             end;
         end;
-        "#
+        "
             .as_bytes(),
         )?;
         troy_file.as_file().flush()?;

@@ -330,7 +330,7 @@ impl Sink for HttpRequestSink {
         // constrain to max concurrency - propagate CB close on hitting limit
         let guard = self.concurrency_cap.inc_for(&event)?;
 
-        if let Some(client) = self.client.as_ref().cloned() {
+        if let Some(client) = self.client.clone() {
             // TODO: think about making ctx an Arc so it doesn't have to be cloned deep
             let task_ctx = ctx.clone();
 

@@ -205,7 +205,7 @@ mod test {
     #[test]
     fn bool() {
         let f = fun("random", "bool");
-        assert!(f(&[]).ok().map(|v| v.is_bool()).unwrap_or_default());
+        assert!(f(&[]).ok().is_some_and(|v| v.is_bool()));
     }
 
     #[test]
@@ -231,7 +231,7 @@ mod test {
         assert_val!(f(&[&v1, &v2]), -42);
         let v = Value::from(1);
         assert_val!(f(&[&v]), 0);
-        assert!(f(&[]).ok().map(|v| v.is_i64()).unwrap_or_default());
+        assert!(f(&[]).ok().is_some_and(|v| v.is_i64()));
         let null = Value::from(0);
         assert!(f(&[&null]).is_err());
     }
@@ -254,21 +254,18 @@ mod test {
         assert!(f(&[&Value::from(v1), &Value::from(v2)])
             .ok()
             .as_f64()
-            .map(|a| a >= v1 && a < v2)
-            .unwrap_or_default());
+            .is_some_and(|a| a >= v1 && a < v2));
         let v = 100.0;
         assert!(f(&[&Value::from(v)])
             .ok()
             .as_f64()
-            .map(|a| a >= 0.0 && a < v)
-            .unwrap_or_default());
+            .is_some_and(|a| a >= 0.0 && a < v));
         let null = Value::from(0.0);
         assert!(f(&[&null]).is_err());
         assert!(f(&[])
             .ok()
             .as_f64()
-            .map(|a| (0.0..1.0).contains(&a))
-            .unwrap_or_default());
+            .is_some_and(|a| (0.0..1.0).contains(&a)));
     }
 
     proptest! {

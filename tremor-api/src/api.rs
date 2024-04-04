@@ -238,7 +238,7 @@ mod tests {
         let api_handle = serve(host.clone(), &world);
         info!("Listening on: {}", host);
 
-        let src = r#"
+        let src = r"
         define flow api_test
         flow
             define pipeline main
@@ -254,7 +254,7 @@ mod tests {
             connect /pipeline/main to /connector/my_null;
         end;
         deploy flow api_test;
-        "#;
+        ";
         let aggr_reg = aggr_registry();
         let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let deploy = deployable

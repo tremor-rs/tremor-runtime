@@ -37,7 +37,7 @@ use tremor_value::{utils::sorted_serialize, Value};
 
 #[derive(Debug)]
 pub(crate) struct Select {
-    select: ast::SelectStmt<'static>,
+    stmt: ast::SelectStmt<'static>,
     windows: Vec<Window>,
     groups: HashMap<String, Group>,
     recursion_limit: u32,
@@ -71,7 +71,7 @@ impl Select {
             .unwrap_or(0);
         Self {
             windows,
-            select: select.clone(),
+            stmt: select.clone(),
             groups: HashMap::new(),
             recursion_limit: tremor_script::recursion_limit(),
             dflt_group,
@@ -177,7 +177,7 @@ impl Operator for Select {
         mut event: Event,
     ) -> Result<EventAndInsights> {
         let Self {
-            select,
+            stmt: select,
             windows,
             groups,
             recursion_limit,
@@ -317,7 +317,7 @@ impl Operator for Select {
     ) -> Result<EventAndInsights> {
         // we only react on ticks and when we have windows
         let Self {
-            select,
+            stmt: select,
             windows,
             groups,
             recursion_limit,

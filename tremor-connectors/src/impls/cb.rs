@@ -199,7 +199,7 @@ impl Connector for Cb {
             )
             .into());
         }
-        let source = CbSource::new(&self.config, ctx.alias(), self.kill_switch.clone()).await?;
+        let source = CbSource::new(&self.config, self.kill_switch.clone()).await?;
         Ok(Some(builder.spawn(source, ctx)))
     }
 
@@ -332,11 +332,7 @@ impl CbSource {
         };
         self.finished && all_received
     }
-    async fn new(
-        config: &Config,
-        _alias: &alias::Connector,
-        kill_switch: KillSwitch,
-    ) -> anyhow::Result<Self> {
+    async fn new(config: &Config, kill_switch: KillSwitch) -> anyhow::Result<Self> {
         let mut files = vec![];
         for path in &config.paths {
             let file = open(path).await?;

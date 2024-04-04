@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_present() {
-        eval!(r#"let t = {}; present t"#, Value::from(true));
+        eval!(r"let t = {}; present t", Value::from(true));
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"],}}}; present t.a"#,
             Value::from(true)
@@ -260,7 +260,7 @@ mod tests {
             Value::from(true)
         );
 
-        eval!(r#"let t = {}; present r"#, Value::from(false));
+        eval!(r"let t = {}; present r", Value::from(false));
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x"#,
             Value::from(false)

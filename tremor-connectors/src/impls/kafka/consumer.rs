@@ -126,12 +126,10 @@ impl Mode {
             } => {
                 rdkafka_options
                     .get("enable.auto.commit")
-                    .map(Mode::is_true_value)
-                    .unwrap_or_default()
+                    .is_some_and(Mode::is_true_value)
                     && rdkafka_options
                         .get("enable.auto.offset.store")
-                        .map(Mode::is_true_value)
-                        .unwrap_or_default()
+                        .is_some_and(Mode::is_true_value)
                     && rdkafka_options
                         .get("auto.commit.interval.ms")
                         .map(Mode::get_int_value)
@@ -150,8 +148,7 @@ impl Mode {
                 rdkafka_options, ..
             } => !rdkafka_options
                 .get("enable.auto.commit")
-                .map(Mode::is_true_value)
-                .unwrap_or_default(),
+                .is_some_and(Mode::is_true_value),
             Mode::Performance => false,
         }
     }
@@ -185,12 +182,10 @@ impl Mode {
                 //
                 if rdkafka_options
                     .get("enable.auto.commit")
-                    .map(Mode::is_true_value)
-                    .unwrap_or_default()
+                    .is_some_and(Mode::is_true_value)
                     && rdkafka_options
                         .get("enable.auto.offset.store")
-                        .map(Mode::is_true_value)
-                        .unwrap_or_default()
+                        .is_some_and(Mode::is_true_value)
                     && *retry_failed_events
                 {
                     return Err(Error::CommitConfigConflict.into());

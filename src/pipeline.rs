@@ -420,7 +420,7 @@ mod tests {
     async fn report() -> Result<()> {
         let _: std::result::Result<_, _> = env_logger::try_init();
         let mut operator_id_gen = OperatorIdGen::new();
-        let trickle = r#"select event from in into out;"#;
+        let trickle = r"select event from in into out;";
         let aggr_reg = aggr_registry();
         let query =
             tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
@@ -530,7 +530,7 @@ mod tests {
     async fn pipeline_spawn() -> Result<()> {
         let _: std::result::Result<_, _> = env_logger::try_init();
         let mut operator_id_gen = OperatorIdGen::new();
-        let trickle = r#"select event from in into out;"#;
+        let trickle = r"select event from in into out;";
         let aggr_reg = aggr_registry();
         let pipeline_id = alias::Pipeline::new("flow", "test-pipe");
         let query =

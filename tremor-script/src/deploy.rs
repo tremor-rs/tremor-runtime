@@ -167,7 +167,7 @@ mod test {
     #[test]
     fn basic_pipeline() {
         parse(
-            r#"define flow test flow define pipeline passthrough pipeline select args from in into out end; end;"#,
+            r"define flow test flow define pipeline passthrough pipeline select args from in into out end; end;",
         );
     }
 }

@@ -301,24 +301,12 @@ impl ExecutableGraph {
         // remove skippable nodes from contraflow and signalflow
         self.contraflow = (*self.contraflow)
             .iter()
-            .filter(|id| {
-                !self
-                    .graph
-                    .get(**id)
-                    .map(Operator::skippable)
-                    .unwrap_or_default()
-            })
+            .filter(|id| !self.graph.get(**id).is_some_and(Operator::skippable))
             .copied()
             .collect();
         self.signalflow = (*self.signalflow)
             .iter()
-            .filter(|id| {
-                !self
-                    .graph
-                    .get(**id)
-                    .map(Operator::skippable)
-                    .unwrap_or_default()
-            })
+            .filter(|id| !self.graph.get(**id).is_some_and(Operator::skippable))
             .copied()
             .collect();
 
@@ -445,8 +433,7 @@ impl ExecutableGraph {
         // Resolve the input stream or entrypoint for this enqueue operation
         if self
             .metric_interval
-            .map(|ival| event.ingest_ns - self.last_metrics > ival)
-            .unwrap_or_default()
+            .is_some_and(|ival| event.ingest_ns - self.last_metrics > ival)
         {
             let mut tags = HashMap::with_capacity_and_hasher(8, ObjectHasher::default());
             tags.insert("pipeline".into(), common_cow(&self.id).into());

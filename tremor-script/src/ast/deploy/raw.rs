@@ -76,7 +76,7 @@ impl<'script> DeployRaw<'script> {
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<Deploy<'script>> {
         let mut stmts: Vec<DeployStmt<'script>> = vec![];
-        for (_i, stmt) in self.stmts.into_iter().enumerate() {
+        for stmt in self.stmts {
             if let Some(stmt) = stmt.up(helper)? {
                 stmts.push(stmt);
             }
