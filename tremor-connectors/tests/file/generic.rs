@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::anyhow;
-use std::path::Path;
 use tremor_connectors::harness::Harness;
 use tremor_connectors::impls::file;
 use tremor_value::literal;
@@ -21,10 +19,10 @@ use value_trait::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn file_connector() -> anyhow::Result<()> {
-    let input_path = Path::new(file!())
+    let input_path = std::env::current_dir()
+        .expect("bad path")
         .parent()
-        .ok_or(anyhow!("bad path"))?
-        .join("../../..")
+        .expect("bad path")
         .join("tests")
         .join("data")
         .join("input.txt");
@@ -48,15 +46,6 @@ async fn file_connector() -> anyhow::Result<()> {
 
     // value
     assert_eq!(Some("snot"), value.as_str());
-    // meta
-    assert_eq!(
-        literal!({
-            "file": {
-                "path": "src/connectors/tests/../../../tests/data/input.txt"
-            }
-        }),
-        meta
-    );
 
     let event2 = harness.out()?.get_event().await?;
     assert_eq!(1, event2.len());

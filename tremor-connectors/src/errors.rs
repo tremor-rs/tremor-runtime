@@ -47,7 +47,7 @@ pub enum Error {
     #[error("Conector was already created")]
     AlreadyCreated(alias::Connector),
     /// Missing configuration
-    #[error("{0} Missing configuration")]
+    #[error("{0} Missing Configuration")]
     MissingConfiguration(alias::Connector),
     /// BuildCfg is unimplemented
     #[error("{0} build_cfg is unimplemented")]
