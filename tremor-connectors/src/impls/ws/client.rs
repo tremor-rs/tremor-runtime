@@ -20,7 +20,7 @@ use crate::{
     errors::error_connector_def,
     prelude::*,
     utils::{
-        socket::{self, tcp_client_socket, TcpSocketOptions},
+        socket::{self, tcp_client, TcpSocketOptions},
         tls::TLSClientConfig,
         ConnectionMeta,
     },
@@ -86,7 +86,7 @@ impl ConnectorBuilder for Builder {
             ),
             Some(Either::Left(tls_config)) => (
                 Some(tls_config.to_client_connector()?),
-                tls_config.domain.clone().unwrap_or(host),
+                tls_config.domain().cloned().unwrap_or(host),
             ),
             Some(Either::Right(false)) | None => (None, host),
         };
@@ -154,7 +154,7 @@ impl WsClientSink {
 #[async_trait::async_trait]
 impl Sink for WsClientSink {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
-        let tcp_stream = tcp_client_socket(&self.config.url, &self.config.socket_options).await?;
+        let tcp_stream = tcp_client(&self.config.url, &self.config.socket_options).await?;
         let (local_addr, peer_addr) = (tcp_stream.local_addr()?, tcp_stream.peer_addr()?);
 
         if let Some(tls_connector) = self.tls_connector.as_ref() {

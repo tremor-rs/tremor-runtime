@@ -33,8 +33,9 @@ use testcontainers::{clients, core::WaitFor, images::generic::GenericImage, Runn
 use tokio::process;
 use tremor_common::ports::IN;
 use tremor_connectors::{
-    harness::{free_port::find_free_tcp_port, setup_for_tls, Harness},
+    harness::Harness,
     impls::{elastic, http::auth::Auth},
+    utils::integration::{free_port::find_free_tcp_port, setup_for_tls},
 };
 use tremor_system::{
     controlplane::CbAction,

@@ -28,10 +28,8 @@ use std::time::Duration;
 use testcontainers::clients::Cli as DockerCli;
 use tokio::time::timeout;
 use tremor_common::ports::IN;
-use tremor_connectors::{
-    harness::{free_port::find_free_tcp_port, Harness},
-    impls::kafka,
-};
+use tremor_connectors::{harness::Harness, impls::kafka, utils::integration::free_port};
+
 use tremor_system::event::{Event, EventId};
 use tremor_value::literal;
 
@@ -276,7 +274,7 @@ async fn connector_kafka_producer() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn producer_unreachable() -> anyhow::Result<()> {
-    let port = find_free_tcp_port().await?;
+    let port = free_port::find_free_tcp_port().await?;
     let broker = format!("127.0.0.1:{port}");
     let topic = "unreachable";
     let connector_config = literal!({
@@ -305,7 +303,7 @@ async fn producer_unreachable() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn producer_unresolvable() -> anyhow::Result<()> {
-    let port = find_free_tcp_port().await?;
+    let port = free_port::find_free_tcp_port().await?;
     let broker = format!("i_do_not_resolve:{port}");
     let topic = "unresolvable";
     let connector_config = literal!({

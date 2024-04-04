@@ -24,7 +24,7 @@ use crate::{
     errors::error_connector_def,
     prelude::*,
     utils::{
-        socket::{self, tcp_client_socket, TcpSocketOptions},
+        socket::{self, tcp_client, TcpSocketOptions},
         tls::TLSClientConfig,
     },
 };
@@ -97,7 +97,7 @@ impl ConnectorBuilder for Builder {
             }
             Some(Either::Left(tls_config)) => (
                 Some(tls_config.to_client_connector()?),
-                tls_config.domain.clone(),
+                tls_config.domain().cloned(),
             ),
             Some(Either::Right(false)) | None => (None, None),
         };
@@ -214,7 +214,7 @@ impl Sink for TcpClientSink {
         let buf_size = self.config.buf_size;
 
         // connect TCP stream
-        let stream = tcp_client_socket(&self.config.url, &self.config.socket_options).await?;
+        let stream = tcp_client(&self.config.url, &self.config.socket_options).await?;
         let local_addr = stream.local_addr()?;
         let peer_addr = stream.peer_addr()?;
         // this is known to fail on macOS for IPv6.

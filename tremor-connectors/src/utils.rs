@@ -20,18 +20,18 @@ pub mod metrics;
 #[cfg(feature = "mime")]
 pub(crate) mod mime;
 /// Some common things for object storage connectors like gcs and s3
-#[cfg(any(feature = "aws", feature = "gcs"))]
-pub(crate) mod object_storage;
+#[cfg(any(feature = "aws", feature = "gcp"))]
+pub mod object_storage;
 /// Protocol Buffer utilities
 #[cfg(feature = "protobuf")]
-pub(crate) mod pb;
+pub mod pb;
 /// Quiescence support facilities
 pub mod quiescence;
 /// Reconnection facilities
 pub mod reconnect;
 /// Socket utilities
 #[cfg(feature = "socket")]
-pub(crate) mod socket;
+pub mod socket;
 /// Transport Level Security facilities
 #[cfg(feature = "tls")]
 pub mod tls;

@@ -53,6 +53,7 @@ pub(crate) use tremor_system::pipeline::OpMeta;
 ///
 /// equals default chunk size for `BufReader`
 pub(crate) const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+
 /// default buf size used for reading from files and streams (sockets etc)
 #[must_use]
 pub fn default_buf_size() -> usize {

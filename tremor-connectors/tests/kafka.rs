@@ -23,7 +23,7 @@ use testcontainers::{
     clients::Cli as DockerCli, core::WaitFor, images::generic::GenericImage, Container,
     RunnableImage,
 };
-use tremor_connectors::harness::free_port::find_free_tcp_port;
+use tremor_connectors::utils::integration::free_port::find_free_tcp_port;
 
 const IMAGE: &str = "vectorized/redpanda";
 const VERSION: &str = "v22.1.7";

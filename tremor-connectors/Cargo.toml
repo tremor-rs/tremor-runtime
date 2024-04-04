@@ -44,7 +44,10 @@ uuid = { version = "1.6", optional = true, default-features = false, features = 
     "v4",
 ] }
 http-body = { version = "0.4", optional = true, default-features = false }
-tempfile = { version = "3.8", optional = true, default-features = false }
+hyper = { version = "0.14", optional = true, default-features = false, features = [
+    "server",
+] }
+async-stream = { version = "0.3", optional = true, default-features = false }
 
 
 # tls
@@ -66,7 +69,6 @@ elasticsearch = { version = "=8.5.0-alpha.1", optional = true, default-features 
 
 # http
 http = { version = "0.2", optional = true, default-features = false }
-hyper = { version = "0.14", optional = true, default-features = false }
 hyper-rustls = { version = "0.24", optional = true, default-features = false, features = [
     "rustls-native-certs",
     "http1",
@@ -90,7 +92,6 @@ googapis = { version = "0.6", optional = true, default-features = false, feature
     "google-storage-v2",
 ] }
 gouth = { version = "0.2", optional = true, default-features = false }
-async-stream = { version = "0.3", optional = true, default-features = false }
 async-std = { version = "1.12.0", optional = true, default-features = false, features = [
     "std",
     "async-io",
@@ -202,6 +203,7 @@ testcontainers = "0.14"
 serial_test = "3.0"
 http-types = "2.0"
 bytes = "1.0"
+tempfile = { version = "3.8", default-features = false }
 
 [features]
 default = [
@@ -212,7 +214,7 @@ default = [
     "otel",
     "aws",
     "kafka",
-    "websockets",
+    "websocket",
     "discord",
     "file",
     "kv",
@@ -237,52 +239,69 @@ socket = ["dep:socket2"]
 dev = ["circut-breaker", "exit", "bench"]
 
 tls = [
-    "dep:tokio-rustls",
-    "dep:rustls",
-    "dep:rustls-pemfile",
+    "dep:hyper",
     "dep:rustls-native-certs",
+    "dep:rustls-pemfile",
+    "dep:rustls",
+    "dep:tokio-rustls",
 ]
+protobuf = ["dep:prost", "dep:prost-types"]
+
 
 dns = ["dep:trust-dns-resolver"]
-elasticsearch = ["dep:elasticsearch"]
+elasticsearch = [
+    "dep:elasticsearch",
+    "dep:reqwest",
+    "dep:serde_yaml",
+    "tls",
+    "http",
+]
 http = [
+    "dep:async-stream",
+    "dep:base64",
+    "dep:dashmap",
+    "dep:gouth",
+    "dep:http-body",
     "dep:http",
-    "dep:hyper",
     "dep:hyper-rustls",
+    "dep:hyper",
     "dep:mime",
     "dep:reqwest",
-    "dep:base64",
-    "dep:http-body",
-    "dep:dashmap",
+    "hyper/stream",
+    "hyper/http1",
+    "hyper/http2",
     "tls",
     "mime",
     "socket",
 ]
 gcp = [
+    "dep:async-std",
+    "dep:async-stream",
     "dep:googapis",
     "dep:gouth",
-    "dep:simd-json-derive",
-    "dep:async-stream",
     "dep:http-body",
-    "dep:async-std",
-    "dep:tempfile",
+    "dep:simd-json-derive",
+    "dep:http",
+    "dep:hyper",
+    "dep:hyper-rustls",
+    "dep:tonic",
+    "protobuf",
 ]
 otel = ["dep:tonic", "protobuf", "dep:tremor-otelapis", "dep:hex"]
 aws = [
-    "dep:aws-sdk-s3",
-    "dep:aws-types",
-    "dep:aws-config",
-    "dep:aws-smithy-http",
     "dep:async-channel",
+    "dep:aws-config",
+    "dep:aws-sdk-s3",
+    "dep:aws-smithy-http",
+    "dep:aws-types",
 ]
-protobuf = ["dep:prost", "dep:prost-types"]
 kafka = ["dep:rdkafka", "dep:rdkafka-sys", "dep:indexmap"]
-websockets = ["dep:tokio-tungstenite"]
+websocket = ["dep:tokio-tungstenite", "tls", "socket"]
 discord = ["dep:serenity"]
 file = ["dep:file-mode", "dep:async-compression"]
 kv = ["dep:sled"]
-wal = ["dep:qwal", "dep:simd-json-derive", "dep:tempfile"]
-bench = ["dep:xz2", "dep:hdrhistogram", "dep:tempfile"]
+wal = ["dep:qwal", "dep:simd-json-derive"]
+bench = ["dep:xz2", "dep:hdrhistogram"]
 clickhouse = ["dep:clickhouse-rs", "dep:chrono-tz", "dep:uuid"]
 crononome = ["dep:serde_yaml", "dep:chrono", "dep:cron"]
 stdio = []
@@ -291,43 +310,43 @@ null = []
 metrics = []
 exit = []
 circut-breaker = []
-tcp = ["socket"]
+tcp = ["socket", "tls"]
 udp = ["socket"]
-unix-socket = ["dep:tempfile"]
+unix-socket = ["socket", "dep:file-mode"]
 
 integration-utils = []
 integration = ["integration-docker", "integration-local"]
 integration-docker = [
-    "elasticsearch-integration",
     "aws-integration",
-    "kafka-integration",
-    "gcp-integration",
     "clickhouse-integration",
+    "elasticsearch-integration",
+    "gcp-integration",
+    "kafka-integration",
 ]
 integration-local = [
-    "websockets-integration",
-    "http-integration",
-    "crononome-integration",
-    "metronome-integration",
-    "wal-integration",
     "bench-integration",
+    "crononome-integration",
     "file-integration",
+    "http-integration",
+    "metronome-integration",
     "tcp-integration",
     "udp-integration",
     "unix-socket-integration",
+    "wal-integration",
+    "websocket-integration",
 ]
+aws-integration = ["aws"]
 bench-integration = ["bench"]
+clickhouse-integration = ["clickhouse", "dep:chrono", "integration-utils"]
 crononome-integration = ["crononome"]
+elasticsearch-integration = ["elasticsearch", "integration-utils"]
 file-integration = ["file"]
 gcp-integration = ["gcp"]
-elasticsearch-integration = ["elasticsearch"]
-aws-integration = ["aws"]
-kafka-integration = ["kafka"]
-websockets-integration = ["websockets"]
 http-integration = ["http", "integration-utils"]
+kafka-integration = ["kafka", "integration-utils"]
 metronome-integration = ["metronome"]
-wal-integration = ["wal"]
-clickhouse-integration = ["clickhouse"]
-tcp-integration = ["tcp"]
+tcp-integration = ["tcp", "integration-utils"]
 udp-integration = ["udp"]
 unix-socket-integration = ["unix-socket"]
+wal-integration = ["wal"]
+websocket-integration = ["websocket", "integration-utils"]

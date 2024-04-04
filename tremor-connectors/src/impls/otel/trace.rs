@@ -20,7 +20,7 @@ use super::{
     id,
     resource::{self, resource_to_pb},
 };
-use crate::{prelude::*, utils::pb::maybe_string_to_pb};
+use crate::{prelude::*, utils::pb::maybe_string};
 use tremor_otelapis::opentelemetry::proto::{
     collector::trace::v1::ExportTraceServiceRequest,
     trace::v1::{
@@ -62,7 +62,7 @@ pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>, 
         .iter()
         .map(|json| {
             Ok(Event {
-                name: maybe_string_to_pb(json.get("name"))?,
+                name: maybe_string(json.get("name"))?,
                 time_unix_nano: {
                     let data = json.get("time_unix_nano");
                     data.try_as_u64()
@@ -101,7 +101,7 @@ pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>, Er
             Ok(Link {
                 span_id: id::hex_span_id_to_pb(json.get("span_id"))?,
                 trace_id: id::hex_trace_id_to_pb(json.get("trace_id"))?,
-                trace_state: maybe_string_to_pb(json.get("trace_state"))?,
+                trace_state: maybe_string(json.get("trace_state"))?,
                 attributes: common::maybe_key_value_list_to_pb(json.get("attributes"))?,
                 dropped_attributes_count: {
                     let data = json.get("dropped_attributes_count");
@@ -129,7 +129,7 @@ pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>, E
             let data = json.get("deprecated_code");
             data.try_as_i32()
         }?,
-        message: maybe_string_to_pb(json.get("message"))?,
+        message: maybe_string(json.get("message"))?,
     }))
 }
 
@@ -155,7 +155,7 @@ fn span_to_json(span: Span) -> Value<'static> {
 
 pub(crate) fn span_to_pb(span: &Value<'_>) -> Result<Span, Error> {
     Ok(Span {
-        name: maybe_string_to_pb(span.get("name"))?,
+        name: maybe_string(span.get("name"))?,
         start_time_unix_nano: {
             let data = span.get("start_time_unix_nano");
             data.try_as_u64()
@@ -174,7 +174,7 @@ pub(crate) fn span_to_pb(span: &Value<'_>) -> Result<Span, Error> {
             .unwrap_or_default(),
         span_id: id::hex_span_id_to_pb(span.get("span_id"))?,
         trace_id: id::hex_trace_id_to_pb(span.get("trace_id"))?,
-        trace_state: maybe_string_to_pb(span.get("trace_state"))?,
+        trace_state: maybe_string(span.get("trace_state"))?,
         attributes: common::maybe_key_value_list_to_pb(span.get("attributes"))?,
         dropped_attributes_count: {
             let data = span.get("dropped_attributes_count");

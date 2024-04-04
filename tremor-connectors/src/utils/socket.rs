@@ -20,19 +20,25 @@ use tremor_common::url::{Defaults, Url};
 
 /// Generic socket errors
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Error {
+pub enum Error {
+    /// No socket
     #[error("no socket")]
     NoSocket,
+    /// Could not resolve to any addresses
     #[error("could not resolve to any addresses")]
     CouldNotResolve,
+    /// Invalid address
     #[error("invalid address {0}:{1}")]
     InvalidAddress(String, u16),
+    /// IO error
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
+
+/// Configuration options for TCP sockets
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "UPPERCASE")]
-pub(crate) struct TcpSocketOptions {
+pub struct TcpSocketOptions {
     #[serde(default)]
     so_reuseport: bool,
     #[serde(default = "default_true")]
@@ -61,7 +67,11 @@ impl TcpSocketOptions {
     }
 }
 
-pub(crate) async fn tcp_server_socket<D: Defaults>(
+/// Create a TCP server socket
+/// This function will try to bind to the given URL and start listening for incoming connections
+/// # Errors
+/// This function will return an error if it could not resolve the given URL to any addresses or if it could not bind to any of the resolved addresses
+pub async fn tcp_server<D: Defaults>(
     url: &Url<D>,
     backlog: i32,
     options: &TcpSocketOptions,
@@ -98,7 +108,11 @@ pub(crate) async fn tcp_server_socket<D: Defaults>(
     Err(last_err.map_or(Error::CouldNotResolve, Error::from))
 }
 
-pub(crate) async fn tcp_client_socket<D: Defaults>(
+/// Connect to a TCP server
+/// This function will try to connect to the given URL
+/// # Errors
+/// This function will return an error if it could not resolve the given URL to any addresses or if it could not connect to any of the resolved addresses
+pub async fn tcp_client<D: Defaults>(
     url: &Url<D>,
     options: &TcpSocketOptions,
 ) -> Result<TcpStream, Error> {
