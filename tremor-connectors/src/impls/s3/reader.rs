@@ -83,8 +83,9 @@ impl Config {
 
 impl tremor_config::Impl for Config {}
 
+/// S3 Reader Connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
@@ -228,7 +229,7 @@ async fn fetch_keys_task(
                     object_data,
                     stream,
                 };
-                sender.send(p).await?;
+                sender.send(p).await.map_err(|_| Error::SendToChannel)?;
                 stream += 1;
             }
         }

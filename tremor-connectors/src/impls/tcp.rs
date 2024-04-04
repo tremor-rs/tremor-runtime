@@ -114,8 +114,10 @@
 //! end;
 //! ```
 
-pub(crate) mod client;
-pub(crate) mod server;
+/// TCP client Connector
+pub mod client;
+/// TCP server Connector
+pub mod server;
 
 use crate::{log_error, prelude::*, utils::ConnectionMeta};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};

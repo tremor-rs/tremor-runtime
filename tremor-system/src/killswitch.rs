@@ -76,7 +76,7 @@ impl KillSwitch {
         res
     }
 
-    /// FIXME: #[cfg(test)]
+    /// Dummy kills switch
     #[must_use]
     pub fn dummy() -> Self {
         KillSwitch(mpsc::channel(1).0)

@@ -254,8 +254,9 @@ fn default_commit_interval() -> u64 {
     5_000_000_000 // 5 seconds, the default from librdkafka
 }
 
+/// The Kafka Consumer Connector
 #[derive(Default, Debug)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {

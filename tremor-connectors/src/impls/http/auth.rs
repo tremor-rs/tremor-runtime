@@ -18,21 +18,39 @@ use tremor_common::base64::{Engine, BASE64};
 /// Authorization methods
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum Auth {
+pub enum Auth {
+    /// Basic auth
     #[serde(alias = "basic")]
-    Basic { username: String, password: String },
+    Basic {
+        /// Username
+        username: String,
+        /// Password
+        password: String,
+    },
+    /// Bearer token
     #[serde(alias = "bearer")]
     Bearer(String),
+    /// Elasticsearch API key
     #[serde(alias = "elastic_api_key")]
-    ElasticsearchApiKey { id: String, api_key: String },
+    ElasticsearchApiKey {
+        /// API key ID
+        id: String,
+        /// API key
+        api_key: String,
+    },
+    /// GCP Auth
     #[serde(alias = "gcp")]
     Gcp,
+    /// No auth
     #[serde(alias = "none")]
     None,
 }
 
 impl Auth {
     /// Prepare a HTTP autheorization header value given the auth strategy
+    /// # Errors
+    /// - If the GCP token cannot be generated
+    /// - If the basic auth credentials cannot be encoded
     pub fn as_header_value(&self) -> anyhow::Result<Option<String>> {
         match self {
             Auth::Gcp => {

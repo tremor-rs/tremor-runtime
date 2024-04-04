@@ -310,8 +310,9 @@ fn default_concurrency() -> usize {
     DEFAULT_CONCURRENCY
 }
 
+/// Elastic search connector
 #[derive(Default, Debug)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -1200,9 +1201,7 @@ mod tests {
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
         let kill_switch = KillSwitch::dummy();
         assert_eq!(
-            String::from(
-                "Invalid Definition for connector \"flow::my_elastic\": empty nodes provided"
-            ),
+            String::from("[flow::my_elastic] Invalid definition: empty nodes provided"),
             builder
                 .build(&alias, &connector_config, &kill_switch)
                 .await

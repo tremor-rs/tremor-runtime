@@ -94,13 +94,11 @@ async-channel = "2.1"
 grok = "2"
 
 
-# http
-
 # wal
-itoa = "1"
-ryu = "1"
-lexical = "6"
-simdutf8 = "0.1"
+# itoa = "1"
+# ryu = "1"
+# lexical = "6"
+# simdutf8 = "0.1"
 
 [dev-dependencies]
 port_scanner = "0.1"
@@ -127,38 +125,6 @@ default = []
 128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
 
-integration = ["integration-docker", "integration-local"]
-integration-docker = [
-  "es-integration",
-  "s3-integration",
-  "kafka-integration",
-  "gcp-integration",
-  "clickhouse-integration",
-]
-integration-local = [
-  "ws-integration",
-  "http-integration",
-  "file-integration",
-  "crononome-integration",
-  "metronome-integration",
-  "socket-integration",
-  "net-integration",
-  "wal-integration",
-]
-gcp-integration = []
-es-integration = []
-s3-integration = []
-kafka-integration = []
-ws-integration = []
-http-integration = []
-file-integration = []
-crononome-integration = []
-metronome-integration = []
-socket-integration = []
-net-integration = []
-wal-integration = []
-clickhouse-integration = []
-tarpaulin-exclude = []
 # those are falky tests
 flaky-test = []
 

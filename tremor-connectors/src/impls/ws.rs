@@ -177,8 +177,10 @@
 //! end;
 //! ```
 
-pub(crate) mod client;
-pub(crate) mod server;
+/// WS client connector
+pub mod client;
+/// WS server connector
+pub mod server;
 
 use crate::prelude::*;
 use futures::prelude::*;
@@ -188,8 +190,9 @@ use tokio_rustls::server::TlsStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
-pub(crate) struct WsDefaults;
-impl Defaults for WsDefaults {
+/// Default url artifacts for the ws connector
+pub struct Defaults;
+impl tremor_common::url::Defaults for Defaults {
     const SCHEME: &'static str = "ws";
     const HOST: &'static str = "localhost";
     const PORT: u16 = 80;

@@ -72,8 +72,9 @@ fn default_max_outstanding_bytes() -> i64 {
     1024 * 1024 * 10
 }
 
+/// The GCP PubSub consumer connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[cfg(all(test, feature = "gcp-integration"))]
 type GSubWithTokenProvider = GSub<crate::utils::google::tests::TestTokenProvider>;

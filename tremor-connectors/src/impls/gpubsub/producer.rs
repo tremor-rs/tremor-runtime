@@ -45,8 +45,9 @@ pub(crate) struct Config {
 
 impl tremor_config::Impl for Config {}
 
+/// PubSub Producer connector
 #[derive(Default, Debug)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[cfg(all(test, feature = "gcp-integration"))]
 type GpubConnectorWithTokenProvider = GpubConnector<crate::utils::google::tests::TestTokenProvider>;

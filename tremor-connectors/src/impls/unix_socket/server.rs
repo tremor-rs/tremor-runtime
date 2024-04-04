@@ -56,8 +56,9 @@ impl tremor_config::Impl for Config {}
 
 //struct ConnectionMeta {}
 
+/// Builder for the unix socket server connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -83,7 +84,7 @@ impl ConnectorBuilder for Builder {
 }
 
 /// just a `stream_id`
-#[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Copy, Ord, PartialOrd)]
 pub(super) struct ConnectionMeta(u64);
 
 ///

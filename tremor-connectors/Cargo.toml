@@ -26,7 +26,10 @@ url = { version = "2.5", default-features = false }
 async-trait = { version = "0.1", default-features = false }
 log = { version = "0.4", features = ["kv_unstable"] }
 tokio-stream = { version = "0.1", default-features = false }
-bimap = { version = "0.6", default-features = false, features = ["serde"] }
+bimap = { version = "0.6", default-features = false, features = [
+    "serde",
+    "std",
+] }
 hostname = { version = "0.3", default-features = false }
 thiserror = { version = "1.0", default-features = false }
 anyhow = { version = "1.0", default-features = false }
@@ -199,6 +202,10 @@ serde_yaml = { version = "0.9", default-features = false }
 test-case = "3.3"
 proptest = "1.4"
 lazy_static = "1"
+testcontainers = "0.14"
+serial_test = "3.0"
+http-types = "2.0"
+bytes = "1.0"
 
 [features]
 default = [
@@ -224,7 +231,10 @@ default = [
     "udp",
     "unix-socket",
     "dev",
+    "integration-local",
 ]
+
+128bit = ["tremor-value/128bit"]
 
 dev = ["circut-breaker", "exit", "bench"]
 
@@ -291,3 +301,35 @@ circut-breaker = []
 tcp = []
 udp = ["dep:socket2"]
 unix-socket = ["dep:tempfile"]
+
+integration = ["integration-docker", "integration-local"]
+integration-docker = [
+    "es-integration",
+    "s3-integration",
+    "kafka-integration",
+    "gcp-integration",
+    "clickhouse-integration",
+]
+integration-local = [
+    "ws-integration",
+    "http-integration",
+    "file-integration",
+    "crononome-integration",
+    "metronome-integration",
+    "socket-integration",
+    "net-integration",
+    "wal-integration",
+]
+gcp-integration = []
+es-integration = []
+s3-integration = []
+kafka-integration = []
+ws-integration = []
+http-integration = []
+file-integration = []
+crononome-integration = []
+metronome-integration = []
+socket-integration = []
+net-integration = []
+wal-integration = []
+clickhouse-integration = []

@@ -49,15 +49,49 @@ lazy_static::lazy_static! {
     };
 }
 
+/// TLS Server Configuration
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct TLSServerConfig {
+pub struct TLSServerConfig {
     pub(crate) cert: PathBuf,
     pub(crate) key: PathBuf,
 }
 
+impl TLSServerConfig {
+    /// creates a new server config
+    #[must_use]
+    pub fn new<P1, P2>(cert: P1, key: P2) -> Self
+    where
+        P1: Into<PathBuf>,
+        P2: Into<PathBuf>,
+    {
+        TLSServerConfig {
+            cert: cert.into(),
+            key: key.into(),
+        }
+    }
+
+    /// Create a new server config from the `TLSServerConfig`
+    /// # Errors
+    /// if the cert or key is invalid
+    pub fn to_server_config(&self) -> Result<ServerConfig, Error> {
+        let certs = load_certs(&self.cert)?;
+
+        let key = load_keys(&self.key)?;
+
+        let server_config = ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            // set this server to use one cert together with the loaded private key
+            .with_single_cert(certs, key)?;
+
+        Ok(server_config)
+    }
+}
+
+/// TLS Client Configuration
 #[derive(Deserialize, Debug, Default, Clone)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct TLSClientConfig {
+pub struct TLSClientConfig {
     /// Path to the pem-encoded certificate file of the CA to use for verifying the servers certificate
     pub(crate) cafile: Option<PathBuf>,
     /// The DNS domain used to verify the server's certificate. If not provided the domain from the connection URL will be used.
@@ -66,6 +100,72 @@ pub(crate) struct TLSClientConfig {
     pub(crate) cert: Option<PathBuf>,
     /// Path to the private key to use for TLS with client-side certificate
     pub(crate) key: Option<PathBuf>,
+}
+
+impl TLSClientConfig {
+    /// creates a new client config
+    #[must_use]
+    pub fn new(
+        cafile: Option<PathBuf>,
+        domain: Option<String>,
+        cert: Option<PathBuf>,
+        key: Option<PathBuf>,
+    ) -> Self {
+        TLSClientConfig {
+            cafile,
+            domain,
+            cert,
+            key,
+        }
+    }
+
+    /// Create a new client connector from the `TLSClientConfig`
+    /// if we have a cafile configured, we only load it, and no other ca certificates
+    /// if there is no cafile configured, we load the default webpki-roots from Mozilla
+    ///
+    /// # Errors
+    /// if the cafile is invalid
+
+    pub fn to_client_connector(&self) -> Result<TlsConnector, Error> {
+        let tls_config = self.to_client_config()?;
+        Ok(TlsConnector::from(Arc::new(tls_config)))
+    }
+    /// Create a new client config from the `TLSClientConfig`
+    /// if we have a cafile configured, we only load it, and no other ca certificates
+    /// if there is no cafile configured, we load the default webpki-roots from Mozilla
+    ///
+    /// # Errors
+    /// if the cafile is invalid
+    pub fn to_client_config(&self) -> Result<ClientConfig, Error> {
+        let roots = if let Some(cafile) = self.cafile.as_ref() {
+            let mut roots = RootCertStore::empty();
+            let certfile = tremor_common::file::open(cafile)?;
+            let mut reader = BufReader::new(certfile);
+
+            let cert = rustls_pemfile::read_one(&mut reader)?.and_then(|item| match item {
+                Item::X509Certificate(cert) => Some(Certificate(cert)),
+                _ => None,
+            });
+            cert.and_then(|cert| roots.add(&cert).ok())
+                .ok_or_else(|| Error::InvalidCertificate(cafile.to_string_lossy().to_string()))?;
+            roots
+        } else {
+            SYSTEM_ROOT_CERTS.clone()
+        };
+
+        let tls_config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(roots);
+
+        // load client certificate stuff
+        if let (Some(cert), Some(key)) = (self.cert.as_ref(), self.key.as_ref()) {
+            let cert = load_certs(cert)?;
+            let key = load_keys(key)?;
+            Ok(tls_config.with_client_auth_cert(cert, key)?)
+        } else {
+            Ok(tls_config.with_no_client_auth())
+        }
+    }
 }
 
 /// TLS Errors
@@ -80,10 +180,13 @@ pub enum Error {
     /// Invalid private key
     #[error("Invalid private key file: {0}")]
     InvalidPrivateKey(String),
+    /// Tremor Common error
     #[error(transparent)]
     TremorCommon(#[from] tremor_common::Error),
+    /// TLS error
     #[error(transparent)]
     Tls(#[from] rustls::Error),
+    /// IO error
     #[error(transparent)]
     IO(#[from] io::Error),
 }
@@ -131,59 +234,6 @@ fn load_keys(path: &Path) -> Result<PrivateKey, Error> {
         .next()
         .ok_or_else(|| Error::InvalidPrivateKey(path.to_string_lossy().to_string()))
 }
-impl TLSServerConfig {
-    pub(crate) fn to_server_config(&self) -> Result<ServerConfig, Error> {
-        let certs = load_certs(&self.cert)?;
-
-        let key = load_keys(&self.key)?;
-
-        let server_config = ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            // set this server to use one cert together with the loaded private key
-            .with_single_cert(certs, key)?;
-
-        Ok(server_config)
-    }
-}
-impl TLSClientConfig {
-    /// if we have a cafile configured, we only load it, and no other ca certificates
-    /// if there is no cafile configured, we load the default webpki-roots from Mozilla
-    pub(crate) fn to_client_connector(&self) -> Result<TlsConnector, Error> {
-        let tls_config = self.to_client_config()?;
-        Ok(TlsConnector::from(Arc::new(tls_config)))
-    }
-    pub(crate) fn to_client_config(&self) -> Result<ClientConfig, Error> {
-        let roots = if let Some(cafile) = self.cafile.as_ref() {
-            let mut roots = RootCertStore::empty();
-            let certfile = tremor_common::file::open(cafile)?;
-            let mut reader = BufReader::new(certfile);
-
-            let cert = rustls_pemfile::read_one(&mut reader)?.and_then(|item| match item {
-                Item::X509Certificate(cert) => Some(Certificate(cert)),
-                _ => None,
-            });
-            cert.and_then(|cert| roots.add(&cert).ok())
-                .ok_or_else(|| Error::InvalidCertificate(cafile.to_string_lossy().to_string()))?;
-            roots
-        } else {
-            SYSTEM_ROOT_CERTS.clone()
-        };
-
-        let tls_config = ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(roots);
-
-        // load client certificate stuff
-        if let (Some(cert), Some(key)) = (self.cert.as_ref(), self.key.as_ref()) {
-            let cert = load_certs(cert)?;
-            let key = load_keys(key)?;
-            Ok(tls_config.with_client_auth_cert(cert, key)?)
-        } else {
-            Ok(tls_config.with_no_client_auth())
-        }
-    }
-}
 
 // This is a copy of https://github.com/rustls/hyper-rustls/blob/main/examples/server.rs
 // for some reason they don't provide it as part of the library
@@ -192,9 +242,9 @@ enum State {
     Streaming(tokio_rustls::server::TlsStream<AddrStream>),
 }
 
-// tokio_rustls::server::TlsStream doesn't expose constructor methods,
-// so we have to TlsAcceptor::accept and handshake to have access to it
-// TlsStream implements AsyncRead/AsyncWrite handshaking tokio_rustls::Accept first
+/// `tokio_rustls::server::TlsStream` doesn't expose constructor methods,
+/// so we have to `TlsAcceptor::accept` and handshake to have access to it
+/// `TlsStream` implements AsyncRead/AsyncWrite handshaking `tokio_rustls::Accept` first
 pub struct Stream {
     state: State,
 }
@@ -272,12 +322,14 @@ impl AsyncWrite for Stream {
     }
 }
 
+/// Acceptor for TLS connections
 pub struct Acceptor {
     config: Arc<ServerConfig>,
     incoming: AddrIncoming,
 }
 
 impl Acceptor {
+    /// Create a new Acceptor
     pub fn new(config: Arc<ServerConfig>, incoming: AddrIncoming) -> Acceptor {
         Acceptor { config, incoming }
     }
@@ -304,7 +356,7 @@ impl Accept for Acceptor {
 mod tests {
     use std::io::Write;
 
-    use crate::tests::setup_for_tls;
+    use crate::harness::setup_for_tls;
 
     use super::*;
 

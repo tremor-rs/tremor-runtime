@@ -35,8 +35,9 @@ struct UdpClient {
     config: Config,
 }
 
+/// Builder for the UdpClient connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {

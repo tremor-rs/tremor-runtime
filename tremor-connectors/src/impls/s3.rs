@@ -148,8 +148,10 @@
 //! :::
 
 mod auth;
-pub(crate) mod reader;
-pub(crate) mod streamer;
+/// The `s3_reader` connector reads objects from an S3 bucket with the given `prefix`, or all object in that bucket if no prefix was provided.
+pub mod reader;
+/// The `s3_streamer` connector will write events to the configured AWS S3 bucket.
+pub mod streamer;
 
 #[derive(thiserror::Error, Debug)]
 enum Error {
@@ -161,4 +163,7 @@ enum Error {
     UploadStart(String),
     #[error("Failed to access bucket `{0}`: {1}")]
     BucketAccess(String, anyhow::Error),
+    /// Error when trying to send to internal channel
+    #[error("Failed to send to internal channel")]
+    SendToChannel,
 }

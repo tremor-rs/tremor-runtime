@@ -4945,7 +4945,21 @@ dependencies = [
  "lazy_static",
  "log",
  "parking_lot 0.12.1",
- "serial_test_derive",
+ "serial_test_derive 2.0.0",
+]
+
+[[package]]
+name = "serial_test"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "953ad9342b3aaca7cb43c45c097dd008d4907070394bd0751a0aa8817e5a018d"
+dependencies = [
+ "dashmap",
+ "futures",
+ "lazy_static",
+ "log",
+ "parking_lot 0.12.1",
+ "serial_test_derive 3.0.0",
 ]
 
 [[package]]
@@ -4953,6 +4967,17 @@ name = "serial_test_derive"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91d129178576168c589c9ec973feedf7d3126c01ac2bf08795109aa35b69fb8f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.38",
+]
+
+[[package]]
+name = "serial_test_derive"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b93fb4adc70021ac1b47f7d45e8cc4169baaa7ea58483bc5b721d19a26202212"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6201,6 +6226,7 @@ dependencies = [
  "base64 0.21.5",
  "beef",
  "bimap",
+ "bytes",
  "chrono",
  "chrono-tz",
  "clickhouse-rs",
@@ -6219,6 +6245,7 @@ dependencies = [
  "hostname",
  "http",
  "http-body",
+ "http-types",
  "hyper",
  "hyper-rustls",
  "indexmap 2.1.0",
@@ -6239,12 +6266,14 @@ dependencies = [
  "serde",
  "serde_yaml 0.9.27",
  "serenity",
+ "serial_test 3.0.0",
  "simd-json",
  "simd-json-derive",
  "sled",
  "socket2 0.5.5",
  "tempfile",
  "test-case",
+ "testcontainers",
  "thiserror",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -6391,9 +6420,7 @@ dependencies = [
  "http-body",
  "http-types",
  "indexmap 2.1.0",
- "itoa 1.0.10",
  "lazy_static",
- "lexical",
  "log",
  "matches",
  "num_cpus",
@@ -6403,15 +6430,13 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "regex",
- "ryu",
  "serde",
  "serde_yaml 0.9.27",
- "serial_test",
+ "serial_test 2.0.0",
  "signal-hook",
  "signal-hook-tokio",
  "simd-json",
  "simd-json-derive",
- "simdutf8",
  "socket2 0.5.5",
  "tempfile",
  "test-case",

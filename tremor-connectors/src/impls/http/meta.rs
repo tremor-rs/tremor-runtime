@@ -33,10 +33,13 @@ use tremor_value::Value;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Invalid HTTP Method
     #[error("Invalid HTTP Method")]
     InvalidMethod,
+    /// Invalid HTTP URL
     #[error("Invalid HTTP URL")]
     InvalidUrl,
+    /// Request already consumed
     #[error("Request already consumed")]
     RequestAlreadyConsumed,
 }
@@ -227,7 +230,7 @@ impl HttpRequestBuilder {
     }
 }
 /// Extract the content type from the headers
-/// Errors:
+/// # Errors
 ///   if the content type is not a valid string
 pub fn content_type(headers: Option<&HeaderMap>) -> anyhow::Result<Option<Mime>> {
     if let Some(headers) = headers {

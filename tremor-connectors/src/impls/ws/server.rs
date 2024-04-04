@@ -47,7 +47,7 @@ enum Error {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     // kept as a str, so it is re-resolved upon each connect
-    url: Url<super::WsDefaults>,
+    url: Url<super::Defaults>,
     #[serde(default)]
     socket_options: TcpSocketOptions,
     /// it is an `i32` because the underlying api also accepts an i32
@@ -69,8 +69,9 @@ pub(crate) struct WsServer {
     sink_is_connected: Arc<AtomicBool>,
 }
 
+/// WS Server connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {

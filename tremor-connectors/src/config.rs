@@ -306,6 +306,6 @@ mod tests {
         let id = alias::Connector::new(tremor_common::alias::Flow::new("flow"), "my_id");
         let res = Connector::from_config(&id, "fancy_schmancy".into(), &config);
         assert!(res.is_err());
-        assert_eq!(String::from("Invalid Definition for connector \"flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
+        assert_eq!(String::from("[flow::my_id] Invalid definition: Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
     }
 }

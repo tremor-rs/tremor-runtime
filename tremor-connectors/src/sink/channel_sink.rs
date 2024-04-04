@@ -92,7 +92,7 @@ pub(crate) struct SinkData {
 /// tracking 1 channel per stream
 pub(crate) struct ChannelSink<M, F, B>
 where
-    M: Hash + Eq + Send + 'static,
+    M: Hash + Eq + Send + PartialOrd + Ord + 'static,
     F: Fn(&Value<'_>) -> Option<M>,
     B: SinkMetaBehaviour,
 {
@@ -108,7 +108,7 @@ where
 
 impl<T, F> ChannelSink<T, F, NoMeta>
 where
-    T: Hash + Eq + Send + 'static,
+    T: Hash + Eq + Send + PartialOrd + Ord + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
 {
     /// Construct a new instance that redacts metadata with prepared `rx` and `tx`
@@ -125,7 +125,7 @@ where
 
 impl<T, F> ChannelSink<T, F, WithMeta>
 where
-    T: Hash + Eq + Send + 'static,
+    T: Hash + Eq + Send + PartialOrd + Ord + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
 {
     /// Construct a new instance of a channel sink with metadata support
@@ -141,7 +141,7 @@ where
 
 impl<T, F, B> ChannelSink<T, F, B>
 where
-    T: Hash + Eq + Send + 'static,
+    T: Hash + Eq + Send + PartialOrd + Ord + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
     B: SinkMetaBehaviour,
 {
@@ -371,7 +371,7 @@ fn get_sink_meta<'lt, 'value>(
 #[async_trait::async_trait()]
 impl<T, F, B> Sink for ChannelSink<T, F, B>
 where
-    T: Hash + Eq + Send + Sync,
+    T: Hash + Eq + Send + Sync + PartialOrd + Ord,
     F: (Fn(&Value<'_>) -> Option<T>) + Send + Sync,
     B: SinkMetaBehaviour + Send + Sync,
 {

@@ -153,7 +153,7 @@ impl Chunk {
             len, self.max_bytes
         );
     }
-    pub(crate) fn from_config(config: Option<&Value>) -> Result<Self, super::Error> {
+    pub(crate) fn from_config(config: Option<&Value>) -> anyhow::Result<Self, super::Error> {
         if let Some(config) = config {
             let config: Config = tremor_value::structurize(config.clone())
                 .map_err(|e| super::Error::InvalidConfig("chunk", e.into()))?;

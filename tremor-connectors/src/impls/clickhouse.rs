@@ -292,8 +292,9 @@ use clickhouse_rs::{
     Block, ClientHandle, Pool,
 };
 
+/// The `clickhouse` connector builder
 #[derive(Default, Debug)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {

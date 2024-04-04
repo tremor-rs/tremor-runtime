@@ -59,8 +59,9 @@ pub(crate) struct Config {
 
 impl tremor_config::Impl for Config {}
 
+/// http server connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 impl Builder {
     const HTTPS_REQUIRED: &'static str =
