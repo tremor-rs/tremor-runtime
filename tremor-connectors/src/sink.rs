@@ -15,9 +15,9 @@
 #![allow(clippy::module_name_repetitions)]
 
 /// Providing a `Sink` implementation for connectors handling multiple Streams
-pub(crate) mod channel_sink;
+pub mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
-pub(crate) mod concurrency_cap;
+pub mod concurrency_cap;
 
 use super::{metrics::SinkReporter, ConnectionLostNotifier, Msg, QuiescenceBeacon};
 use crate::{
@@ -90,7 +90,7 @@ impl SinkReply {
 
     /// Decide according to the given flag if we return a fail or a none
     #[must_use]
-    pub(crate) fn fail_or_none(needs_fail: bool) -> Self {
+    pub fn fail_or_none(needs_fail: bool) -> Self {
         if needs_fail {
             Self::FAIL
         } else {
@@ -100,7 +100,7 @@ impl SinkReply {
 
     /// Decide according to the given flag if we return a ack or a none
     #[must_use]
-    pub(crate) fn ack_or_none(needs_ack: bool) -> Self {
+    pub fn ack_or_none(needs_ack: bool) -> Self {
         if needs_ack {
             Self::ACK
         } else {
@@ -129,7 +129,7 @@ impl Default for SinkAck {
 
 /// Possible replies from asynchronous sinks via `reply_channel` from event or signal handling
 #[derive(Debug)]
-pub(crate) enum AsyncSinkReply {
+pub enum AsyncSinkReply {
     /// success
     Ack(ContraflowData, u64),
     /// failure
@@ -239,7 +239,7 @@ pub trait Sink: Send {
 
 /// handles writing to 1 stream (e.g. file or TCP connection)
 #[async_trait::async_trait]
-pub(crate) trait StreamWriter: Send + Sync {
+pub trait StreamWriter: Send + Sync {
     /// write the given data out to the stream
     async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<&Value>) -> anyhow::Result<()>;
     /// handle the stream being done, by error or regular end of stream
@@ -275,10 +275,14 @@ pub(crate) struct SinkContextInner {
 #[derive(Clone)]
 pub struct SinkContext(Arc<SinkContextInner>);
 impl SinkContext {
-    pub(crate) fn uid(&self) -> SinkId {
+    /// get the unique identifier for the sink
+    #[must_use]
+    pub fn uid(&self) -> SinkId {
         self.0.uid
     }
-    pub(crate) fn notifier(&self) -> &ConnectionLostNotifier {
+    /// get the connection lost notifier
+    #[must_use]
+    pub fn notifier(&self) -> &ConnectionLostNotifier {
         &self.0.notifier
     }
     pub(crate) fn new(
@@ -348,7 +352,7 @@ impl SinkManagerBuilder {
     /// This is especially useful if your sink handles events asynchronously
     /// and you can't reply immediately.
     #[must_use]
-    pub(crate) fn reply_tx(&self) -> ReplySender {
+    pub fn reply_tx(&self) -> ReplySender {
         self.reply_tx.clone()
     }
 
@@ -413,7 +417,11 @@ pub struct EventSerializer {
 }
 
 impl EventSerializer {
-    pub(crate) fn new(
+    /// create a new event serializer with the given codec and postprocessors
+    /// # Errors
+    ///  * if codec resolution fails
+    ///  * if postprocessor resolution fails
+    pub fn new(
         codec_config: Option<tremor_codec::Config>,
         default_codec: CodecReq,
         postprocessor_configs: Vec<postprocessor::Config>,
@@ -446,13 +454,13 @@ impl EventSerializer {
     }
 
     /// drop a stream
-    pub(crate) fn drop_stream(&mut self, stream_id: u64) {
+    pub fn drop_stream(&mut self, stream_id: u64) {
         self.streams.remove(&stream_id);
     }
 
     /// clear out all streams - this can lead to data loss
     /// only use when you are sure, all the streams are gone
-    pub(crate) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.streams.clear();
     }
 
@@ -460,7 +468,7 @@ impl EventSerializer {
     ///
     /// # Errors
     ///   * if serialization failed (codec or postprocessors)
-    pub(crate) async fn serialize<'v>(
+    pub async fn serialize<'v>(
         &mut self,
         value: &Value<'v>,
         meta: &Value<'v>,
@@ -474,7 +482,7 @@ impl EventSerializer {
     ///
     /// # Errors
     ///   * if serialization failed (codec or postprocessors)
-    pub(crate) async fn serialize_for_stream<'v>(
+    pub async fn serialize_for_stream<'v>(
         &mut self,
         value: &Value<'v>,
         meta: &Value<'v>,
@@ -493,7 +501,7 @@ impl EventSerializer {
     ///
     /// # Errors
     ///   * if serialization fails (codec or postprocessors)
-    pub(crate) async fn serialize_for_stream_with_codec<'v>(
+    pub async fn serialize_for_stream_with_codec<'v>(
         &mut self,
         value: &Value<'v>,
         meta: &Value<'v>,
@@ -541,7 +549,9 @@ impl EventSerializer {
     }
 
     /// remove and flush out any pending data from the stream identified by the given `stream_id`
-    pub(crate) fn finish_stream(&mut self, stream_id: u64) -> anyhow::Result<Vec<Vec<u8>>> {
+    /// # Errors
+    ///  * if serialization failed (codec or postprocessors)
+    pub fn finish_stream(&mut self, stream_id: u64) -> anyhow::Result<Vec<Vec<u8>>> {
         if let Some((mut _codec, mut postprocessors)) = self.streams.remove(&stream_id) {
             Ok(finish(&mut postprocessors, &self.alias)?)
         } else {
@@ -883,14 +893,16 @@ where
 
 #[derive(Clone, Debug)]
 /// basic data to build contraflow messages
-pub(crate) struct ContraflowData {
+pub struct ContraflowData {
     event_id: EventId,
     ingest_ns: u64,
     op_meta: OpMeta,
 }
 
 impl ContraflowData {
-    pub(crate) fn new(event_id: EventId, ingest_ns: u64, op_meta: OpMeta) -> Self {
+    /// create a new `ContraflowData` instance
+    #[must_use]
+    pub fn new(event_id: EventId, ingest_ns: u64, op_meta: OpMeta) -> Self {
         Self {
             event_id,
             ingest_ns,
@@ -915,8 +927,9 @@ impl ContraflowData {
         Event::insight(cb, self.event_id, self.ingest_ns, self.op_meta)
     }
 
-    #[cfg(test)]
-    pub(crate) fn event_id(&self) -> &EventId {
+    /// Fetches the correlating event
+    #[must_use]
+    pub fn event_id(&self) -> &EventId {
         &self.event_id
     }
 }

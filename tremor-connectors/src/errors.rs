@@ -134,7 +134,8 @@ pub enum GenericImplementationError {
     ChannelEmpty,
 }
 
-pub(crate) fn error_connector_def<E: ToString + ?Sized>(c: &alias::Connector, e: &E) -> Error {
+/// Utility function to create an invalid definition error
+pub fn error_connector_def<E: ToString + ?Sized>(c: &alias::Connector, e: &E) -> Error {
     Error::InvalidDefinition(c.clone(), e.to_string())
 }
 

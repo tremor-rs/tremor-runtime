@@ -12,67 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::anyhow;
-use std::path::Path;
-use tremor_connectors::harness::Harness;
-use tremor_connectors::impls::file;
-use tremor_value::literal;
-use value_trait::prelude::*;
+#![cfg(feature = "file-integration")]
 
-#[tokio::test(flavor = "multi_thread")]
-async fn file_connector() -> anyhow::Result<()> {
-    let input_path = Path::new(file!())
-        .parent()
-        .ok_or(anyhow!("bad path"))?
-        .join("../../..")
-        .join("tests")
-        .join("data")
-        .join("input.txt");
-    let defn = literal!({
-        "codec": "string",
-        "preprocessors": ["separate"],
-        "config": {
-            "path": input_path.display().to_string(),
-            "mode": "read"
-        }
-    });
-
-    let mut harness = Harness::new("file", &file::Builder::default(), &defn).await?;
-    harness.start().await?;
-    harness.wait_for_connected().await?;
-
-    let event = harness.out()?.get_event().await?;
-    assert_eq!(1, event.len());
-    let value = event.data.suffix().value();
-    let meta = event.data.suffix().meta();
-
-    // value
-    assert_eq!(Some("snot"), value.as_str());
-    // meta
-    assert_eq!(
-        literal!({
-            "file": {
-                "path": "src/connectors/tests/../../../tests/data/input.txt"
-            }
-        }),
-        meta
-    );
-
-    let event2 = harness.out()?.get_event().await?;
-    assert_eq!(1, event2.len());
-    let data = event2.data.suffix().value();
-    assert_eq!(Some("badger"), data.as_str());
-
-    let (out_events, err_events) = harness.stop().await?;
-    assert!(
-        out_events.is_empty(),
-        "got some events on OUT port: {err_events:?}",
-    );
-
-    assert!(
-        err_events.is_empty(),
-        "got some events on ERR port: {err_events:?}",
-    );
-
-    Ok(())
+mod file {
+    mod generic;
+    mod non_existent;
+    mod xz;
 }

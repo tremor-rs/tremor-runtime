@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(feature = "tcp-integration")]
 mod tcp {
     mod client;
+    mod pause_resume;
     mod server;
 }
 
@@ -29,7 +31,7 @@ use tokio::{
     net::TcpListener,
     task::{self, JoinHandle},
 };
-use tremor_connectors::{harness::setup_for_tls, utils::tls::TLSServerConfig};
+use tremor_connectors::{utils::integration::setup_for_tls, utils::tls::TLSServerConfig};
 
 struct EchoServer {
     addr: String,

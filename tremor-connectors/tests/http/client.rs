@@ -28,8 +28,9 @@ use tokio::task::{spawn, JoinHandle};
 use tremor_common::url::HttpDefaults;
 use tremor_common::{ports::IN, url::Url};
 use tremor_connectors::{
-    harness::{free_port::find_free_tcp_port, Harness},
+    harness::Harness,
     impls::http::{self as http_impl, meta::content_type},
+    utils::integration::free_port::find_free_tcp_port,
 };
 use tremor_script::ValueAndMeta;
 use tremor_system::event::Event;

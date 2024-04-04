@@ -34,7 +34,9 @@ hostname = { version = "0.3", default-features = false }
 thiserror = { version = "1.0", default-features = false }
 anyhow = { version = "1.0", default-features = false }
 event-listener = { version = "5", default-features = false }
-
+lazy_static = { version = "1", default-features = false }
+hex = { version = "0.4", optional = true, default-features = false }
+either = { version = "1.10", default-features = false, features = ["serde"] }
 
 # shared
 simd-json-derive = { version = "0.13", optional = true, default-features = false }
@@ -42,7 +44,6 @@ uuid = { version = "1.6", optional = true, default-features = false, features = 
     "v4",
 ] }
 http-body = { version = "0.4", optional = true, default-features = false }
-lazy_static = { version = "1", optional = true, default-features = false }
 tempfile = { version = "3.8", optional = true, default-features = false }
 
 
@@ -108,8 +109,7 @@ prost-types = { version = "0.9.0", optional = true, default-features = false }
 tremor-otelapis = { version = "=0.2.4", optional = true, default-features = false, features = [
     "otel-all",
 ] }
-rand = { version = "0.8.5", optional = true, default-features = false }
-hex = { version = "0.4", optional = true, default-features = false }
+rand = { version = "0.8.5", default-features = false }
 
 # aws
 aws-sdk-s3 = { version = "1.4", optional = true, default-features = false, features = [
@@ -183,9 +183,6 @@ clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "73d3
     "tokio_io",
     "tls",
 ] }
-either = { version = "1.10", optional = true, default-features = false, features = [
-    "serde",
-] }
 chrono-tz = { version = "0.8", optional = true, default-features = false }
 
 # crononome
@@ -201,7 +198,6 @@ socket2 = { version = "0.5", optional = true, default-features = false }
 serde_yaml = { version = "0.9", default-features = false }
 test-case = "3.3"
 proptest = "1.4"
-lazy_static = "1"
 testcontainers = "0.14"
 serial_test = "3.0"
 http-types = "2.0"
@@ -235,6 +231,8 @@ default = [
 ]
 
 128bit = ["tremor-value/128bit"]
+mime = []
+socket = ["dep:socket2"]
 
 dev = ["circut-breaker", "exit", "bench"]
 
@@ -243,7 +241,6 @@ tls = [
     "dep:rustls",
     "dep:rustls-pemfile",
     "dep:rustls-native-certs",
-    "dep:lazy_static",
 ]
 
 dns = ["dep:trust-dns-resolver"]
@@ -258,6 +255,8 @@ http = [
     "dep:http-body",
     "dep:dashmap",
     "tls",
+    "mime",
+    "socket",
 ]
 gcp = [
     "dep:googapis",
@@ -268,14 +267,7 @@ gcp = [
     "dep:async-std",
     "dep:tempfile",
 ]
-otel = [
-    "dep:tonic",
-    "dep:prost",
-    "dep:prost-types",
-    "dep:tremor-otelapis",
-    "dep:rand",
-    "dep:hex",
-]
+otel = ["dep:tonic", "protobuf", "dep:tremor-otelapis", "dep:hex"]
 aws = [
     "dep:aws-sdk-s3",
     "dep:aws-types",
@@ -283,6 +275,7 @@ aws = [
     "dep:aws-smithy-http",
     "dep:async-channel",
 ]
+protobuf = ["dep:prost", "dep:prost-types"]
 kafka = ["dep:rdkafka", "dep:rdkafka-sys", "dep:indexmap"]
 websockets = ["dep:tokio-tungstenite"]
 discord = ["dep:serenity"]
@@ -290,46 +283,51 @@ file = ["dep:file-mode", "dep:async-compression"]
 kv = ["dep:sled"]
 wal = ["dep:qwal", "dep:simd-json-derive", "dep:tempfile"]
 bench = ["dep:xz2", "dep:hdrhistogram", "dep:tempfile"]
-clickhouse = ["dep:clickhouse-rs", "dep:chrono-tz", "dep:either", "dep:uuid"]
+clickhouse = ["dep:clickhouse-rs", "dep:chrono-tz", "dep:uuid"]
 crononome = ["dep:serde_yaml", "dep:chrono", "dep:cron"]
-stdio = ["dep:lazy_static"]
+stdio = []
 metronome = []
 null = []
 metrics = []
 exit = []
 circut-breaker = []
-tcp = []
-udp = ["dep:socket2"]
+tcp = ["socket"]
+udp = ["socket"]
 unix-socket = ["dep:tempfile"]
 
+integration-utils = []
 integration = ["integration-docker", "integration-local"]
 integration-docker = [
-    "es-integration",
-    "s3-integration",
+    "elasticsearch-integration",
+    "aws-integration",
     "kafka-integration",
     "gcp-integration",
     "clickhouse-integration",
 ]
 integration-local = [
-    "ws-integration",
+    "websockets-integration",
     "http-integration",
-    "file-integration",
     "crononome-integration",
     "metronome-integration",
-    "socket-integration",
-    "net-integration",
     "wal-integration",
+    "bench-integration",
+    "file-integration",
+    "tcp-integration",
+    "udp-integration",
+    "unix-socket-integration",
 ]
-gcp-integration = []
-es-integration = []
-s3-integration = []
-kafka-integration = []
-ws-integration = []
-http-integration = []
-file-integration = []
-crononome-integration = []
-metronome-integration = []
-socket-integration = []
-net-integration = []
-wal-integration = []
-clickhouse-integration = []
+bench-integration = ["bench"]
+crononome-integration = ["crononome"]
+file-integration = ["file"]
+gcp-integration = ["gcp"]
+elasticsearch-integration = ["elasticsearch"]
+aws-integration = ["aws"]
+kafka-integration = ["kafka"]
+websockets-integration = ["websockets"]
+http-integration = ["http", "integration-utils"]
+metronome-integration = ["metronome"]
+wal-integration = ["wal"]
+clickhouse-integration = ["clickhouse"]
+tcp-integration = ["tcp"]
+udp-integration = ["udp"]
+unix-socket-integration = ["unix-socket"]

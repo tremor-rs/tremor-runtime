@@ -22,14 +22,16 @@ use std::sync::Arc;
 /// Utility for limiting concurrency in a sink to a certain `cap` value
 /// Issueing `CB::Close` message when the `cap` value is reached and `CB::Open` message when we fall back below it
 #[derive(Debug, Clone)]
-pub(crate) struct ConcurrencyCap {
+pub struct ConcurrencyCap {
     cap: usize,
     reply_tx: ReplySender,
     counter: Arc<AtomicUsize>,
 }
 
 impl ConcurrencyCap {
-    pub(crate) fn new(cap: usize, reply_tx: ReplySender) -> Self {
+    /// creates a new `ConcurrencyCap` with a given `cap` value and a `reply_tx` to send CB messages
+    #[must_use]
+    pub fn new(cap: usize, reply_tx: ReplySender) -> Self {
         Self {
             cap,
             reply_tx,
@@ -44,7 +46,9 @@ impl ConcurrencyCap {
 
     /// increment the counter and return a guard for safely counting down
     /// wrapped inside an enum to check whether we exceeded the maximum or not
-    pub(crate) fn inc_for(&self, event: &Event) -> anyhow::Result<CounterGuard> {
+    /// # Errors
+    /// if we fail to send a CB message
+    pub fn inc_for(&self, event: &Event) -> anyhow::Result<CounterGuard> {
         let num = self.counter.fetch_add(1, Ordering::AcqRel);
         let guard = CounterGuard(num, self.clone(), ContraflowData::from(event));
         if num == self.cap {
@@ -69,7 +73,7 @@ impl ConcurrencyCap {
 }
 
 /// ensures that we subtract 1 from the counter once this drops
-pub(crate) struct CounterGuard(usize, ConcurrencyCap, ContraflowData);
+pub struct CounterGuard(usize, ConcurrencyCap, ContraflowData);
 
 impl Drop for CounterGuard {
     fn drop(&mut self) {

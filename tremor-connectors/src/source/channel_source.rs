@@ -31,7 +31,7 @@ use tokio::{task, time::timeout};
 /// Connector implementations handling their stuff in a separate task can use the
 /// channel obtained by `ChannelSource::sender()` to send `SourceReply`s to the
 /// runtime.
-pub(crate) struct ChannelSource {
+pub struct ChannelSource {
     rx: Receiver<SourceReply>,
     tx: SourceReplySender,
     is_connected: Arc<AtomicBool>,
@@ -60,7 +60,6 @@ impl ChannelSource {
     }
 
     /// get the runtime for the source
-
     #[must_use]
     pub fn runtime(&self) -> ChannelSourceRuntime {
         ChannelSourceRuntime {
@@ -102,19 +101,22 @@ impl Source for ChannelSource {
 
 /// The runtime driving the `ChannelSource`
 #[derive(Clone)]
-pub(crate) struct ChannelSourceRuntime {
+pub struct ChannelSourceRuntime {
     sender: Sender<SourceReply>,
 }
 
 impl ChannelSourceRuntime {
-    pub(crate) fn new(source_tx: Sender<SourceReply>) -> Self {
+    /// create a stream reader
+    #[must_use]
+    pub fn new(source_tx: Sender<SourceReply>) -> Self {
         Self { sender: source_tx }
     }
 }
 
 impl ChannelSourceRuntime {
     const READ_TIMEOUT_MS: Duration = Duration::from_millis(100);
-    pub(crate) fn register_stream_reader<R, C>(&self, stream: u64, ctx: &C, mut reader: R)
+    /// register a stream reader
+    pub fn register_stream_reader<R, C>(&self, stream: u64, ctx: &C, mut reader: R)
     where
         R: StreamReader + Send + Sync + 'static,
         C: Context + Send + Sync + 'static,

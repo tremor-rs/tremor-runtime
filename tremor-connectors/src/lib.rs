@@ -83,8 +83,8 @@ use utils::reconnect::{ConnectionLostNotifier, ReconnectRuntime};
 pub(crate) use utils::{metrics, reconnect};
 use value_trait::prelude::*;
 
-/// Accept timeout
-pub(crate) const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);
+/// Default Accept timeout for network connections
+pub const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Logs but ignores an error
 #[macro_export]
@@ -101,7 +101,7 @@ macro_rules! log_error {
 }
 
 /// context for a Connector or its parts
-pub(crate) trait Context: Display + Clone {
+pub trait Context: Display + Clone {
     /// provide the alias of the connector
     fn alias(&self) -> &alias::Connector;
 
@@ -127,6 +127,8 @@ pub(crate) trait Context: Display + Clone {
     }
 
     /// log an error and return the result
+    /// # Errors
+    /// if the expression is an error
     #[inline]
     fn bail_err<T, E, M>(
         &self,
@@ -220,11 +222,12 @@ impl Context for ConnectorContext {
 
 /// Stream id generator
 #[derive(Debug, Default)]
-pub(crate) struct StreamIdGen(u64);
+pub struct StreamIdGen(u64);
 
 impl StreamIdGen {
     /// get the next stream id and increment the internal state
-    pub(crate) fn next_stream_id(&mut self) -> u64 {
+    #[must_use]
+    pub fn next_stream_id(&mut self) -> u64 {
         let res = self.0;
         self.0 = self.0.wrapping_add(1);
         res
@@ -236,7 +239,7 @@ impl StreamIdGen {
 /// * `StreamClosed` -> Only this stream is closed
 /// * `ConnectorClosed` -> The entire connector is closed, notify that we are disconnected, reconnect according to chosen reconnect config
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub(crate) enum StreamDone {
+pub enum StreamDone {
     /// Only this stream is closed, (only one of many)
     StreamClosed,
     /// With this stream being closed, the whole connector can be considered done/closed
@@ -1008,40 +1011,71 @@ pub trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
 #[must_use]
 pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
+        #[cfg(feature = "file")]
         Box::<impls::file::Builder>::default(),
+        #[cfg(feature = "metrics")]
         Box::<impls::metrics::Builder>::default(),
+        #[cfg(feature = "stdio")]
         Box::<impls::stdio::Builder>::default(),
+        #[cfg(feature = "tcp")]
         Box::<impls::tcp::client::Builder>::default(),
+        #[cfg(feature = "tcp")]
         Box::<impls::tcp::server::Builder>::default(),
+        #[cfg(feature = "udp")]
         Box::<impls::udp::client::Builder>::default(),
+        #[cfg(feature = "udp")]
         Box::<impls::udp::server::Builder>::default(),
+        #[cfg(feature = "kv")]
         Box::<impls::kv::Builder>::default(),
+        #[cfg(feature = "metronome")]
         Box::<impls::metronome::Builder>::default(),
+        #[cfg(feature = "wal")]
         Box::<impls::wal::Builder>::default(),
+        #[cfg(feature = "dns")]
         Box::<impls::dns::client::Builder>::default(),
+        #[cfg(feature = "discord")]
         Box::<impls::discord::Builder>::default(),
+        #[cfg(feature = "ws")]
         Box::<impls::ws::client::Builder>::default(),
+        #[cfg(feature = "ws")]
         Box::<impls::ws::server::Builder>::default(),
+        #[cfg(feature = "elasticsearch")]
         Box::<impls::elastic::Builder>::default(),
+        #[cfg(feature = "crononome")]
         Box::<impls::crononome::Builder>::default(),
+        #[cfg(feature = "aws")]
         Box::<impls::s3::streamer::Builder>::default(),
+        #[cfg(feature = "aws")]
         Box::<impls::s3::reader::Builder>::default(),
+        #[cfg(feature = "kafka")]
         Box::<impls::kafka::consumer::Builder>::default(),
+        #[cfg(feature = "kafka")]
         Box::<impls::kafka::producer::Builder>::default(),
-        #[cfg(unix)]
+        #[cfg(all(unix, feature = "unix-socket"))]
         Box::<impls::unix_socket::server::Builder>::default(),
-        #[cfg(unix)]
+        #[cfg(all(unix, feature = "unix-socket"))]
         Box::<impls::unix_socket::client::Builder>::default(),
+        #[cfg(feature = "http")]
         Box::<impls::http::client::Builder>::default(),
+        #[cfg(feature = "http")]
         Box::<impls::http::server::Builder>::default(),
+        #[cfg(feature = "otel")]
         Box::<impls::otel::client::Builder>::default(),
+        #[cfg(feature = "otel")]
         Box::<impls::otel::server::Builder>::default(),
+        #[cfg(feature = "gcp")]
         Box::<impls::gbq::writer::Builder>::default(),
+        #[cfg(feature = "gcp")]
         Box::<impls::gpubsub::consumer::Builder>::default(),
+        #[cfg(feature = "gcp")]
         Box::<impls::gpubsub::producer::Builder>::default(),
-        Box::<impls::clickhouse::Builder>::default(),
+        #[cfg(feature = "gcp")]
         Box::<impls::gcl::writer::Builder>::default(),
+        #[cfg(feature = "gcp")]
         Box::<impls::gcs::streamer::Builder>::default(),
+        #[cfg(feature = "clickhouse")]
+        Box::<impls::clickhouse::Builder>::default(),
+        #[cfg(feature = "null")]
         Box::<impls::null::Builder>::default(),
     ]
 }
@@ -1051,15 +1085,18 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
 #[must_use]
 pub fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
+        #[cfg(feature = "cb")]
         Box::<impls::cb::Builder>::default(),
+        #[cfg(feature = "bench")]
         Box::<impls::bench::Builder>::default(),
+        #[cfg(feature = "exit")]
         Box::<impls::exit::Builder>::default(),
     ]
 }
 
 /// Function to spawn a long-running task representing a connector connection
 /// and ensuring that upon error the runtime is notified about the lost connection, as the task is gone.
-pub(crate) fn spawn_task<F, C>(ctx: C, t: F) -> JoinHandle<()>
+pub fn spawn_task<F, C>(ctx: C, t: F) -> JoinHandle<()>
 where
     F: Future<Output = anyhow::Result<()>> + Send + 'static,
     C: Context + Send + 'static,

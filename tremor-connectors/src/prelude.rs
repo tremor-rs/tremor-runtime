@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// FIXME, do we want this?
+#![allow(unused_imports)]
 pub(crate) use crate::{
     channel::{bounded, Receiver, Sender},
     errors::{Error, GenericImplementationError},
@@ -52,7 +54,8 @@ pub(crate) use tremor_system::pipeline::OpMeta;
 /// equals default chunk size for `BufReader`
 pub(crate) const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 /// default buf size used for reading from files and streams (sockets etc)
-pub(crate) fn default_buf_size() -> usize {
+#[must_use]
+pub fn default_buf_size() -> usize {
     DEFAULT_BUF_SIZE
 }
 
@@ -62,7 +65,8 @@ pub(crate) fn default_buf_size() -> usize {
 const DEFAULT_BACKLOG: i32 = 128;
 
 /// Default TCP backlog size
-pub(crate) fn default_backlog() -> i32 {
+#[must_use]
+pub fn default_backlog() -> i32 {
     DEFAULT_BACKLOG
 }
 

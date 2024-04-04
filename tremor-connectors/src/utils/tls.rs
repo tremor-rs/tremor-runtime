@@ -354,11 +354,9 @@ impl Accept for Acceptor {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
-    use crate::harness::setup_for_tls;
 
     use super::*;
+    use std::io::Write;
 
     #[test]
     fn load_certs_invalid() -> anyhow::Result<()> {
@@ -396,10 +394,12 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "integration-utils")]
     #[test]
     fn client_config() -> anyhow::Result<()> {
-        setup_for_tls();
+        use crate::utils::integration::setup_for_tls;
 
+        setup_for_tls();
         let tls_config = TLSClientConfig {
             cafile: Some(Path::new("./tests/localhost.cert").to_path_buf()),
             domain: Some("hostenschmirtz".to_string()),

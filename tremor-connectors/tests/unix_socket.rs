@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(feature = "unix-socket-integration")]
+
 use log::debug;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},

@@ -15,21 +15,30 @@
 use std::net::SocketAddr;
 
 /// Metrics facilities
-pub(crate) mod metrics;
+pub mod metrics;
 /// MIME encoding utilities
+#[cfg(feature = "mime")]
 pub(crate) mod mime;
 /// Some common things for object storage connectors like gcs and s3
+#[cfg(any(feature = "aws", feature = "gcs"))]
 pub(crate) mod object_storage;
 /// Protocol Buffer utilities
+#[cfg(feature = "protobuf")]
 pub(crate) mod pb;
 /// Quiescence support facilities
-pub(crate) mod quiescence;
+pub mod quiescence;
 /// Reconnection facilities
-pub(crate) mod reconnect;
+pub mod reconnect;
 /// Socket utilities
+#[cfg(feature = "socket")]
 pub(crate) mod socket;
 /// Transport Level Security facilities
+#[cfg(feature = "tls")]
 pub mod tls;
+
+/// Integration test utils
+#[cfg(any(test, feature = "integration-utils"))]
+pub mod integration;
 
 /// google  utilities
 #[cfg(feature = "gcp")]
@@ -49,8 +58,9 @@ impl From<SocketAddr> for ConnectionMeta {
     }
 }
 
+/// Fetches the current task id or not - helper for unstable tokio
 #[must_use]
-pub(crate) fn task_id() -> String {
+pub fn task_id() -> String {
     // tokio::task::try_id().map_or_else(|| String::from("<no-task>"), |i| i.to_string())
     String::from("<no-task>")
 }

@@ -21,10 +21,7 @@ use tokio::{
     time::timeout,
 };
 use tremor_common::ports::IN;
-use tremor_connectors::{
-    harness::{free_port, Harness},
-    impls::tcp,
-};
+use tremor_connectors::{harness::Harness, impls::tcp, utils::integration::free_port};
 use tremor_system::event::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 
