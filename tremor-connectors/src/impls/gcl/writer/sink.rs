@@ -273,7 +273,7 @@ mod test {
     use tonic::codegen::Service;
     use tremor_common::ids::SinkId;
     use tremor_pipeline::CbAction::Trigger;
-    use tremor_pipeline::EventId;
+    use tremor_system::event::EventId;
     use tremor_value::{literal, structurize};
 
     #[derive(Debug)]

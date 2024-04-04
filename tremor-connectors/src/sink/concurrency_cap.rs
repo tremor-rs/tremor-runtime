@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use tremor_system::{controlplane::CbAction, event::Event};
+
 use super::{AsyncSinkReply, ReplySender};
 use crate::sink::ContraflowData;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use tremor_pipeline::{CbAction, Event};
 
 /// Utility for limiting concurrency in a sink to a certain `cap` value
 /// Issueing `CB::Close` message when the `cap` value is reached and `CB::Open` message when we fall back below it

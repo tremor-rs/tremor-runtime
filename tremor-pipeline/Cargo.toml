@@ -30,6 +30,8 @@ tremor-common = { version = "0.13.0-rc.16", path = "../tremor-common" }
 tremor-config = { version = "0.13.0-rc.16", path = "../tremor-config" }
 tremor-script = { version = "0.13.0-rc.16", path = "../tremor-script" }
 tremor-value = { version = "0.13.0-rc.16", path = "../tremor-value" }
+tremor-system = { version = "0.13.0-rc.16", path = "../tremor-system" }
+
 url = "2"
 window = { git = "https://github.com/tremor-rs/window.git", tag = "v0.1.1" }
 

@@ -138,7 +138,7 @@ pub(crate) async fn udp_socket<D: Defaults>(
             }
         }
     }
-    Err(last_err.map_or_else(|| Error::CouldNotResolve.into(), Error::from))
+    Err(last_err.map_or_else(|| Error::CouldNotResolve, Error::from))
 }
 
 #[derive(Debug, Clone, Deserialize)]

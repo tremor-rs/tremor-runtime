@@ -18,10 +18,10 @@
 mod test;
 
 use super::window::{self, Group, Window};
+use crate::errors::Result;
 use crate::op::prelude::*;
 use crate::op::trickle::window::{GroupWindow, SelectCtx, Trait};
-use crate::{errors::Result, SignalKind};
-use crate::{Event, Operator};
+use crate::Operator;
 use halfbrown::Entry;
 use tremor_common::stry;
 use tremor_script::{
@@ -32,6 +32,7 @@ use tremor_script::{
     prelude::*,
     NO_AGGRS,
 };
+use tremor_system::dataplane::SignalKind;
 use tremor_value::{utils::sorted_serialize, Value};
 
 #[derive(Debug)]

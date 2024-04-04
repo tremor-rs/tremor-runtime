@@ -53,7 +53,6 @@ use tokio::{
     io::{stderr, stdin, stdout, AsyncReadExt, AsyncWriteExt, Stderr, Stdout},
     sync::broadcast::{channel as broadcast, error::RecvError, Receiver},
 };
-use tremor_pipeline::{EventOriginUri, DEFAULT_STREAM_ID};
 const INPUT_SIZE_BYTES: usize = 8192;
 
 lazy_static::lazy_static! {
@@ -192,7 +191,7 @@ impl Sink for StdStreamSink {
     async fn on_event(
         &mut self,
         input: &str,
-        event: tremor_pipeline::Event,
+        event: tremor_system::event::Event,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
@@ -204,9 +203,11 @@ impl Sink for StdStreamSink {
                     "in" | "stdout" => self.stdout.write_all(&chunk).await?,
                     "stderr" => self.stderr.write_all(&chunk).await?,
                     _ => {
-                        return Err(
-                            crate::Error::InvalidPort(ctx.alias().clone(), input.into()).into()
+                        return Err(crate::Error::InvalidPort(
+                            ctx.alias().clone(),
+                            input.to_string().into(),
                         )
+                        .into())
                     }
                 }
             }

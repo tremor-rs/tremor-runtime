@@ -22,6 +22,7 @@ use futures::{
     StreamExt,
 };
 use pin_project_lite::pin_project;
+use std::marker::PhantomData;
 
 pin_project! {
     /// A stream that merges two other streams into a single stream.
@@ -33,29 +34,34 @@ pin_project! {
     /// [`Stream`]: trait.Stream.html
     #[cfg_attr(feature = "docs", doc(cfg(unstable)))]
     #[derive(Debug)]
-    pub struct PriorityMerge<High, Low> {
+    pub struct PriorityMerge<T, High, Low> {
         #[pin]
         high: Fuse<High>,
         #[pin]
         low: Fuse<Low>,
+        t: PhantomData<T>
     }
 }
 
-impl<High: Stream, Low: Stream> PriorityMerge<High, Low> {
+impl<T, High, Low> PriorityMerge<T, High, Low>
+where
+    High: Stream<Item = T>,
+    Low: Stream<Item = T>,
+{
     /// Creates a new `PriorityMerge` from two streams.
     pub fn new(high: High, low: Low) -> Self {
         Self {
             high: high.fuse(),
             low: low.fuse(),
+            t: PhantomData,
         }
     }
 }
 
-impl<High, Low, T> Stream for PriorityMerge<High, Low>
+impl<T, High, Low> Stream for PriorityMerge<T, High, Low>
 where
     High: Stream<Item = T>,
     Low: Stream<Item = T>,
-    T: std::fmt::Debug,
 {
     type Item = T;
 

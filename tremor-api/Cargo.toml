@@ -21,6 +21,7 @@ tremor-runtime = { version = "0.13.0-rc.16", path = "../" }
 tremor-script = { version = "0.13.0-rc.16", path = "../tremor-script" }
 tremor-value = { version = "0.13.0-rc.16", path = "../tremor-value" }
 tremor-common = { version = "0.13.0-rc.16", path = "../tremor-common" }
+tremor-system = { version = "0.13.0-rc.16", path = "../tremor-system" }
 
 [dev-dependencies]
 surf = { version = "2.3", default-features = false, features = [

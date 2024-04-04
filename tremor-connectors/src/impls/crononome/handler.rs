@@ -435,8 +435,8 @@ mod tests {
         let schedule = Schedule::from_str(expression).expect("Failed to parse expression.");
 
         // Membership
-        assert_eq!(true, schedule.years().includes(2031));
-        assert_eq!(false, schedule.years().includes(1969));
+        assert!(schedule.years().includes(2031));
+        assert!(!schedule.years().includes(1969));
 
         // Number of years specified
         assert_eq!(30, schedule.years().count());

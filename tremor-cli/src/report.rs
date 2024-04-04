@@ -86,7 +86,7 @@ pub(crate) enum KeywordKind {
 /// for `env!` macro
 pub(crate) fn metadata() -> HashMap<String, String> {
     use std::env;
-    let mut meta: HashMap<String, String> = HashMap::new();
+    let mut meta: HashMap<String, String> = HashMap::with_capacity(7);
 
     meta.insert("authors".into(), env!("CARGO_PKG_AUTHORS").into());
     meta.insert("description".into(), env!("CARGO_PKG_DESCRIPTION").into());
@@ -98,7 +98,6 @@ pub(crate) fn metadata() -> HashMap<String, String> {
         "allocator".into(),
         crate::alloc::get_allocator_name().into(),
     );
-    meta.insert("librdkafka".into(), tremor_runtime::version::rdkafka());
 
     meta
 }

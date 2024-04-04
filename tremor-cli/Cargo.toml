@@ -53,6 +53,7 @@ tremor-pipeline = { version = "0.13.0-rc.16", path = "../tremor-pipeline" }
 tremor-runtime = { version = "0.13.0-rc.16", path = "../" }
 tremor-script = { version = "0.13.0-rc.16", path = "../tremor-script" }
 tremor-value = { version = "0.13.0-rc.16", path = "../tremor-value" }
+tremor-system = { version = "0.13.0-rc.16", path = "../tremor-system" }
 url = "2"
 error-chain = "0.12"
 globwalk = "0.8"

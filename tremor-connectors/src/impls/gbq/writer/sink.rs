@@ -604,7 +604,7 @@ where
                     &stream
                         .table_schema
                         .clone()
-                        .ok_or_else(|| GbqError::GbqSchemaNotProvided(table_id))?
+                        .ok_or(GbqError::GbqSchemaNotProvided(table_id))?
                         .fields,
                     ctx,
                 );

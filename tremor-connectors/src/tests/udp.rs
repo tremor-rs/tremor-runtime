@@ -15,7 +15,7 @@
 use super::ConnectorHarness;
 use crate::{connectors::impls::udp, errors::Result};
 use tremor_common::ports::IN;
-use tremor_pipeline::Event;
+use tremor_system::event::Event;
 use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]

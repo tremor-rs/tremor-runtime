@@ -27,7 +27,7 @@ use testcontainers::RunnableImage;
 use tokio::time::timeout;
 use tonic::transport::Channel;
 use tremor_common::ports::IN;
-use tremor_pipeline::{Event, EventId};
+use tremor_system::event::{Event, EventId};
 use tremor_value::{literal, Value};
 
 #[tokio::test(flavor = "multi_thread")]

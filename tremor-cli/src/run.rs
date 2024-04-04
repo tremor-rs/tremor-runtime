@@ -27,7 +27,6 @@ use tremor_common::{
     time::nanotime,
 };
 use tremor_interceptor::{postprocessor, preprocessor};
-use tremor_pipeline::{Event, EventId};
 use tremor_runtime::system::{World, WorldConfig};
 use tremor_script::{
     arena::Arena,
@@ -37,6 +36,7 @@ use tremor_script::{
     query::Query,
     script::{AggrType, Return, Script},
 };
+use tremor_system::event::{Event, EventId};
 use tremor_value::Value;
 
 struct Ingress {

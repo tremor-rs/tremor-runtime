@@ -24,7 +24,6 @@ use http_types::{
 use serde::{Deserialize, Serialize};
 use tide::Response;
 use tokio::task::JoinHandle;
-use tremor_runtime::instance::State as InstanceState;
 use tremor_runtime::system::World;
 
 pub mod flow;
@@ -213,12 +212,9 @@ mod tests {
     use http_types::Url;
     use std::time::Instant;
     use tokio::net::TcpListener;
-    use tremor_runtime::{
-        errors::Result as RuntimeResult,
-        instance::State as InstanceState,
-        system::{ShutdownMode, WorldConfig},
-    };
+    use tremor_runtime::{errors::Result as RuntimeResult, system::WorldConfig};
     use tremor_script::{aggr_registry, ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
+    use tremor_system::{instance::State as InstanceState, killswitch::ShutdownMode};
     use tremor_value::{prelude::*, value::StaticValue};
 
     use crate::api::model::{ApiFlowStatusReport, PatchStatus};
@@ -277,7 +273,7 @@ mod tests {
         // check the status endpoint
         let start = Instant::now();
         let client: surf::Client = surf::Config::new()
-            .set_base_url(Url::parse(&format!("http://{host}/"))?)
+            .set_base_url(Url::parse(&format!("http://{host}/")).expect("Could not parse URL"))
             .try_into()
             .expect("Could not create surf client");
 

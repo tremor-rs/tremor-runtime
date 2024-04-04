@@ -15,12 +15,9 @@
 // mod test { <- this is for safety.sh
 
 #![allow(clippy::float_cmp)]
+use super::*;
 use crate::op::prelude::trickle::window::{Actions, Trait};
 use crate::query::window_defn_to_impl;
-use crate::EventId;
-
-use super::*;
-
 use tremor_common::ids::Id;
 use tremor_script::ast::{self, Helper, Ident, Literal};
 use tremor_script::{ast::Consts, NodeMeta};
@@ -28,6 +25,7 @@ use tremor_script::{
     ast::{visitors::ConstFolder, walkers::QueryWalker, Stmt},
     lexer::Location,
 };
+use tremor_system::event::EventId;
 use tremor_value::{literal, Value};
 
 fn test_uid() -> OperatorId {

@@ -19,6 +19,6 @@ macro_rules! instance {
     // crate::INSTANCE is never mutated after the initial setting
     // in main::run() so we can use this safely.
     () => {
-        unsafe { crate::INSTANCE.to_string() }
+        unsafe { tremor_system::INSTANCE.to_string() }
     };
 }

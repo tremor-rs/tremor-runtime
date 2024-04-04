@@ -260,8 +260,6 @@ use tremor_value::value::StaticValue;
 
 #[derive(Debug, thiserror::Error)]
 enum Error {
-    #[error("No elasticsearch client available.")]
-    NoClient,
     #[error("Invalid Response from ES: No \"items\" or not an array: {0}")]
     InvalidResponse(String),
     #[error("Invalid `$elastic.action` {0}")]
@@ -899,9 +897,6 @@ struct ESMeta<'a, 'value> {
 }
 
 impl<'a, 'value> ESMeta<'a, 'value> {
-    // ALLOW: this is a string
-    const MISSING_ID: &'static str = "Missing field `$elastic[\"_id\"]`";
-
     fn new(meta: &'a Value<'value>) -> Self {
         Self {
             meta: if let Some(elastic_meta) = meta.get("elastic") {
@@ -1333,7 +1328,7 @@ mod tests {
         assert_eq!(Some("abcdef"), es_meta.get_id());
         assert_eq!(Some("snot"), es_meta.get_index());
         assert_eq!(Some("pipeline"), es_meta.get_pipeline());
-        assert_eq!(false, es_meta.get_raw_payload());
+        assert!(!es_meta.get_raw_payload());
         assert_eq!(Some(2), es_meta.get_if_primary_term());
         assert_eq!(Some(3), es_meta.get_if_seq_no());
         matches!(es_meta.get_refresh(), Ok(Some(Refresh::WaitFor)));

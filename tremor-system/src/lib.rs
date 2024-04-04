@@ -30,6 +30,8 @@ use std::{
     time::Duration,
 };
 
+/// The Event that carries data through the system
+pub mod event;
 /// Instance management
 pub mod instance;
 
@@ -79,8 +81,8 @@ pub mod killswitch {
     #[derive(Debug, thiserror::Error)]
     pub enum Error {
         /// Error stopping all Flows
-        #[error("Error stopping all Flows: {0}")]
-        Send(#[from] mpsc::error::SendError<Msg>),
+        #[error("Error stopping all Flows")]
+        Send,
     }
     /// for draining and stopping
     #[derive(Debug, Clone)]
@@ -94,7 +96,7 @@ pub mod killswitch {
         pub async fn stop(&self, mode: ShutdownMode) -> Result<(), Error> {
             if mode == ShutdownMode::Graceful {
                 let (tx, rx) = oneshot::channel();
-                self.0.send(Msg::Drain(tx)).await?;
+                self.0.send(Msg::Drain(tx)).await.map_err(|_| Error::Send)?;
                 if let Ok(res) = timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT, rx).await {
                     if res.is_err() {
                         log::error!("Error draining all Flows",);
@@ -106,11 +108,11 @@ pub mod killswitch {
                     );
                 }
             }
-            let res = self.0.send(Msg::Stop).await;
+            let res = self.0.send(Msg::Stop).await.map_err(|_| Error::Send);
             if let Err(e) = &res {
                 log::error!("Error stopping all Flows: {e}");
             }
-            Ok(res?)
+            res
         }
 
         /// FIXME: #[cfg(test)]
@@ -128,8 +130,42 @@ pub mod killswitch {
 }
 /// dataplane
 pub mod dataplane {
-    use tremor_common::ports::Port;
-    use tremor_pipeline::Event;
+    use crate::event::Event;
+    use crate::{
+        connector::{self, sink, source},
+        pipeline,
+    };
+    use tremor_common::{ids::SourceId, ports::Port};
+
+    /// The kind of signal this is
+    #[derive(
+        Debug,
+        Clone,
+        Copy,
+        PartialEq,
+        simd_json_derive::Serialize,
+        simd_json_derive::Deserialize,
+        Eq,
+    )]
+    pub enum SignalKind {
+        // Lifecycle
+        /// Start signal, containing the source uid which just started
+        Start(SourceId),
+        /// Shutdown Signal
+        Shutdown,
+        // Pause, TODO debug trace
+        // Resume, TODO debug trace
+        // Step, TODO ( into, over, to next breakpoint )
+        /// Control
+        Control,
+        /// Periodic Tick
+        Tick,
+        /// Drain Signal - this connection is being drained, there should be no events after this
+        /// This signal must be answered with a Drain contraflow event containing the same uid (u64)
+        /// this way a contraflow event will not be interpreted by connectors for which it isn't meant
+        /// reception of such Drain contraflow event notifies the signal sender that the intermittent pipeline is drained and can be safely disconnected
+        Drain(SourceId),
+    }
 
     /// an input dataplane message for this pipeline
     #[derive(Debug)]
@@ -144,16 +180,141 @@ pub mod dataplane {
         /// a signal
         Signal(Event),
     }
+
+    /// Input targets
+    #[derive(Debug)]
+    pub enum InputTarget {
+        /// another pipeline
+        Pipeline(Box<pipeline::Addr>),
+        /// a connector
+        Source(source::Addr),
+    }
+
+    /// Dataplane errors
+    #[derive(Debug, thiserror::Error)]
+    pub enum Error {
+        /// Error sending an insight to source
+        #[error("Error sending insight to source")]
+        SourceSendInsightError,
+        /// Error sending an insight to pipeline
+        #[error("Error sending insight to pipeline")]
+        PipelineSendInsightError,
+        /// Error sending an event to pipeline
+        #[error("Error sending event to pipeline")]
+        PipelineSendEventError,
+        /// Error sending an event to sink
+        #[error("Error sending event to sink")]
+        SinkSendEventError,
+        /// Error sending a signal to pipeline
+        #[error("Error sending signal to pipeline")]
+        PipelineSendSignalError,
+        /// Error sending a signal to sink
+        #[error("Error sending signal to sink")]
+        SinkSendEventErrorSendSignalError,
+    }
+
+    impl InputTarget {
+        /// send an insight to the target
+        ///
+        /// # Errors
+        /// * if sending failed
+        pub fn send_insight(&self, insight: Event) -> Result<(), Error> {
+            match self {
+                InputTarget::Pipeline(addr) => addr
+                    .send_insight(insight)
+                    .map_err(|_| Error::PipelineSendInsightError),
+                InputTarget::Source(addr) => addr
+                    .send(source::Msg::Cb(insight.cb, insight.id))
+                    .map_err(|_| Error::SourceSendInsightError),
+            }
+        }
+    }
+
+    /// Output targets
+    #[derive(Debug)]
+    pub enum OutputTarget {
+        /// another pipeline
+        Pipeline(Box<pipeline::Addr>),
+        /// a connector
+        Sink(connector::sink::Addr),
+    }
+
+    impl OutputTarget {
+        /// send an event out to this destination
+        ///
+        /// # Errors
+        ///  * when sending the event via the dest channel fails
+        pub async fn send_event(
+            &mut self,
+            input: Port<'static>,
+            event: Event,
+        ) -> Result<(), Error> {
+            match self {
+                Self::Pipeline(addr) => addr
+                    .send(Box::new(Msg::Event { input, event }))
+                    .await
+                    .map_err(|_| Error::PipelineSendInsightError),
+                Self::Sink(addr) => addr
+                    .send(sink::Msg::Event { event, port: input })
+                    .await
+                    .map_err(|_| Error::PipelineSendInsightError),
+            }
+        }
+
+        /// send a signal out to this destination
+        ///
+        /// # Errors
+        ///  * when sending the signal via the dest channel fails
+        pub async fn send_signal(&mut self, signal: Event) -> Result<(), Error> {
+            match self {
+                Self::Pipeline(addr) => {
+                    // Each pipeline has their own ticks, we don't
+                    // want to propagate them
+                    if signal.kind != Some(SignalKind::Tick) {
+                        addr.send(Box::new(Msg::Signal(signal)))
+                            .await
+                            .map_err(|_| Error::PipelineSendSignalError)?;
+                    }
+                }
+                Self::Sink(addr) => addr
+                    .send(sink::Msg::Signal { signal })
+                    .await
+                    .map_err(|_| Error::SinkSendEventErrorSendSignalError)?,
+            }
+            Ok(())
+        }
+    }
+
+    impl From<pipeline::Addr> for OutputTarget {
+        fn from(p: pipeline::Addr) -> Self {
+            Self::Pipeline(Box::new(p))
+        }
+    }
+    impl TryFrom<connector::Addr> for OutputTarget {
+        type Error = anyhow::Error;
+
+        fn try_from(addr: connector::Addr) -> Result<Self, anyhow::Error> {
+            addr.sink
+                .ok_or(anyhow::Error::msg("Connector has no sink"))
+                .map(Self::Sink)
+        }
+    }
 }
 
 /// pipelines
 pub mod pipeline {
 
-    use std::fmt;
+    use std::{
+        collections::BTreeMap,
+        fmt::{self, Display},
+        str::FromStr,
+    };
 
+    use simd_json::OwnedValue;
     use tokio::sync::mpsc::{error::SendError, Sender, UnboundedSender};
-    use tremor_common::alias;
-    use tremor_pipeline::Event;
+    use tremor_common::{alias, ids::OperatorId};
+
+    use crate::event::Event;
 
     use super::{contraflow, controlplane, dataplane};
 
@@ -249,6 +410,285 @@ pub mod pipeline {
     impl fmt::Debug for Addr {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "Pipeline({})", self.alias)
+        }
+    }
+
+    /// Stringified numeric key
+    /// from <https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs>
+    #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug)]
+    pub struct PrimStr<T>(pub T)
+    where
+        T: Copy + Ord + Display + FromStr;
+
+    impl<T> simd_json_derive::SerializeAsKey for PrimStr<T>
+    where
+        T: Copy + Ord + Display + FromStr,
+    {
+        fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
+        where
+            W: std::io::Write,
+        {
+            write!(writer, "\"{}\"", self.0)
+        }
+    }
+
+    impl<T> simd_json_derive::Serialize for PrimStr<T>
+    where
+        T: Copy + Ord + Display + FromStr,
+    {
+        fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
+        where
+            W: std::io::Write,
+        {
+            write!(writer, "\"{}\"", self.0)
+        }
+    }
+
+    impl<'input, T> simd_json_derive::Deserialize<'input> for PrimStr<T>
+    where
+        T: Copy + Ord + Display + FromStr,
+    {
+        #[inline]
+        fn from_tape(tape: &mut simd_json_derive::Tape<'input>) -> simd_json::Result<Self>
+        where
+            Self: std::marker::Sized + 'input,
+        {
+            if let Some(simd_json::Node::String(s)) = tape.next() {
+                Ok(PrimStr(FromStr::from_str(s).map_err(|_e| {
+                    simd_json::Error::generic(simd_json::ErrorType::Serde("not a number".into()))
+                })?))
+            } else {
+                Err(simd_json::Error::generic(
+                    simd_json::ErrorType::ExpectedNull,
+                ))
+            }
+        }
+    }
+
+    /// Operator metadata
+    #[derive(
+        Clone, Debug, Default, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    )]
+    // TODO: optimization: - use two Vecs, one for operator ids, one for operator metadata (Values)
+    //                     - make it possible to trace operators with and without metadata
+    //                     - insert with bisect (numbers of operators tracked will be low single digit numbers most of the time)
+    pub struct OpMeta(BTreeMap<PrimStr<OperatorId>, OwnedValue>);
+
+    impl OpMeta {
+        /// inserts a value
+        pub fn insert<V>(&mut self, key: OperatorId, value: V) -> Option<OwnedValue>
+        where
+            OwnedValue: From<V>,
+        {
+            self.0.insert(PrimStr(key), OwnedValue::from(value))
+        }
+        /// reads a value
+        pub fn get(&mut self, key: OperatorId) -> Option<&OwnedValue> {
+            self.0.get(&PrimStr(key))
+        }
+        /// checks existance of a key
+        #[must_use]
+        pub fn contains_key(&self, key: OperatorId) -> bool {
+            self.0.contains_key(&PrimStr(key))
+        }
+
+        /// Merges two op meta maps, overwriting values with `other` on duplicates
+        pub fn merge(&mut self, mut other: Self) {
+            self.0.append(&mut other.0);
+        }
+
+        /// Returns `true` if this instance contains no values
+        #[must_use]
+        pub fn is_empty(&self) -> bool {
+            self.0.is_empty()
+        }
+    }
+
+    /// Pipeline status report
+    pub mod report {
+        use std::collections::HashMap;
+
+        use crate::{
+            dataplane::{InputTarget, OutputTarget},
+            instance::State,
+        };
+        use tremor_common::ports::Port;
+        use tremor_script::ast::DeployEndpoint;
+
+        /// Status report for a pipeline
+        #[derive(Debug, Clone)]
+        pub struct Status {
+            pub(crate) state: State,
+            pub(crate) inputs: Vec<Input>,
+            pub(crate) outputs: HashMap<String, Vec<Output>>,
+        }
+
+        impl Status {
+            /// create a new status report
+            #[must_use]
+
+            pub fn new(
+                state: State,
+                inputs: Vec<Input>,
+                outputs: HashMap<String, Vec<Output>>,
+            ) -> Self {
+                Self {
+                    state,
+                    inputs,
+                    outputs,
+                }
+            }
+            /// state of the pipeline   
+            #[must_use]
+            pub fn state(&self) -> State {
+                self.state
+            }
+            /// inputs of the pipeline
+            #[must_use]
+            pub fn inputs(&self) -> &[Input] {
+                &self.inputs
+            }
+            /// outputs of the pipeline
+            #[must_use]
+            pub fn outputs(&self) -> &HashMap<String, Vec<Output>> {
+                &self.outputs
+            }
+
+            /// outputs of the pipeline
+            #[must_use]
+            pub fn outputs_mut(&mut self) -> &mut HashMap<String, Vec<Output>> {
+                &mut self.outputs
+            }
+        }
+
+        /// Input report
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum Input {
+            /// Pipeline input report
+            Pipeline {
+                /// alias of the pipeline
+                alias: String,
+
+                /// port of the pipeline
+                port: Port<'static>,
+            },
+            /// Source input report
+            Source {
+                /// alias of the source
+                alias: String,
+                /// port of the source
+                port: Port<'static>,
+            },
+        }
+
+        impl Input {
+            /// create a new pipeline input report
+            #[must_use]
+            pub fn pipeline(alias: &str, port: Port<'static>) -> Self {
+                Self::Pipeline {
+                    alias: alias.to_string(),
+                    port,
+                }
+            }
+            /// create a new source input report
+            #[must_use]
+            pub fn source(alias: &str, port: Port<'static>) -> Self {
+                Self::Source {
+                    alias: alias.to_string(),
+                    port,
+                }
+            }
+            /// create a new input report
+            #[must_use]
+            pub fn new(endpoint: &DeployEndpoint, target: &InputTarget) -> Self {
+                match target {
+                    InputTarget::Pipeline(_addr) => {
+                        Input::pipeline(endpoint.alias(), endpoint.port().clone())
+                    }
+                    InputTarget::Source(_addr) => {
+                        Input::source(endpoint.alias(), endpoint.port().clone())
+                    }
+                }
+            }
+        }
+
+        /// Output report
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum Output {
+            /// Pipeline output report
+            Pipeline {
+                /// alias of the pipeline
+                alias: String,
+                /// port of the pipeline
+                port: Port<'static>,
+            },
+            /// Sink output report
+            Sink {
+                /// alias of the sink
+                alias: String,
+                /// port of the sink
+                port: Port<'static>,
+            },
+        }
+
+        impl Output {
+            /// create a new pipeline output report
+            #[must_use]
+            pub fn pipeline(alias: &str, port: Port<'static>) -> Self {
+                Self::Pipeline {
+                    alias: alias.to_string(),
+                    port,
+                }
+            }
+            /// create a new sink output report
+            #[must_use]
+            pub fn sink(alias: &str, port: Port<'static>) -> Self {
+                Self::Sink {
+                    alias: alias.to_string(),
+                    port,
+                }
+            }
+        }
+        impl From<&(DeployEndpoint, OutputTarget)> for Output {
+            fn from(target: &(DeployEndpoint, OutputTarget)) -> Self {
+                match target {
+                    (endpoint, OutputTarget::Pipeline(_)) => {
+                        Output::pipeline(endpoint.alias(), endpoint.port().clone())
+                    }
+                    (endpoint, OutputTarget::Sink(_)) => {
+                        Output::sink(endpoint.alias(), endpoint.port().clone())
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::OpMeta;
+        use simd_json::prelude::ValueAsScalar;
+        use tremor_common::ids::{Id, OperatorId};
+
+        #[test]
+        fn op_meta_merge() {
+            let op_id1 = OperatorId::new(1);
+            let op_id2 = OperatorId::new(2);
+            let op_id3 = OperatorId::new(3);
+            let mut m1 = OpMeta::default();
+            let mut m2 = OpMeta::default();
+            m1.insert(op_id1, 1);
+            m1.insert(op_id2, 1);
+            m2.insert(op_id1, 2);
+            m2.insert(op_id3, 2);
+            m1.merge(m2);
+
+            assert!(m1.contains_key(op_id1));
+            assert!(m1.contains_key(op_id2));
+            assert!(m1.contains_key(op_id3));
+
+            assert_eq!(m1.get(op_id1).as_u64(), Some(2));
+            assert_eq!(m1.get(op_id2).as_u64(), Some(1));
+            assert_eq!(m1.get(op_id3).as_u64(), Some(2));
         }
     }
 }
@@ -419,7 +859,6 @@ pub mod connector {
         pub fn send_source(&self, msg: source::Msg) -> Result<(), Error> {
             if let Some(source) = self.source.as_ref() {
                 source
-                    .addr
                     .send(msg)
                     .map_err(|_| Error::SourceSendError(self.alias.clone()))?;
             }
@@ -655,10 +1094,9 @@ pub mod connector {
     pub mod source {
         use tokio::sync::mpsc::{Sender, UnboundedSender};
         use tremor_common::ports::Port;
-        use tremor_pipeline::{CbAction, EventId};
         use tremor_script::ast::DeployEndpoint;
 
-        use crate::{connector, pipeline};
+        use crate::{connector, controlplane::CbAction, event::EventId, pipeline};
 
         use super::Attempt;
 
@@ -666,7 +1104,7 @@ pub mod connector {
         #[derive(Clone, Debug)]
         pub struct Addr {
             /// the actual address
-            pub addr: UnboundedSender<Msg>,
+            addr: UnboundedSender<Msg>,
         }
 
         impl Addr {
@@ -730,10 +1168,9 @@ pub mod connector {
     pub mod sink {
         use tokio::sync::mpsc::Sender;
         use tremor_common::ports::Port;
-        use tremor_pipeline::Event;
         use tremor_script::ast::DeployEndpoint;
 
-        use crate::pipeline;
+        use crate::{event::Event, pipeline};
 
         use super::Attempt;
 
@@ -810,59 +1247,77 @@ pub mod connector {
 /// control plane
 pub mod controlplane {
     use crate::{
-        connector,
-        pipeline::{self, Addr},
+        dataplane::{InputTarget, OutputTarget},
+        pipeline,
     };
     use tokio::sync::mpsc::Sender;
-    use tremor_common::ports::Port;
-    use tremor_pipeline::Event;
+    use tremor_common::{
+        ids::{SinkId, SourceId},
+        ports::Port,
+    };
     use tremor_script::ast::DeployEndpoint;
 
-    /// Input targets
-    #[derive(Debug)]
-    pub enum InputTarget {
-        /// another pipeline
-        Pipeline(Box<super::pipeline::Addr>),
-        /// a connector
-        Source(connector::source::Addr),
+    /// A circuit breaker action
+    #[derive(
+        Debug,
+        Clone,
+        Copy,
+        PartialEq,
+        simd_json_derive::Serialize,
+        simd_json_derive::Deserialize,
+        Eq,
+    )]
+    pub enum CbAction {
+        /// Nothing of note
+        None,
+        /// The circuit breaker is triggerd and should break
+        Trigger,
+        /// The circuit breaker is restored and should work again
+        Restore,
+        // TODO: add stream based CbAction variants once their use manifests
+        /// Acknowledge delivery of messages up to a given ID.
+        /// All messages prior to and including  this will be considered delivered.
+        Ack,
+        /// Fail backwards to a given ID
+        /// All messages after and including this will be considered non delivered
+        Fail,
+        /// Notify all upstream sources that this sink has started, notifying them of its existence.
+        /// Will be used for tracking for which sinks to wait during Drain.
+        SinkStart(SinkId),
+        /// answer to a `SignalKind::Drain(uid)` signal from a connector with the same uid
+        Drained(SourceId, SinkId),
+    }
+    impl Default for CbAction {
+        fn default() -> Self {
+            Self::None
+        }
     }
 
-    impl InputTarget {
-        /// send an insight to the target
-        ///
-        /// # Errors
-        /// * if sending failed
-        pub fn send_insight(&self, insight: Event) -> Result<(), anyhow::Error> {
-            match self {
-                InputTarget::Pipeline(addr) => Ok(addr.send_insight(insight)?),
-                InputTarget::Source(addr) => {
-                    Ok(addr.send(crate::connector::source::Msg::Cb(insight.cb, insight.id))?)
-                }
+    impl From<bool> for CbAction {
+        fn from(success: bool) -> Self {
+            if success {
+                CbAction::Ack
+            } else {
+                CbAction::Fail
             }
         }
     }
 
-    /// Output targets
-    #[derive(Debug)]
-    pub enum OutputTarget {
-        /// another pipeline
-        Pipeline(Box<pipeline::Addr>),
-        /// a connector
-        Sink(connector::sink::Addr),
-    }
-
-    impl From<Addr> for OutputTarget {
-        fn from(p: pipeline::Addr) -> Self {
-            Self::Pipeline(Box::new(p))
+    impl CbAction {
+        /// This message should always be delivered and not filtered out
+        #[must_use]
+        pub fn always_deliver(self) -> bool {
+            self.is_cb() || matches!(self, CbAction::Drained(_, _) | CbAction::SinkStart(_))
         }
-    }
-    impl TryFrom<connector::Addr> for OutputTarget {
-        type Error = anyhow::Error;
-
-        fn try_from(addr: connector::Addr) -> Result<Self, anyhow::Error> {
-            addr.sink
-                .ok_or(anyhow::Error::msg("Connector has no sink"))
-                .map(Self::Sink)
+        /// This is a Circuit Breaker related message
+        #[must_use]
+        pub fn is_cb(self) -> bool {
+            matches!(self, CbAction::Trigger | CbAction::Restore)
+        }
+        /// This is a Guaranteed Delivery related message
+        #[must_use]
+        pub fn is_gd(self) -> bool {
+            matches!(self, CbAction::Ack | CbAction::Fail)
         }
     }
 
@@ -901,14 +1356,65 @@ pub mod controlplane {
         Resume,
         /// stop the pipeline
         Stop,
-        #[cfg(test)]
-        Inspect(Sender<connector::StatusReport>),
+        /// Fetches status of the pipeline
+        Inspect(Sender<pipeline::report::Status>),
+    }
+
+    #[cfg(test)]
+    mod test {
+        use crate::pipeline::PrimStr;
+
+        use super::*;
+        use simd_json_derive::{Deserialize, Serialize};
+
+        #[test]
+        fn prim_str() {
+            let p = PrimStr(42);
+            let fourtytwo = r#""42""#;
+            let mut fourtytwo_s = fourtytwo.to_string();
+            let mut fourtytwo_i = "42".to_string();
+            assert_eq!(fourtytwo, p.json_string().unwrap_or_default());
+            assert_eq!(
+                PrimStr::from_slice(unsafe { fourtytwo_s.as_bytes_mut() }),
+                Ok(p)
+            );
+            assert!(PrimStr::<i32>::from_slice(unsafe { fourtytwo_i.as_bytes_mut() }).is_err());
+        }
+
+        #[test]
+        fn cbaction_creation() {
+            assert_eq!(CbAction::default(), CbAction::None);
+            assert_eq!(CbAction::from(true), CbAction::Ack);
+            assert_eq!(CbAction::from(false), CbAction::Fail);
+        }
+
+        #[test]
+        fn cbaction_is_gd() {
+            assert!(!CbAction::None.is_gd());
+
+            assert!(CbAction::Fail.is_gd());
+            assert!(CbAction::Ack.is_gd());
+
+            assert!(!CbAction::Restore.is_gd());
+            assert!(!CbAction::Trigger.is_gd());
+        }
+
+        #[test]
+        fn cbaction_is_cb() {
+            assert!(!CbAction::None.is_cb());
+
+            assert!(!CbAction::Fail.is_cb());
+            assert!(!CbAction::Ack.is_cb());
+
+            assert!(CbAction::Restore.is_cb());
+            assert!(CbAction::Trigger.is_cb());
+        }
     }
 }
 
 /// contraflow
 pub mod contraflow {
-    use tremor_pipeline::Event;
+    use crate::event::Event;
 
     /// contraflow message
     #[derive(Debug)]

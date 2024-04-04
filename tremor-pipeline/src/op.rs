@@ -23,10 +23,11 @@ pub mod qos;
 pub mod trickle;
 
 use self::prelude::OUT;
-use super::{Event, NodeConfig};
+use super::NodeConfig;
 use crate::errors::Result;
 use regex::Regex;
 use tremor_common::{ids::OperatorId, ports::Port};
+use tremor_system::event::Event;
 use tremor_value::{Object, Value};
 
 lazy_static::lazy_static! {

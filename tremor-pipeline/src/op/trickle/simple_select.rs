@@ -14,7 +14,7 @@
 
 // [x] PERF0001: handle select without grouping or windows easier.
 
-use crate::{errors::Result, op::prelude::*, Event, Operator};
+use crate::op::prelude::*;
 use tremor_script::{
     self,
     ast::{self, Select, SelectStmt},

@@ -86,7 +86,6 @@ impl Error {
             | Self::SinkBackplane(alias, _)
             | Self::SourceBackplane(alias, _)
             | Self::ConnectionLostNotifier(alias)
-            | Self::ImplError(alias, _)
             | Self::ChannelEmpty(alias)
             | Self::CreateSink(alias, _)
             | Self::CreateSource(alias, _)

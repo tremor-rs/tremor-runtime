@@ -19,10 +19,10 @@ pub mod impls;
 pub mod prelude;
 
 /// sink parts
-pub(crate) mod sink;
+pub mod sink;
 
 /// source parts
-pub(crate) mod source;
+pub mod source;
 
 #[macro_use]
 pub(crate) mod utils;
@@ -44,8 +44,6 @@ extern crate log;
 extern crate serde;
 
 use self::metrics::{SinkReporter, SourceReporter};
-use self::sink::SinkContext;
-use self::source::SourceContext;
 use self::utils::quiescence::QuiescenceBeacon;
 pub(crate) use crate::config::Connector as ConnectorConfig;
 use crate::{
@@ -237,14 +235,13 @@ pub(crate) enum StreamDone {
 }
 
 /// Lookup table for known connectors
-pub(crate) type Known =
-    std::collections::HashMap<ConnectorType, Box<dyn ConnectorBuilder + 'static>>;
+pub type Known = std::collections::HashMap<ConnectorType, Box<dyn ConnectorBuilder + 'static>>;
 
 /// Spawns a connector
 ///
 /// # Errors
 /// if the connector can not be built or the config is invalid
-pub(crate) async fn spawn(
+pub async fn spawn(
     alias: &alias::Connector,
     connector_id_gen: &mut ConnectorIdGen,
     builder: &dyn ConnectorBuilder,
@@ -291,7 +288,7 @@ async fn connector_task(
         source_metrics_reporter,
         &alias,
     )?;
-    let source_ctx = SourceContext {
+    let source_ctx = source::SourceContext {
         alias: alias.clone(),
         uid: uid.into(),
         connector_type: config.connector_type.clone(),
@@ -305,7 +302,7 @@ async fn connector_task(
         config.metrics_interval_s,
     );
     let sink_builder = sink::builder(&config, codec_requirement, &alias, sink_metrics_reporter)?;
-    let sink_ctx = SinkContext::new(
+    let sink_ctx = sink::SinkContext::new(
         uid.into(),
         alias.clone(),
         config.connector_type.clone(),
@@ -441,7 +438,7 @@ async fn connector_task(
                                 tx: result_tx,
                                 pipeline: pipeline_to_link,
                             };
-                            let res = source.addr.send(m);
+                            let res = source.send(m);
                             log_error!(res, "{ctx} Error sending to source: {e}");
                         } else {
                             let e = Err(Error::InvalidPort(
@@ -839,7 +836,7 @@ pub trait Connector: Send {
     /// If this connector does not act as a source, return `Ok(None)`.
     async fn create_source(
         &mut self,
-        _ctx: SourceContext,
+        _ctx: source::SourceContext,
         _builder: source::SourceManagerBuilder,
     ) -> anyhow::Result<Option<connector::source::Addr>> {
         Ok(None)
@@ -851,7 +848,7 @@ pub trait Connector: Send {
     /// If this connector does not act as a sink, return `Ok(None)`.
     async fn create_sink(
         &mut self,
-        _ctx: SinkContext,
+        _ctx: sink::SinkContext,
         _builder: sink::SinkManagerBuilder,
     ) -> anyhow::Result<Option<connector::sink::Addr>> {
         Ok(None)
@@ -999,9 +996,8 @@ pub trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
 }
 
 /// builtin connector types
-
 #[must_use]
-pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
+pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
         Box::<impls::file::Builder>::default(),
         Box::<impls::metrics::Builder>::default(),
@@ -1044,33 +1040,12 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
 /// debug connector types
 
 #[must_use]
-pub(crate) fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
+pub fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
         Box::<impls::cb::Builder>::default(),
         Box::<impls::bench::Builder>::default(),
         Box::<impls::exit::Builder>::default(),
     ]
-}
-
-/// registering builtin and debug connector types
-///
-/// # Errors
-///  * If a builtin connector couldn't be registered
-
-pub(crate) async fn register_builtin_connector_types(
-    world: &World,
-    debug: bool,
-) -> anyhow::Result<()> {
-    for builder in builtin_connector_types() {
-        world.register_builtin_connector_type(builder).await?;
-    }
-    if debug {
-        for builder in debug_connector_types() {
-            world.register_builtin_connector_type(builder).await?;
-        }
-    }
-
-    Ok(())
 }
 
 /// Function to spawn a long-running task representing a connector connection
@@ -1093,6 +1068,34 @@ where
             debug!("{ctx} Connector loop finished.");
         }
     })
+}
+
+#[macro_use]
+mod macros {
+    // stolen from https://github.com/popzxc/stdext-rs and slightly adapted
+    #[cfg(test)]
+    #[macro_export]
+    macro_rules! function_name {
+        () => {{
+            // Okay, this is ugly, I get it. However, this is the best we can get on a stable rust.
+            fn f() {}
+            fn type_name_of<T>(_: T) -> &'static str {
+                std::any::type_name::<T>()
+            }
+            let mut name = type_name_of(f);
+            if let Some(stripped) = name.strip_suffix("::f") {
+                name = stripped;
+            };
+            while let Some(stripped) = name.strip_suffix("::{{closure}}") {
+                name = stripped;
+            }
+            if let Some(last) = name.split("::").last() {
+                last
+            } else {
+                name
+            }
+        }};
+    }
 }
 
 #[cfg(test)]
@@ -1165,33 +1168,5 @@ pub(crate) mod unit_tests {
         spawn_task(ctx, async move { Err(anyhow::anyhow!("snot 2")) }).await?;
 
         Ok(())
-    }
-}
-
-#[macro_use]
-mod macros {
-    // stolen from https://github.com/popzxc/stdext-rs and slightly adapted
-    #[cfg(test)]
-    #[macro_export]
-    macro_rules! function_name {
-        () => {{
-            // Okay, this is ugly, I get it. However, this is the best we can get on a stable rust.
-            fn f() {}
-            fn type_name_of<T>(_: T) -> &'static str {
-                std::any::type_name::<T>()
-            }
-            let mut name = type_name_of(f);
-            if let Some(stripped) = name.strip_suffix("::f") {
-                name = stripped;
-            };
-            while let Some(stripped) = name.strip_suffix("::{{closure}}") {
-                name = stripped;
-            }
-            if let Some(last) = name.split("::").last() {
-                last
-            } else {
-                name
-            }
-        }};
     }
 }

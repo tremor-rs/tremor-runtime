@@ -33,7 +33,7 @@ use tokio::{
     time::timeout,
 };
 use tremor_common::{ids::Id, time::nanotime};
-use tremor_pipeline::{CbAction, Event, SignalKind};
+use tremor_system::dataplane::SignalKind;
 use tremor_value::Value;
 
 /// Behavioral trait for defining if a Channel Sink needs metadata or not

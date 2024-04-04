@@ -115,7 +115,7 @@ pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Exe
                 data.get_object("filtered_attributes"),
                 data.get_object("filtered_labels"),
             ) {
-                (None, None) => return Err(Error::MissingField("filtered_attributes").into()),
+                (None, None) => return Err(Error::MissingField("filtered_attributes")),
                 (Some(a), None) | (None, Some(a)) => common::obj_key_value_list_to_pb(a),
                 (Some(a), Some(l)) => {
                     let mut a = common::obj_key_value_list_to_pb(a);

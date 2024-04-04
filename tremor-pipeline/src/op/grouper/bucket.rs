@@ -78,7 +78,7 @@ use std::num::NonZeroUsize;
 use crate::errors::{ErrorKind, Result};
 use crate::metrics::value_count;
 use crate::op::prelude::*;
-use crate::{Event, Operator};
+use crate::Operator;
 use beef::Cow;
 use halfbrown::HashMap;
 use lru::LruCache;

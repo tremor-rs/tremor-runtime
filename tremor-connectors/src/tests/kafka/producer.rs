@@ -29,7 +29,7 @@ use std::time::Duration;
 use testcontainers::clients::Cli as DockerCli;
 use tokio::time::timeout;
 use tremor_common::ports::IN;
-use tremor_pipeline::EventId;
+use tremor_system::event::EventId;
 use tremor_value::literal;
 
 #[tokio::test(flavor = "multi_thread")]

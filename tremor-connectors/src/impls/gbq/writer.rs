@@ -118,7 +118,7 @@ mod tests {
                     &ConnectorConfig::default(),
                     CodecReq::Structured,
                     &alias,
-                    SinkReporter::new(alias, broadcast::channel(1).0, None),
+                    SinkReporter::new(alias.clone(), broadcast::channel(1).0, None),
                 )?,
             )
             .await?;

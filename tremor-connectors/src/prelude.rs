@@ -39,13 +39,14 @@ pub(crate) use tremor_common::{
 };
 pub(crate) use tremor_config::Impl;
 pub use tremor_config::NameWithConfig;
-pub(crate) use tremor_pipeline::Event;
-pub use tremor_pipeline::{CbAction, EventOriginUri, DEFAULT_STREAM_ID};
 pub(crate) use tremor_script::prelude::*;
 pub(crate) use tremor_system::connector::sink::Addr as SinkAddr;
 pub(crate) use tremor_system::connector::source::Addr as SourceAddr;
 pub(crate) use tremor_system::connector::Attempt;
+pub(crate) use tremor_system::controlplane::CbAction;
+pub(crate) use tremor_system::event::{Event, EventId, DEFAULT_STREAM_ID};
 pub(crate) use tremor_system::killswitch::{KillSwitch, ShutdownMode};
+pub(crate) use tremor_system::pipeline::OpMeta;
 /// default buf size used for reading from files and streams (sockets etc)
 ///
 /// equals default chunk size for `BufReader`
