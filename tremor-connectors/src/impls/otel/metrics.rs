@@ -324,8 +324,8 @@ pub(crate) fn double_histo_data_points_to_pb(
                     data.try_as_u64()
                 }?,
                 exemplars: double_exemplars_to_pb(data.get("exemplars"))?,
-                explicit_bounds: pb::f64_repeated_to_pb(data.get("explicit_bounds"))?,
-                bucket_counts: pb::u64_repeated_to_pb(data.get("explicit_bounds"))?,
+                explicit_bounds: pb::f64_repeated(data.get("explicit_bounds"))?,
+                bucket_counts: pb::u64_repeated(data.get("explicit_bounds"))?,
             })
         })
         .collect()
@@ -433,8 +433,8 @@ pub(crate) fn int_histo_data_points_to_pb(
                     data.try_as_u64()
                 }?,
                 exemplars: int_exemplars_to_pb(item.get("exemplars"))?,
-                explicit_bounds: pb::f64_repeated_to_pb(item.get("explicit_bounds"))?,
-                bucket_counts: pb::u64_repeated_to_pb(item.get("explicit_bounds"))?,
+                explicit_bounds: pb::f64_repeated(item.get("explicit_bounds"))?,
+                bucket_counts: pb::u64_repeated(item.get("explicit_bounds"))?,
             })
         })
         .collect()
@@ -561,9 +561,9 @@ fn metric_to_json(metric: Metric) -> Value<'static> {
 
 pub(crate) fn metric_to_pb(metric: &Value) -> Result<Metric, Error> {
     Ok(Metric {
-        name: pb::maybe_string_to_pb(metric.get("name"))?,
-        description: pb::maybe_string_to_pb(metric.get("description"))?,
-        unit: pb::maybe_string_to_pb(metric.get("unit"))?,
+        name: pb::maybe_string(metric.get("name"))?,
+        description: pb::maybe_string(metric.get("description"))?,
+        unit: pb::maybe_string(metric.get("unit"))?,
         data: metric.get("data").map(metrics_data_to_pb).transpose()?,
     })
 }

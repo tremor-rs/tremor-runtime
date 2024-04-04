@@ -203,8 +203,12 @@ mod trace;
 pub(crate) mod client;
 pub(crate) mod server;
 
-use tremor_script::tremor_fn;
-use tremor_script::Registry;
+use crate::utils::pb::FromValue;
+use simd_json::prelude::ValueTryAsScalar;
+use tremor_otelapis::opentelemetry::proto::metrics::v1;
+use tremor_script::{tremor_fn, Registry};
+use tremor_value::Value;
+use value_trait::TryTypeError;
 
 /// Extend function registry with `CNCF OpenTelemetry` support
 pub fn load(registry: &mut Registry) {
@@ -227,6 +231,18 @@ pub fn load(registry: &mut Registry) {
         .insert(tremor_fn! (cncf_otel|gen_trace_id_bytes(ctx) {
             Ok(Value::Bytes(id::random_trace_id_bytes(ctx.ingest_ns()).into()).into_static())
         }));
+}
+
+impl FromValue for v1::exemplar::Value {
+    fn from_value(data: &Value<'_>) -> Result<Self, TryTypeError> {
+        Ok(v1::exemplar::Value::AsDouble(data.try_as_f64()?))
+    }
+}
+
+impl FromValue for v1::number_data_point::Value {
+    fn from_value(data: &Value<'_>) -> Result<Self, TryTypeError> {
+        Ok(v1::number_data_point::Value::AsDouble(data.try_as_f64()?))
+    }
 }
 
 #[cfg(test)]

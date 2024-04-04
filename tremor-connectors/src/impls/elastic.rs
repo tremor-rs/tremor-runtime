@@ -345,7 +345,7 @@ impl ConnectorBuilder for Builder {
             }
             let credentials = if let Some((certfile, keyfile)) = tls_config
                 .as_ref()
-                .and_then(|tls| tls.cert.as_ref().zip(tls.key.as_ref()))
+                .and_then(|tls| tls.cert().zip(tls.key()))
             {
                 let mut cert_chain = tokio::fs::read(certfile).await?;
                 let mut key = tokio::fs::read(keyfile).await?;
@@ -366,7 +366,7 @@ impl ConnectorBuilder for Builder {
                 }
             };
             let cert_validation =
-                if let Some(cafile) = tls_config.as_ref().and_then(|tls| tls.cafile.as_ref()) {
+                if let Some(cafile) = tls_config.as_ref().and_then(|tls| tls.cafile()) {
                     let file = tokio::fs::read(cafile).await?;
                     CertValidation::Full(file)
                 } else if tls_config.is_some() {

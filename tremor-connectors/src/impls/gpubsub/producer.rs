@@ -233,42 +233,4 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
 }
 
 #[cfg(test)]
-#[cfg(feature = "gcp-integration")]
-mod tests {
-    use super::*;
-    use crate::google::tests::TestTokenProvider;
-
-    #[test]
-    pub fn is_not_auto_ack() {
-        let sink = GpubSink::<TestTokenProvider> {
-            config: Config {
-                token: TokenSrc::dummy(),
-                connect_timeout: 0,
-                request_timeout: 0,
-                url: Url::default(),
-                topic: String::new(),
-            },
-            hostname: String::new(),
-            client: None,
-        };
-
-        assert!(!sink.auto_ack());
-    }
-
-    #[test]
-    pub fn is_async() {
-        let sink = GpubSink::<TestTokenProvider> {
-            config: Config {
-                token: TokenSrc::dummy(),
-                connect_timeout: 0,
-                request_timeout: 0,
-                url: Url::default(),
-                topic: String::new(),
-            },
-            hostname: String::new(),
-            client: None,
-        };
-
-        assert!(sink.asynchronous());
-    }
-}
+mod tests;

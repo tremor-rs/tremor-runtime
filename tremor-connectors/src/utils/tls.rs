@@ -93,13 +93,13 @@ impl TLSServerConfig {
 #[serde(deny_unknown_fields)]
 pub struct TLSClientConfig {
     /// Path to the pem-encoded certificate file of the CA to use for verifying the servers certificate
-    pub(crate) cafile: Option<PathBuf>,
+    cafile: Option<PathBuf>,
     /// The DNS domain used to verify the server's certificate. If not provided the domain from the connection URL will be used.
-    pub(crate) domain: Option<String>,
+    domain: Option<String>,
     /// Path to the pem-encoded certificate (-chain) to use for TLS with client-side certificate
-    pub(crate) cert: Option<PathBuf>,
+    cert: Option<PathBuf>,
     /// Path to the private key to use for TLS with client-side certificate
-    pub(crate) key: Option<PathBuf>,
+    key: Option<PathBuf>,
 }
 
 impl TLSClientConfig {
@@ -117,6 +117,30 @@ impl TLSClientConfig {
             cert,
             key,
         }
+    }
+
+    /// the  certificate authority file
+    #[must_use]
+    pub fn cafile(&self) -> Option<&PathBuf> {
+        self.cafile.as_ref()
+    }
+
+    /// the domain
+    #[must_use]
+    pub fn domain(&self) -> Option<&String> {
+        self.domain.as_ref()
+    }
+
+    /// the certificate file
+    #[must_use]
+    pub fn cert(&self) -> Option<&PathBuf> {
+        self.cert.as_ref()
+    }
+
+    /// the key file
+    #[must_use]
+    pub fn key(&self) -> Option<&PathBuf> {
+        self.key.as_ref()
     }
 
     /// Create a new client connector from the `TLSClientConfig`
@@ -256,7 +280,8 @@ impl Stream {
             state: State::Handshaking(accept),
         }
     }
-    pub(crate) fn remote_addr(&self) -> Option<SocketAddr> {
+    /// Get the remote address of the stream
+    pub fn remote_addr(&self) -> Option<SocketAddr> {
         match self.state {
             State::Handshaking(ref accept) => accept
                 .get_ref()

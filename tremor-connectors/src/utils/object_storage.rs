@@ -115,24 +115,33 @@ pub(crate) trait ObjectStorageCommon {
     }
 }
 
+/// A buffer part that is part of a larger buffer used to allow for a sliding buffer over data that
+/// prevents the need to move data around in memory.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub(crate) struct BufferPart {
+pub struct BufferPart {
     pub(crate) data: Vec<u8>,
     pub(crate) start: usize,
 }
 
 impl BufferPart {
-    pub(crate) fn len(&self) -> usize {
+    /// Returns the length of the buffer part
+    #[must_use]
+    pub fn len(&self) -> usize {
         self.data.len()
     }
-
-    pub(crate) fn is_empty(&self) -> bool {
+    /// Returns true if the buffer part is empty
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    pub(crate) fn start(&self) -> usize {
+    /// Returns the start index of the buffer part
+    #[must_use]
+    pub fn start(&self) -> usize {
         self.start
     }
-    pub(crate) fn end(&self) -> usize {
+    /// Returns the end index of the buffer part
+    #[must_use]
+    pub fn end(&self) -> usize {
         self.start + self.data.len()
     }
 }

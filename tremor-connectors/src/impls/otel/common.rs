@@ -145,7 +145,7 @@ pub(crate) fn string_key_value_to_pb(
         .iter()
         .map(|(key, value)| {
             let key = key.to_string();
-            let value = pb::maybe_string_to_pb(Some(value))?;
+            let value = pb::maybe_string(Some(value))?;
             Ok(StringKeyValue { key, value })
         })
         .collect()
@@ -197,8 +197,8 @@ pub(crate) fn instrumentation_library_to_pb(
     data: &Value<'_>,
 ) -> Result<InstrumentationLibrary, TryTypeError> {
     Ok(InstrumentationLibrary {
-        name: pb::maybe_string_to_pb((*data).get("name"))?,
-        version: pb::maybe_string_to_pb((*data).get("version"))?,
+        name: pb::maybe_string((*data).get("name"))?,
+        version: pb::maybe_string((*data).get("version"))?,
     })
 }
 

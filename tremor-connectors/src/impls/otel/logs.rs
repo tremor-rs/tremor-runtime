@@ -101,9 +101,9 @@ pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord, Error> {
         .transpose()?
         .unwrap_or_default(),
         // defined as optional - fallback to an empty string
-        severity_text: pb::maybe_string_to_pb(log.get("severity_text")).unwrap_or_default(),
+        severity_text: pb::maybe_string(log.get("severity_text")).unwrap_or_default(),
         // name is defined as optional - fallback to empty string
-        name: pb::maybe_string_to_pb(log.get("name")).unwrap_or_default(),
+        name: pb::maybe_string(log.get("name")).unwrap_or_default(),
         body: log.get("body").map(common::any_value_to_pb),
         flags: affirm_traceflags_valid(
             {

@@ -16,7 +16,7 @@ use super::{WsReader, WsWriter};
 use crate::{
     prelude::*,
     utils::{
-        socket::{tcp_server_socket, TcpSocketOptions},
+        socket::{tcp_server, TcpSocketOptions},
         tls::TLSServerConfig,
         ConnectionMeta,
     },
@@ -196,7 +196,7 @@ impl Connector for WsServer {
                 .set_port(Some(port))
                 .map_err(|()| Error::InvalidUrl)?;
         }
-        let listener = tcp_server_socket(
+        let listener = tcp_server(
             &self.config.url,
             self.config.backlog,
             &self.config.socket_options,

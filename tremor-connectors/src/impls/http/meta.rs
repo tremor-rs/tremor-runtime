@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::convert::Infallible;
-
 use crate::{
     channel::{bounded, Sender},
     impls::http::{client, utils::RequestId},
@@ -169,7 +167,7 @@ impl HttpRequestBuilder {
         let (chunk_tx, mut chunk_rx) = bounded(qsize());
         let body = Body::wrap_stream(async_stream::stream! {
             while let Some(item) = chunk_rx.recv().await {
-                yield Ok::<_, Infallible>(item);
+                yield Ok::<_, std::convert::Infallible>(item);
             }
         });
         let request = request.body(body)?;

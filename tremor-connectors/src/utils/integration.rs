@@ -101,6 +101,7 @@ pub fn setup_for_tls() {
                 println!("Done refreshing TLS Cert/Key.");
                 warn!("Done refreshing TLS Cert/Key.");
             }
+            // ALLOW: This is for tests only, but we should extract it
             _ => panic!("Error creating tls certificate and key"),
         }
     });

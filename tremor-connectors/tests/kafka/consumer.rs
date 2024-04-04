@@ -29,10 +29,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use testcontainers::clients::Cli as DockerCli;
 use tokio::time::timeout;
-use tremor_connectors::{
-    harness::{free_port, Harness},
-    impls::kafka,
-};
+use tremor_connectors::{harness::Harness, impls::kafka, utils::integration::free_port};
 use tremor_system::controlplane::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::prelude::*;

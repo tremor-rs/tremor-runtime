@@ -16,10 +16,12 @@ use crate::prelude::*;
 use simd_json::StaticNode;
 use std::collections::BTreeMap;
 use tremor_common::base64::{Engine, BASE64};
-use tremor_otelapis::opentelemetry::proto::metrics::v1;
 use value_trait::TryTypeError;
 
-pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String, TryTypeError> {
+/// converts a maybe null option to a string. if the value is none it returns an empty string
+/// # Errors
+/// It errors if the value is some but not a string
+pub fn maybe_string(data: Option<&Value<'_>>) -> Result<String, TryTypeError> {
     if data.is_none() {
         Ok(String::new())
     } else {
@@ -27,32 +29,34 @@ pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String, Try
     }
 }
 
-pub(crate) trait FromValue: Sized {
+/// *sob* this is a trait that should not exist
+pub trait FromValue: Sized {
+    /// *sob* this is a trait that should not exist
+    /// # Errors
+    /// It errors if the value is some but not the right type
     fn maybe_from_value(data: Option<&Value<'_>>) -> Result<Option<Self>, TryTypeError> {
         data.map(|d| Self::from_value(d)).transpose()
     }
+    /// *sob* this is a trait that should not exist
+    /// # Errors
+    /// It errors if the value is not the right type
     fn from_value(data: &Value<'_>) -> Result<Self, TryTypeError>;
 }
 
-impl FromValue for v1::exemplar::Value {
-    fn from_value(data: &Value<'_>) -> Result<Self, TryTypeError> {
-        Ok(v1::exemplar::Value::AsDouble(data.try_as_f64()?))
-    }
-}
-
-impl FromValue for v1::number_data_point::Value {
-    fn from_value(data: &Value<'_>) -> Result<Self, TryTypeError> {
-        Ok(v1::number_data_point::Value::AsDouble(data.try_as_f64()?))
-    }
-}
-
-pub(crate) fn maybe_from_value<T: FromValue>(
-    data: Option<&Value<'_>>,
-) -> Result<Option<T>, TryTypeError> {
+/// one of many protobuf helper functerins that require to be cleaned up
+///
+/// TODO: kill this with fire
+///
+/// # Errors
+/// It errors if the value is some but not a the right type
+pub fn maybe_from_value<T: FromValue>(data: Option<&Value<'_>>) -> Result<Option<T>, TryTypeError> {
     T::maybe_from_value(data)
 }
 
-pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>, TryTypeError> {
+/// Converts a json array of f64 values to a protobuf repeated f64
+/// # Errors
+/// It errors if the value is not an array or if any of the values are not `f64`
+pub fn f64_repeated(json: Option<&Value<'_>>) -> Result<Vec<f64>, TryTypeError> {
     json.try_as_array()?
         .iter()
         .map(Some)
@@ -60,7 +64,10 @@ pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>, T
         .collect()
 }
 
-pub(crate) fn u64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<u64>, TryTypeError> {
+/// Converts a json array of u64 values to a protobuf repeated u64
+/// # Errors
+/// It errors if the value is not an array or if any of the values are not `u64`
+pub fn u64_repeated(json: Option<&Value<'_>>) -> Result<Vec<u64>, TryTypeError> {
     json.try_as_array()?
         .iter()
         .map(Some)
@@ -175,7 +182,7 @@ mod test {
         #[test]
         fn prop_string(arb_string in ".*") {
             let json = Value::from(arb_string.clone());
-            let pb = maybe_string_to_pb(Some(&json))?;
+            let pb = maybe_string(Some(&json))?;
             prop_assert_eq!(&arb_string, &pb);
             prop_assert_eq!(pb.len(), arb_string.len());
         }
@@ -186,7 +193,7 @@ mod test {
         #[test]
         fn prop_pb_f64_repeated((vec, _index) in fveci()) {
             let json: Value = literal!(vec.clone());
-            let pb = f64_repeated_to_pb(Some(&json))?;
+            let pb = f64_repeated(Some(&json))?;
             prop_assert_eq!(&vec, &pb);
             prop_assert_eq!(pb.len(), vec.len());
         }
@@ -194,7 +201,7 @@ mod test {
         #[test]
         fn prop_pb_u64_repeated((vec, _index) in uveci()) {
             let json: Value = literal!(vec.clone());
-            let pb = u64_repeated_to_pb(Some(&json))?;
+            let pb = u64_repeated(Some(&json))?;
             prop_assert_eq!(&vec, &pb);
             prop_assert_eq!(pb.len(), vec.len());
         }
@@ -203,16 +210,16 @@ mod test {
     #[test]
     fn bad_string() {
         // NOTE no coercion, no casting
-        assert!(maybe_string_to_pb(Some(&Value::from(false))).is_err());
+        assert!(maybe_string(Some(&Value::from(false))).is_err());
 
         // NOTE We allow None for string and map to pb default of "" ( empty string )
-        assert_eq!(maybe_string_to_pb(None).ok(), Some(String::new()));
+        assert_eq!(maybe_string(None).ok(), Some(String::new()));
     }
 
     #[test]
     fn bad_repeated_numerics() {
-        assert!(f64_repeated_to_pb(Some(&Value::from(vec![true]))).is_err());
-        assert!(u64_repeated_to_pb(Some(&Value::from(vec![true]))).is_err());
+        assert!(f64_repeated(Some(&Value::from(vec![true]))).is_err());
+        assert!(u64_repeated(Some(&Value::from(vec![true]))).is_err());
     }
 
     #[test]
@@ -223,8 +230,8 @@ mod test {
         //
         // As such attempting to convert a non-existent value is an
         // error by construction
-        assert!(f64_repeated_to_pb(None).is_err());
-        assert!(u64_repeated_to_pb(None).is_err());
+        assert!(f64_repeated(None).is_err());
+        assert!(u64_repeated(None).is_err());
     }
 
     #[test]

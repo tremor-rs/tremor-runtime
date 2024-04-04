@@ -21,10 +21,7 @@ use log::error;
 use std::time::{Duration, Instant};
 use testcontainers::{clients, core::Port, images::generic::GenericImage, RunnableImage};
 use tremor_common::ports::IN;
-use tremor_connectors::{
-    harness::{free_port, Harness},
-    impls::clickhouse,
-};
+use tremor_connectors::{harness::Harness, impls::clickhouse, utils::integration::free_port};
 use tremor_system::{
     controlplane::CbAction,
     event::{Event, EventId},
