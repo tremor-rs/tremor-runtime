@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(feature = "websockets-integration")]
+
 use anyhow::{anyhow, bail, Result};
 use futures::SinkExt;
 use futures::StreamExt;
@@ -45,8 +47,9 @@ use tokio_tungstenite::{
 };
 use tremor_common::{ports::IN, url::Url};
 use tremor_connectors::{
-    harness::{free_port::find_free_tcp_port, setup_for_tls, Harness},
+    harness::Harness,
     impls::ws::{self, Defaults},
+    utils::integration::{free_port::find_free_tcp_port, setup_for_tls},
     utils::tls::TLSClientConfig,
 };
 use tremor_system::event::{Event, EventId};

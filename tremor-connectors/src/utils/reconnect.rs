@@ -148,7 +148,7 @@ pub(crate) struct ReconnectRuntime {
 ///
 /// This will change the connector state properly and trigger a new reconnect attempt (according to the configured logic)
 #[derive(Clone)]
-pub(crate) struct ConnectionLostNotifier(alias::Connector, Sender<Msg>);
+pub struct ConnectionLostNotifier(alias::Connector, Sender<Msg>);
 
 impl ConnectionLostNotifier {
     /// constructor
@@ -156,7 +156,9 @@ impl ConnectionLostNotifier {
         Self(alias.clone(), tx)
     }
     /// notify the runtime that this connector lost its connection
-    pub(crate) async fn connection_lost(&self) -> Result<(), Error> {
+    /// # Errors
+    ///   if we fail to send the connection lost notification message since the channel is closed
+    pub async fn connection_lost(&self) -> Result<(), Error> {
         self.1
             .send(Msg::ConnectionLost)
             .await

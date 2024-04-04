@@ -165,9 +165,10 @@ pub(crate) fn make_event_count_metrics_payload(
     (value, Value::object()).into()
 }
 
+/// Create a metrics payload
 // TODO: add convenience functions for creating custom metrics payloads
 #[must_use]
-pub(crate) fn make_metrics_payload(
+pub fn make_metrics_payload(
     name: &'static str,
     fields: Object<'static>,
     tags: Object<'static>,

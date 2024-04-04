@@ -231,9 +231,9 @@ pub trait Source: Send {
     fn asynchronous(&self) -> bool;
 }
 
-///
+/// Stream reader abstraction
 #[async_trait::async_trait]
-pub(crate) trait StreamReader: Send {
+pub trait StreamReader: Send {
     /// reads from the source reader
     async fn read(&mut self, stream: u64) -> anyhow::Result<SourceReply>;
 

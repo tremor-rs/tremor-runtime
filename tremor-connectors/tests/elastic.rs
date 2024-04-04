@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(feature = "elasticsearch-integration")]
+
 use elasticsearch::{
     auth::{ClientCertificate, Credentials},
     cert::{Certificate, CertificateValidation},

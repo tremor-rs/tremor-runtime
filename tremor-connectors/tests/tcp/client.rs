@@ -17,8 +17,9 @@ use std::time::Duration;
 use tokio::net::lookup_host;
 use tremor_common::ports::IN;
 use tremor_connectors::{
-    harness::{free_port, setup_for_tls, Harness},
+    harness::Harness,
     impls::tcp,
+    utils::integration::{free_port, setup_for_tls},
 };
 use tremor_system::{
     controlplane::CbAction,

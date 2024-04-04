@@ -46,7 +46,7 @@ impl Default for Inner {
 /// use this beacon to check if tasks reading or writing from external connections should stop
 #[derive(Debug, Clone, Default)]
 #[allow(clippy::module_name_repetitions)]
-pub(crate) struct QuiescenceBeacon(Arc<Inner>);
+pub struct QuiescenceBeacon(Arc<Inner>);
 
 impl QuiescenceBeacon {
     // we have max 2 listeners at a time, checking this beacon
@@ -94,6 +94,8 @@ impl QuiescenceBeacon {
     }
 
     /// pause both reading and writing
+    /// # Errors
+    ///    if the beacon is already stopped
     pub fn pause(&mut self) -> anyhow::Result<()> {
         match self.0.state.compare_exchange(
             Inner::RUNNING,
@@ -115,6 +117,8 @@ impl QuiescenceBeacon {
     /// Resume both reading and writing.
     ///
     /// Has no effect if not currently paused.
+    /// # Errors
+    ///   if the beacon is not paused
     pub fn resume(&mut self) -> anyhow::Result<()> {
         match self.0.state.compare_exchange(
             Inner::PAUSED,
