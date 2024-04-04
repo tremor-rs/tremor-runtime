@@ -517,7 +517,7 @@ impl Sink for Blackhole {
     async fn on_event(
         &mut self,
         _input: &str,
-        event: tremor_pipeline::Event,
+        event: tremor_system::event::Event,
         ctx: &SinkContext,
         event_serializer: &mut EventSerializer,
         _start: u64,

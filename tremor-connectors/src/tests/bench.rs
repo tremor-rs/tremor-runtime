@@ -35,12 +35,14 @@ async fn stop_after_events() -> anyhow::Result<()> {
         "iters": 2
       }
     });
-    let (world, world_handle) = World::start(WorldConfig::default()).await?;
+    // let (world, world_handle) = World::start(mWorldConfig::default()).await?;
+    let (kill_tx, mut kill_rx) = crate::channel::bounded(1);
+    let kill_switch = KillSwitch::new(kill_tx);
     let mut harness = ConnectorHarness::new_with_kill_switch(
         function_name!(),
         &bench::Builder::default(),
         &defn,
-        world.kill_switch,
+        kill_switch,
     )
     .await?;
 
@@ -57,11 +59,11 @@ async fn stop_after_events() -> anyhow::Result<()> {
                 .send_sink(sink::Msg::Event { event, port: IN })
                 .await?;
         }
-        Result::Ok(())
+        anyhow::Ok(())
     });
 
     // the bench connector should shut the world down
-    world_handle.await??;
+    kill_rx.recv().await.expect("failed to recv");
     handle.abort();
     Ok(())
 }

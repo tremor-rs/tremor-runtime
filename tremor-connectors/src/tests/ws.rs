@@ -47,7 +47,7 @@ use tokio_tungstenite::{
 };
 use tremor_common::ports::IN;
 use tremor_common::url::Url;
-use tremor_pipeline::{Event, EventId};
+use tremor_system::event::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 
 /// A minimal websocket test client harness

@@ -169,8 +169,8 @@ mod test {
 
         assert_eq!(None, config.log_name);
         assert_eq!(None, config.resource);
-        assert_eq!(false, config.partial_success);
-        assert_eq!(false, config.dry_run);
+        assert!(!config.partial_success);
+        assert!(!config.dry_run);
         assert_eq!(1_000_000_000, config.connect_timeout);
         assert_eq!(10_000_000_000, config.request_timeout);
         assert_eq!(LogSeverity::Default as i32, config.default_severity);
@@ -196,7 +196,7 @@ mod test {
         assert_eq!(None, operation(Some(&meta)));
         assert_eq!(String::new(), trace(Some(&meta)));
         assert_eq!(String::new(), span_id(Some(&meta)));
-        assert_eq!(false, trace_sampled(Some(&meta))?);
+        assert!(!trace_sampled(Some(&meta))?);
         assert_eq!(None, source_location(Some(&meta)));
 
         Ok(())
@@ -304,9 +304,9 @@ mod test {
             assert_eq!("127.0.0.1", http_request.server_ip);
             assert_eq!("", http_request.referer);
             //                assert_eq!(100_000_000u64, _http_request.latency.into());
-            assert_eq!(false, http_request.cache_lookup);
-            assert_eq!(false, http_request.cache_hit);
-            assert_eq!(false, http_request.cache_validated_with_origin_server);
+            assert!(!http_request.cache_lookup);
+            assert!(!http_request.cache_hit);
+            assert!(!http_request.cache_validated_with_origin_server);
             assert_eq!(0, http_request.cache_fill_bytes);
             assert_eq!("websocket", http_request.protocol);
             ok_count += 1;

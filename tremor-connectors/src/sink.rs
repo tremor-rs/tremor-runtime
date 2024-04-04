@@ -45,9 +45,13 @@ use tremor_common::{
 use tremor_interceptor::postprocessor::{
     self, finish, make_postprocessors, postprocess, Postprocessors,
 };
-use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
-use tremor_system::connector::{sink, Attempt};
+use tremor_system::{
+    connector::{sink, Attempt},
+    dataplane::SignalKind,
+    event::EventId,
+    pipeline::OpMeta,
+};
 use tremor_value::Value;
 
 pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
@@ -60,7 +64,7 @@ pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
 ///
 /// A response is an event generated from the sink delivery.
 #[derive(Clone, Debug, Default, Copy, PartialEq)]
-pub(crate) struct SinkReply {
+pub struct SinkReply {
     /// guaranteed delivery response - did we sent the event successfully `SinkAck::Ack` or did it fail `SinkAck::Fail`
     pub(crate) ack: SinkAck,
     /// circuit breaker action
@@ -69,17 +73,17 @@ pub(crate) struct SinkReply {
 
 impl SinkReply {
     /// Acknowledges
-    pub(crate) const ACK: SinkReply = SinkReply {
+    pub const ACK: SinkReply = SinkReply {
         ack: SinkAck::Ack,
         cb: CbAction::None,
     };
     /// Fails
-    pub(crate) const FAIL: SinkReply = SinkReply {
+    pub const FAIL: SinkReply = SinkReply {
         ack: SinkAck::Fail,
         cb: CbAction::None,
     };
     /// None
-    pub(crate) const NONE: SinkReply = SinkReply {
+    pub const NONE: SinkReply = SinkReply {
         ack: SinkAck::None,
         cb: CbAction::None,
     };
@@ -137,7 +141,7 @@ pub(crate) enum AsyncSinkReply {
 
 /// connector sink - receiving events
 #[async_trait::async_trait]
-pub(crate) trait Sink: Send {
+pub trait Sink: Send {
     /// called when receiving an event
     async fn on_event(
         &mut self,
@@ -347,7 +351,7 @@ impl SinkManagerBuilder {
     }
 
     /// spawn your specific sink
-    pub(crate) fn spawn<S>(self, sink: S, ctx: SinkContext) -> sink::Addr
+    pub fn spawn<S>(self, sink: S, ctx: SinkContext) -> sink::Addr
     where
         S: Sink + Send + 'static,
     {
@@ -393,7 +397,7 @@ pub(crate) fn builder(
 ///
 /// Keeps track of codec/postprocessors for seach stream
 /// Attention: Take care to clear out data for streams that are not used
-pub(crate) struct EventSerializer {
+pub struct EventSerializer {
     alias: String,
     // default stream handling
     pub(crate) codec: Box<dyn Codec>,
@@ -411,7 +415,7 @@ impl EventSerializer {
         codec_config: Option<tremor_codec::Config>,
         default_codec: CodecReq,
         postprocessor_configs: Vec<postprocessor::Config>,
-        connector_type: &ConnectorType,
+        _connector_type: &ConnectorType,
         alias: &alias::Connector,
     ) -> anyhow::Result<Self> {
         let codec_config = match default_codec {

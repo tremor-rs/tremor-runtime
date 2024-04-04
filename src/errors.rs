@@ -16,24 +16,10 @@
 #![allow(deprecated, missing_docs, clippy::large_enum_variant)]
 
 use error_chain::error_chain;
-use hdrhistogram::{self, serialization as hdr_s};
 use tokio::sync::broadcast;
-use tremor_common::ports::Port;
 use value_trait::prelude::*;
 
 pub type Kind = ErrorKind;
-
-impl From<sled::transaction::TransactionError<()>> for Error {
-    fn from(e: sled::transaction::TransactionError<()>) -> Self {
-        Self::from(format!("Sled Transaction Error: {e:?}"))
-    }
-}
-
-impl From<hdr_s::DeserializeError> for Error {
-    fn from(e: hdr_s::DeserializeError) -> Self {
-        Self::from(format!("{e:?}"))
-    }
-}
 
 impl From<Box<dyn std::error::Error>> for Error {
     fn from(e: Box<dyn std::error::Error>) -> Self {
@@ -43,24 +29,6 @@ impl From<Box<dyn std::error::Error>> for Error {
 
 impl From<Box<dyn std::error::Error + Sync + Send>> for Error {
     fn from(e: Box<dyn std::error::Error + Sync + Send>) -> Self {
-        Self::from(format!("{e:?}"))
-    }
-}
-
-impl From<hdrhistogram::errors::CreationError> for Error {
-    fn from(e: hdrhistogram::errors::CreationError) -> Self {
-        Self::from(format!("{e:?}"))
-    }
-}
-
-impl From<hdrhistogram::RecordError> for Error {
-    fn from(e: hdrhistogram::RecordError) -> Self {
-        Self::from(format!("{e:?}"))
-    }
-}
-
-impl From<hdrhistogram::serialization::V2SerializeError> for Error {
-    fn from(e: hdrhistogram::serialization::V2SerializeError) -> Self {
         Self::from(format!("{e:?}"))
     }
 }
@@ -132,12 +100,6 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
     }
 }
 
-impl<T: std::fmt::Debug> From<aws_sdk_s3::error::SdkError<T>> for Error {
-    fn from(e: aws_sdk_s3::error::SdkError<T>) -> Self {
-        Self::from(ErrorKind::S3Error(format!("{e:?}")))
-    }
-}
-
 impl From<TryTypeError> for Error {
     fn from(e: TryTypeError) -> Self {
         ErrorKind::TypeError(e.expected, e.got).into()
@@ -152,13 +114,15 @@ impl PartialEq for Error {
     }
 }
 
+// FIXME: This is a workaround for the fact that `error_chain` does not support send and sync
+unsafe impl Send for Error {}
+unsafe impl Sync for Error {}
+
 error_chain! {
     links {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
         Codec(tremor_codec::errors::Error, tremor_codec::errors::ErrorKind);
-        Interceptor(tremor_interceptor::errors::Error, tremor_interceptor::errors::ErrorKind);
-        Connector(tremor_connector::errors::Error, tremor_connector::errors::ErrorKind);
     }
     foreign_links {
         AddrParseError(std::net::AddrParseError);
@@ -186,6 +150,11 @@ error_chain! {
         Utf8Error(std::str::Utf8Error);
         ValueError(tremor_value::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        ConnectorError(tremor_connectors::errors::Error);
+        ConnectorImplGenericError(tremor_connectors::errors::GenericImplementationError);
+        SystemConnectorError(tremor_system::connector::Error);
+        SystemDataplaneError(tremor_system::dataplane::Error);
+        SystemKillswitchError(tremor_system::killswitch::Error);
     }
 
     errors {
@@ -282,13 +251,6 @@ error_chain! {
 pub(crate) fn empty_error() -> Error {
     ErrorKind::ChannelEmpty.into()
 }
-pub(crate) fn already_created_error() -> Error {
-    ErrorKind::AlreadyCreated.into()
-}
-#[allow(clippy::needless_pass_by_value)]
-pub(crate) fn pipe_send_e<T>(e: crate::channel::SendError<T>) -> Error {
-    ErrorKind::PipelineSendError(e.to_string()).into()
-}
 
 #[cfg(test)]
 mod test {
@@ -306,21 +268,6 @@ mod test {
             r,
             ErrorKind::TypeError(ValueType::Object, ValueType::String)
         );
-    }
-    #[test]
-    fn aws_error() {
-        use aws_sdk_s3::error::SdkError;
-        #[derive(Debug)]
-        struct DemoError();
-        impl std::fmt::Display for DemoError {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "DemoError")
-            }
-        }
-        impl std::error::Error for DemoError {}
-        let e: SdkError<()> = SdkError::timeout_error(Box::new(DemoError()));
-        let r = Error::from(e);
-        assert_matches!(r.0, ErrorKind::S3Error(_));
     }
 
     #[test]

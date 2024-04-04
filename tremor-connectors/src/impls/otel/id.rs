@@ -98,12 +98,12 @@ fn hex_id_to_pb(
             .collect::<Option<Vec<u8>>>()
             .ok_or_else(|| Error::InvalidArrayContent(kind.to_string()))?
     } else {
-        return Err(Error::FaildToConvert(kind.to_string()).into());
+        return Err(Error::FaildToConvert(kind.to_string()));
     };
     if (allow_empty && data.is_empty()) || data.len() == len_bytes {
         Ok(data)
     } else {
-        Err(Error::InvalidLength(kind.to_string()).into())
+        Err(Error::InvalidLength(kind.to_string()))
     }
 }
 

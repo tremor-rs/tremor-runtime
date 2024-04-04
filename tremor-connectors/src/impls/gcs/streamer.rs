@@ -32,7 +32,6 @@ use crate::{
 };
 use std::time::Duration;
 use tremor_common::time::nanotime;
-use tremor_pipeline::{EventId, OpMeta};
 use tremor_value::Value;
 
 const CONNECTOR_TYPE: &str = "gcs_streamer";
@@ -400,7 +399,7 @@ pub(crate) mod tests {
     use http::StatusCode;
     use std::sync::atomic::AtomicUsize;
     use tremor_common::ids::{ConnectorIdGen, SinkId};
-    use tremor_pipeline::EventId;
+    use tremor_system::event::EventId;
     use tremor_value::literal;
 
     #[derive(Debug, Default)]

@@ -157,9 +157,9 @@ impl Operator for History {
 #[cfg(test)]
 mod test {
     use tremor_common::ids::Id;
+    use tremor_system::event::EventId;
 
     use super::*;
-    use crate::EventId;
 
     #[test]
     fn history_op_test() -> Result<()> {

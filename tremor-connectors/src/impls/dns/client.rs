@@ -229,7 +229,7 @@ fn str_to_record_type(s: &str) -> Result<RecordType, Error> {
         "TLSA" => Ok(RecordType::TLSA),
         "TXT" => Ok(RecordType::TXT),
         "ZERO" => Ok(RecordType::ZERO),
-        other => Err(Error::InvalidRecordType(other.to_string()).into()),
+        other => Err(Error::InvalidRecordType(other.to_string())),
     }
 }
 

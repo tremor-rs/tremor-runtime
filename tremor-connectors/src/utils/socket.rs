@@ -21,16 +21,16 @@ use tremor_common::url::{Defaults, Url};
 /// Generic socket errors
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
-    #[error("unable to resolve {0}")]
-    UnableToConnect(String),
+    // #[error("unable to resolve {0}")]
+    // UnableToConnect(String), FIXME: unused
     #[error("no socket")]
     NoSocket,
     #[error("could not resolve to any addresses")]
     CouldNotResolve,
     #[error("invalid address {0}:{1}")]
     InvalidAddress(String, u16),
-    #[error("missing port")]
-    MissingPort,
+    // #[error("missing port")]
+    // MissingPort, FIXME: unused
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -99,7 +99,7 @@ pub(crate) async fn tcp_server_socket<D: Defaults>(
             }
         }
     }
-    Err(last_err.map_or_else(|| Error::CouldNotResolve.into(), Error::from))
+    Err(last_err.map_or(Error::CouldNotResolve, Error::from))
 }
 
 pub(crate) async fn tcp_client_socket<D: Defaults>(
@@ -133,5 +133,5 @@ pub(crate) async fn tcp_client_socket<D: Defaults>(
             }
         }
     }
-    Err(last_err.map_or_else(|| Error::CouldNotResolve.into(), Error::from))
+    Err(last_err.map_or(Error::CouldNotResolve, Error::from))
 }

@@ -345,7 +345,7 @@ impl Sink for MetricsSink {
     async fn on_event(
         &mut self,
         _input: &str,
-        event: tremor_pipeline::Event,
+        event: tremor_system::event::Event,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,

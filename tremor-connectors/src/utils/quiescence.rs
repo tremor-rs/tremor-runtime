@@ -177,7 +177,7 @@ mod tests {
         ctrl_beacon.stop_reading();
 
         // don't continue reading when stopped reading
-        assert_eq!(false, timeout(timeout_ms, beacon.continue_reading()).await?);
+        assert!(!timeout(timeout_ms, beacon.continue_reading()).await?);
         // writing is fine
         assert!(timeout(timeout_ms, beacon.continue_writing()).await?);
 

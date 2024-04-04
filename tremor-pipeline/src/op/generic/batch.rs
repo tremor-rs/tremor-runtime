@@ -39,9 +39,10 @@
 //! end;
 //! ```
 
-use crate::{op::prelude::*, EventId, EventIdGenerator};
+use crate::op::prelude::*;
 use std::mem::swap;
 use tremor_script::prelude::*;
+use tremor_system::event::{self, EventId};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -67,7 +68,7 @@ struct Batch {
     /// all event ids (min and max) in the batched event
     batch_event_id: EventId,
     is_transactional: bool,
-    event_id_gen: EventIdGenerator,
+    event_id_gen: event::IdGenerator,
 }
 
 fn empty_payload() -> EventPayload {
@@ -78,7 +79,7 @@ op!(BatchFactory(uid, node) {
 if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
     let max_delay_ns = config.timeout;
-    let mut idgen = EventIdGenerator::for_operator(uid);
+    let mut idgen = event::IdGenerator::for_operator(uid);
     Ok(Box::new(Batch {
         data: empty_payload(),
         len: 0,
@@ -217,7 +218,7 @@ mod test {
     #[test]
     fn size() {
         let operator_id = OperatorId::new(0);
-        let mut idgen = EventIdGenerator::for_operator(operator_id);
+        let mut idgen = event::IdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
                 count: 2,
@@ -357,7 +358,7 @@ mod test {
     #[test]
     fn signal() {
         let operator_id = OperatorId::new(0);
-        let mut idgen = EventIdGenerator::for_operator(operator_id);
+        let mut idgen = event::IdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
                 count: 100,
@@ -433,7 +434,7 @@ mod test {
     #[test]
     fn forbid_empty_batches() -> Result<()> {
         let operator_id = OperatorId::new(0);
-        let mut idgen = EventIdGenerator::for_operator(operator_id);
+        let mut idgen = event::IdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
                 count: 2,

@@ -23,7 +23,7 @@ use tokio::{
     time::timeout,
 };
 use tremor_common::ports::IN;
-use tremor_pipeline::{Event, EventId};
+use tremor_system::event::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 
 #[tokio::test(flavor = "multi_thread")]

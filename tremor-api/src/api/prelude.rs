@@ -15,3 +15,4 @@
 pub(crate) use crate::api::*;
 pub(crate) use http_types::StatusCode;
 pub(crate) use tide::Response;
+pub(crate) use tremor_system::instance::State as InstanceState;

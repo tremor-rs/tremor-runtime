@@ -19,13 +19,14 @@ use crate::{
     metrics::value_count,
     ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
-use crate::{op::EventAndInsights, Event, NodeKind, Operator};
+use crate::{op::EventAndInsights, NodeKind, Operator};
 use halfbrown::HashMap;
 use simd_json::ObjectHasher;
 use std::{fmt, fmt::Display};
 use tremor_common::{ids::OperatorId, ports::Port, stry};
 use tremor_config::Map as ConfigMap;
 use tremor_script::{ast::Helper, ast::Stmt};
+use tremor_system::event::Event;
 use tremor_value::{Object, Value};
 
 /// Configuration for a node

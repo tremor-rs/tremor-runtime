@@ -80,11 +80,13 @@ use tremor_common::{
     ids::{ConnectorIdGen, Id, SourceId},
     ports::{Port, ERR, IN, OUT},
 };
-use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta};
 use tremor_system::{
     connector::{self, sink, source, StatusReport},
-    contraflow, controlplane, dataplane,
+    contraflow,
+    controlplane::{self, CbAction},
+    dataplane,
+    event::{Event, EventId},
     instance::State,
 };
 use tremor_value::Value;

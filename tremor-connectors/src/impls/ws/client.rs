@@ -216,7 +216,7 @@ impl Sink for WsClientSink {
     async fn on_event(
         &mut self,
         _input: &str,
-        event: tremor_pipeline::Event,
+        event: tremor_system::event::Event,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,

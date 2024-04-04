@@ -26,7 +26,6 @@ use aws_sdk_s3::{
     Client as S3Client,
 };
 use tremor_common::time::nanotime;
-use tremor_pipeline::{EventId, OpMeta};
 
 pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";
 

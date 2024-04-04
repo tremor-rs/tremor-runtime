@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::select::execute_select_and_having;
-use crate::{Event, EventId, EventIdGenerator, OpMeta};
 use std::{borrow::Cow as SCow, convert::TryFrom};
 use tremor_common::{ids::OperatorId, ports::Port, stry};
 use tremor_script::{
@@ -23,6 +22,10 @@ use tremor_script::{
     interpreter::{Env, LocalStack},
     prelude::*,
     NO_AGGRS,
+};
+use tremor_system::{
+    event::{self, Event, EventId},
+    pipeline::OpMeta,
 };
 
 pub(crate) struct SelectCtx<'run, 'script, 'local> {
@@ -55,7 +58,7 @@ pub struct GroupWindow {
     pub(crate) id: EventId,
     /// For generating new ids for this window
     /// each window has a distinct stream id
-    pub(crate) event_id_gen: EventIdGenerator,
+    pub(crate) event_id_gen: event::IdGenerator,
     /// If the currently windowed data is considered transactional
     /// or not
     pub(crate) transactional: bool,
@@ -77,7 +80,7 @@ impl GroupWindow {
     {
         iter.next().map(|(stream_id, w)| {
             let mut event_id_gen =
-                EventIdGenerator::for_operator_with_stream(operator_id, stream_id);
+                event::IdGenerator::for_operator_with_stream(operator_id, stream_id);
             let id = event_id_gen.next_id();
             Box::new(Self {
                 window: w.window_impl.clone(),

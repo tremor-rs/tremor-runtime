@@ -29,7 +29,7 @@ const UTC: Tz = Tz::UTC;
 
 /// Error for clickhouse conversion
 #[derive(Debug, thiserror::Error)]
-enum Error {
+pub enum Error {
     #[error("Malformed IP address")]
     MalformedIpAddr,
     #[error("Malformed UUID")]
@@ -225,18 +225,18 @@ where
     if let Some(octets) = context.value.as_array() {
         coerce_octet_sequence(octets.as_slice())
             .map(variant)
-            .map_err(|()| Error::from(error))
+            .map_err(|()| error)
     } else if let Some(string) = context.value.as_str() {
         Output::from_str(string)
             .map(extractor)
             .map(variant)
-            .map_err(|_| Error::from(error))
+            .map_err(|_| error)
     } else {
-        Err(Error::from(Error::UnexpectedEventFormat {
+        Err(Error::UnexpectedEventFormat {
             column: context.column_name.to_string(),
             expected_type: context.expected_type.clone(),
             actual_type: context.value.value_type(),
-        }))
+        })
     }
 }
 

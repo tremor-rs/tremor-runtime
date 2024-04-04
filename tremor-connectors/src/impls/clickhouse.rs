@@ -491,7 +491,7 @@ impl ClickhouseSink {
 // This is just a subset of the types actually supported by clickhouse_rs.
 // It targets only the types that can be emitted by Tremor.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-enum DummySqlType {
+pub enum DummySqlType {
     Array(Box<DummySqlType>),
     Nullable(Box<DummySqlType>),
 

@@ -83,7 +83,7 @@ pub enum Error {
     #[error(transparent)]
     TremorCommon(#[from] tremor_common::Error),
     #[error(transparent)]
-    TLS(#[from] rustls::Error),
+    Tls(#[from] rustls::Error),
     #[error(transparent)]
     IO(#[from] io::Error),
 }
@@ -355,7 +355,7 @@ mod tests {
             key: Some(Path::new("./tests/localhost.key").to_path_buf()),
         };
         let client_config = tls_config.to_client_config()?;
-        assert_eq!(true, client_config.client_auth_cert_resolver.has_certs());
+        assert!(client_config.client_auth_cert_resolver.has_certs());
         Ok(())
     }
 }

@@ -18,14 +18,11 @@ pub mod flow;
 pub mod flow_supervisor;
 
 use self::flow::Flow;
-use crate::{
-    channel::Sender,
-    connectors,
-    errors::{Error, Kind as ErrorKind, Result},
-};
-use std::time::Duration;
-use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
+use crate::errors::{Error, Kind as ErrorKind, Result};
+use tokio::{sync::oneshot, task::JoinHandle};
+use tremor_connectors::ConnectorBuilder;
 use tremor_script::{ast, highlighter::Highlighter};
+use tremor_system::killswitch::{KillSwitch, ShutdownMode};
 
 /// Configuration for the runtime
 #[derive(Default)]
@@ -85,7 +82,7 @@ impl World {
     ///  * If the system is unavailable
     pub(crate) async fn register_builtin_connector_type(
         &self,
-        builder: Box<dyn connectors::ConnectorBuilder>,
+        builder: Box<dyn ConnectorBuilder>,
     ) -> Result<()> {
         self.system
             .send(flow_supervisor::Msg::RegisterConnectorType {
@@ -135,7 +132,7 @@ impl World {
             kill_switch,
         };
 
-        connectors::register_builtin_connector_types(&world, config.debug_connectors).await?;
+        crate::register_builtin_connector_types(&world, config.debug_connectors).await?;
         Ok((world, system_h))
     }
 
@@ -144,6 +141,6 @@ impl World {
     /// # Errors
     ///  * if the system failed to stop
     pub async fn stop(&self, mode: ShutdownMode) -> Result<()> {
-        self.kill_switch.stop(mode).await
+        Ok(self.kill_switch.stop(mode).await?)
     }
 }

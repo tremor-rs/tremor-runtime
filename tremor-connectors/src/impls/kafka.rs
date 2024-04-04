@@ -311,8 +311,6 @@ const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 enum Error {
     #[error("Unknown stats client_type \"{0}\"")]
     UnknownStatsClient(String),
-    #[error("not an int value")]
-    InvalidInt,
     #[error("Provided rdkafka_option that will be overwritten: {0}")]
     OptionOverwritten(String),
     #[error("Cannot enable `retry_failed_events` and `enable.auto.commit` and `enable.auto.offset.store` at the same time.")]

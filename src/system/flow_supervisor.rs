@@ -14,30 +14,25 @@
 
 use super::flow::Flow;
 use super::KillSwitch;
-use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
-use crate::{
-    channel::{bounded, Sender},
-    errors::empty_error,
-};
-use crate::{
-    connectors::{self, ConnectorBuilder, ConnectorType},
-    log_error,
-};
-use crate::{
-    errors::{Kind as ErrorKind, Result},
-    qsize,
-};
+use crate::channel::{bounded, Sender};
+use crate::errors::{Kind as ErrorKind, Result};
+use crate::log_error;
+use futures::StreamExt;
 use hashbrown::{hash_map::Entry, HashMap};
 use tokio::{
     sync::oneshot,
     task::{self, JoinHandle},
     time::timeout,
 };
+use tokio_stream::wrappers::ReceiverStream;
 use tremor_common::{
     alias,
     ids::{ConnectorIdGen, OperatorIdGen},
+    primerge::PriorityMerge,
 };
+use tremor_connectors::{errors::GenericImplementationError, ConnectorBuilder, ConnectorType};
 use tremor_script::ast::DeployFlow;
+use tremor_system::{killswitch, qsize, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT};
 
 pub(crate) type Channel = Sender<Msg>;
 
@@ -59,10 +54,6 @@ pub(crate) enum Msg {
     },
     GetFlows(oneshot::Sender<Result<Vec<Flow>>>),
     GetFlow(alias::Flow, oneshot::Sender<Result<Flow>>),
-    /// Initiate the Quiescence process
-    Drain(oneshot::Sender<Result<()>>),
-    /// stop this manager
-    Stop,
 }
 
 #[derive(Debug)]
@@ -70,14 +61,14 @@ pub(crate) struct FlowSupervisor {
     flows: HashMap<alias::Flow, Flow>,
     operator_id_gen: OperatorIdGen,
     connector_id_gen: ConnectorIdGen,
-    known_connectors: connectors::Known,
+    known_connectors: tremor_connectors::Known,
 }
 
 impl FlowSupervisor {
     pub fn new() -> Self {
         Self {
             flows: HashMap::new(),
-            known_connectors: connectors::Known::new(),
+            known_connectors: tremor_connectors::Known::new(),
             operator_id_gen: OperatorIdGen::new(),
             connector_id_gen: ConnectorIdGen::new(),
         }
@@ -174,7 +165,7 @@ impl FlowSupervisor {
         }
         Ok(())
     }
-    async fn handle_drain(&self, sender: oneshot::Sender<Result<()>>) {
+    async fn handle_drain(&self, sender: oneshot::Sender<anyhow::Result<()>>) {
         if self.flows.is_empty() {
             log_error!(
                 sender.send(Ok(())).map_err(|_| "send error"),
@@ -212,33 +203,48 @@ impl FlowSupervisor {
     }
 
     pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel, KillSwitch) {
-        let (tx, mut rx) = bounded(qsize());
-        let kill_switch = KillSwitch(tx.clone());
+        enum MergeMsg {
+            Kill(killswitch::Msg),
+            Ctrl(Msg),
+        }
+        let (kill_tx, kill_rx) = bounded(qsize());
+        let (ctrl_tx, ctrl_rx) = bounded(qsize());
+
+        let kill_stream = ReceiverStream::new(kill_rx).map(MergeMsg::Kill);
+        let ctrl_stream = ReceiverStream::new(ctrl_rx).map(MergeMsg::Ctrl);
+
+        let kill_switch = KillSwitch::new(kill_tx);
         let task_kill_switch = kill_switch.clone();
+
         let system_h = task::spawn(async move {
-            while let Some(msg) = rx.recv().await {
+            let mut stream = PriorityMerge::new(kill_stream, ctrl_stream);
+            while let Some(msg) = stream.next().await {
                 match msg {
-                    Msg::RegisterConnectorType {
+                    MergeMsg::Ctrl(Msg::RegisterConnectorType {
                         connector_type,
                         builder,
                         ..
-                    } => self.handle_register_connector_type(connector_type, builder),
-                    Msg::StartDeploy { flow, sender } => {
+                    }) => self.handle_register_connector_type(connector_type, builder),
+                    MergeMsg::Ctrl(Msg::StartDeploy { flow, sender }) => {
                         self.handle_start_deploy(*flow, sender, &task_kill_switch)
                             .await;
                     }
-                    Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx),
-                    Msg::GetFlow(id, reply_tx) => self.handle_get_flow(&id, reply_tx),
-                    Msg::Stop => {
+                    MergeMsg::Ctrl(Msg::GetFlows(reply_tx)) => self.handle_get_flows(reply_tx),
+                    MergeMsg::Ctrl(Msg::GetFlow(id, reply_tx)) => {
+                        self.handle_get_flow(&id, reply_tx);
+                    }
+                    MergeMsg::Kill(killswitch::Msg::Stop) => {
                         self.handle_stop().await?;
                         break;
                     }
-                    Msg::Drain(sender) => self.handle_drain(sender).await,
+                    MergeMsg::Kill(killswitch::Msg::Drain(sender)) => {
+                        self.handle_drain(sender).await;
+                    }
                 }
             }
             info!("Manager stopped.");
             Ok(())
         });
-        (system_h, tx, kill_switch)
+        (system_h, ctrl_tx, kill_switch)
     }
 }

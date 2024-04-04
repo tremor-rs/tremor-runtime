@@ -185,7 +185,7 @@ impl Sink for DiscordSink {
     async fn on_event(
         &mut self,
         _input: &str,
-        event: tremor_pipeline::Event,
+        event: tremor_system::event::Event,
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,

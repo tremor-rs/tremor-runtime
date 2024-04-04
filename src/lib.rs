@@ -29,8 +29,6 @@
 extern crate serde;
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate lazy_static;
 
 #[macro_use]
 pub(crate) mod macros;
@@ -46,16 +44,12 @@ pub mod pipeline;
 
 /// Tremor runtime system
 pub mod system;
-/// Utility functions
-pub mod utils;
+
 /// Tremor runtime version tools
 pub mod version;
 
-use std::sync::atomic::AtomicUsize;
-
 use crate::errors::{Error, Result};
 
-pub(crate) use crate::config::Connector;
 use system::World;
 use tremor_script::{
     deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
@@ -66,6 +60,27 @@ use tremor_script::{highlighter::Highlighter, FN_REGISTRY};
 pub type OpConfig = tremor_value::Value<'static>;
 
 pub(crate) mod channel;
+
+/// registering builtin and debug connector types
+///
+/// # Errors
+///  * If a builtin connector couldn't be registered
+
+pub(crate) async fn register_builtin_connector_types(
+    world: &World,
+    debug: bool,
+) -> anyhow::Result<()> {
+    for builder in tremor_connectors::builtin_connector_types() {
+        world.register_builtin_connector_type(builder).await?;
+    }
+    if debug {
+        for builder in tremor_connectors::debug_connector_types() {
+            world.register_builtin_connector_type(builder).await?;
+        }
+    }
+
+    Ok(())
+}
 
 /// Loads a Troy file
 ///
@@ -120,8 +135,10 @@ macro_rules! log_error {
 
 #[cfg(test)]
 mod tests {
+    use tremor_system::killswitch::ShutdownMode;
+
     use super::*;
-    use crate::system::{ShutdownMode, WorldConfig};
+    use crate::system::WorldConfig;
     use std::io::Write;
 
     #[tokio::test(flavor = "multi_thread")]

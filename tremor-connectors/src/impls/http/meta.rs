@@ -32,7 +32,7 @@ use tremor_value::Value;
 /// HTTP Connector Errors
 
 #[derive(Debug, thiserror::Error)]
-enum Error {
+pub enum Error {
     #[error("Invalid HTTP Method")]
     InvalidMethod,
     #[error("Invalid HTTP URL")]

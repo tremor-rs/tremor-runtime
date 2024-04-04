@@ -74,7 +74,7 @@ impl Source for ChannelSource {
     async fn pull_data(
         &mut self,
         _pull_id: &mut u64,
-        ctx: &SourceContext,
+        _ctx: &SourceContext,
     ) -> anyhow::Result<SourceReply> {
         Ok(self
             .rx

@@ -34,8 +34,8 @@ use std::{
 use tokio::task::{spawn, JoinHandle};
 use tremor_common::ports::IN;
 use tremor_common::url::HttpDefaults;
-use tremor_pipeline::Event;
 use tremor_script::ValueAndMeta;
+use tremor_system::event::Event;
 use tremor_value::{literal, Value};
 use value_trait::prelude::*;
 

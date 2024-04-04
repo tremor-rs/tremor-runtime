@@ -41,20 +41,18 @@ use tremor_config::NameWithConfig;
 use tremor_interceptor::preprocessor::{
     self, finish, make_preprocessors, preprocess, Preprocessors,
 };
-use tremor_pipeline::{
-    CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
-};
 use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
 use tremor_system::{
     connector::{self, source, Attempt, Connectivity},
-    controlplane::{self, InputTarget},
-    dataplane, pipeline,
+    controlplane,
+    dataplane::{self, InputTarget},
+    event, pipeline,
 };
 use tremor_value::{literal, Value};
 
 /// reply from `Source::on_event`
 #[derive(Debug)]
-pub(crate) enum SourceReply {
+pub enum SourceReply {
     /// A normal data event with a `Vec<u8>` for data
     Data {
         /// origin uri
@@ -109,7 +107,7 @@ pub(crate) type SourceReplySender = Sender<SourceReply>;
 
 /// source part of a connector
 #[async_trait::async_trait]
-pub(crate) trait Source: Send {
+pub trait Source: Send {
     /// Pulls an event from the source if one exists
     /// the `pull_id` identifies the number of the call to `pull_data` and is passed in so
     /// sources can keep track of which event stems from which call of `pull_data` and so can
@@ -304,7 +302,7 @@ impl SourceManagerBuilder {
     /// spawn a Manager with the given source implementation
     /// # Errors
     /// if the source can not be spawned into a own process
-    pub(crate) fn spawn<S>(self, source: S, ctx: SourceContext) -> source::Addr
+    pub fn spawn<S>(self, source: S, ctx: SourceContext) -> source::Addr
     where
         S: Source + Send + Sync + 'static,
     {
@@ -356,7 +354,7 @@ pub(crate) fn builder(
     let codec_config = match connector_default_codec {
         CodecReq::Structured => {
             if config.codec.is_some() {
-                return Err(Error::UnsupportedCodec(alias.clone()).into());
+                return Err(Error::UnsupportedCodec(alias.clone()));
             }
             tremor_codec::Config::from("null")
         }
@@ -461,7 +459,7 @@ impl Streams {
             codec::resolve(codec_config)?
         };
         let preprocessors = make_preprocessors(preprocessor_configs)?;
-        let idgen = EventIdGenerator::new_with_stream(source_uid, stream_id);
+        let idgen = event::IdGenerator::new_with_stream(source_uid, stream_id);
         Ok(StreamState {
             stream_id,
             idgen,
@@ -474,7 +472,7 @@ impl Streams {
 /// everything that is scoped to a single stream
 struct StreamState {
     stream_id: u64,
-    idgen: EventIdGenerator,
+    idgen: event::IdGenerator,
     codec: Box<dyn Codec>,
     preprocessors: Preprocessors,
 }

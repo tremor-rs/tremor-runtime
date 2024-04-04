@@ -30,8 +30,8 @@ use std::{
 };
 use tokio::time::timeout;
 use tremor_common::ports::IN;
-use tremor_pipeline::{Event, EventId};
 use tremor_script::ValueAndMeta;
+use tremor_system::event::{Event, EventId};
 use tremor_value::{literal, Value};
 use value_trait::prelude::*;
 

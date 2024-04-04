@@ -213,7 +213,7 @@ impl Source for HttpServerSource {
             .map(Arc::new);
 
         let server_context = HttpServerState::new(tx, ctx.clone(), "http");
-        let addr = (host, port)
+        let addr = (host.as_str(), port)
             .to_socket_addrs()?
             .next()
             .ok_or(socket::Error::InvalidAddress(host, port))?;
@@ -376,7 +376,7 @@ impl Sink for HttpServerSink {
     async fn on_event(
         &mut self,
         _input: &str,
-        event: tremor_pipeline::Event,
+        event: tremor_system::event::Event,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,

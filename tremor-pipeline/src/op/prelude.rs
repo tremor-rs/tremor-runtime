@@ -14,9 +14,13 @@
 
 pub use super::*;
 pub use crate::errors::*;
-pub use crate::{CbAction, Event, OpMeta, Operator};
+pub use crate::Operator;
 pub use halfbrown::HashMap;
 pub use simd_json::OwnedValue;
 pub use tremor_common::ports::{Port, ERR, IN, OUT, OVERFLOW};
 pub use tremor_config::Impl as ConfigImpl;
+pub(crate) use tremor_system::controlplane::CbAction;
+pub(crate) use tremor_system::event::Event;
+pub(crate) use tremor_system::pipeline::OpMeta;
+
 pub use value_trait::prelude::*;

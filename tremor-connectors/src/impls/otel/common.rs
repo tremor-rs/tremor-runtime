@@ -166,7 +166,7 @@ pub(crate) fn maybe_key_value_list_to_pb(
 
 pub(crate) fn get_attributes_or_labes(data: &Value) -> Result<Vec<KeyValue>, Error> {
     match (data.get_object("attributes"), data.get_object("labels")) {
-        (None, None) => Err(Error::MissingField("attributes").into()),
+        (None, None) => Err(Error::MissingField("attributes")),
         (Some(a), None) | (None, Some(a)) => Ok(obj_key_value_list_to_pb(a)),
         (Some(a), Some(l)) => {
             let mut a = obj_key_value_list_to_pb(a);

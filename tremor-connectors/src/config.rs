@@ -24,8 +24,6 @@ use tremor_script::{
     FN_REGISTRY,
 };
 
-pub(crate) type Id = String;
-
 /// Reconnect strategies for controlling if and how to reconnect
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", deny_unknown_fields)]
@@ -109,7 +107,7 @@ pub struct Connector {
 
 impl Connector {
     /// Spawns a connector from a definition
-    pub(crate) fn from_defn(
+    pub fn from_defn(
         alias: &alias::Connector,
         defn: &ast::ConnectorDefinition<'static>,
     ) -> anyhow::Result<Self> {
@@ -145,8 +143,7 @@ impl Connector {
                         "Expected type {t:?} for key {k} but got {:?}",
                         v.get(k).map_or(ValueType::Null, Value::value_type)
                     ),
-                )
-                .into());
+                ));
             }
             Ok(())
         }

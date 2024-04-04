@@ -119,11 +119,6 @@ use tokio::{
 };
 use tremor_common::asy::file::open;
 
-#[derive(Debug, thiserror::Error)]
-enum Error {
-    #[error("No file to write")]
-    NoFile,
-}
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
