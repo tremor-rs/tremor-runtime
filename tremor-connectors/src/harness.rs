@@ -266,7 +266,7 @@ impl Harness {
             self.get_pipe(IN)?.get_contraflow().await?,
             self.get_pipe(IN)?.get_contraflow().await?,
         ] {
-            if matches!(cf.cb, CbAction::SinkStart(_) | CbAction::Restore) {
+            if !matches!(cf.cb, CbAction::SinkStart(_) | CbAction::Restore) {
                 bail!("Expected SinkStart or Open Contraflow message, got: {cf:?}");
             }
         }
