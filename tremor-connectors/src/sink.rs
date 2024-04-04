@@ -270,6 +270,8 @@ pub(crate) struct SinkContextInner {
     /// notifier the connector runtime if we lost a connection
     pub(crate) notifier: ConnectionLostNotifier,
 }
+
+/// context for the connector sink
 #[derive(Clone)]
 pub struct SinkContext(Arc<SinkContextInner>);
 impl SinkContext {

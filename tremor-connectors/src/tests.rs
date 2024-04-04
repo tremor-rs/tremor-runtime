@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// FIXME
-#![allow(clippy::all, warnings)]
-
 //!
 //! Connector testing framework
 //!
@@ -67,8 +64,9 @@ use crate::{
     channel::{bounded, unbounded, Receiver, UnboundedReceiver},
     config, pipeline,
     prelude::GenericImplementationError,
-    qsize, Connectivity, Error,
+    qsize, Connectivity,
 };
+use anyhow::bail;
 use log::{debug, info};
 use std::{
     collections::HashMap,
@@ -83,15 +81,13 @@ use tremor_common::{
 use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta};
 use tremor_system::{
     connector::{self, sink, source, StatusReport},
-    contraflow,
     controlplane::{self, CbAction},
-    dataplane,
+    dataplane::{self, contraflow},
     event::{Event, EventId},
     instance::State,
 };
 use tremor_value::Value;
 
-/// FIXME
 pub struct ConnectorHarness {
     addr: connector::Addr,
     pipes: HashMap<Port<'static>, TestPipeline>,
@@ -169,7 +165,11 @@ impl ConnectorHarness {
             pipes,
         })
     }
-    ///FIXME
+
+    ///
+    /// Create a new connector harness
+    /// # Errors
+    ///  - If the connector harnes could not be created or the linking failed
     pub async fn new(
         id: &str,
         builder: &dyn crate::ConnectorBuilder,
@@ -186,7 +186,12 @@ impl ConnectorHarness {
     ) -> anyhow::Result<Self> {
         Self::new_with_ports(id, builder, defn, kill_switch, vec![IN], vec![OUT, ERR]).await
     }
-    ///FIXME
+
+    /// Start the connector harness
+    ///
+    /// # Errors
+    ///  - If the connector could not be started
+    ///  - If the sink could not be connected
 
     pub async fn start(&self) -> anyhow::Result<()> {
         // start the connector
@@ -226,7 +231,9 @@ impl ConnectorHarness {
         Ok(self.addr.send(crate::Msg::Resume).await?)
     }
 
-    /// FIXME
+    /// Stop the connector harness and returns lingering events
+    /// # Errors
+    /// - If the connector could not be stopped
     pub async fn stop(mut self) -> anyhow::Result<(Vec<Event>, Vec<Event>)> {
         let (tx, mut rx) = bounded(qsize());
         debug!("Stopping harness...");
@@ -292,10 +299,9 @@ impl ConnectorHarness {
             self.get_pipe(IN)?.get_contraflow().await?,
             self.get_pipe(IN)?.get_contraflow().await?,
         ] {
-            assert!(
-                matches!(cf.cb, CbAction::SinkStart(_) | CbAction::Restore),
-                "Expected SinkStart or Open Contraflow message, got: {cf:?}"
-            );
+            if matches!(cf.cb, CbAction::SinkStart(_) | CbAction::Restore) {
+                bail!("Expected SinkStart or Open Contraflow message, got: {cf:?}");
+            }
         }
 
         Ok(())
@@ -325,31 +331,22 @@ impl ConnectorHarness {
     }
 
     /// get the out pipeline - if any
+    /// # Errors
+    /// If there is no pipeline for the out port
     pub fn out(&mut self) -> anyhow::Result<&mut TestPipeline> {
         self.get_pipe(OUT)
     }
 
-    // #[cfg(any(
-    //     feature = "http-integration",
-    //     feature = "es-integration",
-    //     feature = "kafka-integration"
-    // ))]
     /// get the err pipeline - if any
+    /// # Errors
+    /// If there is no pipeline for the err port
     pub fn err(&mut self) -> anyhow::Result<&mut TestPipeline> {
         self.get_pipe(ERR)
     }
 
-    // #[cfg(any(
-    //     feature = "http-integration",
-    //     feature = "es-integration",
-    //     feature = "socket-integration",
-    //     feature = "net-integration",
-    //     feature = "ws-integration",
-    //     feature = "s3-integration",
-    //     feature = "gcp-integration",
-    //     feature = "kafka-integration",
-    // ))]
-    /// FIXME
+    /// Send an event to the connector
+    /// # Errors
+    /// If the event could not be sent
     pub async fn send_to_sink(&self, event: Event, port: Port<'static>) -> anyhow::Result<()> {
         Ok(self
             .addr
@@ -436,14 +433,8 @@ impl TestPipeline {
     }
 
     /// wait for a contraflow
-    // #[cfg(any(
-    //     feature = "kafka-integration",
-    //     feature = "es-integration",
-    //     feature = "s3-integration",
-    //     feature = "net-integration",
-    //     feature = "http-integration",
-    //     feature = "gcp-integration"
-    // ))]
+    /// # Errors
+    /// If no contraflow is received within the timeout (20s) or the channel is closed
     pub async fn get_contraflow(&mut self) -> anyhow::Result<Event> {
         match timeout(Duration::from_secs(20), self.rx_cf.recv())
             .await?
@@ -453,7 +444,7 @@ impl TestPipeline {
         }
     }
 
-    // get all currently available events from the pipeline
+    /// get all currently available events from the pipeline
     pub(crate) fn get_events(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
         while let Ok(msg) = self.rx.try_recv() {
@@ -471,6 +462,8 @@ impl TestPipeline {
 
     /// get a single event from the pipeline
     /// wait for an event to arrive
+    /// # Errors
+    /// If no event is received within the timeout (120s) or the channel is closed
     pub async fn get_event(&mut self) -> anyhow::Result<Event> {
         const TIMEOUT: Duration = Duration::from_secs(120);
         let start = Instant::now();

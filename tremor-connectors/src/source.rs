@@ -639,7 +639,6 @@ where
                 Ok(Control::Continue)
             }
             source::Msg::Cb(cb, id) => Ok(self.handle_cb(cb, id).await),
-            // FIXME: #[cfg(test)]
             source::Msg::Synchronize(sender) => {
                 self.ctx.swallow_err(
                     sender.send(()).map_err(|()| "send err"),

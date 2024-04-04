@@ -6268,10 +6268,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tremor-event"
-version = "0.1.0"
-
-[[package]]
 name = "tremor-influx"
 version = "0.13.0-rc.16"
 dependencies = [
@@ -6426,7 +6422,6 @@ dependencies = [
  "tremor-common",
  "tremor-config",
  "tremor-connectors",
- "tremor-event",
  "tremor-influx",
  "tremor-interceptor",
  "tremor-pipeline",

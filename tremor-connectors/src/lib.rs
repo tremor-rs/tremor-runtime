@@ -11,8 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![recursion_limit = "1024"]
 
+//! Tremor Connector Framework and basic connectors
+
+#![deny(warnings)]
+#![deny(missing_docs)]
+#![deny(
+    clippy::all,
+    clippy::unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic,
+    clippy::mod_module_files
+)]
 /// connectors
 pub mod impls;
 /// prelude with commonly needed stuff imported

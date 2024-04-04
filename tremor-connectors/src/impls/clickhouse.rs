@@ -488,42 +488,60 @@ impl ClickhouseSink {
     }
 }
 
-// This is just a subset of the types actually supported by clickhouse_rs.
-// It targets only the types that can be emitted by Tremor.
+/// This is just a subset of the types actually supported by `clickhouse_rs`.
+/// It targets only the types that can be emitted by Tremor.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub enum DummySqlType {
+    /// An array of.
     Array(Box<DummySqlType>),
+    /// A nullable type.
     Nullable(Box<DummySqlType>),
 
+    /// Unsigned integers.
     UInt8,
+    /// Unsigned integers.
     UInt16,
+    /// Unsigned integers.
     UInt32,
+    /// Unsigned integers.
     UInt64,
 
+    /// Signed integers.
     Int8,
+    /// Signed integers.
     Int16,
+    /// Signed integers.
     Int32,
+    /// Signed integers.
     Int64,
-
+    /// Strings.
     String,
 
+    /// IPv4 addresses.
     #[serde(rename = "IPv4")]
     Ipv4,
+    /// IPv6 addresses.
     #[serde(rename = "IPv6")]
     Ipv6,
+    /// UUIDs.
     #[serde(rename = "UUID")]
     Uuid,
 
+    /// Date and time.
     DateTime,
 
     // The following three variants allow us to get more control of how much
     // precision is needed.
+    /// Date and time with seconds precision.
     #[serde(rename = "DateTime64(0)")]
     DateTime64Secs,
+    /// Date and time with milliseconds precision.
     #[serde(rename = "DateTime64(3)")]
     DateTime64Millis,
+    /// Date and time with microseconds precision.
     #[serde(rename = "DateTime64(6)")]
     DateTime64Micros,
+    /// Date and time with nanoseconds precision.
     #[serde(rename = "DateTime64(9)")]
     DateTime64Nanos,
 }

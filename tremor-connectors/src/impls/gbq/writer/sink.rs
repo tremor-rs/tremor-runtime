@@ -112,14 +112,10 @@ fn map_field(
         let mut type_name = None;
         let mut subfields = HashMap::with_capacity(raw_field.fields.len());
 
-        let table_type =
-            if let Some(table_type) = table_field_schema::Type::from_i32(raw_field.r#type) {
-                table_type
-            } else {
-                warn!("{ctx} Found a field of unknown type: {}", raw_field.name);
-
-                continue;
-            };
+        let Some(table_type) = table_field_schema::Type::from_i32(raw_field.r#type) else {
+            warn!("{ctx} Found a field of unknown type: {}", raw_field.name);
+            continue;
+        };
 
         let grpc_type = match table_type {
             TableType::Int64 => field_descriptor_proto::Type::Int64,
@@ -361,9 +357,7 @@ where
             let append_response =
                 timeout(req_timeout, client.append_rows(stream::iter(vec![request]))).await;
 
-            let append_response = if let Ok(append_response) = append_response {
-                append_response
-            } else {
+            let Ok(append_response) = append_response else {
                 // timeout sending append rows request
                 error!(
                     "{ctx} GBQ request timed out after {}ms",
