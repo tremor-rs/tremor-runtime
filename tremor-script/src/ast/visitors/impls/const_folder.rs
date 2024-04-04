@@ -287,18 +287,14 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
                 }
                 Segment::Range { start, end, mid }
             }
-            Segment::Element { expr, mid, .. }
-                if expr.as_lit().map(Value::is_usize).unwrap_or_default() =>
-            {
+            Segment::Element { expr, mid, .. } if expr.as_lit().is_some_and(Value::is_usize) => {
                 let idx = expr
                     .as_lit()
                     .and_then(Value::as_usize)
                     .ok_or("unreachable error is int and not int")?;
                 Segment::Idx { idx, mid }
             }
-            Segment::Element { expr, mid, .. }
-                if expr.as_lit().map(Value::is_str).unwrap_or_default() =>
-            {
+            Segment::Element { expr, mid, .. } if expr.as_lit().is_some_and(Value::is_str) => {
                 if let Some(Value::String(key)) = expr.into_lit() {
                     let key = KnownKey::from(key);
                     Segment::Id { key, mid }

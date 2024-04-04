@@ -98,13 +98,13 @@ fn test_string_not_eq() -> Result<()> {
 #[test]
 fn test_invocation_eq() -> Result<()> {
     test_ast_eq(
-        r#"
+        "
         fn add(x, y) with
           x + y
         end;
         add(add(4, state[1]), 4.2);
         add(add(4, state[1]), 4.2);
-        "#,
+        ",
         true,
     )
 }
@@ -366,50 +366,50 @@ fn present_eq_test() -> Result<()> {
 #[test]
 fn group_path_eq_test() -> Result<()> {
     test_ast_eq(
-        r#"
+        "
         group[1];
         group[1]
-        "#,
+        ",
         true,
     )
 }
 #[test]
 fn group_path_not_eq_test() -> Result<()> {
     test_ast_eq(
-        r#"
+        "
         group[1];
         group[0]
-        "#,
+        ",
         false,
     )
 }
 #[test]
 fn window_path_eq_test() -> Result<()> {
     test_ast_eq(
-        r#"
+        "
         window;
         window
-        "#,
+        ",
         true,
     )
 }
 #[test]
 fn args_path_eq_test() -> Result<()> {
     test_ast_eq(
-        r#"
+        "
         args[0];
         args[0]
-        "#,
+        ",
         true,
     )
 }
 #[test]
 fn meta_path_eq_test() -> Result<()> {
     test_ast_eq(
-        r#"
+        "
         $meta[1];
         $meta[1]
-        "#,
+        ",
         true,
     )
 }
@@ -450,10 +450,10 @@ fn string_eq_test() -> Result<()> {
 #[test]
 fn mul_eq_test() -> Result<()> {
     test_ast_eq(
-        r#"
+        "
         event.m1 * event.m2;
         event.m1 * event.m2;
-        "#,
+        ",
         true,
     )
 }

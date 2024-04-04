@@ -520,20 +520,17 @@ impl<'script> ExpressionRaw<'script> for ExprRaw<'script> {}
 
 fn is_one_simple_group<'script>(patterns: &[ClauseGroup<'script, Expr<'script>>]) -> bool {
     let is_one = patterns.len() == 1;
-    let is_simple = patterns
-        .first()
-        .map(|cg| {
-            if let ClauseGroup::Simple {
-                precondition: None,
-                patterns,
-            } = cg
-            {
-                patterns.len() == 1
-            } else {
-                false
-            }
-        })
-        .unwrap_or_default();
+    let is_simple = patterns.first().is_some_and(|cg| {
+        if let ClauseGroup::Simple {
+            precondition: None,
+            patterns,
+        } = cg
+        {
+            patterns.len() == 1
+        } else {
+            false
+        }
+    });
     is_one && is_simple
 }
 
@@ -2077,7 +2074,7 @@ impl_expr_exraw!(MatchRaw);
     // No clippy, we really mean j.exclusive(k) || k.exclusive(j)...
     clippy::suspicious_operation_groupings,
     // also what is wrong with you clippy ...
-    clippy::blocks_in_if_conditions
+    clippy::blocks_in_conditions
 )]
 fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
     for i in (0..patterns.len()).rev() {
@@ -2085,10 +2082,9 @@ fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
             if patterns
                 .get(j)
                 .and_then(|jv| Some((jv, patterns.get(j - 1)?)))
-                .map(|(j, k)| {
+                .is_some_and(|(j, k)| {
                     j.cost() <= k.cost() && (j.is_exclusive_to(k) || k.is_exclusive_to(j))
                 })
-                .unwrap_or_default()
             {
                 patterns.swap(j, j - 1);
             }

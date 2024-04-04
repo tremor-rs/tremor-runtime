@@ -92,13 +92,9 @@ async fn run_bench(
             let cwd = std::env::current_dir()?;
             file::set_current_dir(&root)?;
             status::tags(&tags, Some(&matched), Some(&config.excludes))?;
-            let test_report = process::run_process(
-                "bench",
-                config.base_directory.as_path(),
-                &cwd.join(&root),
-                &tags,
-            )
-            .await?;
+            let test_report =
+                process::run_process("bench", config.base_directory.as_path(), &cwd.join(&root))
+                    .await?;
 
             // Restore cwd
             file::set_current_dir(&cwd)?;
@@ -183,12 +179,7 @@ async fn run_integration(
 
         // Run integration tests
         let test_report = if let Some(timeout_dur) = config.timeout {
-            match timeout(
-                timeout_dur,
-                process::run_process("integration", base, root, &tags),
-            )
-            .await
-            {
+            match timeout(timeout_dur, process::run_process("integration", base, root)).await {
                 Err(_) => {
                     // timeout
                     return Err(format!("Timeout running test {}", root.display()).into());
@@ -196,7 +187,7 @@ async fn run_integration(
                 Ok(res) => res?,
             }
         } else {
-            process::run_process("integration", base, root, &tags).await?
+            process::run_process("integration", base, root).await?
         };
 
         // Restore cwd

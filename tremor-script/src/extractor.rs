@@ -311,15 +311,11 @@ impl Extractor {
 }
 
 fn is_prefix(rule_text: &str) -> bool {
-    Regex::new(r"^[^*?]+\*$")
-        .map(|re| re.is_match(rule_text))
-        .unwrap_or_default()
+    Regex::new(r"^[^*?]+\*$").is_ok_and(|re| re.is_match(rule_text))
 }
 
 fn is_suffix(rule_text: &str) -> bool {
-    Regex::new(r"^\*[^*?]+$")
-        .map(|re| re.is_match(rule_text))
-        .unwrap_or_default()
+    Regex::new(r"^\*[^*?]+$").is_ok_and(|re| re.is_match(rule_text))
 }
 
 impl<T: std::error::Error> From<T> for Error {

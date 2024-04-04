@@ -39,7 +39,7 @@ pub(crate) struct Before {
     #[serde(rename = "max-await-secs", default = "default_max_await_secs")]
     until: u64,
     #[serde(rename = "min-await-secs", default = "default_min_await_secs")]
-    before_start_delay: u64,
+    start_delay: u64,
 }
 
 fn default_dir() -> String {
@@ -133,11 +133,9 @@ impl Before {
                             }
                         }
                         "wait-for-ms" => {
-                            success &= v
-                                .first()
-                                .and_then(|delay| delay.parse().ok())
-                                .map(|delay| start.elapsed() > Duration::from_millis(delay))
-                                .unwrap_or_default();
+                            success &= v.first().and_then(|delay| delay.parse().ok()).is_some_and(
+                                |delay| start.elapsed() > Duration::from_millis(delay),
+                            );
                         }
                         "http-ok" => {
                             for endpoint in v {
@@ -166,8 +164,7 @@ impl Before {
                             success &= v
                                 .first()
                                 .and_then(|code| code.parse::<i32>().ok())
-                                .map(|expected_code| expected_code == code)
-                                .unwrap_or_default();
+                                .is_some_and(|expected_code| expected_code == code);
                         }
                         _ => (),
                     }
@@ -179,9 +176,9 @@ impl Before {
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
-        if self.before_start_delay > 0 {
-            let dur = Duration::from_secs(self.before_start_delay);
-            debug!("Sleeping for {}s ...", self.before_start_delay);
+        if self.start_delay > 0 {
+            let dur = Duration::from_secs(self.start_delay);
+            debug!("Sleeping for {}s ...", self.start_delay);
             tokio::time::sleep(dur).await;
         }
         Ok(())

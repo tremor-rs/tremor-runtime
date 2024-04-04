@@ -184,8 +184,7 @@ fn interceptor_can_add_the_auth_header() -> anyhow::Result<()> {
     assert!(result
         .metadata()
         .get("authorization")
-        .map(|m| m == "test")
-        .unwrap_or_default());
+        .is_some_and(|m| m == "test"));
     Ok(())
 }
 

@@ -35,11 +35,7 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request,
 };
-use std::{
-    convert::Infallible,
-    net::{SocketAddr, ToSocketAddrs},
-    sync::Arc,
-};
+use std::{convert::Infallible, net::ToSocketAddrs, sync::Arc};
 use tokio::{sync::oneshot, task::JoinHandle};
 use tremor_common::ids::Id;
 
@@ -222,29 +218,19 @@ impl Source for HttpServerSource {
         // Server task - this is the main receive loop for http server instances
         self.server_task = Some(spawn_task(ctx.clone(), async move {
             if let Some(server_config) = tls_server_config {
-                let make_service = make_service_fn(move |conn: &tls::Stream| {
+                let make_service = make_service_fn(move |_conn: &tls::Stream| {
                     // We have to clone the context to share it with each invocation of
                     // `make_service`. If your data doesn't implement `Clone` consider using
                     // an `std::sync::Arc`.
                     let server_context = server_context.clone();
 
-                    // You can grab the address of the incoming connection like so.
-                    let maybe_addr = conn.remote_addr();
                     async move {
-                        if let Some(addr) = maybe_addr {
-                            // Create a `Service` for responding to the request.
-                            let service = service_fn(move |req| {
-                                handle_request(server_context.clone(), addr, req)
-                            });
+                        // Create a `Service` for responding to the request.
+                        let service =
+                            service_fn(move |req| handle_request(server_context.clone(), req));
 
-                            // Return the service to hyper.
-                            Ok(service)
-                        } else {
-                            Err(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                "no remote address",
-                            ))
-                        }
+                        // Return the service to hyper.
+                        anyhow::Ok(service)
                     }
                 });
                 let incoming = AddrIncoming::bind(&addr)?;
@@ -252,18 +238,15 @@ impl Source for HttpServerSource {
                     .serve(make_service);
                 listener.await?;
             } else {
-                let make_service = make_service_fn(move |conn: &AddrStream| {
+                let make_service = make_service_fn(move |_conn: &AddrStream| {
                     // We have to clone the context to share it with each invocation of
                     // `make_service`. If your data doesn't implement `Clone` consider using
                     // an `std::sync::Arc`.
                     let server_context = server_context.clone();
 
-                    // You can grab the address of the incoming connection like so.
-                    let addr = conn.remote_addr();
-
                     // Create a `Service` for responding to the request.
                     let service =
-                        service_fn(move |req| handle_request(server_context.clone(), addr, req));
+                        service_fn(move |req| handle_request(server_context.clone(), req));
 
                     // Return the service to hyper.
                     async move { Ok::<_, Infallible>(service) }
@@ -688,11 +671,10 @@ struct RawRequestData {
 
 async fn handle_request(
     mut context: HttpServerState,
-    addr: SocketAddr,
     req: Request<Body>,
 ) -> http::Result<Response<Body>> {
     // NOTE We wrap and crap as tide doesn't report donated route handler's errors
-    let result = _handle_request(&mut context, addr, req).await;
+    let result = _handle_request(&mut context, req).await;
     match result {
         Ok(response) => Ok(response),
         Err(e) => {
@@ -709,7 +691,6 @@ async fn handle_request(
 
 async fn _handle_request(
     context: &mut HttpServerState,
-    _addr: SocketAddr,
     req: Request<Body>,
 ) -> anyhow::Result<Response<Body>> {
     let request_meta = extract_request_meta(&req, context.scheme)?;

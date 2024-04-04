@@ -558,7 +558,7 @@ mod test {
     pub struct SO {}
 
     #[derive(serde::Deserialize, Debug)]
-    pub struct S {
+    pub struct StructTest {
         pub o: Option<SO>,
         pub s: Option<String>,
         pub b: Option<bool>,
@@ -595,12 +595,12 @@ mod test {
 
     #[test]
     fn option_field_absent() -> Result<()> {
-        let mut raw_json = r#"{}"#.to_string();
-        let result: Result<S> =
+        let mut raw_json = "{}".to_string();
+        let result: Result<StructTest> =
             structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
         assert!(result.is_ok());
 
-        let mut raw_json = r#"{}"#.to_string();
+        let mut raw_json = "{}".to_string();
         let result: Result<N> =
             structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
         assert!(result.is_err());
@@ -627,7 +627,7 @@ mod test {
             "fy": 0
         }"#
         .to_string();
-        let result: Result<S> =
+        let result: Result<StructTest> =
             structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
         assert!(result.is_ok());
 
@@ -635,8 +635,8 @@ mod test {
             structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
         assert!(result.is_ok());
 
-        let mut raw_json = r#"{}"#.to_string();
-        let result: Result<S> =
+        let mut raw_json = "{}".to_string();
+        let result: Result<StructTest> =
             structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
         assert!(result.is_ok());
 

@@ -17,7 +17,7 @@ use beef::Cow;
 use halfbrown::RawEntryMut;
 use simd_json::ObjectHasher;
 use std::fmt;
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::BuildHasher;
 use value_trait::prelude::*;
 
 /// Well known key that can be looked up in a `Value` faster.
@@ -56,11 +56,8 @@ where
 {
     fn from(key: S) -> Self {
         let key = Cow::from(key);
-        let hash_builder = ObjectHasher::default();
-        let mut hasher = hash_builder.build_hasher();
-        key.hash(&mut hasher);
         Self {
-            hash: hasher.finish(),
+            hash: ObjectHasher::default().hash_one(&key),
             key,
         }
     }

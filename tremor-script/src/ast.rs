@@ -1283,30 +1283,27 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                         pattern: Pattern::Record(RecordPattern { fields, .. }),
                         mid,
                         ..
-                    } if fields.len() == 1 => fields
-                        .first()
-                        .map(|f| {
-                            // where the record key is a binary equal
-                            match f {
-                                PredicatePattern::Bin {
-                                    kind: BinOpKind::Eq,
-                                    key,
-                                    ..
-                                }
-                                | PredicatePattern::TildeEq { key, .. } => {
-                                    // and the key of this equal is the same in all patterns
-                                    if let Some((first, _)) = &first_key {
-                                        first == key
-                                    } else {
-                                        first_key = Some((key.clone(), mid.clone()));
-                                        // this is the first item so we can assume so far it's all OK
-                                        true
-                                    }
-                                }
-                                _ => false,
+                    } if fields.len() == 1 => fields.first().is_some_and(|f| {
+                        // where the record key is a binary equal
+                        match f {
+                            PredicatePattern::Bin {
+                                kind: BinOpKind::Eq,
+                                key,
+                                ..
                             }
-                        })
-                        .unwrap_or_default(),
+                            | PredicatePattern::TildeEq { key, .. } => {
+                                // and the key of this equal is the same in all patterns
+                                if let Some((first, _)) = &first_key {
+                                    first == key
+                                } else {
+                                    first_key = Some((key.clone(), mid.clone()));
+                                    // this is the first item so we can assume so far it's all OK
+                                    true
+                                }
+                            }
+                            _ => false,
+                        }
+                    }),
                     _ => false,
                 }
             }) {
@@ -1896,8 +1893,7 @@ impl<'script> RecordPattern<'script> {
             self.fields
                 .first()
                 .and_then(|f1| Some((f1, other.fields.first()?)))
-                .map(|(f1, f2)| f1.is_exclusive_to(f2) || f2.is_exclusive_to(f1))
-                .unwrap_or_default()
+                .is_some_and(|(f1, f2)| f1.is_exclusive_to(f2) || f2.is_exclusive_to(f1))
         } else {
             false
         }

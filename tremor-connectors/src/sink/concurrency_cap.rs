@@ -50,7 +50,7 @@ impl ConcurrencyCap {
     /// if we fail to send a CB message
     pub fn inc_for(&self, event: &Event) -> anyhow::Result<CounterGuard> {
         let num = self.counter.fetch_add(1, Ordering::AcqRel);
-        let guard = CounterGuard(num, self.clone(), ContraflowData::from(event));
+        let guard = CounterGuard(self.clone(), ContraflowData::from(event));
         if num == self.cap {
             // we crossed max - send a close
             self.reply_tx.send(AsyncSinkReply::CB(
@@ -73,12 +73,12 @@ impl ConcurrencyCap {
 }
 
 /// ensures that we subtract 1 from the counter once this drops
-pub struct CounterGuard(usize, ConcurrencyCap, ContraflowData);
+pub struct CounterGuard(ConcurrencyCap, ContraflowData);
 
 impl Drop for CounterGuard {
     fn drop(&mut self) {
         // TODO: move this out of drop here
-        if self.1.dec_with(&self.2).is_err() {
+        if self.0.dec_with(&self.1).is_err() {
             error!("Error sending a CB Open.");
         }
     }
