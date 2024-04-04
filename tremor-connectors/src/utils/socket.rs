@@ -21,16 +21,12 @@ use tremor_common::url::{Defaults, Url};
 /// Generic socket errors
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
-    // #[error("unable to resolve {0}")]
-    // UnableToConnect(String), FIXME: unused
     #[error("no socket")]
     NoSocket,
     #[error("could not resolve to any addresses")]
     CouldNotResolve,
     #[error("invalid address {0}:{1}")]
     InvalidAddress(String, u16),
-    // #[error("missing port")]
-    // MissingPort, FIXME: unused
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }

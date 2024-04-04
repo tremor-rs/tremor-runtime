@@ -26,7 +26,6 @@ members = [
   "tremor-value",
   "tremor-connectors",
   "tremor-system",
-  "tremor-event",
 ]
 
 default-members = ["tremor-cli"]
@@ -47,7 +46,6 @@ tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
 tremor-system = { path = "tremor-system" }
 tremor-value = { path = "tremor-value" }
-tremor-event = { path = "tremor-event" }
 
 tokio = { version = "1.34", features = ["full"] }
 tokio-stream = "0.1"

@@ -107,6 +107,9 @@ pub struct Connector {
 
 impl Connector {
     /// Spawns a connector from a definition
+    ///
+    /// # Errors
+    ///   * If the connector definition is invalid
     pub fn from_defn(
         alias: &alias::Connector,
         defn: &ast::ConnectorDefinition<'static>,

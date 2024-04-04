@@ -1037,7 +1037,7 @@ mod test {
             let (stream_id, pull_id) = resolver.resolve_stream_and_pull_ids_inner(topic.as_str(), partition, offset);
             let res = resolver.resolve_topic(stream_id, pull_id);
             assert!(res.is_some());
-            let (resolved_topic, resolved_partition, resolved_offset) = if let Some(v) = res {v} else { panic!("no data") };
+            let Some((resolved_topic, resolved_partition, resolved_offset)) = res else { panic!("no data") };
             assert_eq!(topic.as_str(), resolved_topic);
             assert_eq!(partition, resolved_partition);
             assert_eq!(Offset::Offset(offset), resolved_offset);

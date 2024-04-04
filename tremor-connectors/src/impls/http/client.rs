@@ -101,7 +101,7 @@ fn default_method() -> SerdeishMethod {
 // for new
 impl tremor_config::Impl for Config {}
 
-/// FIXME: Todo
+/// Builder for the HTTP client connector
 #[derive(Debug, Default)]
 pub struct Builder {}
 

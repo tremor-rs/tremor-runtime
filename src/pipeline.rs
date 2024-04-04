@@ -23,9 +23,8 @@ use tremor_common::{
 use tremor_pipeline::{errors::ErrorKind as PipelineErrorKind, ExecutableGraph};
 use tremor_script::{ast::DeployEndpoint, highlighter::Dumb};
 use tremor_system::{
-    contraflow,
     controlplane::{self, CbAction},
-    dataplane::{self, InputTarget, OutputTarget},
+    dataplane::{self, contraflow, InputTarget, OutputTarget},
     event::Event,
     instance::State,
     pipeline, qsize,

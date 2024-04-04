@@ -228,7 +228,7 @@ impl HttpRequestBuilder {
 }
 /// Extract the content type from the headers
 /// Errors:
-/// FIXME: if the content type is not a valid string
+///   if the content type is not a valid string
 pub fn content_type(headers: Option<&HeaderMap>) -> anyhow::Result<Option<Mime>> {
     if let Some(headers) = headers {
         let header_content_type = headers

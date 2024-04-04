@@ -196,10 +196,13 @@
 //! Setting the `$correlation` metadata on an outbound request will result in the response
 //! being tagged with the `$correlation` value set in the corresponding request.
 
+/// HTTP auth helper
 pub(crate) mod auth;
-/// FIXME: This is a public module, but it is not documented
+/// HTTP client connector
 pub mod client;
-/// FIXME: This is a public module, but it is not documented
-pub mod meta;
-pub(crate) mod server;
+/// HTTP metadata helper
+pub(crate) mod meta;
+/// HTTP server connect
+pub mod server;
+/// HTTP utils
 pub(crate) mod utils;
