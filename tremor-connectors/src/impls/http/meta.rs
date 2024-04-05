@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::{
-    channel::{bounded, Sender},
     impls::http::{client, utils::RequestId},
     prelude::*,
     utils::mime::MimeCodecMap,
@@ -25,7 +24,6 @@ use http::{
 };
 use hyper::{header::HeaderValue, Body, Method, Request, Response};
 use mime::Mime;
-use tremor_value::Value;
 
 /// HTTP Connector Errors
 

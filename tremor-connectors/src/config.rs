@@ -15,8 +15,6 @@
 use crate::prelude::*;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use simd_json::ValueType;
-use tremor_common::alias;
 use tremor_interceptor::{postprocessor, preprocessor};
 use tremor_script::{
     ast::deploy::ConnectorDefinition,

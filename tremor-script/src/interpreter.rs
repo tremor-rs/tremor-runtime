@@ -37,9 +37,9 @@ mod imut_expr;
 pub use self::expr::Cont;
 use crate::{
     ast::{
-        ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, ExprPath, GroupBy, ImutExpr,
-        InvokeAggrFn, NodeMeta, Patch, PatchOperation, Path, Pattern, PredicatePattern,
-        RecordPattern, ReservedPath, RunConsts, Segment, TuplePattern, UnaryOpKind,
+        ArrayPattern, ArrayPredicatePattern, BinOpKind, ExprPath, GroupBy, ImutExpr, InvokeAggrFn,
+        NodeMeta, Patch, PatchOperation, Path, Pattern, PredicatePattern, RecordPattern,
+        ReservedPath, RunConsts, Segment, TuplePattern, UnaryOpKind,
     },
     ctx::NO_CONTEXT,
     errors::{
@@ -50,14 +50,9 @@ use crate::{
         error_patch_merge_type_conflict, error_patch_update_key_missing, unknown_local, Result,
     },
     prelude::*,
-    stry, EventContext, Value, NO_AGGRS, NO_CONSTS,
+    stry, NO_AGGRS, NO_CONSTS,
 };
-use simd_json::StaticNode;
-use std::{
-    borrow::{Borrow, Cow},
-    convert::TryInto,
-    iter::Iterator,
-};
+use std::borrow::{Borrow, Cow};
 
 /// constant `true` value
 pub const TRUE: Value<'static> = Value::Static(StaticNode::Bool(true));

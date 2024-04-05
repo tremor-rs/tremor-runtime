@@ -21,15 +21,13 @@ use crate::errors::ErrorKind::InvalidBinaryBoolean;
 pub use crate::prelude::ValueType;
 use crate::{
     arena,
-    ast::{self, base_expr::Ranged, BaseExpr, BooleanBinOpKind},
+    ast::{self, BooleanBinOpKind},
     errors, lexer,
     pos::{self, Span},
     prelude::*,
-    Value,
 };
 use error_chain::error_chain;
 use lalrpop_util::ParseError as LalrpopError;
-use simd_json::{ExtendedValueType, TryTypeError};
 use std::fmt::Write;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
 use std::{fmt::Display, num};
@@ -1441,7 +1439,6 @@ pub(crate) fn unexpected_character<O: Ranged, I: Ranged>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use matches::assert_matches;
 
     #[test]
     fn test_type_error() {
@@ -1450,7 +1447,7 @@ mod test {
             got: ValueType::String,
         })
         .0;
-        assert_matches!(
+        matches!(
             r,
             ErrorKind::TypeError(None, None, ValueType::Object, ValueType::String)
         );

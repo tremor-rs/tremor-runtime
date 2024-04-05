@@ -15,10 +15,9 @@
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use serde_yaml::Value as YamlValue;
+use std::cmp::Ordering;
 use std::cmp::Reverse;
-use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use std::collections::BinaryHeap;
-use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
 use std::{clone::Clone, time::Duration};

@@ -13,9 +13,7 @@
 // limitations under the License.
 
 use crate::prelude::*;
-use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnWrapper};
-use crate::EventContext;
-use crate::Value;
+use crate::registry::{mfa, FResult, FunctionError, TremorFn};
 use crate::{tremor_const_fn, tremor_fn_};
 
 macro_rules! map_function {

@@ -12,13 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{
-    base_expr::Ranged,
-    raw::{BytesDataType, Endian},
-};
+use super::raw::{BytesDataType, Endian};
 use crate::errors::{err_generic, Result};
 use crate::prelude::*;
-use crate::{stry, Value};
+use crate::stry;
 use byteorder::{BigEndian, ByteOrder};
 
 // We are truncating for so we can write parts of the values

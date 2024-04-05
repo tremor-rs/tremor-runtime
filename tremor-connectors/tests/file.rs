@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(feature = "file-integration")]
+#![cfg(feature = "integration-tests-file")]
 
 mod file {
     mod generic;

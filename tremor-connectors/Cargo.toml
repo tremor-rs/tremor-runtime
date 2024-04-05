@@ -324,30 +324,30 @@ integration-harness-docker = [
     "integration-tests-kafka",
 ]
 integration-harness-local = [
-    "bench-integration",
-    "crononome-integration",
-    "file-integration",
-    "http-integration",
-    "metronome-integration",
-    "tcp-integration",
-    "udp-integration",
-    "unix-socket-integration",
-    "wal-integration",
+    "integration-tests-bench",
+    "integration-tests-crononome",
+    "integration-tests-file",
+    "integration-tests-http",
+    "integration-tests-metronome",
+    "integration-tests-tcp",
+    "integration-tests-udp",
+    "integration-tests-unix-socket",
+    "integration-tests-wal",
     "websocket-integration",
 ]
 
-bench-integration = ["bench"]
+integration-tests-bench = ["bench"]
 integration-tests-clickhouse = ["clickhouse", "dep:chrono", "integration-utils"]
-crononome-integration = ["crononome"]
+integration-tests-crononome = ["crononome"]
 integration-tests-elasticsearch = ["elasticsearch", "integration-utils"]
-file-integration = ["file"]
+integration-tests-file = ["file"]
 integration-tests-gcp = ["gcp", "integration-utils"]
-http-integration = ["http", "integration-utils"]
+integration-tests-http = ["http", "integration-utils"]
 integration-tests-aws = ["aws", "integration-utils"]
 integration-tests-kafka = ["kafka", "integration-utils"]
-metronome-integration = ["metronome"]
-tcp-integration = ["tcp", "integration-utils"]
-udp-integration = ["udp"]
-unix-socket-integration = ["unix-socket"]
-wal-integration = ["wal"]
+integration-tests-metronome = ["metronome"]
+integration-tests-tcp = ["tcp", "integration-utils"]
+integration-tests-udp = ["udp"]
+integration-tests-unix-socket = ["unix-socket"]
+integration-tests-wal = ["wal"]
 websocket-integration = ["websocket", "integration-utils"]

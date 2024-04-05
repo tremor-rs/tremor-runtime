@@ -238,7 +238,7 @@ pub(crate) struct Config {
     ///   }
     ///   ```
     mode: Mode,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "integration-tests-kafka"))]
     #[serde(default = "Default::default")]
     test_options: HashMap<String, String>,
 }
@@ -298,7 +298,7 @@ impl ConnectorBuilder for Builder {
             )?;
         }
 
-        #[cfg(test)]
+        #[cfg(any(test, feature = "integration-tests-kafka"))]
         {
             for (k, v) in &config.test_options {
                 set_client_config(&mut client_config, k.as_str(), v)?;

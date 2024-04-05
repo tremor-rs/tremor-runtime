@@ -110,7 +110,7 @@
 //! | [Validate pipeline to pipeline](https://github.com/tremor-rs/tremor-runtime/tree/main/tremor-cli/tests/integration/cb-pipeline-to-pipeline)  | All required circuit breaker events are received and processed correctly |
 //! | [Validate auto-acknowledged sinks](https://github.com/tremor-rs/tremor-runtime/tree/main/tremor-cli/tests/integration/cb-with-auto-ack-sink) | All required circuit breaker events are received and processed correctly |
 
-use crate::{errors::GenericImplementationError, prelude::*};
+use crate::prelude::*;
 use halfbrown::HashMap;
 use std::{path::PathBuf, time::Duration};
 use tokio::{

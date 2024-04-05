@@ -35,7 +35,6 @@ use crate::{
     extractor::Extractor,
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
     prelude::*,
-    KnownKey, Value,
 };
 pub use base_expr::BaseExpr;
 use beef::Cow;
@@ -45,7 +44,6 @@ use serde::Serialize;
 use simd_json::ObjectHasher;
 
 use super::{
-    base_expr::Ranged,
     docs::{FnDoc, ModDoc},
     module::Manager,
     warning, ComprehensionFoldOp, Const, NodeId, NodeMeta,

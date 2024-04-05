@@ -45,8 +45,8 @@ pub mod warning;
 
 pub use self::helper::Helper;
 pub use self::node_id::{BaseRef, NodeId};
+use self::visitors::ConstFolder;
 use self::walkers::ImutExprWalker;
-use self::{base_expr::Ranged, visitors::ConstFolder};
 use crate::{
     arena,
     ast::{
@@ -56,13 +56,12 @@ use crate::{
     errors::{err_generic, error_no_locals, Kind as ErrorKind, Result},
     extractor::Extractor,
     impl_expr, impl_expr_ex, impl_expr_no_lt,
-    interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
+    interpreter::{Cont, Env, LocalStack},
     lexer::Span,
     pos::Location,
     prelude::*,
-    registry::{CustomFn, FResult, TremorAggrFnWrapper, TremorFnWrapper},
-    script::Return,
-    stry, KnownKey, Value,
+    registry::{CustomFn, FResult, TremorAggrFnWrapper},
+    stry, Value,
 };
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
@@ -170,13 +169,6 @@ impl NodeMeta {
     pub(crate) fn aid(&self) -> arena::Index {
         self.range.aid()
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-struct Function<'script> {
-    is_const: bool,
-    argc: usize,
-    name: Cow<'script, str>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]

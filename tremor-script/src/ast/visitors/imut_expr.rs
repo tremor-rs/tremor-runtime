@@ -15,7 +15,6 @@
 use crate::ast::{ArrayAppend, BooleanBinExpr, Const};
 
 use super::prelude::*;
-use super::VisitRes;
 use super::VisitRes::Walk;
 
 /// Visitor for traversing all `ImutExprInt`s within the given `ImutExprInt`

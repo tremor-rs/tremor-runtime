@@ -26,7 +26,7 @@ use tremor_otelapis::opentelemetry::proto::{
     collector::logs::v1::ExportLogsServiceRequest,
     logs::v1::{InstrumentationLibraryLogs, LogRecord, ResourceLogs},
 };
-use tremor_value::{literal, prelude::*, Value};
+use tremor_value::{literal, prelude::*};
 
 use super::common::Error;
 

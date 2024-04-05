@@ -13,11 +13,7 @@
 // limitations under the License.
 
 use super::UnixSocketReader;
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    prelude::*,
-    utils::socket,
-};
+use crate::{prelude::*, utils::socket};
 use std::{path::PathBuf, sync::Arc};
 use tokio::{
     io::{split, AsyncWriteExt, WriteHalf},

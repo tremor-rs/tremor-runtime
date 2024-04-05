@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::{
-    channel::{bounded, Receiver, Sender},
     errors::error_connector_def,
     impls::http::{
         auth::Auth,
@@ -37,7 +36,6 @@ use std::sync::Arc;
 use std::{sync::atomic::AtomicBool, time::Duration};
 use tokio::time::timeout;
 use tremor_common::time::nanotime;
-use tremor_config::NameWithConfig;
 
 //  pipeline -> Sink -> http client
 //                          |

@@ -71,6 +71,7 @@ async fn transactional_retry() -> anyhow::Result<()> {
                 topic
             ],
             "mode": {
+                // transctional
                 "transactional": {}
             },
             "test_options": {
@@ -218,7 +219,7 @@ async fn transactional_retry() -> anyhow::Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::transactional_retry",
+            "source": "test::test",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -433,7 +434,7 @@ async fn custom_no_retry() -> anyhow::Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::custom_no_retry",
+            "source": "test::test",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -637,7 +638,7 @@ async fn performance() -> anyhow::Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::performance",
+            "source": "test::test",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -974,8 +975,10 @@ async fn transactional_store_offset_handling() -> anyhow::Result<()> {
                 "transactional": {
                     "commit_interval": commit_interval
                 }
-            }
-        }
+            },
+            "test_options": {
+                "auto.offset.reset": "beginning"
+            }        }
     });
 
     // start new harness
@@ -1084,9 +1087,8 @@ async fn transactional_commit_offset_handling() -> anyhow::Result<()> {
                 topic
             ],
             "mode": {
-                "transactional": {
-                   "commit_interval": 0 // trigger direct commits
-                }
+                // transctransactionaltional
+                "transactional": {}
             },
             "test_options": {
                 "auto.offset.reset": "beginning"
@@ -1170,7 +1172,11 @@ async fn transactional_commit_offset_handling() -> anyhow::Result<()> {
                 "transactional": {
                    "commit_interval": 0 // trigger direct commits
                 }
+            },
+            "test_options": {
+                "auto.offset.reset": "beginning"
             }
+
         }
     });
     // start new harness

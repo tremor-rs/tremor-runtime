@@ -14,7 +14,6 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::{registry, CustomFn, NodeMeta};
-use matches::assert_matches;
 use simd_json::ObjectHasher;
 use tremor_value::Object;
 
@@ -208,7 +207,7 @@ fn replace_last_shadow_use() {
     };
     g.replace_last_shadow_use(42);
     if let ClauseGroup::Simple { patterns, .. } = g {
-        assert_matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+        matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
     } else {
         unreachable!()
     };
@@ -224,8 +223,8 @@ fn replace_last_shadow_use() {
     g.replace_last_shadow_use(42);
     if let ClauseGroup::SearchTree { rest, tree, .. } = g {
         let last = &tree.values().next().unwrap().1;
-        assert_matches!(last, Expr::AssignMoveLocal { idx: 42, .. });
-        assert_matches!(rest[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+        matches!(last, Expr::AssignMoveLocal { idx: 42, .. });
+        matches!(rest[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
     } else {
         unreachable!()
     };
@@ -246,12 +245,12 @@ fn replace_last_shadow_use() {
     g.replace_last_shadow_use(42);
     if let ClauseGroup::Combined { groups, .. } = g {
         if let ClauseGroup::Simple { patterns, .. } = &groups[0] {
-            assert_matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+            matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
         } else {
             unreachable!()
         };
         if let ClauseGroup::Simple { patterns, .. } = &groups[1] {
-            assert_matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+            matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
         } else {
             unreachable!()
         };
@@ -266,7 +265,7 @@ fn replace_last_shadow_use() {
     };
     g.replace_last_shadow_use(42);
     if let ClauseGroup::Single { pattern, .. } = g {
-        assert_matches!(pattern.last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+        matches!(pattern.last_expr, Expr::AssignMoveLocal { idx: 42, .. });
     } else {
         unreachable!()
     };

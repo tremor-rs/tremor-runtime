@@ -39,7 +39,6 @@ use petgraph::graph;
 use std::borrow::Borrow;
 use std::fmt;
 use std::fmt::Display;
-use std::iter::Iterator;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tremor_common::{ids::OperatorId, ports::Port};
 use tremor_script::{

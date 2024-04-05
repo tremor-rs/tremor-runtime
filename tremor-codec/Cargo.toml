@@ -21,7 +21,6 @@ futures = "0.3"
 simd-json-derive = "0.13"
 value-trait = "0.8"
 beef = "0.5"
-test-case = "3.3"
 byteorder = "1.5"
 itoa = "1"
 ryu = "1"
@@ -29,7 +28,6 @@ lexical = "6"
 simdutf8 = "0.1"
 chrono = "0.4"
 uuid = { version = "1.6", features = ["v4"] }
-matches = "0.1"
 async-recursion = "1"
 
 schema_registry_converter = { version = "3", default-features = false, features = [
@@ -62,3 +60,4 @@ serde_yaml = "0.9"
 
 [dev-dependencies]
 proptest = "1.4"
+test-case = "3"

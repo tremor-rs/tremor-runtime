@@ -13,10 +13,7 @@
 // limitations under the License.
 
 use crate::prelude::*;
-use crate::registry::Registry;
 use crate::tremor_fn;
-use crate::EventOriginUri;
-use std::string::ToString;
 
 pub fn load(registry: &mut Registry) {
     registry

@@ -34,10 +34,9 @@ use tremor_script::{
     lexer::Lexer,
     prelude::*,
     query::Query,
-    script::{AggrType, Return, Script},
+    script::Script,
 };
 use tremor_system::event::{Event, EventId};
-use tremor_value::Value;
 
 struct Ingress {
     is_interactive: bool,

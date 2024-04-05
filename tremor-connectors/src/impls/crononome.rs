@@ -119,7 +119,6 @@ use crate::{errors::error_connector_def, prelude::*};
 use handler::{ChronomicQueue, CronEntryInt};
 use serde_yaml::Value as YamlValue;
 use tremor_common::time::nanotime;
-use value_trait::ValueBuilder;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]

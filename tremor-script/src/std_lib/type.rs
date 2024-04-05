@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::Registry;
 use crate::{errors, prelude::*};
 use crate::{tremor_const_fn, tremor_fn_};
 

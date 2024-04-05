@@ -40,8 +40,7 @@
 mod handler;
 mod utils;
 
-use crate::channel::{bounded, Receiver, Sender};
-use crate::{prelude::*, spawn_task};
+use crate::prelude::*;
 use handler::Handler;
 use serenity::prelude::*;
 use tokio::task::JoinHandle;

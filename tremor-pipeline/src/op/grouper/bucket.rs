@@ -75,12 +75,9 @@
 
 use std::num::NonZeroUsize;
 
-use crate::errors::{ErrorKind, Result};
 use crate::metrics::value_count;
 use crate::op::prelude::*;
-use crate::Operator;
 use beef::Cow;
-use halfbrown::HashMap;
 use lru::LruCache;
 use tremor_script::prelude::*;
 use window::TimeWindow;

@@ -23,7 +23,6 @@ use googapis::google::logging::r#type::LogSeverity;
 use serde::Deserialize;
 use std::collections::HashMap;
 use tonic::transport::Channel;
-use tremor_common::alias;
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]

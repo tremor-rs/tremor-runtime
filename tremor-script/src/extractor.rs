@@ -35,9 +35,8 @@ mod kv;
 mod re;
 
 use crate::{grok::PATTERNS_FILE_DEFAULT_PATH, prelude::*};
-use crate::{EventContext, Value};
 use re::Regex;
-use std::{fmt, iter::Iterator, result::Result as StdResult};
+use std::{fmt, result::Result as StdResult};
 use tremor_common::base64::{Engine, BASE64};
 
 use self::cidr::SnotCombiner;

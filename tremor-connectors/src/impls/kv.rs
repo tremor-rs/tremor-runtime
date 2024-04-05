@@ -115,16 +115,10 @@
 //! in the intervening time since we last read from the store for this key.
 //! :::
 
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    errors::{error_connector_def, GenericImplementationError},
-    prelude::*,
-};
+use crate::{errors::error_connector_def, prelude::*};
 use serde::Deserialize;
 use sled::{CompareAndSwapError, Db, IVec};
 use std::{
-    boxed::Box,
-    convert::TryFrom,
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
 };

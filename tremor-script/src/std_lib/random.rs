@@ -13,10 +13,8 @@
 // limitations under the License.
 
 use crate::prelude::*;
-use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnWrapper};
+use crate::registry::{mfa, FResult, FunctionError, TremorFn};
 use crate::tremor_fn;
-use crate::EventContext;
-use crate::Value;
 use rand::distributions::Alphanumeric;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 

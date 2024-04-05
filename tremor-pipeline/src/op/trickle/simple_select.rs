@@ -16,7 +16,6 @@
 
 use crate::op::prelude::*;
 use tremor_script::{
-    self,
     ast::{self, Select, SelectStmt},
     errors::query_guard_not_bool,
     interpreter::{Env, LocalStack},

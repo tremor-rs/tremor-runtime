@@ -15,7 +15,6 @@
 use crate::interpreter::val_eq;
 use crate::prelude::*;
 use crate::tremor_fn;
-use crate::{registry::Registry, TRUE};
 
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (test|assert(ctx, desc, expected, got) {

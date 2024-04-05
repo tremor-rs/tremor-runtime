@@ -105,7 +105,7 @@ use cidr_utils::{
 use halfbrown::HashMap;
 use simd_json::ObjectHasher;
 use std::{
-    iter::{Iterator, Peekable},
+    iter::Peekable,
     net::{IpAddr, Ipv4Addr},
     result::Result as StdResult,
     slice::Iter,

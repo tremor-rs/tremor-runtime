@@ -14,7 +14,6 @@
 #![allow(clippy::cast_precision_loss)]
 
 use crate::prelude::*;
-use crate::registry::Registry;
 use crate::tremor_const_fn;
 use std::cmp::{max, min};
 

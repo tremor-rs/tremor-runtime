@@ -101,11 +101,15 @@ async fn http_server_test_basic() -> Result<()> {
     let mut result = Err(anyhow!("todo"));
 
     let mut final_port = 0;
-    while let Err(e) = result {
+    while result.is_err() {
         if start.elapsed() > timeout {
-            return Err(anyhow!("HTTP Server not listening after {timeout:?}: {e}"));
+            return Err(anyhow!(
+                "HTTP Server not listening after {timeout:?}: {result:?}"
+            ));
         }
-        let (connector, url, port) = harness_dflt("http").await?;
+        let Ok((connector, url, port)) = harness_dflt("http").await else {
+            continue;
+        };
         final_port = port;
         let req = Request::builder()
             .method("GET")

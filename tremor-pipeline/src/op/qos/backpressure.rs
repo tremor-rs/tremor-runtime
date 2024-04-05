@@ -45,7 +45,6 @@
 //! end;
 //! ```
 
-use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
 use tremor_script::prelude::*;
 

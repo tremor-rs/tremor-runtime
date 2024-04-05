@@ -13,7 +13,6 @@
 // limitations under the License.
 use super::{TcpDefaults, TcpReader, TcpWriter};
 use crate::{
-    channel::{bounded, Receiver, Sender},
     errors::error_connector_def,
     prelude::*,
     sink::channel_sink::ChannelSinkMsg,

@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::channel::{bounded, Receiver, Sender};
 use crate::prelude::*;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::{boxed::Box, sync::atomic::AtomicBool};
 use trust_dns_resolver::{
     lookup::Lookup,
     proto::rr::{RData, RecordType},

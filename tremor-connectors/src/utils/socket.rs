@@ -16,7 +16,6 @@ use crate::prelude::*;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::lookup_host;
 use tokio::net::{TcpListener, TcpStream};
-use tremor_common::url::{Defaults, Url};
 
 /// Generic socket errors
 #[derive(Debug, thiserror::Error)]
