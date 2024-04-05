@@ -4,7 +4,7 @@
     "args": [
         "run",
         "--name",
-        "tremor-elasticsearch-integration-sink-only-unique",
+        "tremor-integration-tests-elasticsearch-sink-only-unique",
         "-p127.0.0.1:9200:9200",
         "-p9300:9300",
         "-e",

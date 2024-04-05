@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #![cfg(feature = "integration-tests-aws")]
-mod s3 {
+mod aws {
     mod reader;
     mod streamer;
 }

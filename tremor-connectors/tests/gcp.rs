@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(feature = "gcp-integration")]
-mod gpubsub {
+#![cfg(feature = "integration-tests-gcp")]
+mod gcp {
     mod gpub;
     mod gsub;
 }
