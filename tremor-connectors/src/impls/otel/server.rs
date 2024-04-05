@@ -14,7 +14,7 @@
 
 use super::{common::OtelDefaults, logs, metrics, trace};
 use crate::prelude::*;
-use async_std::channel::{bounded, Receiver, Sender};
+use async_channel::{bounded, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
 const CONNECTOR_TYPE: &str = "otel_server";

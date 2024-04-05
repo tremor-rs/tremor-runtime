@@ -63,18 +63,6 @@ impl<T> From<async_channel::SendError<T>> for Error {
     }
 }
 
-impl<T> From<async_std::channel::SendError<T>> for Error {
-    fn from(e: async_std::channel::SendError<T>) -> Self {
-        Self::from(format!("{e:?}"))
-    }
-}
-
-impl<T> From<async_std::channel::TrySendError<T>> for Error {
-    fn from(e: async_std::channel::TrySendError<T>) -> Self {
-        Self::from(format!("{e:?}"))
-    }
-}
-
 impl<T> From<broadcast::error::SendError<T>> for Error
 where
     T: std::fmt::Debug,
@@ -127,8 +115,6 @@ error_chain! {
     foreign_links {
         AddrParseError(std::net::AddrParseError);
         AnyhowError(anyhow::Error);
-        AsyncChannelRecvError(async_std::channel::RecvError);
-        AsyncChannelTryRecvError(async_std::channel::TryRecvError);
         Base64Error(tremor_common::base64::DecodeError);
         ChannelReceiveError(std::sync::mpsc::RecvError);
         Common(tremor_common::Error);

@@ -40,7 +40,7 @@ pub enum TokenSrc {
     Json(OwnedValue),
     /// File for json
     File(String),
-    /// Environment variable driven
+    /// Environment variable driven`t`
     Env,
 }
 

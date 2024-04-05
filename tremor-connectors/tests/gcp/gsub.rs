@@ -31,10 +31,11 @@ use value_trait::prelude::*;
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn no_connection() -> anyhow::Result<()> {
+    let _ = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
-            "token": {"file": file!().to_string()},
+            "token": {"file": "tests/gcp.json"},
             "url": "https://localhost:9090",
             "ack_deadline": 30_000_000_000u64,
             "connect_timeout": 100_000_000,
@@ -52,6 +53,7 @@ async fn create_subscription(
     topic: &str,
     subscription: &str,
 ) -> anyhow::Result<()> {
+    let _ = env_logger::try_init();
     let channel = Channel::from_shared(endpoint)?.connect().await?;
     let mut publisher = PublisherClient::new(channel.clone());
     publisher
@@ -97,6 +99,7 @@ async fn create_subscription(
 #[tokio::test(flavor = "multi_thread")]
 #[serial(gpubsub)]
 async fn simple_subscribe() -> anyhow::Result<()> {
+    let _ = env_logger::try_init();
     let runner = Cli::docker();
 
     let (pubsub, pubsub_args) =
@@ -112,7 +115,7 @@ async fn simple_subscribe() -> anyhow::Result<()> {
         "metrics_interval_s": 1,
         "codec": "binary",
         "config":{
-            "token": {"file": file!().to_string()},
+            "token": {"file": "tests/gcp.json"},
             "url": endpoint.clone(),
             "ack_deadline": 30_000_000_000_u64,
             "connect_timeout": 30_000_000_000_u64,

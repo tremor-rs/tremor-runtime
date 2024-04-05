@@ -4,6 +4,6 @@
     "args": [
         "rm",
         "-f",
-        "tremor-elasticsearch-integration-blabla-gd"
+        "tremor-integration-tests-elasticsearch-blabla-gd"
     ]
 }

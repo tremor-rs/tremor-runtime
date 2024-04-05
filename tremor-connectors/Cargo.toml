@@ -48,6 +48,7 @@ hyper = { version = "0.14", optional = true, default-features = false, features 
     "server",
 ] }
 async-stream = { version = "0.3", optional = true, default-features = false }
+async-channel = { version = "2.1", optional = true, default-features = false }
 
 
 # tls
@@ -85,17 +86,13 @@ dashmap = { version = "5.5", optional = true, default-features = false }
 
 
 # gcp
-googapis = { version = "0.6", optional = true, default-features = false, features = [
+googapis = { version = "0.6", optional = true, default-features = true, features = [
     "google-pubsub-v1",
     "google-cloud-bigquery-storage-v1",
     "google-logging-v2",
     "google-storage-v2",
 ] }
-gouth = { version = "0.2", optional = true, default-features = false }
-async-std = { version = "1.12.0", optional = true, default-features = false, features = [
-    "std",
-    "async-io",
-] }
+gouth = { version = "0.2", optional = true, default-features = true }
 
 
 # opentelemetry
@@ -121,7 +118,6 @@ aws-sdk-s3 = { version = "1", optional = true, default-features = false, feature
 ] }
 aws-types = { version = "1", optional = true, default-features = false }
 aws-config = { version = "1", optional = true, default-features = false }
-async-channel = { version = "2.1", optional = true, default-features = false }
 
 # kafka
 rdkafka = { version = "0.36", optional = true, features = [
@@ -206,6 +202,7 @@ serial_test = "3.0"
 http-types = "2.0"
 bytes = "1.0"
 tempfile = { version = "3.8", default-features = false }
+env_logger = "0.11"
 
 [features]
 default = [
@@ -277,7 +274,7 @@ http = [
     "socket",
 ]
 gcp = [
-    "dep:async-std",
+    "dep:async-channel",
     "dep:async-stream",
     "dep:googapis",
     "dep:gouth",
@@ -319,9 +316,9 @@ integration-harness = [
 integration-harness-docker = [
     "integration-tests-aws",
     "integration-tests-clickhouse",
-    "elasticsearch-integration",
-    "gcp-integration",
-    "kafka-integration",
+    "integration-tests-elasticsearch",
+    "integration-tests-gcp",
+    "integration-tests-kafka",
 ]
 integration-harness-local = [
     "bench-integration",
@@ -339,12 +336,12 @@ integration-harness-local = [
 bench-integration = ["bench"]
 integration-tests-clickhouse = ["clickhouse", "dep:chrono", "integration-utils"]
 crononome-integration = ["crononome"]
-elasticsearch-integration = ["elasticsearch", "integration-utils"]
+integration-tests-elasticsearch = ["elasticsearch", "integration-utils"]
 file-integration = ["file"]
-gcp-integration = ["gcp"]
+integration-tests-gcp = ["gcp"]
 http-integration = ["http", "integration-utils"]
 integration-tests-aws = ["aws", "integration-utils"]
-kafka-integration = ["kafka", "integration-utils"]
+integration-tests-kafka = ["kafka", "integration-utils"]
 metronome-integration = ["metronome"]
 tcp-integration = ["tcp", "integration-utils"]
 udp-integration = ["udp"]

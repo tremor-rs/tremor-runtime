@@ -76,10 +76,10 @@ fn default_max_outstanding_bytes() -> i64 {
 #[derive(Debug, Default)]
 pub struct Builder {}
 
-#[cfg(all(test, feature = "gcp-integration"))]
+#[cfg(all(test, feature = "integration-tests-gcp"))]
 type GSubWithTokenProvider = GSub<crate::utils::google::tests::TestTokenProvider>;
 
-#[cfg(not(all(test, feature = "gcp-integration")))]
+#[cfg(not(all(test, feature = "integration-tests-gcp")))]
 type GSubWithTokenProvider = GSub<crate::utils::google::GouthTokenProvider>;
 
 #[async_trait::async_trait]
@@ -126,7 +126,7 @@ struct GSubSource<T: TokenProvider> {
     config: Config,
     client: Option<PubSubClient<T>>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
-    ack_sender: Option<async_std::channel::Sender<u64>>,
+    ack_sender: Option<async_channel::Sender<u64>>,
     task_handle: Option<JoinHandle<()>>,
     url: Url<HttpsDefaults>,
     client_id: String,
@@ -152,7 +152,7 @@ async fn consumer_task<T: TokenProvider>(
     client_id: String,
     sender: Sender<AsyncTaskMessage>,
     config: Config,
-    ack_receiver: async_std::channel::Receiver<u64>,
+    ack_receiver: async_channel::Receiver<u64>,
 ) -> anyhow::Result<()> {
     let mut ack_counter = 0;
     let ack_deadline = Duration::from_nanos(config.ack_deadline);
@@ -332,7 +332,7 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
 
         let (tx, rx) = bounded(qsize());
         // TODO: get rid of async std but this is tricky, lets look at this after the gcp update
-        let (ack_tx, ack_rx) = async_std::channel::bounded(qsize());
+        let (ack_tx, ack_rx) = async_channel::bounded(qsize());
 
         let join_handle = spawn_task(
             ctx.clone(),

@@ -4,7 +4,7 @@
     "args": [
         "run",
         "--name",
-        "tremor-elasticsearch-integration-blabla-gd",
+        "tremor-integration-tests-elasticsearch-blabla-gd",
         "-p127.0.0.1:9200:9200",
         "-p9300:9300",
         "-e",

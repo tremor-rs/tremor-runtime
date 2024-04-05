@@ -49,10 +49,10 @@ impl tremor_config::Impl for Config {}
 #[derive(Default, Debug)]
 pub struct Builder {}
 
-#[cfg(all(test, feature = "gcp-integration"))]
+#[cfg(all(test, feature = "integration-tests-gcp"))]
 type GpubConnectorWithTokenProvider = GpubConnector<crate::utils::google::tests::TestTokenProvider>;
 
-#[cfg(not(all(test, feature = "gcp-integration")))]
+#[cfg(not(all(test, feature = "integration-tests-gcp")))]
 type GpubConnectorWithTokenProvider = GpubConnector<crate::utils::google::GouthTokenProvider>;
 
 #[async_trait::async_trait()]
