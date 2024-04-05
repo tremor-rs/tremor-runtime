@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(feature = "s3-integration")]
+#![cfg(feature = "integration-tests-aws")]
 mod s3 {
     mod reader;
     mod streamer;
@@ -27,7 +27,7 @@ use std::{
     time::{Duration, Instant},
 };
 use testcontainers::{clients::Cli, images::generic::GenericImage, Container, RunnableImage};
-use tremor_connectors::harness::free_port::find_free_tcp_port;
+use tremor_connectors::utils::integration::free_port::find_free_tcp_port;
 
 const IMAGE: &str = "minio/minio";
 const VERSION: &str = "RELEASE.2023-01-12T02-06-16Z";

@@ -3,11 +3,11 @@
   args:
     - "run"
     - "--name"
-    - "tremor-clickhouse-integration-blabla-unique"
+    - "tremor-integration-tests-clickhouse-blabla-unique"
     - "-p127.0.0.1:18123:8123"
     - "-p127.0.0.1:19000:9000"
     - "clickhouse/clickhouse-server:22.5.1-alpine"
-  await: 
+  await:
     http-ok:
       - "http://127.0.0.1:18123/"
   max-await-secs: 120
@@ -20,5 +20,5 @@
     - "CREATE TABLE tremor ( name String, nickname String ) ENGINE Memory;"
   await:
     status:
-     - "0"
+      - "0"
   max-await-secs: 10
