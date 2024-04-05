@@ -41,9 +41,10 @@ pub mod free_port {
         ///
         /// # Errors
         /// If no free port could be found
-        pub async fn next(&mut self) -> io::Result<u16> {
+        async fn next(&mut self) -> io::Result<u16> {
             let mut candidate = self.port;
-            self.port = self.port.wrapping_add(1);
+            let inc: u16 = rand::random();
+            self.port = self.port.wrapping_add(inc % 42);
             loop {
                 if let Ok(listener) = TcpListener::bind(("127.0.0.1", candidate)).await {
                     let port = listener.local_addr()?.port();

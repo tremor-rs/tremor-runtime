@@ -17,7 +17,7 @@ mod sink;
 use crate::{
     impls::gbq::writer::sink::{GbqSink, TonicChannelFactory},
     prelude::*,
-    utils::google::{GouthTokenProvider, TokenSrc},
+    utils::google::TokenSrc,
 };
 
 #[derive(Deserialize, Clone)]
@@ -51,10 +51,7 @@ impl Connector for Gbq {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> anyhow::Result<Option<SinkAddr>> {
-        let sink = GbqSink::<GouthTokenProvider, _, _>::new(
-            self.config.clone(),
-            Box::new(TonicChannelFactory),
-        );
+        let sink = GbqSink::<_, _>::new(self.config.clone(), Box::new(TonicChannelFactory));
 
         Ok(Some(builder.spawn(sink, ctx)))
     }
@@ -88,19 +85,21 @@ mod tests {
     use tremor_common::ids::SinkId;
 
     use super::*;
-    use crate::reconnect::ConnectionLostNotifier;
     use crate::sink::builder;
     use crate::{metrics::SinkReporter, utils::quiescence::QuiescenceBeacon};
+    use crate::{reconnect::ConnectionLostNotifier, utils::google::tests::gouth_token};
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn can_spawn_sink() -> anyhow::Result<()> {
+        let mock = gouth_token().await?;
+
         let mut connector = Gbq {
             config: Config {
                 table_id: "test".into(),
                 connect_timeout: 1,
                 request_timeout: 1,
                 request_size_limit: 10 * 1024 * 1024,
-                token: TokenSrc::dummy(),
+                token: mock.token_src(),
             },
         };
         let alias = alias::Connector::new("a", "b");

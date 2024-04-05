@@ -22,40 +22,6 @@ use hyper::{
 use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
 use tokio::task::JoinHandle;
 
-#[derive(Clone)]
-pub struct TestTokenProvider {
-    token: Arc<String>,
-}
-
-impl Default for TestTokenProvider {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TestTokenProvider {
-    pub fn new() -> Self {
-        Self {
-            token: Arc::new(String::new()),
-        }
-    }
-
-    pub fn new_with_token(token: Arc<String>) -> Self {
-        Self { token }
-    }
-}
-
-impl TokenProvider for TestTokenProvider {
-    fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
-        Ok(self.token.clone())
-    }
-}
-impl From<TokenSrc> for TestTokenProvider {
-    fn from(_src: TokenSrc) -> Self {
-        Self::new()
-    }
-}
-
 #[derive(serde::Serialize, serde::Deserialize)]
 struct ServiceAccount {
     client_email: String,
@@ -108,6 +74,9 @@ pub struct GouthMock {
 impl GouthMock {
     pub fn cert_file(&self) -> String {
         self.file.to_string_lossy().to_string()
+    }
+    pub fn token_src(&self) -> TokenSrc {
+        TokenSrc::File(self.cert_file())
     }
 }
 
@@ -165,7 +134,7 @@ async fn gouth_token_test() -> anyhow::Result<()> {
     let mock = gouth_token().await?;
     let path_str = mock.cert_file();
 
-    let mut provider = GouthTokenProvider::from(TokenSrc::File(path_str));
+    let mut provider = AuthInterceptor::from(TokenSrc::File(path_str));
     dbg!(&provider);
 
     // Make sure the server is up by retrying a few times
@@ -188,22 +157,11 @@ async fn gouth_token_test() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn appease_the_coverage_gods() {
-    let provider = GouthTokenProvider::from(TokenSrc::dummy());
-    let mut provider = provider;
-    assert!(provider.get_token().is_err());
+#[tokio::test(flavor = "multi_thread")]
+async fn interceptor_can_add_the_auth_header() -> anyhow::Result<()> {
+    let mock = gouth_token().await?;
+    let mut interceptor = AuthInterceptor::from(TokenSrc::File(mock.cert_file()));
 
-    let provider = FailingTokenProvider::default();
-    let mut provider = provider;
-    assert!(provider.get_token().is_err());
-}
-
-#[test]
-fn interceptor_can_add_the_auth_header() -> anyhow::Result<()> {
-    let mut interceptor = AuthInterceptor {
-        token_provider: TestTokenProvider::new_with_token(Arc::new("test".to_string())),
-    };
     let request = Request::new(());
 
     let result = interceptor.call(request)?;
@@ -211,45 +169,6 @@ fn interceptor_can_add_the_auth_header() -> anyhow::Result<()> {
     assert!(result
         .metadata()
         .get("authorization")
-        .is_some_and(|m| m == "test"));
+        .is_some_and(|m| m == "snot access_token"));
     Ok(())
-}
-
-#[derive(Clone, Default)]
-struct FailingTokenProvider {}
-
-impl TokenProvider for FailingTokenProvider {
-    fn get_token(&mut self) -> std::result::Result<Arc<String>, Status> {
-        Err(Status::unavailable("boo"))
-    }
-}
-impl From<TokenSrc> for FailingTokenProvider {
-    fn from(_src: TokenSrc) -> Self {
-        Self::default()
-    }
-}
-
-#[test]
-fn interceptor_will_pass_token_error() {
-    let mut interceptor = AuthInterceptor {
-        token_provider: FailingTokenProvider {},
-    };
-    let request = Request::new(());
-
-    let result = interceptor.call(request);
-
-    assert!(result.is_err());
-}
-
-#[test]
-fn interceptor_fails_on_invalid_token_value() {
-    let mut interceptor = AuthInterceptor {
-        // control characters (ASCII < 32) are not allowed
-        token_provider: TestTokenProvider::new_with_token(Arc::new("\r\n".into())),
-    };
-    let request = Request::new(());
-
-    let result = interceptor.call(request);
-
-    assert!(result.is_err());
 }

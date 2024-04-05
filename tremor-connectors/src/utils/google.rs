@@ -45,10 +45,6 @@ pub enum TokenSrc {
 }
 
 impl TokenSrc {
-    #[cfg(test)]
-    pub(crate) fn dummy() -> Self {
-        TokenSrc::Env
-    }
     pub(crate) fn to_token(&self) -> anyhow::Result<Token> {
         Ok(match self {
             TokenSrc::Json(json) => {
@@ -61,16 +57,7 @@ impl TokenSrc {
     }
 }
 
-pub trait TokenProvider: Clone + Send + Sync + From<TokenSrc> {
-    fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status>;
-}
-
-pub struct GouthTokenProvider {
-    pub(crate) gouth_token: Option<Token>,
-    pub(crate) src: TokenSrc,
-}
-
-impl std::fmt::Debug for GouthTokenProvider {
+impl std::fmt::Debug for AuthInterceptor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GouthTokenProvider")
             .field("gouth_token", &self.gouth_token.is_some())
@@ -79,7 +66,7 @@ impl std::fmt::Debug for GouthTokenProvider {
     }
 }
 
-impl Clone for GouthTokenProvider {
+impl Clone for AuthInterceptor {
     fn clone(&self) -> Self {
         Self {
             gouth_token: None,
@@ -88,22 +75,24 @@ impl Clone for GouthTokenProvider {
     }
 }
 
-impl From<TokenSrc> for GouthTokenProvider {
+impl From<TokenSrc> for AuthInterceptor {
     fn from(src: TokenSrc) -> Self {
         Self::new(src)
     }
 }
 
-impl GouthTokenProvider {
+pub(crate) struct AuthInterceptor {
+    pub(crate) gouth_token: Option<Token>,
+    pub(crate) src: TokenSrc,
+}
+
+impl AuthInterceptor {
     pub fn new(src: TokenSrc) -> Self {
-        GouthTokenProvider {
+        Self {
             gouth_token: None,
             src,
         }
     }
-}
-
-impl TokenProvider for GouthTokenProvider {
     fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
         let token = if let Some(ref token) = self.gouth_token {
             token
@@ -122,20 +111,9 @@ impl TokenProvider for GouthTokenProvider {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct AuthInterceptor<T>
-where
-    T: TokenProvider,
-{
-    pub token_provider: T,
-}
-
-impl<T> Interceptor for AuthInterceptor<T>
-where
-    T: TokenProvider,
-{
+impl Interceptor for AuthInterceptor {
     fn call(&mut self, mut request: Request<()>) -> ::std::result::Result<Request<()>, Status> {
-        let header_value = self.token_provider.get_token()?;
+        let header_value = self.get_token()?;
         let metadata_value = match MetadataValue::from_str(header_value.as_str()) {
             Ok(val) => val,
             Err(e) => {

@@ -18,7 +18,7 @@ use crate::{
     prelude::*,
     sink::concurrency_cap::ConcurrencyCap,
     utils::{
-        google::{AuthInterceptor, ChannelFactory, TokenProvider},
+        google::{AuthInterceptor, ChannelFactory},
         pb,
     },
 };
@@ -52,15 +52,14 @@ impl ChannelFactory<Channel> for TonicChannelFactory {
     }
 }
 
-pub(crate) struct GclSink<T, TChannel>
+pub(crate) struct GclSink<TChannel>
 where
-    T: TokenProvider + Clone,
     TChannel: tonic::codegen::Service<
             http::Request<tonic::body::BoxBody>,
             Response = http::Response<tonic::transport::Body>,
         > + Clone,
 {
-    client: Option<LoggingServiceV2Client<InterceptedService<TChannel, AuthInterceptor<T>>>>,
+    client: Option<LoggingServiceV2Client<InterceptedService<TChannel, AuthInterceptor>>>,
     config: Config,
     concurrency_cap: ConcurrencyCap,
     reply_tx: ReplySender,
@@ -92,7 +91,6 @@ fn value_to_log_entry(
 }
 
 impl<
-        T: TokenProvider + Clone,
         TChannel: tonic::codegen::Service<
                 http::Request<tonic::body::BoxBody>,
                 Response = http::Response<tonic::transport::Body>,
@@ -100,7 +98,7 @@ impl<
             > + Send
             + Clone,
         TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>>,
-    > GclSink<T, TChannel>
+    > GclSink<TChannel>
 {
     pub fn new(
         config: Config,
@@ -120,7 +118,6 @@ impl<
 
 #[async_trait::async_trait]
 impl<
-        T: TokenProvider + Clone + 'static,
         TChannel: tonic::codegen::Service<
                 http::Request<tonic::body::BoxBody>,
                 Response = http::Response<tonic::transport::Body>,
@@ -129,7 +126,7 @@ impl<
             + Clone
             + 'static,
         TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
-    > Sink for GclSink<T, TChannel>
+    > Sink for GclSink<TChannel>
 where
     TChannel::Future: Send,
 {
@@ -226,12 +223,8 @@ where
             .make_channel(Duration::from_nanos(self.config.connect_timeout))
             .await?;
 
-        let client = LoggingServiceV2Client::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token_provider: T::from(self.config.token.clone()),
-            },
-        );
+        let client =
+            LoggingServiceV2Client::with_interceptor(channel, self.config.token.clone().into());
 
         self.client = Some(client);
 

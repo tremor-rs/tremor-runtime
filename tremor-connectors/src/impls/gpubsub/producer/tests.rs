@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::utils::google::tests::TestTokenProvider;
-
 use super::*;
 
-#[test]
-pub fn is_not_auto_ack() {
-    let sink = GpubSink::<TestTokenProvider> {
+#[tokio::test(flavor = "multi_thread")]
+async fn is_not_auto_ack() {
+    let mock = crate::utils::google::tests::gouth_token()
+        .await
+        .expect("Failed to get token");
+
+    let sink = GpubSink {
         config: Config {
-            token: TokenSrc::dummy(),
+            token: mock.token_src(),
             connect_timeout: 0,
             request_timeout: 0,
             url: Url::default(),
@@ -33,11 +35,15 @@ pub fn is_not_auto_ack() {
     assert!(!sink.auto_ack());
 }
 
-#[test]
-pub fn is_async() {
-    let sink = GpubSink::<TestTokenProvider> {
+#[tokio::test(flavor = "multi_thread")]
+async fn is_async() {
+    let mock = crate::utils::google::tests::gouth_token()
+        .await
+        .expect("Failed to get token");
+
+    let sink = GpubSink {
         config: Config {
-            token: TokenSrc::dummy(),
+            token: mock.token_src(),
             connect_timeout: 0,
             request_timeout: 0,
             url: Url::default(),

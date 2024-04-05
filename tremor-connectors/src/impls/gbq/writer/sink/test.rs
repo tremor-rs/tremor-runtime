@@ -18,10 +18,7 @@ use crate::{
     impls::gbq,
     reconnect::ConnectionLostNotifier,
     utils::{
-        google::{
-            tests::{gouth_token, TestTokenProvider},
-            TokenSrc,
-        },
+        google::{tests::gouth_token, TokenSrc},
         quiescence::QuiescenceBeacon,
     },
 };
@@ -763,7 +760,7 @@ async fn on_event_fails_if_client_is_not_conected() -> anyhow::Result<()> {
         "request_timeout": 1_000_000
     }))?;
 
-    let mut sink = GbqSink::<TestTokenProvider, _, _>::new(config, Box::new(TonicChannelFactory));
+    let mut sink = GbqSink::<_, _>::new(config, Box::new(TonicChannelFactory));
 
     let result = sink
         .on_event(
@@ -805,7 +802,7 @@ async fn on_event_fails_if_write_stream_is_not_conected() -> anyhow::Result<()> 
         "request_timeout": 1_000_000
     }))?;
 
-    let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
+    let mut sink = GbqSink::<_, _>::new(
         config,
         Box::new(HardcodedChannelFactory {
             channel: Channel::from_static("http://example.com").connect_lazy(),
@@ -891,9 +888,11 @@ pub async fn fails_on_error_response() -> anyhow::Result<()> {
         buffer_write_stream,
         buffer_append_rows_response,
     ])));
-    let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
+    let mock = gouth_token().await?;
+
+    let mut sink = GbqSink::<_, _>::new(
         Config {
-            token: TokenSrc::dummy(),
+            token: TokenSrc::File(mock.cert_file()),
             table_id: String::new(),
             connect_timeout: 1_000_000_000,
             request_timeout: 1_000_000_000,
@@ -947,6 +946,8 @@ pub async fn splits_large_requests() -> anyhow::Result<()> {
     let mut buffer_write_stream = vec![];
     let mut buffer_append_rows_response = vec![];
     let alias = alias::Connector::new("flow", "connector");
+    let mock = gouth_token().await?;
+
     WriteStream {
         name: "test".to_string(),
         r#type: i32::from(write_stream::Type::Committed),
@@ -982,9 +983,9 @@ pub async fn splits_large_requests() -> anyhow::Result<()> {
         buffer_append_rows_response.clone(),
         buffer_append_rows_response,
     ])));
-    let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
+    let mut sink = GbqSink::<_, _>::new(
         Config {
-            token: TokenSrc::dummy(),
+            token: mock.token_src(),
             table_id: String::new(),
             connect_timeout: 1_000_000_000,
             request_timeout: 1_000_000_000,
@@ -1053,9 +1054,11 @@ pub async fn splits_large_requests() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn does_not_auto_ack() {
-    let sink = GbqSink::<TestTokenProvider, _, _>::new(
+    let mock = gouth_token().await.expect("failed to get token");
+
+    let sink = GbqSink::<_, _>::new(
         Config {
-            token: TokenSrc::dummy(),
+            token: mock.token_src(),
             table_id: String::new(),
             connect_timeout: 1_000_000_000,
             request_timeout: 1_000_000_000,

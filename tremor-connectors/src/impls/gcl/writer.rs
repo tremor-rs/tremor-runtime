@@ -17,7 +17,7 @@ mod sink;
 
 use crate::impls::gcl::writer::sink::{GclSink, TonicChannelFactory};
 use crate::prelude::*;
-use crate::utils::google::{GouthTokenProvider, TokenSrc};
+use crate::utils::google::TokenSrc;
 use googapis::google::api::MonitoredResource;
 use googapis::google::logging::r#type::LogSeverity;
 use serde::Deserialize;
@@ -226,11 +226,8 @@ impl Connector for Gcl {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> anyhow::Result<Option<SinkAddr>> {
-        let sink = GclSink::<GouthTokenProvider, Channel>::new(
-            self.config.clone(),
-            builder.reply_tx(),
-            TonicChannelFactory,
-        );
+        let sink =
+            GclSink::<Channel>::new(self.config.clone(), builder.reply_tx(), TonicChannelFactory);
 
         Ok(Some(builder.spawn(sink, ctx)))
     }
