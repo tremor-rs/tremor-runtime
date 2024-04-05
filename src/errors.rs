@@ -33,18 +33,6 @@ impl From<Box<dyn std::error::Error + Sync + Send>> for Error {
     }
 }
 
-impl From<http_types::Error> for Error {
-    fn from(e: http_types::Error) -> Self {
-        Self::from(format!("{e}"))
-    }
-}
-
-impl From<glob::PatternError> for Error {
-    fn from(e: glob::PatternError) -> Self {
-        Self::from(format!("{e}"))
-    }
-}
-
 impl<T> From<crate::channel::SendError<T>> for Error {
     fn from(e: crate::channel::SendError<T>) -> Self {
         Self::from(format!("{e}"))
@@ -54,12 +42,6 @@ impl<T> From<crate::channel::SendError<T>> for Error {
 impl From<crate::channel::TryRecvError> for Error {
     fn from(e: crate::channel::TryRecvError) -> Self {
         Self::from(format!("{e}"))
-    }
-}
-
-impl<T> From<async_channel::SendError<T>> for Error {
-    fn from(e: async_channel::SendError<T>) -> Self {
-        Self::from(format!("{e:?}"))
     }
 }
 
@@ -121,8 +103,6 @@ error_chain! {
         Config(tremor_config::Error);
         EnvVarError(std::env::VarError);
         FromUtf8Error(std::string::FromUtf8Error);
-        GrokError(grok::Error );
-        Hex(hex::FromHexError);
         Io(std::io::Error);
         JoinError(tokio::task::JoinError);
         JsonAccessError(value_trait::AccessError);
@@ -130,7 +110,6 @@ error_chain! {
         OneShotRecv(tokio::sync::oneshot::error::RecvError);
         ParseFloatError(std::num::ParseFloatError);
         ParseIntError(std::num::ParseIntError);
-        RegexError(regex::Error);
         Timeout(tokio::time::error::Elapsed);
         TryFromIntError(std::num::TryFromIntError);
         Utf8Error(std::str::Utf8Error);
@@ -241,7 +220,6 @@ pub(crate) fn empty_error() -> Error {
 #[cfg(test)]
 mod test {
     use super::*;
-    use matches::assert_matches;
 
     #[test]
     fn test_type_error() {
@@ -250,16 +228,9 @@ mod test {
             got: ValueType::String,
         })
         .0;
-        assert_matches!(
+        matches!(
             r,
             ErrorKind::TypeError(ValueType::Object, ValueType::String)
         );
-    }
-
-    #[test]
-    fn send_error() {
-        let e = async_channel::SendError(0u8);
-        let error = Error::from(e);
-        assert_eq!(error.to_string(), "SendError(..)".to_string(),);
     }
 }

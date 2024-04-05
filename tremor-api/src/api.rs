@@ -210,7 +210,7 @@ mod tests {
     use http_types::Url;
     use std::time::Instant;
     use tokio::net::TcpListener;
-    use tremor_runtime::{errors::Result as RuntimeResult, system::WorldConfig};
+    use tremor_runtime::system::WorldConfig;
     use tremor_script::{aggr_registry, ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
     use tremor_system::{instance::State as InstanceState, killswitch::ShutdownMode};
     use tremor_value::{prelude::*, value::StaticValue};
@@ -221,7 +221,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)] // this is a test
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_api() -> RuntimeResult<()> {
+    async fn test_api() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let _: std::result::Result<_, _> = env_logger::try_init();
         let config = WorldConfig {
             debug_connectors: true,

@@ -533,7 +533,7 @@ pub(crate) mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn yolo_happy_path() -> anyhow::Result<()> {
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
-        let mock = crate::utils::google::tests::gouth_token().await?;
+        let mock = gouth_token().await?;
 
         let config = Config {
             url: Url::default(),
@@ -721,7 +721,7 @@ pub(crate) mod tests {
     async fn yolo_on_failure() -> anyhow::Result<()> {
         // ensure that failures on calls to google don't fail events
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
-        let mock = crate::utils::google::tests::gouth_token().await?;
+        let mock = gouth_token().await?;
 
         let config = Config {
             url: Url::default(),
@@ -896,7 +896,7 @@ pub(crate) mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn yolo_invalid_event() -> anyhow::Result<()> {
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
-        let mock = crate::utils::google::tests::gouth_token().await?;
+        let mock = gouth_token().await?;
 
         let config = Config {
             url: Url::default(),
@@ -992,7 +992,7 @@ pub(crate) mod tests {
             client.inject_failure(true);
             Ok(client)
         });
-        let mock = crate::utils::google::tests::gouth_token().await?;
+        let mock = gouth_token().await?;
 
         let config = Config {
             url: Url::default(),
@@ -1046,7 +1046,7 @@ pub(crate) mod tests {
     pub async fn consistent_happy_path() -> anyhow::Result<()> {
         let (reply_tx, mut reply_rx) = unbounded();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
-        let mock = crate::utils::google::tests::gouth_token().await?;
+        let mock = gouth_token().await?;
 
         let config = Config {
             url: Url::default(),
@@ -1272,7 +1272,7 @@ pub(crate) mod tests {
     async fn consistent_on_failure() -> anyhow::Result<()> {
         let (reply_tx, mut reply_rx) = unbounded();
         let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
-        let mock = crate::utils::google::tests::gouth_token().await?;
+        let mock = gouth_token().await?;
 
         let config = Config {
             url: Url::default(),
