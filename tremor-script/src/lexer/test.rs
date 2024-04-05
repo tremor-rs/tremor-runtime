@@ -15,7 +15,6 @@
 #![allow(clippy::ignored_unit_patterns)]
 
 use super::*;
-use matches::assert_matches;
 use proptest::prelude::*;
 
 macro_rules! lex_ok {
@@ -491,7 +490,7 @@ fn lexer_long_float() -> Result<()> {
         .next()
         .ok_or("unexpected")??
         .value;
-    assert_matches!(token, Token::FloatLiteral(f_tkn, _) if f_tkn == f);
+    matches!(token, Token::FloatLiteral(f_tkn, _) if f_tkn == f);
     Ok(())
 }
 

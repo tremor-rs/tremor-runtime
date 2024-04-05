@@ -22,7 +22,6 @@ pub(crate) mod separate;
 pub(crate) mod textual_length_prefixed;
 
 use log::error;
-use std::default::Default;
 use tremor_common::time::nanotime;
 /// Set of Postprocessors
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
@@ -45,7 +44,6 @@ pub enum Error {
 /// Configuration for a postprocessor
 pub type Config = tremor_config::NameWithConfig;
 
-trait PostprocessorState {}
 /// Postprocessor trait
 pub trait Postprocessor: Send + Sync {
     /// Canonical name of the postprocessor

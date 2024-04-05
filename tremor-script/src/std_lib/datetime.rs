@@ -21,7 +21,7 @@
 use crate::datetime::{_parse, has_tz};
 use crate::errors::{Error, Result};
 use crate::prelude::*;
-use crate::registry::{FResult, FunctionError, Mfa, Registry};
+use crate::registry::{FResult, FunctionError, Mfa};
 use crate::tremor_const_fn;
 use beef::Cow;
 use chrono::FixedOffset;

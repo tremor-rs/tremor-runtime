@@ -58,7 +58,6 @@ use apache_avro::{
 };
 use schema_registry_converter::avro_common::AvroSchema;
 use serde::Deserialize;
-use value_trait::TryTypeError;
 
 const AVRO_BUFFER_CAP: usize = 512;
 

@@ -18,14 +18,11 @@
 mod test;
 
 use super::window::{self, Group, Window};
-use crate::errors::Result;
 use crate::op::prelude::*;
 use crate::op::trickle::window::{GroupWindow, SelectCtx, Trait};
-use crate::Operator;
 use halfbrown::Entry;
 use tremor_common::stry;
 use tremor_script::{
-    self,
     ast::{self, ImutExpr, RunConsts, SelectStmt},
     errors::{err_generic, Result as TSResult},
     interpreter::{Env, LocalStack},
@@ -33,7 +30,7 @@ use tremor_script::{
     NO_AGGRS,
 };
 use tremor_system::dataplane::SignalKind;
-use tremor_value::{utils::sorted_serialize, Value};
+use tremor_value::utils::sorted_serialize;
 
 #[derive(Debug)]
 pub(crate) struct Select {

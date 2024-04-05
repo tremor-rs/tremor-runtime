@@ -17,14 +17,12 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
-use super::CodecReq;
 use crate::{
-    channel::{unbounded, Sender, UnboundedReceiver},
-    errors::Error,
+    channel::{unbounded, UnboundedReceiver},
     metrics::SourceReporter,
     prelude::*,
     utils::reconnect::ConnectionLostNotifier,
-    ConnectorType, Context, QuiescenceBeacon, StreamDone,
+    QuiescenceBeacon, StreamDone,
 };
 pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
 use std::collections::{btree_map::Entry, BTreeMap, HashSet};
@@ -32,23 +30,20 @@ use std::fmt::Display;
 use tokio::task;
 use tremor_codec::{self as codec, Codec};
 use tremor_common::{
-    alias,
     ids::{Id, SinkId, SourceId},
-    ports::{Port, ERR, OUT},
     time::nanotime,
 };
-use tremor_config::NameWithConfig;
 use tremor_interceptor::preprocessor::{
     self, finish, make_preprocessors, preprocess, Preprocessors,
 };
-use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
+use tremor_script::ast::DeployEndpoint;
 use tremor_system::{
-    connector::{self, source, Attempt, Connectivity},
+    connector::{self, source, Connectivity},
     controlplane,
     dataplane::{self, InputTarget},
     event, pipeline,
 };
-use tremor_value::{literal, Value};
+use tremor_value::literal;
 
 /// reply from `Source::on_event`
 #[derive(Debug)]

@@ -32,7 +32,6 @@ use crate::{
 };
 use std::time::Duration;
 use tremor_common::time::nanotime;
-use tremor_value::Value;
 
 const CONNECTOR_TYPE: &str = "gcs_streamer";
 

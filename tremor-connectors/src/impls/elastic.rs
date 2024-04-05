@@ -231,11 +231,8 @@
 
 use super::http::auth::Auth;
 use crate::{
-    errors::{error_connector_def, GenericImplementationError},
-    impls::http::utils::Header,
-    prelude::*,
-    sink::concurrency_cap::ConcurrencyCap,
-    utils::tls::TLSClientConfig,
+    errors::error_connector_def, impls::http::utils::Header, prelude::*,
+    sink::concurrency_cap::ConcurrencyCap, utils::tls::TLSClientConfig,
 };
 use either::Either;
 use elasticsearch::{

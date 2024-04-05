@@ -297,15 +297,13 @@ use rdkafka_sys::RDKafkaErrorCode;
 use simd_json::ObjectHasher;
 use std::{
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64},
         Arc,
     },
     time::Duration,
 };
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::task::JoinHandle;
-use tremor_script::EventPayload;
-use tremor_value::Value;
 
 const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 

@@ -14,7 +14,6 @@
 // #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use crate::prelude::*;
-use crate::registry::Registry;
 use crate::tremor_const_fn;
 use tremor_value::utils::sorted_serialize;
 

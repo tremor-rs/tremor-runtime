@@ -32,7 +32,7 @@ use tremor_otelapis::opentelemetry::proto::{
         NumberDataPoint, ResourceMetrics, Sum, Summary, SummaryDataPoint,
     },
 };
-use tremor_value::{literal, prelude::*, Value};
+use tremor_value::{literal, prelude::*};
 
 pub(crate) fn int_exemplars_to_json(data: Vec<IntExemplar>) -> Value<'static> {
     data.into_iter()

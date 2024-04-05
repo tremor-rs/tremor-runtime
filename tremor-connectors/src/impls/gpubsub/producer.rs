@@ -26,9 +26,6 @@ use tonic::{
     transport::{Certificate, Channel, ClientTlsConfig},
     Code,
 };
-use tremor_common::url::HttpsDefaults;
-use tremor_system::event::Event;
-use tremor_value::Value;
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]

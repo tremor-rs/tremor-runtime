@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::prelude::*;
-use super::VisitRes;
 use super::VisitRes::Walk;
 
 /// Visitor for traversing all `Exprs`s within the given `Exprs`

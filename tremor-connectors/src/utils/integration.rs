@@ -95,6 +95,7 @@ pub fn setup_for_tls() {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
+            // ALLOW: This is for tests only, but we should extract it
             .expect("Unable to spawn ./tests/refresh_tls_cert.sh");
         let out = cmd.wait().expect("Failed to refresh certs/keys");
         match out.code() {

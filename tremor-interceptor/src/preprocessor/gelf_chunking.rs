@@ -54,7 +54,7 @@
 
 use super::prelude::*;
 use log::{error, warn};
-use rand::{self, RngCore};
+use rand::RngCore;
 use std::collections::{hash_map::Entry, HashMap};
 
 const FIVE_SEC: u64 = 5_000_000_000;

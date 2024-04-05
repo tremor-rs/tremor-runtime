@@ -26,7 +26,7 @@ use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
 use tremor_runtime::system::World;
-use tremor_runtime::{self, version};
+use tremor_runtime::version;
 use tremor_system::killswitch::ShutdownMode;
 
 macro_rules! log_and_print_error {

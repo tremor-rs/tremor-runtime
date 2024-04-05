@@ -81,7 +81,6 @@
 use crate::prelude::*;
 use chrono::{DateTime, Datelike, Offset, TimeZone, Utc};
 use syslog_loose::{IncompleteDate, ProcId, Protocol, SyslogFacility, SyslogSeverity, Variant};
-use tremor_value::Value;
 
 const DEFAULT_PRI: i32 = 13;
 

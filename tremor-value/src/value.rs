@@ -26,9 +26,9 @@ use beef::Cow;
 use halfbrown::HashMap;
 pub use r#static::StaticValue;
 use simd_json::{prelude::*, Buffers, ObjectHasher};
-use simd_json::{Deserializer, Node, StaticNode};
-use std::{borrow::Borrow, convert::TryInto, fmt};
-use std::{cmp::Ord, hash::Hash};
+use simd_json::{Deserializer, Node};
+use std::hash::Hash;
+use std::{borrow::Borrow, fmt};
 use std::{
     cmp::Ordering,
     ops::{Index, IndexMut},

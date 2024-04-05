@@ -13,10 +13,8 @@
 // limitations under the License.
 
 use crate::prelude::*;
-use simd_json::StaticNode;
 use std::collections::BTreeMap;
 use tremor_common::base64::{Engine, BASE64};
-use value_trait::TryTypeError;
 
 /// converts a maybe null option to a string. if the value is none it returns an empty string
 /// # Errors

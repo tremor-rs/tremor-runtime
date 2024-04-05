@@ -13,10 +13,9 @@
 // limitations under the License.
 
 use super::select::execute_select_and_having;
-use std::{borrow::Cow as SCow, convert::TryFrom};
+use std::borrow::Cow as SCow;
 use tremor_common::{ids::OperatorId, ports::Port, stry};
 use tremor_script::{
-    self,
     ast::{AggrSlice, Aggregates, Consts, RunConsts, Script, Select, WindowDefinition},
     errors::{err_generic, error_generic, Result},
     interpreter::{Env, LocalStack},

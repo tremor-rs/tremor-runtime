@@ -29,11 +29,7 @@
 //!
 //! We try to route the event to the connection with `stream_id` `123`.
 use super::{UnixSocketReader, UnixSocketWriter};
-use crate::{
-    channel::{bounded, Receiver, Sender},
-    prelude::*,
-    sink::channel_sink::ChannelSinkMsg,
-};
+use crate::{prelude::*, sink::channel_sink::ChannelSinkMsg};
 use std::{
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc},

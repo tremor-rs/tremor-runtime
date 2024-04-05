@@ -18,7 +18,6 @@ use tremor_common::ids::{Id, OperatorId, SourceId};
 use tremor_common::time::nanotime;
 use tremor_script::prelude::*;
 pub use tremor_script::EventOriginUri as OriginUri;
-use tremor_script::EventPayload;
 
 use crate::{controlplane::CbAction, dataplane::SignalKind, pipeline::OpMeta};
 

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::prelude::*;
-use crate::registry::Registry;
 use crate::tremor_const_fn;
 
 // ALLOW: Until we have u64 support in clippy

@@ -110,7 +110,6 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
     net::UnixStream,
 };
-use tremor_value::Value;
 
 /// unix domain socket server
 pub mod server;

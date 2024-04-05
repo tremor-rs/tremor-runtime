@@ -20,7 +20,6 @@
 
 use super::TcpReader;
 use crate::{
-    channel::{bounded, Receiver, Sender},
     errors::error_connector_def,
     prelude::*,
     utils::{

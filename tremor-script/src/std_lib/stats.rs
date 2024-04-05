@@ -17,7 +17,6 @@ use crate::prelude::*;
 use crate::registry::{
     mfa, Aggr as AggrRegistry, FResult, FunctionError, TremorAggrFn, TremorAggrFnWrapper,
 };
-use crate::Value;
 use hdrhistogram::Histogram;
 use sketches_ddsketch::{Config as DDSketchConfig, DDSketch};
 use std::cmp::max;

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(feature = "metronome-integration")]
+#![cfg(feature = "integration-tests-metronome")]
 
 use std::time::Duration;
 use tremor_connectors::harness::Harness;

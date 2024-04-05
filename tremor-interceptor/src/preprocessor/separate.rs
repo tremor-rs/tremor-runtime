@@ -343,7 +343,10 @@ mod test {
             .map(|e| e.to_string())
             .unwrap_or_default();
 
-        assert_eq!("Invalid Configuration for split preprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res);
+        assert_eq!(
+            res,
+            "split Invalid config: Invalid 'separator': \"abc\", must be 1 byte.",
+        );
     }
 
     #[test]

@@ -107,7 +107,6 @@ error_chain! {
 #[cfg(test)]
 mod test {
     use super::*;
-    use matches::assert_matches;
 
     #[test]
     fn test_type_error() {
@@ -116,7 +115,7 @@ mod test {
             got: ValueType::String,
         })
         .0;
-        assert_matches!(
+        matches!(
             r,
             ErrorKind::TypeError(ValueType::Object, ValueType::String)
         );

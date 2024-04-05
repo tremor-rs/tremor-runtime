@@ -19,11 +19,11 @@
 // https://github.com/maciejhirsz/json-rust/blob/master/src/codegen.rs
 
 use super::{Object, Value};
-use simd_json::{prelude::*, stry, StaticNode};
+use simd_json::{prelude::*, stry};
 use std::io::{self, Write};
 use tremor_common::base64::BASE64;
 use value_trait::generator::{
-    BaseGenerator, DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
+    DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
 };
 
 //use util::print_dec;

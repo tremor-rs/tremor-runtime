@@ -48,7 +48,7 @@
 //! sub command to find out more
 //! :::
 
-use crate::{prelude::*, utils::hostname};
+use crate::prelude::*;
 use tokio::{
     io::{stderr, stdin, stdout, AsyncReadExt, AsyncWriteExt, Stderr, Stdout},
     sync::broadcast::{channel as broadcast, error::RecvError, Receiver},

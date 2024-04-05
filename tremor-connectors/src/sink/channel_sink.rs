@@ -14,18 +14,14 @@
 
 //! Sink implementation that keeps track of multiple streams and keeps channels to send to each stream
 
-use crate::channel::{bounded, Receiver, Sender};
-use crate::{prelude::*, Context, StreamDone};
+use crate::prelude::*;
 use bimap::BiMap;
 use either::Either;
 use std::collections::HashMap;
 use std::{
     hash::Hash,
     marker::PhantomData,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
 use tokio::{
@@ -34,7 +30,6 @@ use tokio::{
 };
 use tremor_common::{ids::Id, time::nanotime};
 use tremor_system::dataplane::SignalKind;
-use tremor_value::Value;
 
 /// Behavioral trait for defining if a Channel Sink needs metadata or not
 pub trait SinkMetaBehaviour: Send + Sync {

@@ -21,11 +21,10 @@ pub mod concurrency_cap;
 
 use super::{metrics::SinkReporter, ConnectionLostNotifier, Msg, QuiescenceBeacon};
 use crate::{
-    channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
+    channel::{unbounded, UnboundedReceiver, UnboundedSender},
     config::Connector as ConnectorConfig,
     pipeline,
     prelude::*,
-    qsize,
 };
 use futures::StreamExt; // for .next() on PriorityMerge
 use std::{
@@ -45,14 +44,8 @@ use tremor_common::{
 use tremor_interceptor::postprocessor::{
     self, finish, make_postprocessors, postprocess, Postprocessors,
 };
-use tremor_script::{ast::DeployEndpoint, EventPayload};
-use tremor_system::{
-    connector::{sink, Attempt},
-    dataplane::SignalKind,
-    event::EventId,
-    pipeline::OpMeta,
-};
-use tremor_value::Value;
+use tremor_script::ast::DeployEndpoint;
+use tremor_system::{connector::sink, dataplane::SignalKind};
 
 pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
 

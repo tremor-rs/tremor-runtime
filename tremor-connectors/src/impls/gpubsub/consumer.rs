@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::{
-    channel::{bounded, Receiver, Sender},
     prelude::*,
     utils::google::{AuthInterceptor, TokenSrc},
 };

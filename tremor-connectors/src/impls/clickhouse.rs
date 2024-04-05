@@ -282,15 +282,13 @@
 
 mod conversion;
 
-use std::fmt::{self, Display, Formatter};
-
-use crate::{errors::GenericImplementationError, prelude::*};
-
+use crate::prelude::*;
 use clickhouse_rs::{
     errors::Error as CError,
     types::{DateTimeType, SqlType},
     Block, ClientHandle, Pool,
 };
+use std::fmt::{self, Display, Formatter};
 
 /// The `clickhouse` connector builder
 #[derive(Default, Debug)]

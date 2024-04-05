@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::prelude::*;
-use crate::registry::Registry;
 use crate::{tremor_const_fn, tremor_fn_};
 
 pub fn load(registry: &mut Registry) {

@@ -506,7 +506,6 @@ mod tests {
             .outputs_mut()
             .remove("out")
             .expect("no outputs on out port");
-        assert!(output2.is_empty());
         assert_eq!(1, output2.len());
         let output2 = output2.pop().ok_or("no data")?;
         assert_eq!(output2, report::Output::pipeline("snot3", IN));

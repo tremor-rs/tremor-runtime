@@ -137,6 +137,9 @@ mod tests {
             .map(|e| e.to_string())
             .unwrap_or_default();
 
-        assert_eq!("Invalid Configuration for separate postprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res);
+        assert_eq!(
+            "seperate Invalid config: Invalid 'separator': \"abc\", must be 1 byte.",
+            res
+        );
     }
 }
