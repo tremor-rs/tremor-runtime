@@ -517,6 +517,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn can_delete_upload() -> anyhow::Result<()> {
+        let mock = crate::utils::google::tests::gouth_token().await?;
+
         let client = MockHttpClient {
             handle_request: Box::new(|req| {
                 assert_eq!(req.method(), Method::DELETE);
@@ -536,7 +538,7 @@ mod tests {
                 max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
-            &TokenSrc::dummy(),
+            &mock.token_src(),
         )?;
         api_client
             .delete_upload(

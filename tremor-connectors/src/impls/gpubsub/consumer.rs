@@ -15,7 +15,7 @@
 use crate::{
     channel::{bounded, Receiver, Sender},
     prelude::*,
-    utils::google::{AuthInterceptor, TokenProvider, TokenSrc},
+    utils::google::{AuthInterceptor, TokenSrc},
 };
 use beef::generic::Cow;
 use futures::StreamExt;
@@ -26,7 +26,6 @@ use googapis::google::pubsub::v1::{
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
@@ -76,12 +75,6 @@ fn default_max_outstanding_bytes() -> i64 {
 #[derive(Debug, Default)]
 pub struct Builder {}
 
-#[cfg(all(test, feature = "integration-tests-gcp"))]
-type GSubWithTokenProvider = GSub<crate::utils::google::tests::TestTokenProvider>;
-
-#[cfg(not(all(test, feature = "integration-tests-gcp")))]
-type GSubWithTokenProvider = GSub<crate::utils::google::GouthTokenProvider>;
-
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -103,28 +96,26 @@ impl ConnectorBuilder for Builder {
             crate::utils::task_id()
         );
 
-        Ok(Box::new(GSubWithTokenProvider {
+        Ok(Box::new(GSub {
             config,
             url,
             client_id,
-            _phantom: PhantomData,
         }))
     }
 }
 
-struct GSub<T> {
+struct GSub {
     config: Config,
     url: Url<HttpsDefaults>,
     client_id: String,
-    _phantom: PhantomData<T>,
 }
 
-type PubSubClient<T> = SubscriberClient<InterceptedService<Channel, AuthInterceptor<T>>>;
+type PubSubClient = SubscriberClient<InterceptedService<Channel, AuthInterceptor>>;
 type AsyncTaskMessage = anyhow::Result<(u64, PubsubMessage)>;
 
-struct GSubSource<T: TokenProvider> {
+struct GSubSource {
     config: Config,
-    client: Option<PubSubClient<T>>,
+    client: Option<PubSubClient>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
     ack_sender: Option<async_channel::Sender<u64>>,
     task_handle: Option<JoinHandle<()>>,
@@ -132,7 +123,7 @@ struct GSubSource<T: TokenProvider> {
     client_id: String,
 }
 
-impl<T: TokenProvider> GSubSource<T> {
+impl GSubSource {
     pub fn new(config: Config, url: Url<HttpsDefaults>, client_id: String) -> Self {
         GSubSource {
             config,
@@ -146,8 +137,8 @@ impl<T: TokenProvider> GSubSource<T> {
     }
 }
 
-async fn consumer_task<T: TokenProvider>(
-    mut client: PubSubClient<T>,
+async fn consumer_task(
+    mut client: PubSubClient,
     ctx: SourceContext,
     client_id: String,
     sender: Sender<AsyncTaskMessage>,
@@ -286,7 +277,7 @@ fn pubsub_metadata(
 }
 
 #[async_trait::async_trait]
-impl<T: TokenProvider + 'static> Source for GSubSource<T> {
+impl Source for GSubSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
@@ -309,12 +300,8 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
             task_handle.abort();
         }
 
-        let mut client = SubscriberClient::with_interceptor(
-            channel.clone(),
-            AuthInterceptor {
-                token_provider: T::from(self.config.token.clone()),
-            },
-        );
+        let mut client =
+            SubscriberClient::with_interceptor(channel.clone(), self.config.token.clone().into());
         // check that the subscription exists
         let res = client
             .get_subscription(GetSubscriptionRequest {
@@ -413,13 +400,13 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: TokenProvider + 'static> Connector for GSub<T> {
+impl Connector for GSub {
     async fn create_source(
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> anyhow::Result<Option<SourceAddr>> {
-        let source = GSubSource::<T>::new(
+        let source = GSubSource::new(
             self.config.clone(),
             self.url.clone(),
             self.client_id.clone(),

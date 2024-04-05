@@ -14,12 +14,12 @@
 
 use crate::{
     prelude::*,
-    utils::google::{AuthInterceptor, TokenProvider, TokenSrc},
+    utils::google::{AuthInterceptor, TokenSrc},
 };
 use googapis::google::pubsub::v1::{
     publisher_client::PublisherClient, PublishRequest, PubsubMessage,
 };
-use std::{collections::HashMap, marker::PhantomData, time::Duration};
+use std::{collections::HashMap, time::Duration};
 use tokio::time::timeout;
 use tonic::{
     codegen::InterceptedService,
@@ -49,12 +49,6 @@ impl tremor_config::Impl for Config {}
 #[derive(Default, Debug)]
 pub struct Builder {}
 
-#[cfg(all(test, feature = "integration-tests-gcp"))]
-type GpubConnectorWithTokenProvider = GpubConnector<crate::utils::google::tests::TestTokenProvider>;
-
-#[cfg(not(all(test, feature = "integration-tests-gcp")))]
-type GpubConnectorWithTokenProvider = GpubConnector<crate::utils::google::GouthTokenProvider>;
-
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -70,26 +64,22 @@ impl ConnectorBuilder for Builder {
     ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
-        Ok(Box::new(GpubConnectorWithTokenProvider {
-            config,
-            _phantom: PhantomData,
-        }))
+        Ok(Box::new(GpubConnector { config }))
     }
 }
 
-struct GpubConnector<T> {
+struct GpubConnector {
     config: Config,
-    _phantom: PhantomData<T>,
 }
 
 #[async_trait::async_trait()]
-impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
+impl Connector for GpubConnector {
     async fn create_sink(
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> anyhow::Result<Option<SinkAddr>> {
-        let sink = GpubSink::<T> {
+        let sink = GpubSink {
             config: self.config.clone(),
             hostname: self
                 .config
@@ -117,15 +107,14 @@ impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
     }
 }
 
-struct GpubSink<T: TokenProvider> {
+struct GpubSink {
     config: Config,
     hostname: String,
-
-    client: Option<PublisherClient<InterceptedService<Channel, AuthInterceptor<T>>>>,
+    client: Option<PublisherClient<InterceptedService<Channel, AuthInterceptor>>>,
 }
 
 #[async_trait::async_trait()]
-impl<T: TokenProvider> Sink for GpubSink<T> {
+impl Sink for GpubSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
@@ -141,9 +130,7 @@ impl<T: TokenProvider> Sink for GpubSink<T> {
 
         self.client = Some(PublisherClient::with_interceptor(
             channel,
-            AuthInterceptor {
-                token_provider: T::from(self.config.token.clone()),
-            },
+            self.config.token.clone().into(),
         ));
 
         Ok(true)

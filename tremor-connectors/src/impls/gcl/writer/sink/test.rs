@@ -14,13 +14,10 @@
 
 #![allow(clippy::cast_possible_wrap)]
 use super::*;
+use crate::channel::bounded;
 use crate::impls::gcl;
 use crate::utils::quiescence::QuiescenceBeacon;
 use crate::ConnectionLostNotifier;
-use crate::{
-    channel::bounded,
-    utils::google::{tests::TestTokenProvider, TokenSrc},
-};
 use crate::{harness::Harness, utils::google::tests::gouth_token};
 use anyhow::Result;
 use bytes::Bytes;
@@ -115,10 +112,11 @@ impl Service<http::Request<BoxBody>> for MockService {
 async fn on_event_can_send_an_event() -> anyhow::Result<()> {
     let (tx, mut rx) = crate::channel::unbounded();
     let (connection_lost_tx, _connection_lost_rx) = bounded(10);
+    let mock = gouth_token().await?;
 
-    let mut sink = GclSink::<TestTokenProvider, _>::new(
+    let mut sink = GclSink::<_>::new(
         Config {
-            token: TokenSrc::dummy(),
+            token: mock.token_src(),
             log_name: None,
             resource: None,
             partial_success: false,
@@ -229,7 +227,7 @@ async fn on_event_fails_if_client_is_not_connected() -> anyhow::Result<()> {
         "connect_timeout": 1_000_000
     }))?;
 
-    let mut sink = GclSink::<TestTokenProvider, _>::new(config, reply_tx, MockChannelFactory);
+    let mut sink = GclSink::<_>::new(config, reply_tx, MockChannelFactory);
     let alias = alias::Connector::new("", "");
     let notifier = ConnectionLostNotifier::new(&alias, rx);
     let result = sink

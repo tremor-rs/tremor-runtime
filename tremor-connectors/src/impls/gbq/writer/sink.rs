@@ -15,7 +15,7 @@
 use crate::{
     impls::gbq::writer::Config,
     prelude::*,
-    utils::google::{AuthInterceptor, ChannelFactory, TokenProvider},
+    utils::google::{AuthInterceptor, ChannelFactory},
 };
 use futures::{stream, StreamExt};
 use googapis::google::cloud::bigquery::storage::v1::{
@@ -71,12 +71,8 @@ struct ConnectedWriteStream {
     mapping: JsonToProtobufMapping,
 }
 
-pub(crate) struct GbqSink<
-    T: TokenProvider,
-    TChannel: GbqChannel<TChannelError>,
-    TChannelError: GbqChannelError,
-> {
-    client: Option<BigQueryWriteClient<InterceptedService<TChannel, AuthInterceptor<T>>>>,
+pub(crate) struct GbqSink<TChannel: GbqChannel<TChannelError>, TChannelError: GbqChannelError> {
+    client: Option<BigQueryWriteClient<InterceptedService<TChannel, AuthInterceptor>>>,
     write_streams: HashMap<String, ConnectedWriteStream>,
     config: Config,
     channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
@@ -304,8 +300,8 @@ impl JsonToProtobufMapping {
         &self.descriptor
     }
 }
-impl<T: TokenProvider, TChannel: GbqChannel<TChannelError>, TChannelError: GbqChannelError>
-    GbqSink<T, TChannel, TChannelError>
+impl<TChannel: GbqChannel<TChannelError>, TChannelError: GbqChannelError>
+    GbqSink<TChannel, TChannelError>
 {
     pub fn new(
         config: Config,
@@ -322,11 +318,8 @@ impl<T: TokenProvider, TChannel: GbqChannel<TChannelError>, TChannelError: GbqCh
 }
 
 #[async_trait::async_trait]
-impl<
-        T: TokenProvider + 'static,
-        TChannel: GbqChannel<TChannelError> + 'static,
-        TChannelError: GbqChannelError,
-    > Sink for GbqSink<T, TChannel, TChannelError>
+impl<TChannel: GbqChannel<TChannelError> + 'static, TChannelError: GbqChannelError> Sink
+    for GbqSink<TChannel, TChannelError>
 where
     TChannel::Future: Send,
 {
@@ -426,12 +419,8 @@ where
             .make_channel(Duration::from_nanos(self.config.connect_timeout))
             .await?;
 
-        let client = BigQueryWriteClient::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token_provider: T::from(self.config.token.clone()),
-            },
-        );
+        let client =
+            BigQueryWriteClient::with_interceptor(channel, self.config.token.clone().into());
         self.client = Some(client);
 
         Ok(true)
@@ -475,9 +464,8 @@ where
 {
 }
 
-impl<T, TChannelError, TChannel> GbqSink<T, TChannel, TChannelError>
+impl<TChannelError, TChannel> GbqSink<TChannel, TChannelError>
 where
-    T: TokenProvider + 'static,
     TChannel: GbqChannel<TChannelError> + 'static,
     TChannel::Future: Send,
     TChannelError: GbqChannelError,
@@ -553,11 +541,8 @@ where
     }
 }
 
-impl<
-        T: TokenProvider + 'static,
-        TChannel: GbqChannel<TChannelError> + 'static,
-        TChannelError: GbqChannelError,
-    > GbqSink<T, TChannel, TChannelError>
+impl<TChannel: GbqChannel<TChannelError> + 'static, TChannelError: GbqChannelError>
+    GbqSink<TChannel, TChannelError>
 where
     TChannel::Future: Send,
 {
