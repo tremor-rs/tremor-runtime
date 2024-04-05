@@ -113,12 +113,14 @@ tremor-otelapis = { version = "=0.2.4", optional = true, default-features = fals
 rand = { version = "0.8.5", default-features = false }
 
 # aws
-aws-sdk-s3 = { version = "1.4", optional = true, default-features = false, features = [
+aws-sdk-s3 = { version = "1", optional = true, default-features = false, features = [
     "behavior-version-latest",
+    "sigv4a",
+    "rustls",
+    "rt-tokio",
 ] }
 aws-types = { version = "1", optional = true, default-features = false }
 aws-config = { version = "1", optional = true, default-features = false }
-aws-smithy-http = { version = "0.60", optional = true, default-features = false }
 async-channel = { version = "2.1", optional = true, default-features = false }
 
 # kafka
@@ -229,7 +231,7 @@ default = [
     "udp",
     "unix-socket",
     "dev",
-    "integration-local",
+    "integration-harness-local",
 ]
 
 128bit = ["tremor-value/128bit"]
@@ -288,13 +290,7 @@ gcp = [
     "protobuf",
 ]
 otel = ["dep:tonic", "protobuf", "dep:tremor-otelapis", "dep:hex"]
-aws = [
-    "dep:async-channel",
-    "dep:aws-config",
-    "dep:aws-sdk-s3",
-    "dep:aws-smithy-http",
-    "dep:aws-types",
-]
+aws = ["dep:async-channel", "dep:aws-config", "dep:aws-sdk-s3", "dep:aws-types"]
 kafka = ["dep:rdkafka", "dep:rdkafka-sys", "dep:indexmap"]
 websocket = ["dep:tokio-tungstenite", "tls", "socket"]
 discord = ["dep:serenity"]
@@ -315,15 +311,19 @@ udp = ["socket"]
 unix-socket = ["socket", "dep:file-mode"]
 
 integration-utils = []
-integration = ["integration-docker", "integration-local"]
-integration-docker = [
-    "aws-integration",
-    "clickhouse-integration",
+
+integration-harness = [
+    "integration-harness-docker",
+    "integration-harness-local",
+]
+integration-harness-docker = [
+    "integration-tests-aws",
+    "integration-tests-clickhouse",
     "elasticsearch-integration",
     "gcp-integration",
     "kafka-integration",
 ]
-integration-local = [
+integration-harness-local = [
     "bench-integration",
     "crononome-integration",
     "file-integration",
@@ -335,14 +335,15 @@ integration-local = [
     "wal-integration",
     "websocket-integration",
 ]
-aws-integration = ["aws"]
+
 bench-integration = ["bench"]
-clickhouse-integration = ["clickhouse", "dep:chrono", "integration-utils"]
+integration-tests-clickhouse = ["clickhouse", "dep:chrono", "integration-utils"]
 crononome-integration = ["crononome"]
 elasticsearch-integration = ["elasticsearch", "integration-utils"]
 file-integration = ["file"]
 gcp-integration = ["gcp"]
 http-integration = ["http", "integration-utils"]
+integration-tests-aws = ["aws", "integration-utils"]
 kafka-integration = ["kafka", "integration-utils"]
 metronome-integration = ["metronome"]
 tcp-integration = ["tcp", "integration-utils"]
