@@ -1433,21 +1433,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "conquer-once"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c6d3a9775a69f6d1fe2cc888999b67ed30257d3da4d2af91984e722f2ec918a"
-dependencies = [
- "conquer-util",
-]
-
-[[package]]
-name = "conquer-util"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e763eef8846b13b380f37dfecda401770b0ca4e56e95170237bd7c25c7db3582"
-
-[[package]]
 name = "console"
 version = "0.15.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5149,20 +5134,6 @@ dependencies = [
 
 [[package]]
 name = "serial_test"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e56dd856803e253c8f298af3f4d7eb0ae5e23a737252cd90bb4f3b435033b2d"
-dependencies = [
- "dashmap",
- "futures",
- "lazy_static",
- "log",
- "parking_lot 0.12.1",
- "serial_test_derive 2.0.0",
-]
-
-[[package]]
-name = "serial_test"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "953ad9342b3aaca7cb43c45c097dd008d4907070394bd0751a0aa8817e5a018d"
@@ -5172,18 +5143,7 @@ dependencies = [
  "lazy_static",
  "log",
  "parking_lot 0.12.1",
- "serial_test_derive 3.0.0",
-]
-
-[[package]]
-name = "serial_test_derive"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91d129178576168c589c9ec973feedf7d3126c01ac2bf08795109aa35b69fb8f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.58",
+ "serial_test_derive",
 ]
 
 [[package]]
@@ -5865,7 +5825,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e2b1567ca8a2b819ea7b28c92be35d9f76fb9edb214321dcc86eb96023d1f87"
 dependencies = [
  "bollard-stubs",
- "conquer-once",
  "futures",
  "hex",
  "hmac 0.12.1",
@@ -5874,7 +5833,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
- "signal-hook",
 ]
 
 [[package]]
@@ -6500,7 +6458,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "serenity",
- "serial_test 3.0.0",
+ "serial_test",
  "simd-json",
  "simd-json-derive",
  "sled",
@@ -6629,51 +6587,25 @@ name = "tremor-runtime"
 version = "0.13.0-rc.16"
 dependencies = [
  "anyhow",
- "async-channel 2.2.0",
- "async-compression",
- "async-std",
- "async-stream",
  "async-trait",
- "base64 0.21.7",
- "beef",
- "bimap",
- "bytes",
- "dashmap",
- "either",
- "env_logger 0.10.2",
+ "env_logger 0.11.3",
  "error-chain",
- "event-listener 5.2.0",
  "futures",
- "glob",
- "grok",
  "halfbrown",
  "hashbrown 0.14.3",
- "hex",
- "hostname",
- "http-body 0.4.6",
- "http-types",
  "indexmap 2.2.6",
- "lazy_static",
  "log",
- "matches",
  "num_cpus",
- "pin-project-lite 0.2.14",
  "port_scanner",
  "pretty_assertions",
  "proptest",
- "rand 0.8.5",
  "regex",
  "serde",
  "serde_yaml",
- "serial_test 2.0.0",
- "signal-hook",
- "signal-hook-tokio",
+ "serial_test",
  "simd-json",
  "simd-json-derive",
- "socket2 0.5.6",
  "tempfile",
- "test-case",
- "testcontainers",
  "tokio",
  "tokio-stream",
  "tremor-codec",
@@ -6686,7 +6618,6 @@ dependencies = [
  "tremor-script",
  "tremor-system",
  "tremor-value",
- "url",
  "value-trait",
 ]
 
