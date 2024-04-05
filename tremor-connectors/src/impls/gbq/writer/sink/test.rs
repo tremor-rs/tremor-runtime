@@ -18,7 +18,10 @@ use crate::{
     impls::gbq,
     reconnect::ConnectionLostNotifier,
     utils::{
-        google::{tests::TestTokenProvider, TokenSrc},
+        google::{
+            tests::{gouth_token, TestTokenProvider},
+            TokenSrc,
+        },
         quiescence::QuiescenceBeacon,
     },
 };
@@ -750,8 +753,11 @@ async fn sink_fails_if_config_is_missing() -> anyhow::Result<()> {
 async fn on_event_fails_if_client_is_not_conected() -> anyhow::Result<()> {
     let (rx, _tx) = bounded(1024);
     let alias = alias::Connector::new("flow", "connector");
+    // note we need to keep this around until the end of the test so we can't consume it
+    let token_file = gouth_token().await?;
+
     let config = Config::new(&literal!({
-        "token": {"file": file!().to_string()},
+        "token": {"file": token_file.cert_file()},
         "table_id": "doesnotmatter",
         "connect_timeout": 1_000_000,
         "request_timeout": 1_000_000
@@ -789,8 +795,11 @@ async fn on_event_fails_if_client_is_not_conected() -> anyhow::Result<()> {
 async fn on_event_fails_if_write_stream_is_not_conected() -> anyhow::Result<()> {
     let (rx, _tx) = bounded(1024);
     let alias = alias::Connector::new("flow", "connector");
+    // note we need to keep this around until the end of the test so we can't consume it
+    let token_file = gouth_token().await?;
+
     let config = Config::new(&literal!({
-        "token": {"file": file!().to_string()},
+        "token": {"file": token_file.cert_file()},
         "table_id": "doesnotmatter",
         "connect_timeout": 1_000_000,
         "request_timeout": 1_000_000

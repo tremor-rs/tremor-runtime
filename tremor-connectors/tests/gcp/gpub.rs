@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::gouth_token;
 use googapis::google::pubsub::v1::{
     publisher_client::PublisherClient, subscriber_client::SubscriberClient, PullRequest,
     Subscription, Topic,
@@ -34,10 +35,13 @@ use tremor_value::{literal, Value};
 #[serial(gpubsub)]
 async fn no_connection() -> anyhow::Result<()> {
     let _ = env_logger::try_init();
+    // note we need to keep this around until the end of the test so we can't consume it
+    let token_file = gouth_token().await?;
+
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "url": "https://localhost:9090",
             "connect_timeout": 100_000_000,
             "topic": "projects/xxx/topics/test-a",
@@ -53,10 +57,13 @@ async fn no_connection() -> anyhow::Result<()> {
 #[serial(gpubsub)]
 async fn no_hostname() -> anyhow::Result<()> {
     let _ = env_logger::try_init();
+    // note we need to keep this around until the end of the test so we can't consume it
+    let token_file = gouth_token().await?;
+
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "url": "file:///etc/passwd",
             "connect_timeout": 100_000_000,
             "topic": "projects/xxx/topics/test-a",
@@ -86,10 +93,13 @@ async fn simple_publish() -> anyhow::Result<()> {
     let endpoint = format!("http://localhost:{port}");
     let endpoint_clone = endpoint.clone();
 
+    // note we need to keep this around until the end of the test so we can't consume it
+    let token_file = gouth_token().await?;
+
     let connector_yaml: Value = literal!({
         "codec": "binary",
         "config":{
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "url": endpoint,
             "connect_timeout": 30_000_000_000_u64,
             "topic": "projects/test/topics/test",
@@ -187,20 +197,22 @@ async fn simple_publish_with_timeout() -> anyhow::Result<()> {
 
     let port = container
         .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+
+    // note we need to keep this around until the end of the test so we can't consume it
+    let token_file = crate::gouth_token().await?;
     let endpoint = format!("http://localhost:{port}");
-    let endpoint_clone = endpoint.clone();
 
     let connector_yaml: Value = literal!({
         "codec": "binary",
         "config":{
-            "token": {"file": file!().to_string()},
-            "url": endpoint,
+            "token": {"file": token_file.cert_file()},
+            "url": endpoint.clone(),
             "connect_timeout": 30_000_000_000u64,
             "topic": "projects/test/topics/test",
         }
     });
 
-    let channel = Channel::from_shared(endpoint_clone)?.connect().await?;
+    let channel = Channel::from_shared(endpoint)?.connect().await?;
     let mut subscriber = SubscriberClient::new(channel.clone());
     let mut publisher = PublisherClient::new(channel.clone());
     publisher
