@@ -51,7 +51,7 @@ use std::{
 
 use super::utils;
 use anyhow::{bail, Ok, Result};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::DateTime;
 use chrono_tz::Tz;
 use clickhouse_rs::Pool;
 use log::error;
@@ -336,7 +336,7 @@ async fn test() -> Result<()> {
                 g: i32 = -32_000,
                 h: i64 = -33_000,
                 i: &str = "hello",
-                j: DateTime<Tz> = DateTime::<Utc>::from_naive_utc_and_offset(NaiveDateTime::from_timestamp_opt(1_634_400_000, 0).expect("valid timestamp literal"), Utc),
+                j: DateTime<Tz> = DateTime::from_timestamp(1_634_400_000, 0).expect("valid timestamp literal"),
                 // k: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1_634_400_000, 0), Utc),
                 // l: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1_634_400_000, 0), Utc),
                 // m: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1_634_400_000, 0), Utc),
