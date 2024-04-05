@@ -153,7 +153,7 @@ mod test {
     use super::super::Config;
     use super::*;
 
-    use crate::impls::gcl::writer::default_log_severity;
+    use crate::{impls::gcl::writer::default_log_severity, utils::google::tests::gouth_token};
     use googapis::google::logging::r#type::LogSeverity;
     use std::collections::HashMap as StdHashMap;
     use tremor_config::Impl;
@@ -161,10 +161,13 @@ mod test {
     use tremor_value::literal;
     use tremor_value::structurize;
 
-    #[test]
-    fn config_with_defaults_no_overrides() -> anyhow::Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn config_with_defaults_no_overrides() -> anyhow::Result<()> {
+        // note we need to keep this around until the end of the test so we can't consume it
+        let token_file = gouth_token().await?;
+
         let config: Config = Config::new(&literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
         }))?;
 
         assert_eq!(None, config.log_name);
@@ -179,10 +182,12 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn config_with_defaults_and_overrides() -> anyhow::Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn config_with_defaults_and_overrides() -> anyhow::Result<()> {
+        let token_file = gouth_token().await?;
+
         let config: Config = Config::new(&literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
         }))?;
         let meta = literal!({}); // no overrides
         assert_eq!("default".to_string(), config.log_name(Some(&meta)));
@@ -202,15 +207,18 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn default_log_name_test() -> anyhow::Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn default_log_name_test() -> anyhow::Result<()> {
+        // note we need to keep this around until the end of the test so we can't consume it
+        let token_file = gouth_token().await?;
+
         let empty_config: Config = Config::new(&literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
         }))?;
         assert_eq!("default", &empty_config.log_name(None));
 
         let ok_config: Config = Config::new(&literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "log_name": "snot",
         }))?;
         assert_eq!("snot", &ok_config.log_name(None));
@@ -222,23 +230,27 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn log_name_overrides() -> anyhow::Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn log_name_overrides() -> anyhow::Result<()> {
+        let token_file = gouth_token().await?;
+
         let empty_config: Config = Config::new(&literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
         }))?;
         let meta = literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "log_name": "snot",
         });
         assert_eq!("snot".to_string(), empty_config.log_name(Some(&meta)));
         Ok(())
     }
 
-    #[test]
-    fn log_severity_overrides() -> anyhow::Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn log_severity_overrides() -> anyhow::Result<()> {
+        let token_file = gouth_token().await?;
+
         let mut empty_config: Config = Config::new(&literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
         }))?;
         let meta = literal!({
             "log_severity": LogSeverity::Debug as i32,
@@ -338,22 +350,23 @@ mod test {
         assert_eq!(2, ok_count);
     }
 
-    #[test]
-    fn default_labels_test() -> anyhow::Result<()> {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn default_labels_test() -> anyhow::Result<()> {
         // NOTE labels are disjoin in GCL
         //      Common labels are sent once per batch of events
         //      Metadata override ( per event ) labels are per event
         //      So, although odd, this test is as intended
         assert_eq!(StdHashMap::new(), Config::labels(None));
+        let token_file = gouth_token().await?;
 
         let ok_config = Config::new(&literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "labels": { "snot": "badger" } }
         ))?;
         assert_eq!(1, ok_config.labels.len());
 
         let ko_config: std::result::Result<Config, _> = Config::new(&literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "labels": "snot"
         }));
         assert!(ko_config.is_err());

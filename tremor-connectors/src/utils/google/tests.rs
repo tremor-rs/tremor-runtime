@@ -20,6 +20,7 @@ use hyper::{
     Body,
 };
 use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
+use tokio::task::JoinHandle;
 
 #[derive(Clone)]
 pub struct TestTokenProvider {
@@ -100,11 +101,27 @@ sEUlZGvHmBh8nBk/7LJVlVcVRWQeQ1kg6b+m6thwRz6HsKIvExpNYbVkzqxbeJW3
 PX8efvDMhv16QqDFF0k80d0=
 -----END PRIVATE KEY-----";
 
-#[tokio::test(flavor = "multi_thread")]
-async fn gouth_token() -> anyhow::Result<()> {
-    let mut file = tempfile::NamedTempFile::new()?;
+pub struct GouthMock {
+    file: tempfile::TempPath,
+    server_handle: JoinHandle<Result<(), hyper::Error>>,
+}
+impl GouthMock {
+    pub fn cert_file(&self) -> String {
+        self.file.to_string_lossy().to_string()
+    }
+}
 
+impl Drop for GouthMock {
+    fn drop(&mut self) {
+        self.server_handle.abort();
+    }
+}
+
+/// creates a dummy gcp token file to use in mocks or test containers
+pub async fn gouth_token() -> anyhow::Result<GouthMock> {
     let port = free_port::find_free_tcp_port().await?;
+
+    let mut file = tempfile::NamedTempFile::new()?;
     let sa = ServiceAccount {
         client_email: "snot@tremor.rs".to_string(),
         private_key_id: "badger".to_string(),
@@ -113,15 +130,10 @@ async fn gouth_token() -> anyhow::Result<()> {
     };
     let sa_str = simd_json::serde::to_string_pretty(&sa)?;
     file.as_file_mut().write_all(sa_str.as_bytes())?;
-    let path = file.into_temp_path();
-    let path_str = path.to_string_lossy().to_string();
-
-    let mut provider = GouthTokenProvider::from(TokenSrc::File(path_str));
-    dbg!(&provider);
-    assert!(provider.get_token().is_err());
 
     let service_fn = make_service_fn(|_| async {
         Ok::<_, Infallible>(service_fn(|_| async {
+            println!("serving");
             Ok::<_, Box<dyn std::error::Error + Send + Sync>>(hyper::Response::builder().body(
                 Body::from(simd_json::serde::to_vec(&TokenResponse {
                     token_type: "snot".to_string(),
@@ -137,9 +149,25 @@ async fn gouth_token() -> anyhow::Result<()> {
         .next()
         .expect("no address");
     let server_handle = tokio::task::spawn(async move {
+        println!("starting server on {addr:?}");
         let listener = hyper::Server::bind(&addr).serve(service_fn);
-        listener.await
+        dbg!(listener.await)
     });
+
+    Ok(GouthMock {
+        file: file.into_temp_path(),
+        server_handle,
+    })
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn gouth_token_test() -> anyhow::Result<()> {
+    let mock = gouth_token().await?;
+    let path_str = mock.cert_file();
+
+    let mut provider = GouthTokenProvider::from(TokenSrc::File(path_str));
+    dbg!(&provider);
+
     // Make sure the server is up by retrying a few times
     let mut attempt = 0;
     let token = loop {
@@ -152,8 +180,7 @@ async fn gouth_token() -> anyhow::Result<()> {
     };
     assert_eq!(token.as_str(), "snot access_token");
 
-    server_handle.abort();
-
+    drop(mock);
     // token is cached, no need to call again
     let token = provider.get_token()?;
     assert_eq!(token.as_str(), "snot access_token");

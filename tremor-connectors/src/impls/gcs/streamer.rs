@@ -391,6 +391,7 @@ pub(crate) mod tests {
         impls::gcs::{resumable_upload_client::ResumableUploadClient, streamer::Mode},
         reconnect::ConnectionLostNotifier,
         utils::{
+            google::tests::gouth_token,
             object_storage::{BufferPart, ObjectId},
             quiescence::QuiescenceBeacon,
         },
@@ -498,15 +499,17 @@ pub(crate) mod tests {
     }
 
     #[test]
-    pub fn default_endpoint_does_not_panic() {
+    fn default_endpoint_does_not_panic() {
         // This test will fail if this panics (it should never)
         default_endpoint();
     }
 
-    #[test]
-    pub fn config_adapts_when_buffer_size_is_not_divisible_by_256ki() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn config_adapts_when_buffer_size_is_not_divisible_by_256ki() {
+        let token_file = gouth_token().await.expect("token file");
+
         let raw_config = literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "mode": "yolo",
             "buffer_size": 256 * 1000
         });
@@ -1414,8 +1417,10 @@ pub(crate) mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn connector_yolo_mode() -> anyhow::Result<()> {
+        let token_file = gouth_token().await?;
+
         let config = literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "mode": "yolo"
         });
         let builder = super::Builder::default();
@@ -1442,8 +1447,10 @@ pub(crate) mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn connector_consistent_mode() -> anyhow::Result<()> {
+        let token_file = gouth_token().await?;
+
         let config = literal!({
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
             "mode": "consistent"
         });
         let builder = super::Builder::default();

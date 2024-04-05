@@ -14,7 +14,6 @@
 
 #![allow(clippy::cast_possible_wrap)]
 use super::*;
-use crate::harness::Harness;
 use crate::impls::gcl;
 use crate::utils::quiescence::QuiescenceBeacon;
 use crate::ConnectionLostNotifier;
@@ -22,6 +21,7 @@ use crate::{
     channel::bounded,
     utils::google::{tests::TestTokenProvider, TokenSrc},
 };
+use crate::{harness::Harness, utils::google::tests::gouth_token};
 use anyhow::Result;
 use bytes::Bytes;
 use futures::future::Ready;
@@ -178,12 +178,14 @@ async fn on_event_can_send_an_event() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn fails_if_the_event_is_not_an_object() -> anyhow::Result<()> {
+#[tokio::test(flavor = "multi_thread")]
+async fn fails_if_the_event_is_not_an_object() -> anyhow::Result<()> {
     let now = tremor_common::time::nanotime();
     let data = &literal!("snot");
+    let token_file = gouth_token().await?;
+
     let config = Config::new(&literal!({
-        "token": {"file": file!().to_string()},
+        "token": {"file": token_file.cert_file()},
     }))?;
     let meta = literal!({});
     let meta = meta.get("gcl_writer").or(None);
@@ -201,9 +203,11 @@ fn fails_if_the_event_is_not_an_object() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn sink_succeeds_if_config_is_nearly_empty() -> anyhow::Result<()> {
+    let token_file = gouth_token().await?;
+
     let config = literal!({
         "config": {
-            "token": {"file": file!().to_string()},
+            "token": {"file": token_file.cert_file()},
         }
     });
 
@@ -218,8 +222,10 @@ async fn sink_succeeds_if_config_is_nearly_empty() -> anyhow::Result<()> {
 async fn on_event_fails_if_client_is_not_connected() -> anyhow::Result<()> {
     let (rx, _tx) = bounded(1024);
     let (reply_tx, _reply_rx) = crate::channel::unbounded();
+    let token_file = gouth_token().await?;
+
     let config = Config::new(&literal!({
-        "token": {"file": file!().to_string()},
+        "token": {"file": token_file.cert_file()},
         "connect_timeout": 1_000_000
     }))?;
 
@@ -252,11 +258,13 @@ async fn on_event_fails_if_client_is_not_connected() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn log_name_override() -> anyhow::Result<()> {
+#[tokio::test(flavor = "multi_thread")]
+async fn log_name_override() -> anyhow::Result<()> {
     let now = tremor_common::time::nanotime();
+    let token_file = gouth_token().await?;
+
     let config: Config = structurize(literal!({
-        "token": {"file": file!().to_string()},
+        "token": {"file": token_file.cert_file()},
         "log_name": "snot"
     }))?;
     let data = literal!({"snot": "badger"});
@@ -267,11 +275,13 @@ fn log_name_override() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn log_severity_override() -> anyhow::Result<()> {
+#[tokio::test(flavor = "multi_thread")]
+async fn log_severity_override() -> anyhow::Result<()> {
+    let token_file = gouth_token().await?;
+
     let now = tremor_common::time::nanotime();
     let config: Config = structurize(literal!({
-        "token": {"file": file!().to_string()},
+        "token": {"file": token_file.cert_file()},
     }))?;
     let data = literal!({"snot": "badger"});
     let meta = literal!({"log_name": "override", "log_severity": LogSeverity::Debug as i32});

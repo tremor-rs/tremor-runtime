@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::gouth_token;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{
@@ -32,10 +33,13 @@ use value_trait::prelude::*;
 #[serial(gpubsub)]
 async fn no_connection() -> anyhow::Result<()> {
     let _ = env_logger::try_init();
+    // note we need to keep this around until the end of the test so we can't consume it
+    let token_file = gouth_token().await?;
+
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
-            "token": {"file": "tests/gcp.json"},
+            "token": {"file": token_file.cert_file()},
             "url": "https://localhost:9090",
             "ack_deadline": 30_000_000_000u64,
             "connect_timeout": 100_000_000,
@@ -111,11 +115,14 @@ async fn simple_subscribe() -> anyhow::Result<()> {
     let endpoint = format!("http://localhost:{port}");
     let topic = "projects/test/topics/test";
     let subscription = "projects/test/subscriptions/test-subscription-a";
+    // note we need to keep this around until the end of the test so we can't consume it
+    let token_file = gouth_token().await?;
+
     let connector_yaml: Value = literal!({
         "metrics_interval_s": 1,
         "codec": "binary",
         "config":{
-            "token": {"file": "tests/gcp.json"},
+            "token": {"file": token_file.cert_file()},
             "url": endpoint.clone(),
             "ack_deadline": 30_000_000_000_u64,
             "connect_timeout": 30_000_000_000_u64,

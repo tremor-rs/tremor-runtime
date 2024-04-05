@@ -46,9 +46,12 @@ uuid = { version = "1.6", optional = true, default-features = false, features = 
 http-body = { version = "0.4", optional = true, default-features = false }
 hyper = { version = "0.14", optional = true, default-features = false, features = [
     "server",
+    "http1",
+    "http2",
+    "runtime",
 ] }
 async-stream = { version = "0.3", optional = true, default-features = false }
-async-channel = { version = "2.1", optional = true, default-features = false }
+async-channel = { version = "1.9", optional = true, default-features = false }
 
 
 # tls
@@ -338,7 +341,7 @@ integration-tests-clickhouse = ["clickhouse", "dep:chrono", "integration-utils"]
 crononome-integration = ["crononome"]
 integration-tests-elasticsearch = ["elasticsearch", "integration-utils"]
 file-integration = ["file"]
-integration-tests-gcp = ["gcp"]
+integration-tests-gcp = ["gcp", "integration-utils"]
 http-integration = ["http", "integration-utils"]
 integration-tests-aws = ["aws", "integration-utils"]
 integration-tests-kafka = ["kafka", "integration-utils"]
