@@ -1,0 +1,80 @@
+[package]
+name = "tremor-connectors-gcp"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tremor-connectors = { path = "../tremor-connectors", features = [
+    "object-storage",
+    "protobuf",
+] }
+tremor-common = { path = "../tremor-common" }
+tremor-system = { path = "../tremor-system" }
+tremor-value = { path = "../tremor-value" }
+tremor-config = { path = "../tremor-config" }
+tremor-script = { path = "../tremor-script" }
+
+anyhow = { version = "1", default-features = true }
+async-trait = { version = "0.1", default-features = true }
+futures = { version = "0.3", default-features = true }
+http = { version = "0.2", default-features = true }
+http-body = { version = "0.4", default-features = true }
+log = { version = "0.4", default-features = true }
+serde = { version = "1.0", default-features = true, features = ["derive"] }
+thiserror = { version = "1", default-features = true }
+
+bytes = { version = "0.5", default-features = true }
+
+googapis = { version = "0.6", default-features = true, features = [
+    "google-pubsub-v1",
+    "google-cloud-bigquery-storage-v1",
+    "google-logging-v2",
+    "google-storage-v2",
+] }
+gouth = { version = "0.2", default-features = true }
+prost = { version = "0.9.0", default-features = true }
+prost-types = { version = "0.9.0", default-features = true }
+tokio = { version = "1.34", default-features = true }
+tonic = { version = "0.6.1", default-features = true, features = [
+    "transport",
+    "tls",
+] }
+simd-json = { version = "0.13", default-features = true }
+hyper = { version = "0.14", default-features = true, features = [
+    "server",
+    "http1",
+    "http2",
+    "runtime",
+] }
+hyper-rustls = { version = "0.24", default-features = true, features = [
+    "rustls-native-certs",
+    "http1",
+    "http2",
+    "tokio-runtime",
+] }
+url = { version = "2.5", default-features = true }
+async-channel = { version = "1.9", default-features = true }
+async-stream = { version = "0.3", default-features = true }
+simd-json-derive = { version = "0.13", default-features = true }
+
+[dev-dependencies]
+testcontainers = { version = "0.14", default-features = true }
+hyper = { version = "0.14", default-features = true, features = [
+    "server",
+    "http1",
+    "http2",
+    "runtime",
+] }
+tokio = { version = "1.34", default-features = true }
+value-trait = { version = "0.8" }
+test-case = { version = "3", default-features = true }
+anyhow = { version = "1" }
+tremor-codec = { path = "../tremor-codec" }
+tempfile = { version = "3", default-features = true }
+env_logger = { version = "0.11", default-features = true }
+
+
+[features]
+integration-harness = ["tremor-connectors/integration-utils"]

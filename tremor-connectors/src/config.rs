@@ -97,10 +97,11 @@ pub struct Connector {
     /// Postprocessor chain configuration
     pub postprocessors: Option<Vec<postprocessor::Config>>,
 
-    pub(crate) reconnect: Reconnect,
+    /// Reconnect strategy
+    pub reconnect: Reconnect,
 
-    //pub(crate) on_pause: PauseBehaviour,
-    pub(crate) metrics_interval_s: Option<u64>,
+    /// Metrics interval in seconds
+    pub metrics_interval_s: Option<u64>,
 }
 
 impl Connector {

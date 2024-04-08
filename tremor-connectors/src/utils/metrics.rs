@@ -89,7 +89,7 @@ impl SourceReporter {
 }
 
 /// metrics reporter for connector sinks
-pub(crate) struct SinkReporter {
+pub struct SinkReporter {
     alias: alias::Connector,
     metrics_in: u64,
     tx: MetricsSender,
@@ -98,11 +98,9 @@ pub(crate) struct SinkReporter {
 }
 
 impl SinkReporter {
-    pub(crate) fn new(
-        alias: alias::Connector,
-        tx: MetricsSender,
-        flush_interval_s: Option<u64>,
-    ) -> Self {
+    /// Create a new sink reporter
+    #[must_use]
+    pub fn new(alias: alias::Connector, tx: MetricsSender, flush_interval_s: Option<u64>) -> Self {
         Self {
             alias,
             metrics_in: 0,

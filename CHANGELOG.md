@@ -2,8 +2,11 @@
 
 ## Unreleased
 
+
+
 ### New features
 * kafka schema registry codec
+* Extract connectors in their own crate and aws and gcp into another
 
 ### Breaking Changes
 * remove schema_registry preprocessor
@@ -12,7 +15,6 @@
 ## [0.13.0-rc.16]
 
 ### New features
-
 * kafka schema registry integration
 * Expand the `for` comprehension to include initial values and folding (using a limited set of possible operations for now)
 * Add `+` for `record + record`

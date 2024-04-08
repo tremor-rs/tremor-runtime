@@ -73,6 +73,12 @@ pub(crate) async fn register_builtin_connector_types(
     for builder in tremor_connectors::builtin_connector_types() {
         world.register_builtin_connector_type(builder).await?;
     }
+    for builder in tremor_connectors_gcp::builtin_connector_types() {
+        world.register_builtin_connector_type(builder).await?;
+    }
+    for builder in tremor_connectors_aws::builtin_connector_types() {
+        world.register_builtin_connector_type(builder).await?;
+    }
     if debug {
         for builder in tremor_connectors::debug_connector_types() {
             world.register_builtin_connector_type(builder).await?;

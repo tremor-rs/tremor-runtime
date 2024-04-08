@@ -17,7 +17,7 @@ use crate::prelude::*;
 /// mode of operation for object storage connectors
 #[derive(Debug, Default, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum Mode {
+pub enum Mode {
     /// automatically ack all incoming events regardless
     /// of delivery success or not
     #[default]
@@ -45,25 +45,30 @@ impl std::fmt::Display for Mode {
     }
 }
 
+/// Object id for object storage
 #[derive(Hash, PartialEq, Eq, Debug, Clone)]
-pub(crate) struct ObjectId {
+pub struct ObjectId {
     bucket: String,
     name: String,
 }
 
 impl ObjectId {
-    pub(crate) fn new(bucket: impl Into<String>, name: impl Into<String>) -> Self {
+    /// Create a new object id
+    pub fn new(bucket: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             bucket: bucket.into(),
         }
     }
-
-    pub(crate) fn bucket(&self) -> &str {
+    /// Returns the bucket name
+    #[must_use]
+    pub fn bucket(&self) -> &str {
         self.bucket.as_str()
     }
 
-    pub(crate) fn name(&self) -> &str {
+    /// Returns the object name
+    #[must_use]
+    pub fn name(&self) -> &str {
         self.name.as_str()
     }
 }
@@ -74,21 +79,30 @@ impl std::fmt::Display for ObjectId {
     }
 }
 
-pub(crate) const NAME: &str = "name";
-pub(crate) const BUCKET: &str = "bucket";
+const NAME: &str = "name";
+const BUCKET: &str = "bucket";
 
+/// Error type for object storage operations
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Error {
+pub enum Error {
+    /// Error when metadata is invalid or missing
     #[error("Metadata `${0}.{1}` is invalid or missing.")]
     MetadataError(String, &'static str),
+    /// Error when no upload is in progress
     #[error("No upload in progress")]
     NoUpload,
 }
 
-pub(crate) trait ObjectStorageCommon {
+/// Generic trait for common object storage operations
+pub trait Common {
+    /// Returns the type of the connector
     fn connector_type(&self) -> &str;
+    /// Returns the default bucket for the connector
     fn default_bucket(&self) -> Option<&String>;
 
+    /// Returns the bucket name from the metadata
+    /// # Errors
+    /// Fails if the bucket name is missing or not a string
     fn get_bucket_name(&self, meta: Option<&Value>) -> Result<String, Error> {
         let res = match (meta.get(BUCKET), self.default_bucket()) {
             (Some(meta_bucket), _) => meta_bucket
@@ -103,7 +117,9 @@ pub(crate) trait ObjectStorageCommon {
 
         res.map(ToString::to_string)
     }
-
+    /// Returns the object id from the metadata
+    /// # Errors
+    /// Fails if the object id is missing or not a string or if the bucket name is missing or not a string
     fn get_object_id(&self, meta: Option<&Value<'_>>) -> Result<ObjectId, Error> {
         let name = meta
             .get(NAME)
@@ -119,11 +135,16 @@ pub(crate) trait ObjectStorageCommon {
 /// prevents the need to move data around in memory.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct BufferPart {
-    pub(crate) data: Vec<u8>,
-    pub(crate) start: usize,
+    data: Vec<u8>,
+    start: usize,
 }
 
 impl BufferPart {
+    /// Create a new buffer part
+    #[must_use]
+    pub fn new(data: Vec<u8>, start: usize) -> Self {
+        Self { data, start }
+    }
     /// Returns the length of the buffer part
     #[must_use]
     pub fn len(&self) -> usize {
@@ -144,71 +165,122 @@ impl BufferPart {
     pub fn end(&self) -> usize {
         self.start + self.data.len()
     }
+
+    /// Returns the data of the buffer part
+    #[must_use]
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
 }
 
-pub(crate) trait ObjectStorageUpload {
+/// Trait for objects that can be uploaded to object storage
+pub trait Upload {
+    /// Returns the object id of the upload
     fn object_id(&self) -> &ObjectId;
+    /// Returns true if the upload is failed
     fn is_failed(&self) -> bool;
+    /// Marks the upload as failed
     fn mark_as_failed(&mut self);
+    /// Tracks an event for the upload
     fn track(&mut self, event: &Event);
 }
 
-pub(crate) trait ObjectStorageBuffer {
+/// Trait for objects that can be used as a buffer for object storage uploads
+pub trait Buffer {
+    /// Create a new buffer with the given size
     fn new(size: usize) -> Self;
+
+    /// Write data to the buffer
     fn write(&mut self, data: Vec<u8>);
+
+    /// Read the current block of data from the buffer
     fn read_current_block(&mut self) -> Option<BufferPart>;
+
+    /// Mark the buffer as done until the given index
+    /// # Errors
+    /// Fails if the index is out of bounds
     fn mark_done_until(&mut self, idx: usize) -> anyhow::Result<()>;
+
     /// reset the buffer and return the final part
     fn reset(&mut self) -> BufferPart;
 }
 
+/// Trait for structs that can be used as a sink for object storage
 #[async_trait::async_trait]
-pub(crate) trait ObjectStorageSinkImpl<Upload>: ObjectStorageCommon
+pub trait SinkImpl<U>: Common
 where
-    Upload: ObjectStorageUpload,
+    U: Upload,
 {
+    /// Returns the size of the buffer
     fn buffer_size(&self) -> usize;
+
+    /// Connect to the object storage
+    /// # Errors
+    /// Fails if the connection fails
     async fn connect(&mut self, ctx: &SinkContext) -> anyhow::Result<()>;
+
+    /// Check if a bucket exists
+    /// # Errors
+    /// Fails if the state of the bucket cannot be determined
     async fn bucket_exists(&mut self, bucket: &str) -> anyhow::Result<bool>;
+
+    /// Start an upload
+    /// # Errors
+    /// Fails if the upload cannot be started
     async fn start_upload(
         &mut self,
         object_id: &ObjectId,
         event: &Event,
         ctx: &SinkContext,
-    ) -> anyhow::Result<Upload>;
+    ) -> anyhow::Result<U>;
+
+    /// Upload data to a started upload
+    /// # Errors
+    /// Fails if the data cannot be uploaded
     async fn upload_data(
         &mut self,
         data: BufferPart,
-        upload: &mut Upload,
+        upload: &mut U,
         ctx: &SinkContext,
     ) -> anyhow::Result<usize>;
+
+    /// Finish a started upload
+    /// # Errors
+    /// Fails if the upload cannot be finished
     async fn finish_upload(
         &mut self,
-        upload: Upload,
+        upload: U,
         part: BufferPart,
         ctx: &SinkContext,
     ) -> anyhow::Result<()>;
-    async fn fail_upload(&mut self, upload: Upload, ctx: &SinkContext) -> anyhow::Result<()>;
+
+    /// Marsk a started upload as failed
+    /// # Errors
+    /// Fails if the upload cannot be marked as failed
+    async fn fail_upload(&mut self, upload: U, ctx: &SinkContext) -> anyhow::Result<()>;
 }
 
-pub(crate) struct ConsistentSink<Impl, Upload, Buffer>
+/// Trait for objects that can be used as a sink for object storage
+pub struct ConsistentSink<Impl, U, B>
 where
-    Buffer: ObjectStorageBuffer,
-    Upload: ObjectStorageUpload,
-    Impl: ObjectStorageSinkImpl<Upload>,
+    B: Buffer,
+    U: Upload,
+    Impl: SinkImpl<U>,
 {
-    pub(crate) sink_impl: Impl,
-    current_upload: Option<Upload>,
-    buffers: Buffer,
+    sink_impl: Impl,
+    current_upload: Option<U>,
+    buffers: B,
 }
 
-impl<Impl, Upload, Buffer> ConsistentSink<Impl, Upload, Buffer>
+impl<Impl, U, B> ConsistentSink<Impl, U, B>
 where
-    Buffer: ObjectStorageBuffer,
-    Upload: ObjectStorageUpload,
-    Impl: ObjectStorageSinkImpl<Upload>,
+    B: Buffer,
+    U: Upload,
+    Impl: SinkImpl<U>,
 {
-    pub(crate) fn new(sink_impl: Impl) -> Self {
+    /// Create a new consistent sink
+    #[must_use]
+    pub fn new(sink_impl: Impl) -> Self {
         let buffers = Buffer::new(sink_impl.buffer_size());
         Self {
             sink_impl,
@@ -216,14 +288,26 @@ where
             buffers,
         }
     }
+
+    /// Returns the current sink
+    #[must_use]
+    pub fn sink_impl(&self) -> &Impl {
+        &self.sink_impl
+    }
+
+    /// Returns a mutable reference to the current sink
+    #[must_use]
+    pub fn sink_impl_mut(&mut self) -> &mut Impl {
+        &mut self.sink_impl
+    }
 }
 
 #[async_trait::async_trait]
-impl<Impl, Upload, Buffer> Sink for ConsistentSink<Impl, Upload, Buffer>
+impl<Impl, U, B> Sink for ConsistentSink<Impl, U, B>
 where
-    Buffer: ObjectStorageBuffer + Send + Sync,
-    Upload: ObjectStorageUpload + Send + Sync,
-    Impl: ObjectStorageSinkImpl<Upload> + Send + Sync,
+    B: Buffer + Send + Sync,
+    U: Upload + Send + Sync,
+    Impl: SinkImpl<U> + Send + Sync,
 {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.buffers = Buffer::new(self.sink_impl.buffer_size());
@@ -288,11 +372,11 @@ where
     }
 }
 
-impl<Impl, Upload, Buffer> ConsistentSink<Impl, Upload, Buffer>
+impl<Impl, U, B> ConsistentSink<Impl, U, B>
 where
-    Buffer: ObjectStorageBuffer,
-    Upload: ObjectStorageUpload,
-    Impl: ObjectStorageSinkImpl<Upload>,
+    B: Buffer,
+    U: Upload,
+    Impl: SinkImpl<U>,
 {
     async fn on_event_inner(
         &mut self,
@@ -380,44 +464,59 @@ where
         Ok(())
     }
 }
-pub(crate) struct YoloSink<Impl, Upload, Buffer>
+/// A sink that acks all events immediately and does not guarantee delivery
+pub struct YoloSink<Impl, U, B>
 where
-    Impl: ObjectStorageSinkImpl<Upload>,
-    Upload: ObjectStorageUpload,
-    Buffer: ObjectStorageBuffer,
+    U: Upload,
+    B: Buffer,
+    Impl: SinkImpl<U>,
 {
     pub(crate) sink_impl: Impl,
-    current_upload: Option<Upload>,
-    buffer: Buffer,
+    current_upload: Option<U>,
+    buffer: B,
 }
 
-impl<Impl, Upload, Buffer> YoloSink<Impl, Upload, Buffer>
+impl<Impl, U, B> YoloSink<Impl, U, B>
 where
-    Impl: ObjectStorageSinkImpl<Upload> + Send,
-    Upload: ObjectStorageUpload + Send,
-    Buffer: ObjectStorageBuffer + Send,
+    U: Upload + Send,
+    B: Buffer + Send,
+    Impl: SinkImpl<U> + Send,
 {
-    pub(crate) fn new(sink_impl: Impl) -> Self {
-        let buffer = Buffer::new(sink_impl.buffer_size());
+    /// Create a new yolo sink
+    #[must_use]
+    pub fn new(sink_impl: Impl) -> Self {
+        let buffer = B::new(sink_impl.buffer_size());
         Self {
             sink_impl,
             current_upload: None,
             buffer,
         }
     }
+
+    /// Returns the current sink
+    #[must_use]
+    pub fn sink_impl(&self) -> &Impl {
+        &self.sink_impl
+    }
+
+    /// Returns a mutable reference to the current sink
+    #[must_use]
+    pub fn sink_impl_mut(&mut self) -> &mut Impl {
+        &mut self.sink_impl
+    }
 }
 
 #[async_trait::async_trait]
-impl<Impl, Upload, Buffer> Sink for YoloSink<Impl, Upload, Buffer>
+impl<Impl, U, B> Sink for YoloSink<Impl, U, B>
 where
-    Impl: ObjectStorageSinkImpl<Upload> + Send + Sync,
-    Upload: ObjectStorageUpload + Send + Sync,
-    Buffer: ObjectStorageBuffer + Send + Sync,
+    U: Upload + Send + Sync,
+    B: Buffer + Send + Sync,
+    Impl: SinkImpl<U> + Send + Sync,
 {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         // clear out the previous upload
         self.current_upload = None;
-        self.buffer = Buffer::new(self.sink_impl.buffer_size());
+        self.buffer = B::new(self.sink_impl.buffer_size());
         self.sink_impl.connect(ctx).await?;
 
         // if we have a default bucket, check that it is accessible

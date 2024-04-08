@@ -17,6 +17,9 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
+/// Impurts all souces need
+pub mod prelude;
+
 use crate::{
     channel::{unbounded, UnboundedReceiver},
     metrics::SourceReporter,

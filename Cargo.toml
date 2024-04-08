@@ -26,6 +26,8 @@ members = [
   "tremor-value",
   "tremor-connectors",
   "tremor-system",
+  "tremor-connectors-aws",
+  "tremor-connectors-gcp",
 ]
 
 default-members = ["tremor-cli"]
@@ -40,6 +42,8 @@ tremor-codec = { path = "tremor-codec" }
 tremor-common = { path = "tremor-common" }
 tremor-config = { path = "tremor-config" }
 tremor-connectors = { path = "tremor-connectors" }
+tremor-connectors-aws = { path = "tremor-connectors-aws" }
+tremor-connectors-gcp = { path = "tremor-connectors-gcp" }
 tremor-influx = { path = "tremor-influx" }
 tremor-interceptor = { path = "tremor-interceptor" }
 tremor-pipeline = { path = "tremor-pipeline" }

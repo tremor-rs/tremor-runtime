@@ -57,17 +57,24 @@ jobs:
           attempt_delay: 10000
           with: |
             files: ./lcov.txt
-            flags: unittests,$flags
+            flags: unittests,${{ env.flags }}
             fail_ci_if_error: ${{ github.event_name == 'pull_request' }}
             verbose: true
   connectors-linux:
+    strategy:
+      matrix:
+        package:
+          [
+            "tremor-connectors",
+            "tremor-connectors-aws",
+            "tremor-connectors-gcp",
+          ]
+
     runs-on: ubuntu-latest-16-cores
     steps:
       - uses: actions/checkout@v3
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
-      - name: Install Docker Image
-        run: ./.github/scripts/install-docker-images.sh
       - name: Install llvm-tools-preview
         run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
@@ -78,7 +85,14 @@ jobs:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_BACKTRACE: full
-        run: cargo llvm-cov -p tremor-connectors --lcov --output-path lcov.txt --features integration-harness
+        run: cargo llvm-cov -p ${{ matrix.package }} --lcov --output-path lcov.txt --features integration-harness
+      - name: Generate matrix name
+        run: |
+          flags="${{ matrix.package }}"
+          flags="${flags//[- ]/}"
+          echo "$flags"
+          echo "flags=$flags" >> $GITHUB_ENV
+
       - name: Upload coverage to Codecov
         uses: Wandalen/wretry.action@v1.0.42
         env:
@@ -89,6 +103,6 @@ jobs:
           attempt_delay: 10000
           with: |
             files: ./lcov.txt
-            flags: unittests,tremorconnectors
+            flags: unittests,${{ env.flags }}
             fail_ci_if_error: ${{ github.event_name == 'pull_request' }}
             verbose: true

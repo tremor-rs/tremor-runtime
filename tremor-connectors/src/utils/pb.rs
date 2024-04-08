@@ -123,7 +123,11 @@ pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value, T
     })
 }
 
-pub(crate) fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Struct, TryTypeError> {
+/// Converts a json object to a protobuf struct
+/// # Errors
+/// It errors if the value is not an object or the content of the object is not convertible to a protobuf struct
+
+pub fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Struct, TryTypeError> {
     use prost_types::value::Kind;
 
     if json.is_object() {

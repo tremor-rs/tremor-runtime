@@ -20,7 +20,7 @@ pub mod metrics;
 #[cfg(feature = "mime")]
 pub(crate) mod mime;
 /// Some common things for object storage connectors like gcs and s3
-#[cfg(any(feature = "aws", feature = "gcp"))]
+#[cfg(feature = "object-storage")]
 pub mod object_storage;
 /// Protocol Buffer utilities
 #[cfg(feature = "protobuf")]
@@ -40,9 +40,6 @@ pub mod tls;
 #[cfg(any(test, feature = "integration-utils"))]
 pub mod integration;
 
-/// google  utilities
-#[cfg(feature = "gcp")]
-pub(crate) mod google;
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ConnectionMeta {
     pub(crate) host: String,

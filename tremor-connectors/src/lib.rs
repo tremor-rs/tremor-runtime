@@ -1043,10 +1043,6 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::<impls::elastic::Builder>::default(),
         #[cfg(feature = "crononome")]
         Box::<impls::crononome::Builder>::default(),
-        #[cfg(feature = "aws")]
-        Box::<impls::s3::streamer::Builder>::default(),
-        #[cfg(feature = "aws")]
-        Box::<impls::s3::reader::Builder>::default(),
         #[cfg(feature = "kafka")]
         Box::<impls::kafka::consumer::Builder>::default(),
         #[cfg(feature = "kafka")]
@@ -1063,16 +1059,6 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::<impls::otel::client::Builder>::default(),
         #[cfg(feature = "otel")]
         Box::<impls::otel::server::Builder>::default(),
-        #[cfg(feature = "gcp")]
-        Box::<impls::gbq::writer::Builder>::default(),
-        #[cfg(feature = "gcp")]
-        Box::<impls::gpubsub::consumer::Builder>::default(),
-        #[cfg(feature = "gcp")]
-        Box::<impls::gpubsub::producer::Builder>::default(),
-        #[cfg(feature = "gcp")]
-        Box::<impls::gcl::writer::Builder>::default(),
-        #[cfg(feature = "gcp")]
-        Box::<impls::gcs::streamer::Builder>::default(),
         #[cfg(feature = "clickhouse")]
         Box::<impls::clickhouse::Builder>::default(),
         #[cfg(feature = "null")]
