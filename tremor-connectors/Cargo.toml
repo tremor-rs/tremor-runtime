@@ -32,7 +32,7 @@ bimap = { version = "0.6", default-features = false, features = [
 ] }
 hostname = { version = "0.3", default-features = false }
 thiserror = { version = "1.0", default-features = false }
-anyhow = { version = "1.0", default-features = false }
+anyhow = { version = "1.0", default-features = true }
 event-listener = { version = "5", default-features = false }
 lazy_static = { version = "1", default-features = false }
 hex = { version = "0.4", optional = true, default-features = false }

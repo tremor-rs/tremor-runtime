@@ -14,14 +14,8 @@ jobs:
       matrix:
         kind: [integration, unit, command]
         include:
-          # - os: windows-2019
-          - os: macos-10.15
-            exclude_tests: "--excludes docker"
-            # GH OS X runners only support very very very very old CPUs so we can't use anything
-            # fancy here and got to fall back to the minimal SSE4.2 requirement for simd_json
-            target_feature: "+sse4.2"
-          - os: macos-11.0
-            target_feature: "+sse4.2"
+          - os: macos-latest
+            target_feature: "+avx,+avx2,+sse4.2"
           - os: ubuntu-latest-8-cores
             exclude_tests: ""
             target_feature: "+avx,+avx2,+sse4.2"
@@ -37,12 +31,6 @@ jobs:
       - name: Install deps
         if: matrix.os == 'ubuntu-latest-8-cores'
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
-      # - name: Free Disk Space (Ubuntu)
-      #   uses: jlumbroso/free-disk-space@main
-      #   with:
-      #     # this might remove tools that are actually needed,
-      #     # if set to "true" but frees about 6 GB
-      #     tool-cache: false
       - name: Install llvm-tools-preview
         run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
@@ -71,6 +59,6 @@ jobs:
           attempt_delay: 10000
           with: |
             files: ./lcov.txt
-            flags: unittests
+            flags: e2etests
             fail_ci_if_error: ${{ github.event_name == 'pull_request' }}
             verbose: true
