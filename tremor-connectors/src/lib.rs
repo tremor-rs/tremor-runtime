@@ -1035,9 +1035,9 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::<impls::dns::client::Builder>::default(),
         #[cfg(feature = "discord")]
         Box::<impls::discord::Builder>::default(),
-        #[cfg(feature = "ws")]
+        #[cfg(feature = "websocket")]
         Box::<impls::ws::client::Builder>::default(),
-        #[cfg(feature = "ws")]
+        #[cfg(feature = "websocket")]
         Box::<impls::ws::server::Builder>::default(),
         #[cfg(feature = "elasticsearch")]
         Box::<impls::elastic::Builder>::default(),
@@ -1085,7 +1085,7 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
 #[must_use]
 pub fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
-        #[cfg(feature = "cb")]
+        #[cfg(feature = "circut-breaker")]
         Box::<impls::cb::Builder>::default(),
         #[cfg(feature = "bench")]
         Box::<impls::bench::Builder>::default(),

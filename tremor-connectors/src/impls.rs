@@ -70,7 +70,7 @@ pub mod metronome;
 pub mod null;
 
 /// `WebSockets`
-#[cfg(feature = "websockets")]
+#[cfg(feature = "websocket")]
 pub mod ws;
 
 /// `OpenTelemetry`
