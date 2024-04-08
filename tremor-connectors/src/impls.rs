@@ -1,4 +1,4 @@
-// Copyright 2021, The Tremor Team
+// Copyright 2021-2024, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,15 +41,6 @@ pub mod elastic;
 /// file connector implementation
 #[cfg(feature = "file")]
 pub mod file;
-/// Google Cloud Platform
-#[cfg(feature = "gcp")]
-pub mod gbq;
-#[cfg(feature = "gcp")]
-pub mod gcl;
-#[cfg(feature = "gcp")]
-pub mod gcs;
-#[cfg(feature = "gcp")]
-pub mod gpubsub;
 /// HTTP
 #[cfg(feature = "http")]
 pub mod http;
@@ -76,9 +67,7 @@ pub mod ws;
 /// `OpenTelemetry`
 #[cfg(feature = "otel")]
 pub mod otel;
-/// AWS S3 connectors
-#[cfg(feature = "aws")]
-pub mod s3;
+
 /// std streams connector (stdout, stderr, stdin)
 #[cfg(feature = "stdio")]
 pub mod stdio;

@@ -27,7 +27,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-
       - name: Install deps
         if: matrix.os == 'ubuntu-latest-8-cores'
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
@@ -59,6 +58,6 @@ jobs:
           attempt_delay: 10000
           with: |
             files: ./lcov.txt
-            flags: e2etests
+            flags: e2etests,e2e-${{ matrix.kind }}
             fail_ci_if_error: ${{ github.event_name == 'pull_request' }}
             verbose: true

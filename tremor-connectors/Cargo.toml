@@ -51,7 +51,7 @@ hyper = { version = "0.14", optional = true, default-features = false, features 
     "runtime",
 ] }
 async-stream = { version = "0.3", optional = true, default-features = false }
-async-channel = { version = "1.9", optional = true, default-features = false }
+gouth = { version = "0.2", optional = true, default-features = true }
 
 
 # tls
@@ -87,17 +87,6 @@ reqwest = { version = "0.11", optional = true, default-features = false, feature
 base64 = { version = "0.21", optional = true, default-features = false }
 dashmap = { version = "5.5", optional = true, default-features = false }
 
-
-# gcp
-googapis = { version = "0.6", optional = true, default-features = true, features = [
-    "google-pubsub-v1",
-    "google-cloud-bigquery-storage-v1",
-    "google-logging-v2",
-    "google-storage-v2",
-] }
-gouth = { version = "0.2", optional = true, default-features = true }
-
-
 # opentelemetry
 tonic = { version = "0.6.1", optional = true, default-features = false, features = [
     "transport",
@@ -111,16 +100,7 @@ tremor-otelapis = { version = "=0.2.4", optional = true, default-features = fals
     "otel-all",
 ] }
 rand = { version = "0.8.5", default-features = false }
-
-# aws
-aws-sdk-s3 = { version = "1", optional = true, default-features = false, features = [
-    "behavior-version-latest",
-    "sigv4a",
-    "rustls",
-    "rt-tokio",
-] }
-aws-types = { version = "1", optional = true, default-features = false }
-aws-config = { version = "1", optional = true, default-features = false }
+async-channel = { version = "1.9", optional = true, default-features = false }
 
 # kafka
 rdkafka = { version = "0.36", optional = true, features = [
@@ -133,7 +113,6 @@ rdkafka-sys = { version = "4.6", optional = true, features = [
     "libz-static",
 ], default-features = false }
 indexmap = { version = "2", optional = true, default-features = false }
-
 
 # websockets
 tokio-tungstenite = { version = "0.20", optional = true, default-features = false, features = [
@@ -212,9 +191,7 @@ default = [
     "dns",
     "elasticsearch",
     "http",
-    "gcp",
     "otel",
-    "aws",
     "kafka",
     "websocket",
     "discord",
@@ -234,6 +211,7 @@ default = [
     "integration-harness-local",
 ]
 
+object-storage = []
 128bit = ["tremor-value/128bit"]
 mime = []
 socket = ["dep:socket2"]
@@ -276,21 +254,14 @@ http = [
     "mime",
     "socket",
 ]
-gcp = [
-    "dep:async-channel",
-    "dep:async-stream",
-    "dep:googapis",
-    "dep:gouth",
-    "dep:http-body",
-    "dep:simd-json-derive",
-    "dep:http",
-    "dep:hyper",
-    "dep:hyper-rustls",
+
+otel = [
     "dep:tonic",
     "protobuf",
+    "dep:tremor-otelapis",
+    "dep:hex",
+    "dep:async-channel",
 ]
-otel = ["dep:tonic", "protobuf", "dep:tremor-otelapis", "dep:hex"]
-aws = ["dep:async-channel", "dep:aws-config", "dep:aws-sdk-s3", "dep:aws-types"]
 kafka = ["dep:rdkafka", "dep:rdkafka-sys", "dep:indexmap"]
 websocket = ["dep:tokio-tungstenite", "tls", "socket"]
 discord = ["dep:serenity"]
@@ -317,10 +288,8 @@ integration-harness = [
     "integration-harness-local",
 ]
 integration-harness-docker = [
-    "integration-tests-aws",
     "integration-tests-clickhouse",
     "integration-tests-elasticsearch",
-    "integration-tests-gcp",
     "integration-tests-kafka",
 ]
 integration-harness-local = [
@@ -341,9 +310,7 @@ integration-tests-clickhouse = ["clickhouse", "dep:chrono", "integration-utils"]
 integration-tests-crononome = ["crononome"]
 integration-tests-elasticsearch = ["elasticsearch", "integration-utils"]
 integration-tests-file = ["file"]
-integration-tests-gcp = ["gcp", "integration-utils"]
 integration-tests-http = ["http", "integration-utils"]
-integration-tests-aws = ["aws", "integration-utils"]
 integration-tests-kafka = ["kafka", "integration-utils"]
 integration-tests-metronome = ["metronome"]
 integration-tests-tcp = ["tcp", "integration-utils"]

@@ -19,6 +19,9 @@ pub mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub mod concurrency_cap;
 
+/// Imports that are required by all sinks
+pub mod prelude;
+
 use super::{metrics::SinkReporter, ConnectionLostNotifier, Msg, QuiescenceBeacon};
 use crate::{
     channel::{unbounded, UnboundedReceiver, UnboundedSender},
@@ -47,7 +50,8 @@ use tremor_interceptor::postprocessor::{
 use tremor_script::ast::DeployEndpoint;
 use tremor_system::{connector::sink, dataplane::SignalKind};
 
-pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
+/// Sender for replies from sinks
+pub type ReplySender = UnboundedSender<AsyncSinkReply>;
 
 /// Result for a sink function that may provide insights or response.
 ///
@@ -65,6 +69,17 @@ pub struct SinkReply {
 }
 
 impl SinkReply {
+    /// Returns the ack status of the reply
+    #[must_use]
+    pub fn ack(&self) -> SinkAck {
+        self.ack
+    }
+
+    /// Returns the circuit breaker action of the reply
+    #[must_use]
+    pub fn cb(&self) -> CbAction {
+        self.cb
+    }
     /// Acknowledges
     pub const ACK: SinkReply = SinkReply {
         ack: SinkAck::Ack,
@@ -105,7 +120,7 @@ impl SinkReply {
 /// stuff a sink replies back upon an event or a signal
 /// to the calling sink/connector manager
 #[derive(Clone, Debug, Copy, PartialEq)]
-pub(crate) enum SinkAck {
+pub enum SinkAck {
     /// no reply - maybe no reply yet, maybe replies come asynchronously...
     None,
     /// everything went smoothly, chill
@@ -278,7 +293,9 @@ impl SinkContext {
     pub fn notifier(&self) -> &ConnectionLostNotifier {
         &self.0.notifier
     }
-    pub(crate) fn new(
+    /// creates a new sink context
+    #[must_use]
+    pub fn new(
         uid: SinkId,
         alias: alias::Connector,
         connector_type: ConnectorType,
@@ -365,11 +382,14 @@ impl SinkManagerBuilder {
 /// create a builder for a `SinkManager`.
 /// with the generic information available in the connector
 /// the builder then in a second step takes the source specific information to assemble and spawn the actual `SinkManager`.
-pub(crate) fn builder(
+/// # Errors
+/// * if codec resolution fails
+/// * if postprocessor resolution fails
+/// * if the codec is not supported
+pub fn builder(
     config: &ConnectorConfig,
     connector_codec_requirement: CodecReq,
     alias: &alias::Connector,
-
     metrics_reporter: SinkReporter,
 ) -> anyhow::Result<SinkManagerBuilder> {
     // resolve codec and processors

@@ -14,11 +14,7 @@
 
 use crate::errors::Result;
 use crate::version::VERSION;
-use tremor_connectors::impls::gcl;
-use tremor_connectors::impls::otel;
-use tremor_script::registry::Registry;
-use tremor_script::FN_REGISTRY;
-use tremor_script::{tremor_const_fn, tremor_fn};
+use tremor_script::{registry::Registry, tremor_const_fn, tremor_fn, FN_REGISTRY};
 
 /// Loads the function library
 ///
@@ -34,8 +30,8 @@ pub fn load() -> Result<()> {
 /// # Errors
 ///  * if we can't install extensions
 pub fn install(reg: &mut Registry) -> Result<()> {
-    otel::load(reg);
-    gcl::load(reg);
+    tremor_connectors::impls::otel::load(reg);
+    tremor_connectors_gcp::gcl::load(reg);
     reg.insert(tremor_fn!(system|instance(_context) {
         Ok(Value::from(instance!()))
     }))

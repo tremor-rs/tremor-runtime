@@ -84,7 +84,7 @@ impl PartialEq for Error {
     }
 }
 
-// FIXME: This is a workaround for the fact that `error_chain` does not support send and sync
+// TODO: This is a workaround for the fact that `error_chain` does not support send and sync
 unsafe impl Send for Error {}
 unsafe impl Sync for Error {}
 

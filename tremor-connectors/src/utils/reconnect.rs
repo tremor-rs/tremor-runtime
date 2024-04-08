@@ -152,7 +152,8 @@ pub struct ConnectionLostNotifier(alias::Connector, Sender<Msg>);
 
 impl ConnectionLostNotifier {
     /// constructor
-    pub(crate) fn new(alias: &alias::Connector, tx: Sender<Msg>) -> Self {
+    #[must_use]
+    pub fn new(alias: &alias::Connector, tx: Sender<Msg>) -> Self {
         Self(alias.clone(), tx)
     }
     /// notify the runtime that this connector lost its connection

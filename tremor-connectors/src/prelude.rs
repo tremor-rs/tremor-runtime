@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// FIXME, do we want this?
-#![allow(unused_imports)]
 pub(crate) use crate::{
     channel::{bounded, Receiver, Sender},
     errors::{Error, GenericImplementationError},
@@ -37,7 +35,7 @@ pub(crate) use std::sync::atomic::Ordering;
 pub use tremor_common::alias;
 pub(crate) use tremor_common::{
     ports::{Port, ERR, IN, OUT},
-    url::{Defaults, HttpsDefaults, Url},
+    url::{Defaults, Url},
 };
 pub(crate) use tremor_config::Impl;
 pub use tremor_config::NameWithConfig;
