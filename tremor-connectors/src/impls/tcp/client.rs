@@ -51,7 +51,7 @@ pub(crate) struct Config {
     url: Url<super::TcpDefaults>,
     // IP_TTL for ipv4 and hop limit for ipv6
     //ttl: Option<u32>,
-    #[serde(default = "crate::prelude::default_buf_size")]
+    #[serde(default = "crate::utils::default_buf_size")]
     buf_size: usize,
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
     tls: Option<Either<TLSClientConfig, bool>>,

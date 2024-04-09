@@ -24,6 +24,7 @@ pub use crate::{
 pub use serde::Deserialize;
 pub use tremor_common::alias;
 pub use tremor_config::Impl;
+pub use tremor_script::EventPayload;
 pub use tremor_system::{
     connector::{sink::Addr as SinkAddr, Attempt},
     controlplane::CbAction,
@@ -32,4 +33,3 @@ pub use tremor_system::{
     pipeline::OpMeta,
 };
 pub use tremor_value::Value;
-pub use tremor_script::EventPayload;

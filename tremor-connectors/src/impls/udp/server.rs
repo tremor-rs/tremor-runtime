@@ -25,7 +25,7 @@ pub(crate) struct Config {
     /// The port to listen on.
     pub(crate) url: Url<super::UdpDefaults>,
     /// UDP: receive buffer size
-    #[serde(default = "crate::prelude::default_buf_size")]
+    #[serde(default = "crate::utils::default_buf_size")]
     buf_size: usize,
 
     /// whether to set the SO_REUSEPORT option

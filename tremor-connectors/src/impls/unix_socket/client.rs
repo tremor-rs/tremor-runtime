@@ -36,7 +36,7 @@ const URL_SCHEME: &str = "tremor-unix-socket-client";
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     path: String,
-    #[serde(default = "crate::prelude::default_buf_size")]
+    #[serde(default = "crate::utils::default_buf_size")]
     buf_size: usize,
 }
 
