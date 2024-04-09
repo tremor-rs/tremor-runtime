@@ -1,6 +1,6 @@
 BASE=$1 # src/codec
 TARGET=$2 # codecs
-for f in $(find ../${BASE}/*.rs | grep -v "/test.rs$" | sed -e "s;../${BASE}/;;g" -e 's;.rs$;;')
+for f in $(find ../${BASE}/*.rs | grep -v "/test.rs$" | grep -v "/lib.rs$" | grep -v "/utils.rs$" | sed -e "s;../${BASE}/;;g" -e 's;.rs$;;')
 do
   name=$(echo ${f} | sed -e 's/_/-/g')
   file="../${BASE}/${f}.rs"
