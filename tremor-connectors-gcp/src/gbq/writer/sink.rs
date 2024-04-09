@@ -28,7 +28,6 @@ use googapis::google::cloud::bigquery::storage::v1::{
 use log::{error, info, warn};
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
-use simd_json::prelude::{ValueAsScalar, ValueObjectAccess, ValueTryAsContainer, ValueTryAsScalar};
 use std::{
     collections::{hash_map::Entry, HashMap},
     marker::PhantomData,
@@ -40,7 +39,7 @@ use tonic::{
     transport::{Certificate, Channel, ClientTlsConfig},
 };
 use tremor_connectors::sink::prelude::*;
-use tremor_value::prelude::TryTypeError;
+use tremor_value::prelude::*;
 
 pub(crate) struct TonicChannelFactory;
 

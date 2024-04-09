@@ -149,11 +149,12 @@
 //! deploy flow main;
 //! ```
 
-use crate::prelude::*;
+use crate::{sink::prelude::*, source::prelude::*};
 use beef::Cow;
 use tokio::sync::broadcast::{error::RecvError, Receiver, Sender};
 use tremor_pipeline::{MetricsMsg, METRICS_CHANNEL};
-use tremor_script::utils::hostname;
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::prelude::*;
 
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
 const TAGS: Cow<'static, str> = Cow::const_str("tags");
@@ -249,7 +250,7 @@ impl MetricsSource {
             rx,
             origin_uri: EventOriginUri {
                 scheme: "tremor-metrics".to_string(),
-                host: hostname(),
+                host: crate::utils::hostname(),
                 port: None,
                 path: vec![],
             },

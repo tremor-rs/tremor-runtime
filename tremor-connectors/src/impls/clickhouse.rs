@@ -282,13 +282,15 @@
 
 mod conversion;
 
-use crate::prelude::*;
+use crate::sink::prelude::*;
 use clickhouse_rs::{
     errors::Error as CError,
     types::{DateTimeType, SqlType},
     Block, ClientHandle, Pool,
 };
 use std::fmt::{self, Display, Formatter};
+use tremor_common::url::{Defaults, Url};
+use tremor_value::prelude::*;
 
 /// The `clickhouse` connector builder
 #[derive(Default, Debug)]

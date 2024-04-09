@@ -23,30 +23,35 @@ pub mod prelude;
 use crate::{
     channel::{unbounded, UnboundedReceiver},
     metrics::SourceReporter,
-    prelude::*,
     utils::reconnect::ConnectionLostNotifier,
-    QuiescenceBeacon, StreamDone,
+    CodecReq, ConnectorType, Context, Error, QuiescenceBeacon, StreamDone,
 };
-pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
 use std::collections::{btree_map::Entry, BTreeMap, HashSet};
 use std::fmt::Display;
-use tokio::task;
+use tokio::{sync::mpsc::Sender, task};
 use tremor_codec::{self as codec, Codec};
 use tremor_common::{
+    alias,
     ids::{Id, SinkId, SourceId},
+    ports::{Port, ERR, OUT},
     time::nanotime,
 };
+use tremor_config::NameWithConfig;
 use tremor_interceptor::preprocessor::{
     self, finish, make_preprocessors, preprocess, Preprocessors,
 };
-use tremor_script::ast::DeployEndpoint;
-use tremor_system::{
-    connector::{self, source, Connectivity},
-    controlplane,
-    dataplane::{self, InputTarget},
-    event, pipeline,
+use tremor_script::{
+    ast::{BaseExpr, DeployEndpoint},
+    EventOriginUri, EventPayload, ValueAndMeta,
 };
-use tremor_value::literal;
+use tremor_system::{
+    connector::{self, source, Attempt, Connectivity},
+    controlplane::{self, CbAction},
+    dataplane::{self, InputTarget},
+    event::{self, Event, EventId, DEFAULT_STREAM_ID},
+    pipeline,
+};
+use tremor_value::prelude::*;
 
 /// reply from `Source::on_event`
 #[derive(Debug)]

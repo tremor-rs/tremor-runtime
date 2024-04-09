@@ -14,22 +14,37 @@
 
 use super::{WsReader, WsWriter};
 use crate::{
-    prelude::*,
+    sink::{
+        channel_sink::{ChannelSink, ChannelSinkRuntime},
+        prelude::*,
+    },
+    source::{
+        channel_source::{ChannelSource, ChannelSourceRuntime},
+        prelude::*,
+    },
+    spawn_task,
     utils::{
         socket::{tcp_server, TcpSocketOptions},
         tls::TLSServerConfig,
         ConnectionMeta,
     },
+    ConnectorType, StreamIdGen, ACCEPT_TIMEOUT,
 };
+
 use futures::StreamExt;
 use rustls::ServerConfig;
 use std::{
     net::SocketAddr,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 use tokio::{task::JoinHandle, time::timeout};
 use tokio_rustls::TlsAcceptor;
 use tokio_tungstenite::accept_async;
+use tremor_common::url::Url;
+use tremor_value::prelude::*;
 
 const URL_SCHEME: &str = "tremor-ws-server";
 
@@ -51,7 +66,7 @@ pub(crate) struct Config {
     #[serde(default)]
     socket_options: TcpSocketOptions,
     /// it is an `i32` because the underlying api also accepts an i32
-    #[serde(default = "default_backlog")]
+    #[serde(default = "crate::prelude::default_backlog")]
     backlog: i32,
     tls: Option<TLSServerConfig>,
 }

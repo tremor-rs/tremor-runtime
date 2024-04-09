@@ -17,11 +17,7 @@ use googapis::google::logging::{
     v2::{LogEntryOperation, LogEntrySourceLocation},
 };
 use prost_types::Timestamp;
-use simd_json::{
-    prelude::{ValueAsScalar, ValueObjectAccess, ValueObjectAccessAsScalar, ValueTryAsScalar},
-    TryTypeError,
-};
-use tremor_value::Value;
+use tremor_value::prelude::*;
 
 pub(crate) fn get_or_default(meta: Option<&Value>, key: &str) -> String {
     meta.get_str(key).unwrap_or_default().to_string()

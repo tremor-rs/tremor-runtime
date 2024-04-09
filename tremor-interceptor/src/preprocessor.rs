@@ -22,7 +22,6 @@ pub(crate) mod separate;
 mod textual_length_prefixed;
 pub(crate) mod prelude {
     pub use super::Preprocessor;
-    pub use tremor_common::default_true;
     pub use tremor_value::Value;
     pub use value_trait::prelude::*;
 }

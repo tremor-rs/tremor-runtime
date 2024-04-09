@@ -119,9 +119,18 @@ pub mod client;
 /// TCP server Connector
 pub mod server;
 
-use crate::{log_error, prelude::*, utils::ConnectionMeta};
+use crate::{
+    log_error,
+    sink::{channel_sink::ChannelSinkRuntime, SinkRuntime, StreamWriter},
+    source::{SourceReply, StreamReader},
+    utils::ConnectionMeta,
+    StreamDone,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
+use tremor_common::{alias, url::Defaults};
+use tremor_script::EventOriginUri;
+use tremor_value::Value;
 
 pub(crate) struct TcpDefaults;
 impl Defaults for TcpDefaults {

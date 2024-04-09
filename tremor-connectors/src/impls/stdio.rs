@@ -48,11 +48,13 @@
 //! sub command to find out more
 //! :::
 
-use crate::prelude::*;
+use crate::{sink::prelude::*, source::prelude::*};
 use tokio::{
     io::{stderr, stdin, stdout, AsyncReadExt, AsyncWriteExt, Stderr, Stdout},
     sync::broadcast::{channel as broadcast, error::RecvError, Receiver},
 };
+use tremor_common::ports::{Port, IN};
+use tremor_system::event::DEFAULT_STREAM_ID;
 const INPUT_SIZE_BYTES: usize = 8192;
 
 lazy_static::lazy_static! {
@@ -114,7 +116,7 @@ impl StdStreamSource {
             stdin: None,
             origin_uri: EventOriginUri {
                 scheme: "tremor-stdin".to_string(),
-                host: hostname(),
+                host: crate::utils::hostname(),
                 port: None,
                 path: vec![],
             },

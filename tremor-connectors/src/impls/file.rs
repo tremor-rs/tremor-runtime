@@ -134,15 +134,16 @@
 //!   end;
 //! ```
 
-use std::{ffi::OsStr, path::PathBuf};
-
-use crate::prelude::*;
+use crate::{sink::prelude::*, source::prelude::*};
 use async_compression::tokio::bufread::XzDecoder;
+use std::{ffi::OsStr, path::PathBuf};
 use tokio::{
     fs::{File as FSFile, OpenOptions},
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
 };
-use tremor_common::asy::file;
+use tremor_common::{asy::file, ports::OUT};
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::prelude::*;
 
 const URL_SCHEME: &str = "tremor-file";
 
@@ -198,7 +199,7 @@ pub(crate) struct Config {
     /// how to interface with the file
     pub(crate) mode: Mode, // whether we read or write (in various forms)
     /// chunk_size to read from the file
-    #[serde(default = "default_buf_size")]
+    #[serde(default = "crate::prelude::default_buf_size")]
     pub(crate) chunk_size: usize,
 }
 
@@ -281,7 +282,7 @@ impl FileSource {
         let buf = vec![0; config.chunk_size];
         let origin_uri = EventOriginUri {
             scheme: URL_SCHEME.to_string(),
-            host: hostname(),
+            host: crate::utils::hostname(),
             port: None,
             path: vec![config.path.display().to_string()],
         };

@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", features = [
+tremor-connectors = { path = "../tremor-connectors", default-features = false, features = [
     "object-storage",
     "protobuf",
 ] }
@@ -41,7 +41,6 @@ tonic = { version = "0.6.1", default-features = true, features = [
     "transport",
     "tls",
 ] }
-simd-json = { version = "0.13", default-features = true }
 hyper = { version = "0.14", default-features = true, features = [
     "server",
     "http1",
@@ -58,6 +57,7 @@ url = { version = "2.5", default-features = true }
 async-channel = { version = "1.9", default-features = true }
 async-stream = { version = "0.3", default-features = true }
 simd-json-derive = { version = "0.13", default-features = true }
+simd-json = { version = "0.13", default-features = true }
 
 [dev-dependencies]
 testcontainers = { version = "0.14", default-features = true }
@@ -74,6 +74,11 @@ anyhow = { version = "1" }
 tremor-codec = { path = "../tremor-codec" }
 tempfile = { version = "3", default-features = true }
 env_logger = { version = "0.11", default-features = true }
+tremor-connectors = { path = "../tremor-connectors", default-features = false, features = [
+    "object-storage",
+    "protobuf",
+    "integration-utils",
+] }
 
 
 [features]

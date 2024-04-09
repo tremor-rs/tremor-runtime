@@ -100,9 +100,11 @@
 //! * Modify the application to trigger a HTTP `GET` request and serialize the response to a log file
 //! * Replace the `metronome` with a `crononome` for periodic scheduled calendar driven events
 
-use crate::prelude::*;
+use crate::source::prelude::*;
 use std::time::Duration;
-use tremor_common::time::nanotime;
+use tremor_common::{alias, time::nanotime};
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::literal;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -133,7 +135,7 @@ impl ConnectorBuilder for Builder {
         let config = Config::new(raw)?;
         let origin_uri = EventOriginUri {
             scheme: "tremor-metronome".to_string(),
-            host: hostname(),
+            host: crate::utils::hostname(),
             port: None,
             path: vec![config.interval.to_string()],
         };
@@ -228,8 +230,9 @@ impl Source for MetronomeSource {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::{config::Reconnect, prelude::*};
+    use crate::{config::Reconnect, ConnectorBuilder};
+    use tremor_common::alias;
+    use tremor_system::killswitch::KillSwitch;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn missing_config() -> anyhow::Result<()> {

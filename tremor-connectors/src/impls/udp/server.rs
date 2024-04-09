@@ -14,8 +14,10 @@
 
 //! The UDP server will close the udp spcket on stop
 use super::{udp_socket, UdpSocketOptions};
-use crate::{prelude::*, utils::socket};
+use crate::{source::prelude::*, utils::socket, Context};
 use tokio::net::UdpSocket;
+use tremor_common::{alias, url::Url};
+use tremor_system::event::DEFAULT_STREAM_ID;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -23,7 +25,7 @@ pub(crate) struct Config {
     /// The port to listen on.
     pub(crate) url: Url<super::UdpDefaults>,
     /// UDP: receive buffer size
-    #[serde(default = "default_buf_size")]
+    #[serde(default = "crate::prelude::default_buf_size")]
     buf_size: usize,
 
     /// whether to set the SO_REUSEPORT option

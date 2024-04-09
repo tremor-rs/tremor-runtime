@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use tremor_connectors::utils::integration::free_port;
-
 use super::*;
 use hyper::{
     service::{make_service_fn, service_fn},
@@ -21,6 +19,7 @@ use hyper::{
 };
 use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
 use tokio::task::JoinHandle;
+use tremor_connectors::utils::integration::free_port;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct ServiceAccount {

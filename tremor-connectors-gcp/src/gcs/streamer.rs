@@ -141,7 +141,7 @@ impl Connector for GCSStreamerConnector {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> anyhow::Result<Option<Addr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let token = self.config.token.clone();
         let client_factory = Box::new(move |config: &Config| {
             let http_client = create_client(Duration::from_nanos(config.connect_timeout));

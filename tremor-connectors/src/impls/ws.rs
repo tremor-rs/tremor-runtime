@@ -182,13 +182,20 @@ pub mod client;
 /// WS server connector
 pub mod server;
 
-use crate::prelude::*;
-use futures::prelude::*;
-use futures::stream::{SplitSink, SplitStream};
+use crate::{
+    sink::{SinkRuntime, StreamWriter},
+    source::{SourceReply, StreamReader},
+    Context, StreamDone,
+};
+use futures::{
+    prelude::*,
+    stream::{SplitSink, SplitStream},
+};
 use tokio::net::TcpStream;
 use tokio_rustls::server::TlsStream;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::WebSocketStream;
+use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
+use tremor_script::EventOriginUri;
+use tremor_value::prelude::*;
 
 /// Default url artifacts for the ws connector
 pub struct Defaults;

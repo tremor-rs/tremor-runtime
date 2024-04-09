@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::prelude::*;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::lookup_host;
 use tokio::net::{TcpListener, TcpStream};
+use tremor_common::url::{Defaults, Url};
 
 /// Generic socket errors
 #[derive(Debug, thiserror::Error)]
@@ -40,9 +40,9 @@ pub enum Error {
 pub struct TcpSocketOptions {
     #[serde(default)]
     so_reuseport: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     so_reuseaddr: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     tcp_nodelay: bool,
     // TODO: add more options
 }

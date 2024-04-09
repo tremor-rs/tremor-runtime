@@ -29,12 +29,29 @@
 //!
 //! We try to route the event to the connection with `stream_id` `123`.
 use super::{UnixSocketReader, UnixSocketWriter};
-use crate::{prelude::*, sink::channel_sink::ChannelSinkMsg};
+use crate::{
+    sink::{
+        channel_sink::{ChannelSink, ChannelSinkMsg, ChannelSinkRuntime},
+        prelude::*,
+    },
+    source::{channel_source::ChannelSourceRuntime, prelude::*},
+    spawn_task, StreamIdGen, ACCEPT_TIMEOUT,
+};
 use std::{
     path::PathBuf,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
-use tokio::{io::split, net::UnixListener, task::JoinHandle, time::timeout};
+use tokio::{
+    io::split,
+    net::UnixListener,
+    sync::mpsc::{channel, Receiver, Sender},
+    task::JoinHandle,
+    time::timeout,
+};
+use tremor_value::prelude::*;
 
 const URL_SCHEME: &str = "tremor-unix-socket-server";
 
@@ -44,7 +61,7 @@ pub(crate) struct Config {
     pub path: String,
     pub permissions: Option<String>,
     /// receive buffer size
-    #[serde(default = "default_buf_size")]
+    #[serde(default = "crate::prelude::default_buf_size")]
     buf_size: usize,
 }
 
@@ -69,7 +86,7 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
-        let (sink_tx, sink_rx) = bounded(qsize());
+        let (sink_tx, sink_rx) = channel(qsize());
         Ok(Box::new(UnixSocketServer {
             config,
             sink_tx,
@@ -156,7 +173,7 @@ impl UnixSocketSource {
         sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
         sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
-        let (tx, rx) = bounded(qsize());
+        let (tx, rx) = channel(qsize());
         let runtime = ChannelSourceRuntime::new(tx);
         Self {
             config,
@@ -195,7 +212,7 @@ impl Source for UnixSocketSource {
             let mut stream_id_gen = StreamIdGen::default();
             let origin_uri = EventOriginUri {
                 scheme: URL_SCHEME.to_string(),
-                host: hostname(),
+                host: crate::utils::hostname(),
                 port: None,
                 path: vec![path.display().to_string()],
             };

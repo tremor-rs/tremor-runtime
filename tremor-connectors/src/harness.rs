@@ -20,13 +20,12 @@
 // some tests don't use everything and this would generate warnings for those
 // which it shouldn't
 
-use super::prelude::KillSwitch;
 use crate::{
     builtin_connector_types,
     channel::{bounded, unbounded, Receiver, UnboundedReceiver},
-    config, pipeline,
-    prelude::GenericImplementationError,
-    qsize, Connectivity,
+    config, pipeline, qsize,
+    sink::prelude::GenericImplementationError,
+    Connectivity,
 };
 use anyhow::bail;
 use log::{debug, info};
@@ -47,6 +46,7 @@ use tremor_system::{
     dataplane::{self, contraflow},
     event::{Event, EventId},
     instance::State,
+    killswitch::KillSwitch,
 };
 use tremor_value::Value;
 

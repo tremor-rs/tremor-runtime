@@ -17,7 +17,7 @@
 
 use crate::{
     impls::kafka::{is_fatal_error, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT},
-    prelude::*,
+    sink::prelude::*,
     utils::task_id,
 };
 use halfbrown::HashMap;
@@ -28,11 +28,16 @@ use rdkafka::{
 };
 use std::time::Duration;
 use tokio::{
-    sync::broadcast::{channel as broadcast, error::TryRecvError, Receiver as BroadcastReceiver},
+    sync::{
+        broadcast::{channel as broadcast, error::TryRecvError, Receiver as BroadcastReceiver},
+        mpsc::channel,
+    },
     task,
     time::timeout,
 };
 use tremor_common::time::nanotime;
+use tremor_system::qsize;
+use tremor_value::prelude::*;
 
 const KAFKA_PRODUCER_META_KEY: &str = "kafka_producer";
 
@@ -95,7 +100,7 @@ impl ConnectorBuilder for Builder {
         // - set librdkafka logger to debug in logger.yaml
         // - configure: debug: "all" for this onramp
         let tid = task_id();
-        let client_id = format!("tremor-{}-{alias}-{tid}", hostname());
+        let client_id = format!("tremor-{}-{alias}-{tid}", crate::utils::hostname());
         producer_config
             .set("client.id", &client_id)
             .set("bootstrap.servers", config.brokers.join(","));
@@ -270,7 +275,7 @@ impl Sink for KafkaProducerSink {
             drop(old_producer);
         };
 
-        let (tx, mut rx) = bounded(qsize());
+        let (tx, mut rx) = channel(qsize());
         let (metrics_tx, metrics_rx) = broadcast(1);
         self.metrics_rx = Some(metrics_rx);
         let context = TremorRDKafkaContext::producer(ctx.clone(), tx, metrics_tx);

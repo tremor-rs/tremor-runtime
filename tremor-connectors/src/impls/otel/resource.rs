@@ -16,8 +16,8 @@
 
 use super::common;
 use super::common::Error;
-use crate::prelude::*;
 use tremor_otelapis::opentelemetry::proto::resource::v1::Resource;
+use tremor_value::prelude::*;
 
 pub(crate) fn resource_to_json(pb: Resource) -> Value<'static> {
     literal!({

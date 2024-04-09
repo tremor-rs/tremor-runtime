@@ -76,7 +76,7 @@ pub struct Config {
     separator: String,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     max_length: Option<usize>,
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     buffered: bool,
 }
 

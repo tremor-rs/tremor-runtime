@@ -20,7 +20,7 @@ use aws_sdk_s3::{
 };
 use log::{debug, warn};
 use tremor_common::{
-    alias, default_true,
+    alias,
     time::nanotime,
     url::{HttpsDefaults, Url},
 };
@@ -60,7 +60,7 @@ pub(crate) struct Config {
     /// Set this to `true` for accessing s3 compatible backends
     /// that do only support path style access, like e.g. minio.
     /// Defaults to `true` for backward compatibility.
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     path_style_access: bool,
 }
 
@@ -114,7 +114,7 @@ impl Connector for S3Connector {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> anyhow::Result<Option<Addr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         match self.config.mode {
             Mode::Yolo => {
                 let sink_impl = S3ObjectStorageSinkImpl::yolo(self.config.clone());

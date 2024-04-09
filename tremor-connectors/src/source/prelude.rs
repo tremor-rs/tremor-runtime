@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 pub use crate::{
+    config::Connector as ConnectorConfig,
     source::{Source, SourceContext, SourceManagerBuilder, SourceReply},
     CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType,
 };
@@ -19,7 +20,8 @@ pub use serde::Deserialize;
 pub use tremor_config::Impl;
 pub use tremor_script::EventOriginUri;
 pub use tremor_system::{
-    connector::{source::Addr, Attempt},
+    connector::{source::Addr as SourceAddr, Attempt},
+    controlplane::CbAction,
     killswitch::KillSwitch,
     qsize,
 };

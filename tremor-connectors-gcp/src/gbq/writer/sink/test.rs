@@ -28,8 +28,6 @@ use googapis::google::{
 use http::{HeaderMap, HeaderValue};
 use hyper::body::Bytes;
 use prost::Message;
-use simd_json::prelude::MutableObject;
-use simd_json::ValueBuilder;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::sync::{Arc, RwLock};
@@ -45,7 +43,6 @@ use tremor_connectors::{
 };
 use tremor_system::controlplane::CbAction;
 use tremor_value::literal;
-use value_trait::{StaticNode, ValueType};
 
 struct HardcodedChannelFactory {
     channel: Channel,

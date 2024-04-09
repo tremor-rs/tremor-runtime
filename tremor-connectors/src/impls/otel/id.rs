@@ -15,10 +15,10 @@
 #![allow(dead_code)]
 
 use super::common::{self, Error};
-use crate::prelude::*;
 use ::rand::Rng;
 use std::fmt::Write;
 use tremor_common::rand;
+use tremor_value::prelude::*;
 
 pub(crate) fn random_span_id_bytes(ingest_ns_seed: u64) -> Vec<u8> {
     let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);

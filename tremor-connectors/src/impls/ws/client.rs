@@ -18,7 +18,11 @@
 use super::{WsReader, WsWriter};
 use crate::{
     errors::error_connector_def,
-    prelude::*,
+    sink::{channel_sink::ChannelSinkRuntime, prelude::*, StreamWriter},
+    source::{
+        channel_source::{ChannelSource, ChannelSourceRuntime},
+        prelude::*,
+    },
     utils::{
         socket::{self, tcp_client, TcpSocketOptions},
         tls::TLSClientConfig,
@@ -30,8 +34,13 @@ use futures::StreamExt;
 use rustls::ServerName;
 use std::sync::Arc;
 use std::{net::SocketAddr, sync::atomic::AtomicBool};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio_rustls::TlsConnector;
 use tokio_tungstenite::client_async;
+use tremor_common::url::Url;
+use tremor_script::EventOriginUri;
+use tremor_system::{event::DEFAULT_STREAM_ID, qsize};
+use tremor_value::literal;
 
 const URL_SCHEME: &str = "tremor-ws-client";
 
@@ -90,7 +99,7 @@ impl ConnectorBuilder for Builder {
             ),
             Some(Either::Right(false)) | None => (None, host),
         };
-        let (source_tx, source_rx) = bounded(qsize());
+        let (source_tx, source_rx) = channel(qsize());
 
         Ok(Box::new(WsClient {
             config,

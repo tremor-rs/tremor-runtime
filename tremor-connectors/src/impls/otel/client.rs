@@ -13,14 +13,16 @@
 // limitations under the License.
 
 use super::{common::OtelDefaults, logs, metrics, trace};
-use crate::prelude::*;
-use tonic::transport::Channel as TonicChannel;
-use tonic::transport::Endpoint as TonicEndpoint;
+use crate::sink::prelude::*;
+use tonic::transport::{Channel as TonicChannel, Endpoint as TonicEndpoint};
+use tremor_common::url::Url;
 use tremor_otelapis::opentelemetry::proto::collector::{
     logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
     metrics::v1::{metrics_service_client::MetricsServiceClient, ExportMetricsServiceRequest},
     trace::v1::{trace_service_client::TraceServiceClient, ExportTraceServiceRequest},
 };
+use tremor_script::EventOriginUri;
+use tremor_value::prelude::*;
 
 const CONNECTOR_TYPE: &str = "otel_client";
 
@@ -32,13 +34,13 @@ pub(crate) struct Config {
     /// The hostname or IP address for the remote OpenTelemetry collector endpoint
     #[serde(default = "Default::default")]
     pub(crate) url: Url<OtelDefaults>,
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     pub(crate) logs: bool,
     /// Enables the trace service
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     pub(crate) trace: bool,
     /// Enables the metrics service
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     pub(crate) metrics: bool,
 }
 
@@ -205,6 +207,9 @@ impl Sink for OtelSink {
 
 #[cfg(test)]
 mod tests {
+    use tremor_common::alias;
+    use tremor_value::literal;
+
     use super::*;
 
     #[tokio::test(flavor = "multi_thread")]

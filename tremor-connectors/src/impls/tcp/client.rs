@@ -21,7 +21,11 @@
 use super::TcpReader;
 use crate::{
     errors::error_connector_def,
-    prelude::*,
+    sink::prelude::*,
+    source::{
+        channel_source::{ChannelSource, ChannelSourceRuntime},
+        prelude::*,
+    },
     utils::{
         socket::{self, tcp_client, TcpSocketOptions},
         tls::TLSClientConfig,
@@ -29,8 +33,15 @@ use crate::{
 };
 use either::Either;
 use std::sync::{atomic::AtomicBool, Arc};
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use tokio::{
+    io::AsyncWriteExt,
+    net::TcpStream,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 use tokio_rustls::TlsConnector;
+use tremor_common::url::Url;
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::literal;
 
 const URL_SCHEME: &str = "tremor-tcp-client";
 
@@ -40,7 +51,7 @@ pub(crate) struct Config {
     url: Url<super::TcpDefaults>,
     // IP_TTL for ipv4 and hop limit for ipv6
     //ttl: Option<u32>,
-    #[serde(default = "default_buf_size")]
+    #[serde(default = "crate::prelude::default_buf_size")]
     buf_size: usize,
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
     tls: Option<Either<TLSClientConfig, bool>>,
@@ -100,7 +111,7 @@ impl ConnectorBuilder for Builder {
             ),
             Some(Either::Right(false)) | None => (None, None),
         };
-        let (source_tx, source_rx) = bounded(qsize());
+        let (source_tx, source_rx) = channel(qsize());
         Ok(Box::new(TcpClient {
             config,
             tls_connector,

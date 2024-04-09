@@ -21,7 +21,6 @@ use googapis::google::logging::v2::{
     WriteLogEntriesRequest,
 };
 use log::{error, info};
-use simd_json::{prelude::ValueObjectAccess, TryTypeError};
 use std::time::Duration;
 use tokio::time::timeout;
 use tonic::{
@@ -35,6 +34,7 @@ use tremor_connectors::{
     spawn_task,
     utils::pb,
 };
+use tremor_value::prelude::*;
 
 pub(crate) struct TonicChannelFactory;
 

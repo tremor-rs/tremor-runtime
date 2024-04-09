@@ -14,7 +14,7 @@
 
 use crate::{
     impls::http::{client, utils::RequestId},
-    prelude::*,
+    sink::EventSerializer,
     utils::mime::MimeCodecMap,
 };
 use either::Either;
@@ -24,9 +24,12 @@ use http::{
 };
 use hyper::{header::HeaderValue, Body, Method, Request, Response};
 use mime::Mime;
+use tokio::sync::mpsc::{channel, Sender};
+use tremor_config::NameWithConfig;
+use tremor_system::qsize;
+use tremor_value::prelude::*;
 
 /// HTTP Connector Errors
-
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Invalid HTTP Method
@@ -162,7 +165,7 @@ impl HttpRequestBuilder {
             request = request.header(hyper::header::AUTHORIZATION, auth_header);
         }
 
-        let (chunk_tx, mut chunk_rx) = bounded(qsize());
+        let (chunk_tx, mut chunk_rx) = channel(qsize());
         let body = Body::wrap_stream(async_stream::stream! {
             while let Some(item) = chunk_rx.recv().await {
                 yield Ok::<_, std::convert::Infallible>(item);
@@ -319,6 +322,11 @@ pub(super) fn extract_response_meta<B>(
 
 #[cfg(test)]
 mod test {
+    use crate::CodecReq;
+    use crate::ConnectorType;
+    use tremor_common::alias;
+    use tremor_config::Impl;
+
     use super::*;
     #[tokio::test(flavor = "multi_thread")]
     async fn builder() -> anyhow::Result<()> {

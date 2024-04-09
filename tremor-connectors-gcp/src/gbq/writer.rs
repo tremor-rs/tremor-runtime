@@ -50,7 +50,7 @@ impl Connector for Gbq {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> anyhow::Result<Option<Addr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = GbqSink::<_, _>::new(self.config.clone(), Box::new(TonicChannelFactory));
 
         Ok(Some(builder.spawn(sink, ctx)))

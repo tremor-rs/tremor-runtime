@@ -290,20 +290,23 @@ pub mod consumer;
 /// Kafka producer connector
 pub mod producer;
 
-use crate::{errors::error_connector_def, prelude::*};
+use crate::{errors::error_connector_def, metrics::make_metrics_payload, Context};
 use beef::Cow;
 use rdkafka::{error::KafkaError, ClientContext, Statistics};
 use rdkafka_sys::RDKafkaErrorCode;
 use simd_json::ObjectHasher;
 use std::{
     sync::{
-        atomic::{AtomicBool, AtomicU64},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     time::Duration,
 };
-use tokio::sync::broadcast::Sender as BroadcastSender;
+use tokio::sync::{broadcast::Sender as BroadcastSender, mpsc::Sender};
 use tokio::task::JoinHandle;
+use tremor_common::alias;
+use tremor_script::EventPayload;
+use tremor_value::{Object, Value};
 
 const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 

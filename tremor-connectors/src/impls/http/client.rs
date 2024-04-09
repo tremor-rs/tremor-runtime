@@ -19,8 +19,8 @@ use crate::{
         meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder},
         utils::{Header, RequestId},
     },
-    prelude::*,
-    sink::concurrency_cap::ConcurrencyCap,
+    sink::{concurrency_cap::ConcurrencyCap, prelude::*},
+    source::prelude::*,
     utils::{mime::MimeCodecMap, tls::TLSClientConfig},
 };
 use either::Either;
@@ -32,10 +32,20 @@ use hyper::{
 };
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use serde::{Deserialize, Deserializer};
-use std::sync::Arc;
-use std::{sync::atomic::AtomicBool, time::Duration};
-use tokio::time::timeout;
-use tremor_common::time::nanotime;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+use tokio::{
+    sync::mpsc::{channel, Receiver, Sender},
+    time::timeout,
+};
+use tremor_common::{time::nanotime, url::Url};
+use tremor_system::qsize;
+use tremor_value::prelude::*;
 
 //  pipeline -> Sink -> http client
 //                          |
@@ -68,7 +78,7 @@ pub(crate) struct Config {
     /// custom codecs mapping from mime_type to custom codec name
     /// e.g. for handling `application/json` with the `binary` codec, if desired
     /// the mime type of `*/*` serves as a default / fallback
-    mime_mapping: Option<HashMap<String, NameWithConfig>>,
+    mime_mapping: Option<HashMap<String, tremor_config::NameWithConfig>>,
 }
 
 /// Just a wrapper
@@ -132,7 +142,7 @@ impl ConnectorBuilder for Builder {
                     "missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config.",
                 ).into());
         }
-        let (response_tx, response_rx) = bounded(qsize());
+        let (response_tx, response_rx) = channel(qsize());
         let mime_codec_map = Arc::new(if let Some(codec_map) = config.mime_mapping.clone() {
             MimeCodecMap::from_custom(codec_map)
         } else {

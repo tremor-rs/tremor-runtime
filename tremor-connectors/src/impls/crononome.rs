@@ -115,10 +115,12 @@
 
 mod handler;
 
-use crate::{errors::error_connector_def, prelude::*};
+use crate::{errors::error_connector_def, source::prelude::*, Context};
 use handler::{ChronomicQueue, CronEntryInt};
 use serde_yaml::Value as YamlValue;
-use tremor_common::time::nanotime;
+use tremor_common::{alias, time::nanotime};
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::prelude::*;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -202,7 +204,7 @@ impl CrononomeSource {
             cq: ChronomicQueue::default(),
             origin_uri: EventOriginUri {
                 scheme: "tremor-crononome".to_string(),
-                host: hostname(),
+                host: crate::utils::hostname(),
                 port: None,
                 path: vec![],
             },

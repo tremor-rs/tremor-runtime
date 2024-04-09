@@ -14,13 +14,16 @@
 
 use gouth::Token;
 use log::error;
-use simd_json::OwnedValue;
 use simd_json_derive::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::{Request, Status};
+use tremor_value::value::StaticValue;
+
+#[cfg(test)]
+pub(crate) mod tests;
 
 #[async_trait::async_trait]
 pub(crate) trait ChannelFactory<
@@ -38,7 +41,7 @@ pub(crate) trait ChannelFactory<
 #[serde(rename_all = "lowercase")]
 pub enum TokenSrc {
     /// Enmbedded JSON
-    Json(OwnedValue),
+    Json(StaticValue),
     /// File for json
     File(String),
     /// Environment variable driven`t`
@@ -132,6 +135,3 @@ impl Interceptor for AuthInterceptor {
         Ok(request)
     }
 }
-
-#[cfg(test)]
-pub(crate) mod tests;
