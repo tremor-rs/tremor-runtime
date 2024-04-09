@@ -54,7 +54,7 @@ async fn wal() -> anyhow::Result<()> {
         transactional: false,
         ..Event::default()
     };
-    harness.send_to_sink(event, IN).await?;
+    harness.send_to_sink(event).await?;
     let event = harness.out()?.get_event().await?;
     // event is now transactional
     let ack_id = event.id.clone();
@@ -69,7 +69,7 @@ async fn wal() -> anyhow::Result<()> {
         transactional: true,
         ..Event::default()
     };
-    harness.send_to_sink(event, IN).await?;
+    harness.send_to_sink(event).await?;
 
     // check that we got an ack for the event
     let cf = harness.get_pipe(IN)?.get_contraflow().await?;

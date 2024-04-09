@@ -28,7 +28,7 @@ use crate::{
         tls::TLSServerConfig,
         ConnectionMeta,
     },
-    ConnectorType, StreamIdGen, ACCEPT_TIMEOUT,
+    StreamIdGen, ACCEPT_TIMEOUT,
 };
 
 use futures::StreamExt;

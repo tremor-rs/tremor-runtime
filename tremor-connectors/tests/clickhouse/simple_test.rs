@@ -112,7 +112,7 @@ async fn simple_insertion() -> anyhow::Result<()> {
         ..Event::default()
     };
 
-    harness.send_to_sink(event, IN).await?;
+    harness.send_to_sink(event).await?;
 
     // Once the data has been inserted, we wait for the "I handled everything"
     // signal and check its properties.

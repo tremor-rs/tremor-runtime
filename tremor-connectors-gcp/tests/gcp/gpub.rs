@@ -150,7 +150,7 @@ async fn simple_publish() -> anyhow::Result<()> {
             data: (Value::String(format!("Event {i}").into()), literal!({})).into(),
             ..Event::default()
         };
-        harness.send_to_sink(event, IN).await?;
+        harness.send_to_sink(event).await?;
     }
 
     let mut received_messages = HashSet::new();
@@ -257,7 +257,7 @@ async fn simple_publish_with_timeout() -> anyhow::Result<()> {
         data: (Value::from("Event X"), literal!({})).into(),
         ..Event::default()
     };
-    harness.send_to_sink(event, IN).await?;
+    harness.send_to_sink(event).await?;
     timeout(
         Duration::from_secs(10),
         harness.wait_for_state(State::Failed),

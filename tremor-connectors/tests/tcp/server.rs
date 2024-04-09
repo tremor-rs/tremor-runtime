@@ -20,7 +20,6 @@ use tokio::{
     net::TcpStream,
     time::timeout,
 };
-use tremor_common::ports::IN;
 use tremor_connectors::{harness::Harness, impls::tcp, utils::integration::free_port};
 use tremor_system::event::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
@@ -69,7 +68,7 @@ async fn server_event_routing() -> anyhow::Result<()> {
         data: (Value::String("badger".into()), meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(event1, IN).await?;
+    harness.send_to_sink(event1).await?;
     let mut buf = vec![0_u8; 8192];
     let bytes_read = timeout(Duration::from_secs(2), socket1.read(&mut buf)).await??;
     let data = &buf[0..bytes_read];
@@ -89,7 +88,7 @@ async fn server_event_routing() -> anyhow::Result<()> {
         ..Event::default()
     };
 
-    harness.send_to_sink(event2, IN).await?;
+    harness.send_to_sink(event2).await?;
     let bytes_read = timeout(Duration::from_secs(5), socket2.read(&mut buf)).await??;
     let data = &buf[0..bytes_read];
     assert_eq!("fleek", &String::from_utf8_lossy(data));

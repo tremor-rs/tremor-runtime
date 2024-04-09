@@ -314,13 +314,26 @@ impl Harness {
         self.get_pipe(ERR)
     }
 
-    /// Send an event to the connector
+    /// Send an event to the connector to a specific port
     /// # Errors
     /// If the event could not be sent
-    pub async fn send_to_sink(&self, event: Event, port: Port<'static>) -> anyhow::Result<()> {
+    pub async fn send_to_sink_port(&self, event: Event, port: Port<'static>) -> anyhow::Result<()> {
         Ok(self
             .addr
             .send_sink(sink::Msg::Event { event, port })
+            .await?)
+    }
+
+    /// Send an event to the connector to the `IN` port
+    /// # Errors
+    /// If the event could not be sent
+    pub async fn send_to_sink(&self, event: Event) -> anyhow::Result<()> {
+        Ok(self
+            .addr
+            .send_sink(sink::Msg::Event {
+                event,
+                port: Port::In,
+            })
             .await?)
     }
 

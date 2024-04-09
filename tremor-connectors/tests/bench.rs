@@ -16,7 +16,6 @@ use log::{error, info};
 use std::{io::Write, time::Duration};
 use tempfile::NamedTempFile;
 use tokio::{sync::mpsc::channel, time::timeout};
-use tremor_common::ports::IN;
 use tremor_connectors::{harness::Harness, impls::bench};
 use tremor_system::killswitch::KillSwitch;
 use tremor_value::prelude::*;
@@ -51,7 +50,7 @@ async fn stop_after_events() -> anyhow::Result<()> {
         // echo pipeline
         for _ in 0..6 {
             let event = harness.out()?.get_event().await?;
-            harness.send_to_sink(event, IN).await?;
+            harness.send_to_sink(event).await?;
         }
         anyhow::Ok(())
     });
@@ -95,7 +94,7 @@ async fn stop_after_secs() -> anyhow::Result<()> {
                 Ok(r) => r,
                 Err(e) => return anyhow::Result::<()>::Err(e),
             };
-            if let Err(e) = harness.send_to_sink(event, IN).await {
+            if let Err(e) = harness.send_to_sink(event).await {
                 error!("Error sending event to sink: {e}");
             }
         }

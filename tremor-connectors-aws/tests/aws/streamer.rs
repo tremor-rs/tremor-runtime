@@ -255,7 +255,7 @@ async fn connector_s3_consistent() -> anyhow::Result<()> {
 }
 
 async fn send_to_sink(harness: &Harness, event: &Event) -> anyhow::Result<()> {
-    harness.send_to_sink(event.clone(), IN).await?;
+    harness.send_to_sink(event.clone()).await?;
     Ok(())
 }
 

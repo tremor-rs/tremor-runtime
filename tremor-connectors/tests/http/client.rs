@@ -26,7 +26,7 @@ use std::{
 };
 use tokio::task::{spawn, JoinHandle};
 use tremor_common::url::HttpDefaults;
-use tremor_common::{ports::IN, url::Url};
+use tremor_common::url::Url;
 use tremor_connectors::{
     harness::Harness,
     impls::http::{self as http_impl, meta::content_type},
@@ -158,7 +158,7 @@ async fn rtt(
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
-    harness.send_to_sink(event, IN).await?;
+    harness.send_to_sink(event).await?;
     let event = harness.out()?.get_event().await;
     let event = match event {
         Ok(event) => event,

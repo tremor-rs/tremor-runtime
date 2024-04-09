@@ -123,7 +123,7 @@ async fn connector_elastic() -> anyhow::Result<()> {
         transactional: false,
         ..Event::default()
     };
-    harness.send_to_sink(event_not_batched, IN).await?;
+    harness.send_to_sink(event_not_batched).await?;
     let err_events = harness.err()?.get_events();
     assert!(err_events.is_empty(), "Received err msgs: {err_events:?}");
     let event = harness.out()?.get_event().await?;
@@ -189,7 +189,7 @@ async fn connector_elastic() -> anyhow::Result<()> {
         transactional: false,
         ..Event::default()
     };
-    harness.send_to_sink(event_not_batched, IN).await?;
+    harness.send_to_sink(event_not_batched).await?;
     let err_events = harness.err()?.get_events();
     assert!(err_events.is_empty(), "Received err msgs: {err_events:?}");
     let event = harness.out()?.get_event().await?;
@@ -280,7 +280,7 @@ async fn connector_elastic() -> anyhow::Result<()> {
         data: (batched_data, batched_meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(event_batched, IN).await?;
+    harness.send_to_sink(event_batched).await?;
     let out_event1 = harness.out()?.get_event().await?;
     let meta = out_event1.data.suffix().meta().clone_static();
 
@@ -387,7 +387,7 @@ async fn connector_elastic() -> anyhow::Result<()> {
         data: (update_data, update_meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(update_event, IN).await?;
+    harness.send_to_sink(update_event).await?;
     let out_event = harness.out()?.get_event().await?;
     let meta = out_event.data.suffix().meta();
     assert_eq!(
@@ -442,7 +442,7 @@ async fn connector_elastic() -> anyhow::Result<()> {
             .into(),
         ..Event::default()
     };
-    harness.send_to_sink(event.clone(), IN).await?;
+    harness.send_to_sink(event.clone()).await?;
     let cf = harness.get_pipe(IN)?.get_contraflow().await?;
     assert_eq!(CbAction::Fail, cf.cb);
     let err_event = harness.err()?.get_event().await?;
@@ -587,7 +587,7 @@ async fn elastic_routing() -> anyhow::Result<()> {
         data: (batched_data, batched_meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(event_batched, IN).await?;
+    harness.send_to_sink(event_batched).await?;
     let out_event1 = harness.out()?.get_event().await?;
     let meta = out_event1.data.suffix().meta();
     assert_eq!(
@@ -1223,7 +1223,7 @@ async fn send_one_event(harness: &mut Harness) -> anyhow::Result<()> {
         data: (data, meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(event, IN).await?;
+    harness.send_to_sink(event).await?;
     let success_event = harness
         .out()
         .expect("NO pipeline connected to port OUT")
