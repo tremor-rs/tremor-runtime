@@ -11,25 +11,3 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-/// default buf size used for reading from files and streams (sockets etc)
-///
-/// equals default chunk size for `BufReader`
-pub(crate) const DEFAULT_BUF_SIZE: usize = 8 * 1024;
-
-/// default buf size used for reading from files and streams (sockets etc)
-#[must_use]
-pub fn default_buf_size() -> usize {
-    DEFAULT_BUF_SIZE
-}
-
-/// Default TCP backlog size
-///
-/// Value taken from the Rust std library
-const DEFAULT_BACKLOG: i32 = 128;
-
-/// Default TCP backlog size
-#[must_use]
-pub fn default_backlog() -> i32 {
-    DEFAULT_BACKLOG
-}

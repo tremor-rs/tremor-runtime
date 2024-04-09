@@ -61,7 +61,7 @@ pub(crate) struct Config {
     pub path: String,
     pub permissions: Option<String>,
     /// receive buffer size
-    #[serde(default = "crate::prelude::default_buf_size")]
+    #[serde(default = "crate::utils::default_buf_size")]
     buf_size: usize,
 }
 

@@ -49,11 +49,11 @@ pub(crate) struct Config {
     url: Url<TcpDefaults>,
     tls: Option<TLSServerConfig>,
     // TCP: receive buffer size
-    #[serde(default = "crate::prelude::default_buf_size")]
+    #[serde(default = "crate::utils::default_buf_size")]
     buf_size: usize,
 
     /// it is an `i32` because the underlying api also accepts an i32
-    #[serde(default = "crate::prelude::default_backlog")]
+    #[serde(default = "crate::utils::default_backlog")]
     backlog: i32,
 
     #[serde(default)]

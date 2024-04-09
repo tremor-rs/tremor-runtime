@@ -25,8 +25,6 @@
 )]
 /// connectors
 pub mod impls;
-/// prelude with commonly needed stuff imported
-pub mod prelude;
 
 /// sink parts
 pub mod sink;

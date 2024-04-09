@@ -66,7 +66,7 @@ pub(crate) struct Config {
     #[serde(default)]
     socket_options: TcpSocketOptions,
     /// it is an `i32` because the underlying api also accepts an i32
-    #[serde(default = "crate::prelude::default_backlog")]
+    #[serde(default = "crate::utils::default_backlog")]
     backlog: i32,
     tls: Option<TLSServerConfig>,
 }
