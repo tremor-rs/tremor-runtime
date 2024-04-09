@@ -25,8 +25,7 @@ log = { version = "0.4", default-features = true }
 serde = { version = "1.0", default-features = true, features = ["derive"] }
 thiserror = { version = "1", default-features = true }
 
-bytes = { version = "0.5", default-features = true }
-
+bytes = { version = "1.6", default-features = true }
 googapis = { version = "0.6", default-features = true, features = [
     "google-pubsub-v1",
     "google-cloud-bigquery-storage-v1",

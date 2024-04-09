@@ -347,7 +347,7 @@ async fn ws_server_text_routing() -> Result<()> {
         data: (Value::String("badger".into()), meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(echo_back, IN).await?;
+    harness.send_to_sink(echo_back).await?;
     assert_eq!(ExpectMessage::Text("\"badger\"".into()), c1.expect()?);
 
     //cleanup
@@ -390,7 +390,7 @@ async fn ws_client_binary_routing() -> Result<()> {
         data: (Value::String("badger".into()), meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(echo_back, IN).await?;
+    harness.send_to_sink(echo_back).await?;
 
     let data: Vec<u8> = br#""badger""#.to_vec();
     assert_eq!(ExpectMessage::Binary(data), ts.expect()?);
@@ -434,7 +434,7 @@ async fn ws_client_text_routing() -> Result<()> {
         data: (Value::String("badger".into()), meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(echo_back, IN).await?;
+    harness.send_to_sink(echo_back).await?;
 
     assert_eq!(ExpectMessage::Text(r#""badger""#.to_string()), ts.expect()?);
 
@@ -516,7 +516,7 @@ async fn wss_server_text_routing() -> Result<()> {
         data: (Value::String("badger".into()), meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(echo_back, IN).await?;
+    harness.send_to_sink(echo_back).await?;
     assert_eq!(
         ExpectMessage::Text(r#""badger""#.to_string()),
         c1.expect().await?
@@ -601,7 +601,7 @@ async fn wss_server_binary_routing() -> Result<()> {
         data: (Value::String("badger".into()), meta).into(),
         ..Event::default()
     };
-    harness.send_to_sink(echo_back, IN).await?;
+    harness.send_to_sink(echo_back).await?;
     let data = br#""badger""#.to_vec();
     assert_eq!(ExpectMessage::Binary(data), c1.expect().await?);
 

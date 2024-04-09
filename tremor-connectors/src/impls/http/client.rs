@@ -44,7 +44,6 @@ use tokio::{
     time::timeout,
 };
 use tremor_common::{time::nanotime, url::Url};
-use tremor_system::qsize;
 use tremor_value::prelude::*;
 
 //  pipeline -> Sink -> http client

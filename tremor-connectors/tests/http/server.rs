@@ -21,7 +21,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
-use tremor_common::ports::IN;
 use tremor_connectors::{
     harness::Harness,
     impls::http::{meta::content_type, server},
@@ -60,7 +59,7 @@ where
                 ..Event::default()
             };
             // pass the processed event to the sink
-            connector.send_to_sink(event, IN).await?;
+            connector.send_to_sink(event).await?;
         }
         let (_out, _err) = connector.stop().await?;
 
@@ -371,7 +370,7 @@ async fn https_server_test() -> Result<()> {
                 data: (value, meta).into(),
                 ..Event::default()
             };
-            connector.send_to_sink(event, IN).await?;
+            connector.send_to_sink(event).await?;
         }
         anyhow::Ok(())
     });

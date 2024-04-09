@@ -19,11 +19,10 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::UnixStream,
 };
-use tremor_common::ports::IN;
 use tremor_connectors::harness::Harness;
 use tremor_connectors::impls::unix_socket;
 use tremor_system::event::{Event, EventId};
-use tremor_value::{literal, prelude::*, Value};
+use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn unix_socket() -> anyhow::Result<()> {
@@ -92,7 +91,7 @@ async fn unix_socket() -> anyhow::Result<()> {
         data: (Value::String("badger".into()), meta).into(),
         ..Event::default()
     };
-    server_harness.send_to_sink(event1, IN).await?;
+    server_harness.send_to_sink(event1).await?;
 
     let mut buf = vec![0_u8; 8192];
     let bytes_read = socket1.read(&mut buf).await?;
@@ -108,7 +107,7 @@ async fn unix_socket() -> anyhow::Result<()> {
         ..Event::default()
     };
 
-    client_harness.send_to_sink(event, IN).await?;
+    client_harness.send_to_sink(event).await?;
     // send something to socket 2
     let server_event = server_harness.out()?.get_event().await?;
     // send an event and route it via eventid to socket 2
@@ -119,7 +118,7 @@ async fn unix_socket() -> anyhow::Result<()> {
         data: (Value::String("fleek".into()), Value::object()).into(),
         ..Event::default()
     };
-    server_harness.send_to_sink(event2, IN).await?;
+    server_harness.send_to_sink(event2).await?;
     let client_event = client_harness.out()?.get_event().await?;
     assert_eq!("fleek", client_event.data.parts().0.to_string());
     debug!("Received event 2 via client");

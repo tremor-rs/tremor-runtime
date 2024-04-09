@@ -38,8 +38,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio_rustls::TlsConnector;
 use tokio_tungstenite::client_async;
 use tremor_common::url::Url;
-use tremor_script::EventOriginUri;
-use tremor_system::{event::DEFAULT_STREAM_ID, qsize};
+use tremor_system::event::DEFAULT_STREAM_ID;
 use tremor_value::literal;
 
 const URL_SCHEME: &str = "tremor-ws-client";

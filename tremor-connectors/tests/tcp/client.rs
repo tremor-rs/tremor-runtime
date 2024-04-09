@@ -15,7 +15,6 @@
 use crate::EchoServer;
 use std::time::Duration;
 use tokio::net::lookup_host;
-use tremor_common::ports::IN;
 use tremor_connectors::{
     harness::Harness,
     impls::tcp,
@@ -88,7 +87,7 @@ async fn tcp_client_test(use_tls: bool) -> anyhow::Result<()> {
         transactional: true,
         ..Event::default()
     };
-    connector.send_to_sink(event, IN).await?;
+    connector.send_to_sink(event).await?;
     let response = connector.out()?.get_event().await?;
     let localhost_ip = lookup_host(("localhost", 0))
         .await?
@@ -126,11 +125,11 @@ async fn tcp_client_test(use_tls: bool) -> anyhow::Result<()> {
         transactional: true,
         ..Event::default()
     };
-    connector.send_to_sink(event.clone(), IN).await?;
+    connector.send_to_sink(event.clone()).await?;
     let mut cf = connector.get_pipe("in")?.get_contraflow().await?;
     while matches!(cf.cb, CbAction::Ack) {
         tokio::time::sleep(Duration::from_millis(100)).await;
-        connector.send_to_sink(event.clone(), IN).await?;
+        connector.send_to_sink(event.clone()).await?;
         cf = connector.get_pipe("in")?.get_contraflow().await?;
     }
     assert_eq!(CbAction::Fail, cf.cb);

@@ -22,7 +22,6 @@ use std::sync::{
 };
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tremor_common::ports::{ERR, OUT};
-use tremor_script::EventPayload;
 use tremor_system::event::DEFAULT_STREAM_ID;
 use tremor_value::prelude::*;
 use trust_dns_resolver::{

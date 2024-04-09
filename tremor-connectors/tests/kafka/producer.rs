@@ -128,7 +128,7 @@ async fn connector_kafka_producer() -> anyhow::Result<()> {
         transactional: false,
         ..Event::default()
     };
-    harness.send_to_sink(e1, IN).await?;
+    harness.send_to_sink(e1).await?;
     match timeout(Duration::from_secs(30), message_stream.next()) // first message, we might need to wait a little longer for the consumer to boot up and settle things with redpanda
         .await?
     {
@@ -165,7 +165,7 @@ async fn connector_kafka_producer() -> anyhow::Result<()> {
         transactional: true,
         ..Event::default()
     };
-    harness.send_to_sink(e2, IN).await?;
+    harness.send_to_sink(e2).await?;
     match timeout(Duration::from_secs(5), message_stream.next()).await? {
         Some(Ok(msg)) => {
             assert_eq!(Some("badger".as_bytes()), msg.key());
@@ -218,7 +218,7 @@ async fn connector_kafka_producer() -> anyhow::Result<()> {
         is_batch: true,
         ..Event::default()
     };
-    harness.send_to_sink(batched_event, IN).await?;
+    harness.send_to_sink(batched_event).await?;
     let borrowed_batchman_msg = timeout(Duration::from_secs(2), message_stream.next())
         .await?
         .expect("timeout waiting for batchman message")

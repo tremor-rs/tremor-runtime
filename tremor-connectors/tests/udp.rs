@@ -13,7 +13,6 @@
 // limitations under the License.
 #![cfg(feature = "integration-tests-udp")]
 
-use tremor_common::ports::IN;
 use tremor_connectors::harness::Harness;
 use tremor_connectors::impls::udp;
 use tremor_system::event::Event;
@@ -49,7 +48,7 @@ async fn udp_no_bind() -> anyhow::Result<()> {
         data: (Value::String("badger".into()), literal!({})).into(),
         ..Event::default()
     };
-    client_harness.send_to_sink(event1, IN).await?;
+    client_harness.send_to_sink(event1).await?;
     // send something to socket 2
     let server_event = server_harness.out()?.get_event().await?;
     // send an event and route it via eventid to socket 2
@@ -95,7 +94,7 @@ async fn udp_bind() -> anyhow::Result<()> {
         data: (Value::String("badger".into()), literal!({})).into(),
         ..Event::default()
     };
-    client_harness.send_to_sink(event1, IN).await?;
+    client_harness.send_to_sink(event1).await?;
     // send something to socket 2
     let server_event = server_harness.out()?.get_event().await?;
     // send an event and route it via eventid to socket 2
