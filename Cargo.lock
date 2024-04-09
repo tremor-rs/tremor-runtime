@@ -6271,7 +6271,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-api"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "env_logger 0.10.2",
  "halfbrown",
@@ -6293,7 +6293,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-cli"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "anyhow",
  "clap",
@@ -6339,7 +6339,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-codec"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "apache-avro",
  "async-recursion",
@@ -6375,7 +6375,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-common"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "base64 0.21.7",
  "beef",
@@ -6394,7 +6394,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-config"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "serde",
  "simd-json",
@@ -6403,7 +6403,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors"
-version = "0.1.0"
+version = "0.1.1-rc.1"
 dependencies = [
  "anyhow",
  "async-channel 1.9.0",
@@ -6485,7 +6485,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-aws"
-version = "0.1.0"
+version = "0.1.1-rc.1"
 dependencies = [
  "anyhow",
  "async-channel 2.2.0",
@@ -6512,7 +6512,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-gcp"
-version = "0.1.0"
+version = "0.1.1-rc.1"
 dependencies = [
  "anyhow",
  "async-channel 1.9.0",
@@ -6552,7 +6552,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-influx"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "criterion",
  "lexical",
@@ -6564,7 +6564,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-interceptor"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -6612,7 +6612,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-pipeline"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "beef",
  "criterion",
@@ -6646,7 +6646,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6687,7 +6687,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-script"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "atty",
  "beef",
@@ -6738,7 +6738,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-system"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "anyhow",
  "either",
@@ -6755,7 +6755,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-value"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.17"
 dependencies = [
  "base64 0.21.7",
  "beef",
