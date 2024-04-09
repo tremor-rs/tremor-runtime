@@ -50,7 +50,7 @@ pub mod value;
 pub use crate::serde::structurize;
 pub use error::*;
 pub use known_key::{Error as KnownKeyError, KnownKey};
-pub use simd_json::{json, json_typed, Buffers, StaticNode};
+pub use simd_json::{json, json_typed, Buffers, StaticNode, TryTypeError, ValueType};
 pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, Value};
 
 use beef::Cow;

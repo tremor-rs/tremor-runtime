@@ -110,7 +110,7 @@
 //! | [Validate pipeline to pipeline](https://github.com/tremor-rs/tremor-runtime/tree/main/tremor-cli/tests/integration/cb-pipeline-to-pipeline)  | All required circuit breaker events are received and processed correctly |
 //! | [Validate auto-acknowledged sinks](https://github.com/tremor-rs/tremor-runtime/tree/main/tremor-cli/tests/integration/cb-with-auto-ack-sink) | All required circuit breaker events are received and processed correctly |
 
-use crate::prelude::*;
+use crate::{sink::prelude::*, source::prelude::*};
 use halfbrown::HashMap;
 use std::{path::PathBuf, time::Duration};
 use tokio::{
@@ -118,6 +118,8 @@ use tokio::{
     io::{AsyncBufReadExt, BufReader, Lines},
 };
 use tremor_common::asy::file::open;
+use tremor_system::killswitch::ShutdownMode;
+use tremor_value::prelude::*;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -129,7 +131,7 @@ pub(crate) struct Config {
     #[serde(default = "default_timeout")]
     timeout: u64,
     // only expect the latest event to be acked, the earliest to be failed
-    #[serde(default = "default_false")]
+    #[serde(default = "tremor_common::default_false")]
     expect_batched: bool,
 }
 
@@ -348,7 +350,7 @@ impl CbSource {
             config: config.clone(),
             origin_uri: EventOriginUri {
                 scheme: String::from("tremor-cb"),
-                host: hostname(),
+                host: crate::utils::hostname(),
                 ..EventOriginUri::default()
             },
             kill_switch,

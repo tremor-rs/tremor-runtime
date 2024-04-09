@@ -26,29 +26,41 @@ use super::{metrics::SinkReporter, ConnectionLostNotifier, Msg, QuiescenceBeacon
 use crate::{
     channel::{unbounded, UnboundedReceiver, UnboundedSender},
     config::Connector as ConnectorConfig,
-    pipeline,
-    prelude::*,
+    pipeline, CodecReq, ConnectorType, Context, Error, StreamDone,
 };
-use futures::StreamExt; // for .next() on PriorityMerge
+use futures::StreamExt;
 use std::{
     borrow::Borrow,
     collections::{btree_map::Entry, BTreeMap, HashSet},
     fmt::Display,
     sync::Arc,
 };
-use tokio::task;
+use tokio::{
+    sync::mpsc::{channel, Receiver, Sender},
+    task,
+};
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
 use tremor_codec::{self as codec, Codec};
 use tremor_common::{
+    alias,
     ids::{SinkId, SourceId},
     primerge::PriorityMerge,
     time::nanotime,
 };
+use tremor_config::NameWithConfig;
 use tremor_interceptor::postprocessor::{
     self, finish, make_postprocessors, postprocess, Postprocessors,
 };
-use tremor_script::ast::DeployEndpoint;
-use tremor_system::{connector::sink, dataplane::SignalKind};
+use tremor_script::{ast::DeployEndpoint, EventPayload};
+use tremor_system::{
+    connector::{sink, Attempt},
+    controlplane::CbAction,
+    dataplane::SignalKind,
+    event::{Event, EventId, DEFAULT_STREAM_ID},
+    pipeline::OpMeta,
+    qsize,
+};
+use tremor_value::Value; // for .next() on PriorityMerge
 
 /// Sender for replies from sinks
 pub type ReplySender = UnboundedSender<AsyncSinkReply>;
@@ -371,7 +383,7 @@ impl SinkManagerBuilder {
     where
         S: Sink + Send + 'static,
     {
-        let (sink_tx, sink_rx) = bounded(qsize());
+        let (sink_tx, sink_rx) = channel(qsize());
         let manager = SinkManager::new(sink, ctx, self, sink_rx);
         task::spawn(manager.run());
 
@@ -499,7 +511,6 @@ impl EventSerializer {
         &mut self,
         value: &Value<'v>,
         meta: &Value<'v>,
-
         ingest_ns: u64,
         stream_id: u64,
     ) -> anyhow::Result<Vec<Vec<u8>>> {

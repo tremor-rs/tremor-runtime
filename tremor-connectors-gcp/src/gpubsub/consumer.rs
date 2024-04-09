@@ -23,8 +23,6 @@ use googapis::google::pubsub::v1::{
 };
 use log::{debug, info};
 use serde::Deserialize;
-use simd_json::prelude::ValueAsMutContainer;
-use simd_json::ValueBuilder;
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -53,7 +51,7 @@ use tremor_connectors::{
     utils::{hostname, task_id},
 };
 use tremor_system::event::DEFAULT_STREAM_ID;
-use tremor_value::{literal, Value};
+use tremor_value::prelude::*;
 
 // controlling retries upon gpubsub returning `Unavailable` from StreamingPull
 // this in on purpose not exposed via config as this should remain an internal thing
@@ -421,7 +419,7 @@ impl Connector for GSub {
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
-    ) -> anyhow::Result<Option<Addr>> {
+    ) -> anyhow::Result<Option<SourceAddr>> {
         let source = GSubSource::new(
             self.config.clone(),
             self.url.clone(),

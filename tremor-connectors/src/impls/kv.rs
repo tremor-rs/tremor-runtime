@@ -115,17 +115,28 @@
 //! in the intervening time since we last read from the store for this key.
 //! :::
 
-use crate::{errors::error_connector_def, prelude::*};
+use crate::{
+    errors::error_connector_def,
+    sink::prelude::*,
+    source::{channel_source::ChannelSource, prelude::*},
+};
 use serde::Deserialize;
 use sled::{CompareAndSwapError, Db, IVec};
 use std::{
     path::PathBuf,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tremor_codec::{
     json::{Json, Sorted},
     Codec,
 };
+use tremor_common::ports::{ERR, OUT};
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::prelude::*;
 
 /// KV Errors
 #[derive(Debug, thiserror::Error)]
@@ -311,7 +322,7 @@ impl ConnectorBuilder for Builder {
             return Err(error_connector_def(id, Builder::INVALID_DIR).into());
         }
 
-        let (tx, rx) = bounded(qsize());
+        let (tx, rx) = channel(qsize());
         Ok(Box::new(Kv {
             config,
             rx: Some(rx),
@@ -357,7 +368,7 @@ impl Connector for Kv {
         let codec = Json::default();
         let origin_uri = EventOriginUri {
             scheme: "tremor-kv".to_string(),
-            host: hostname(),
+            host: crate::utils::hostname(),
             port: None,
             path: self
                 .config

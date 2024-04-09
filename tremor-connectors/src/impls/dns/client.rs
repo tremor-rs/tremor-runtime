@@ -12,9 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::prelude::*;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use crate::{
+    sink::prelude::*,
+    source::{channel_source::ChannelSource, prelude::*},
+};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tremor_common::ports::{ERR, OUT};
+use tremor_script::EventPayload;
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::prelude::*;
 use trust_dns_resolver::{
     lookup::Lookup,
     proto::rr::{RData, RecordType},
@@ -46,7 +56,7 @@ impl ConnectorBuilder for Builder {
         _raw_config: &ConnectorConfig,
         _kill_switch: &KillSwitch,
     ) -> anyhow::Result<Box<dyn Connector>> {
-        let (tx, rx) = bounded(128);
+        let (tx, rx) = channel(128);
         Ok(Box::new(Client {
             tx,
             rx: Some(rx),
@@ -106,7 +116,7 @@ impl DnsSink {
     fn new(tx: Sender<SourceReply>, source_is_connected: Arc<AtomicBool>) -> Self {
         let origin_uri = EventOriginUri {
             scheme: "tremor-dns".to_string(),
-            host: hostname(),
+            host: tremor_script::utils::hostname(),
             port: None,
             path: Vec::new(),
         };

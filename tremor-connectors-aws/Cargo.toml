@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", features = [
+tremor-connectors = { path = "../tremor-connectors", default-features = false, features = [
     "object-storage",
 ] }
 tremor-common = { path = "../tremor-common" }

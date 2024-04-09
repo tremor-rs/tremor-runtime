@@ -91,8 +91,10 @@
 //!
 //! :::
 
-use crate::prelude::*;
+use crate::sink::prelude::*;
 use std::time::Duration;
+use tremor_system::killswitch::ShutdownMode;
+use tremor_value::prelude::*;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -100,7 +102,7 @@ pub(crate) struct Config {
     #[serde(default)]
     delay: Option<u64>,
 
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     graceful: bool,
 }
 

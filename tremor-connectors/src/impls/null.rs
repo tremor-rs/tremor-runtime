@@ -86,7 +86,7 @@
 //! [2022-04-12T15:28:23Z ERROR tremor::server] We are SHUTTING DOWN due to errors during initialization!
 //! ```
 
-use crate::prelude::*;
+use crate::{sink::prelude::*, source::prelude::*};
 
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}

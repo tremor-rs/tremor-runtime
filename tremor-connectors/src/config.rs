@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::prelude::*;
+use crate::{ConnectorType, Error};
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
+use tremor_common::alias;
 use tremor_interceptor::{postprocessor, preprocessor};
 use tremor_script::{
     ast::deploy::ConnectorDefinition,
     ast::{self, Helper},
     FN_REGISTRY,
 };
+use tremor_value::prelude::*;
 
 /// Reconnect strategies for controlling if and how to reconnect
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -38,7 +40,7 @@ pub enum Reconnect {
         /// maximum number of retries to execute
         max_retries: Option<u64>,
         /// Randomize the growth rate
-        #[serde(default = "default_true")]
+        #[serde(default = "tremor_common::default_true")]
         randomized: bool,
     },
 }
@@ -242,6 +244,8 @@ impl Connector {
 
 #[cfg(test)]
 mod tests {
+    use tremor_value::literal;
+
     use super::*;
 
     #[test]

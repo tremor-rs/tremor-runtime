@@ -37,12 +37,11 @@
 //! end;
 //! ```
 
-use std::{sync::Arc, time::Duration};
-
-use crate::prelude::*;
-use tokio::sync::Mutex;
-
+use crate::{sink::prelude::*, source::prelude::*};
 use simd_json_derive::{Deserialize, Serialize};
+use std::{sync::Arc, time::Duration};
+use tokio::sync::Mutex;
+use tremor_system::event::DEFAULT_STREAM_ID;
 
 #[derive(serde::Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]

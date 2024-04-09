@@ -13,12 +13,22 @@
 // limitations under the License.
 
 use super::UnixSocketReader;
-use crate::{prelude::*, utils::socket};
+use crate::{
+    sink::prelude::*,
+    source::{
+        channel_source::{ChannelSource, ChannelSourceRuntime},
+        prelude::*,
+    },
+    utils::socket,
+};
 use std::{path::PathBuf, sync::Arc};
 use tokio::{
     io::{split, AsyncWriteExt, WriteHalf},
     net::UnixStream,
+    sync::mpsc::{channel, Receiver, Sender},
 };
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::literal;
 
 const URL_SCHEME: &str = "tremor-unix-socket-client";
 
@@ -26,7 +36,7 @@ const URL_SCHEME: &str = "tremor-unix-socket-client";
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     path: String,
-    #[serde(default = "default_buf_size")]
+    #[serde(default = "crate::prelude::default_buf_size")]
     buf_size: usize,
 }
 
@@ -49,7 +59,7 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> anyhow::Result<Box<dyn Connector>> {
         let config = Config::new(conf)?;
-        let (source_tx, source_rx) = bounded(qsize());
+        let (source_tx, source_rx) = channel(qsize());
         Ok(Box::new(Client {
             config,
             source_tx,
@@ -138,7 +148,7 @@ impl Sink for UnixSocketSink {
         let stream = UnixStream::connect(&path).await?;
         let origin_uri = EventOriginUri {
             scheme: URL_SCHEME.to_string(),
-            host: hostname(),
+            host: crate::utils::hostname(),
             port: None,
             path: vec![path.display().to_string()],
         };

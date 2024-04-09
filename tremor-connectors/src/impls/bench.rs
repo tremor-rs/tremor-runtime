@@ -198,7 +198,7 @@
 //!
 //! In order to run the the `tremor server run` with the bench connector, add the `--debug-connectors` flag.
 
-use crate::prelude::*;
+use crate::{sink::prelude::*, source::prelude::*};
 use hdrhistogram::Histogram;
 use serde::Deserialize;
 use std::{
@@ -212,7 +212,8 @@ use tremor_common::{
     file,
     time::nanotime,
 };
-use tremor_system::connector::source;
+use tremor_system::{connector::source, event::DEFAULT_STREAM_ID, killswitch::ShutdownMode};
+use tremor_value::prelude::*;
 use xz2::read::XzDecoder;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -229,13 +230,13 @@ pub(crate) struct Config {
     pub chunk_size: Option<usize>,
     /// Number of iterations through the whole source to stop after
     pub iters: Option<usize>,
-    #[serde(default = "default_false")]
+    #[serde(default = "tremor_common::default_false")]
     pub base64: bool,
 
-    #[serde(default = "default_false")]
+    #[serde(default = "tremor_common::default_false")]
     pub is_transactional: bool,
 
-    #[serde(default = "default_false")]
+    #[serde(default = "tremor_common::default_false")]
     pub structured: bool,
 
     /// Number of seconds to collect data before the system is stopped.
@@ -289,7 +290,7 @@ impl ConnectorBuilder for Builder {
         };
         let origin_uri = EventOriginUri {
             scheme: "tremor-blaster".to_string(),
-            host: hostname(),
+            host: crate::utils::hostname(),
             port: None,
             path: vec![config.path.clone()],
         };

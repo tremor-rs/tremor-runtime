@@ -19,10 +19,6 @@ use self::sink::{GclSink, TonicChannelFactory};
 use crate::utils::TokenSrc;
 use googapis::google::{api::MonitoredResource, logging::r#type::LogSeverity};
 use serde::Deserialize;
-use simd_json::prelude::{
-    ValueObjectAccess, ValueObjectAccessAsContainer, ValueObjectAccessAsScalar,
-    ValueObjectAccessTryAsContainer, ValueTryAsScalar,
-};
 use std::collections::HashMap;
 use tonic::transport::Channel;
 use tremor_connectors::{
@@ -30,7 +26,7 @@ use tremor_connectors::{
     sink::{prelude::*, SinkContext, SinkManagerBuilder},
     CodecReq,
 };
-use tremor_value::{prelude::TryTypeError, Value};
+use tremor_value::{prelude::*, value::StaticValue};
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -65,7 +61,7 @@ pub(crate) struct Config {
     ///   "zone": "us-central1-a", "instance_id": "00000000000000000000" }}
     /// ```    
     #[serde(default = "Default::default")]
-    pub resource: Option<simd_json::OwnedValue>,
+    pub resource: Option<StaticValue>,
 
     /// This setting sets the behaviour of the connector with respect to whether valid entries should
     /// be written even if some entries in a batch set to Google Cloud Logging are invalid. Defaults to
@@ -190,11 +186,12 @@ impl Config {
 impl tremor_config::Impl for Config {}
 
 fn value_to_monitored_resource(
-    from: Option<&simd_json::OwnedValue>,
+    from: Option<&StaticValue>,
 ) -> Result<Option<MonitoredResource>, TryTypeError> {
     match from {
         None => Ok(None),
         Some(from) => {
+            let from = from.value();
             let kind = from
                 .get_str("type")
                 .map(ToString::to_string)
@@ -232,7 +229,7 @@ impl Connector for Gcl {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> anyhow::Result<Option<Addr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink =
             GclSink::<Channel>::new(self.config.clone(), builder.reply_tx(), TonicChannelFactory);
 
@@ -266,13 +263,12 @@ impl ConnectorBuilder for Builder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simd_json::OwnedValue;
     use tremor_value::literal;
 
     #[test]
     fn value_to_monitored_resource_conversion() -> anyhow::Result<()> {
         let mut ok_count = 0;
-        let from: OwnedValue = literal!({
+        let from: StaticValue = literal!({
             "type": "gce_instance".to_string(),
             "labels": {
               "zone": "us-central1-a",
@@ -293,7 +289,7 @@ mod tests {
             anyhow::bail!("Skipped test asserts due to serialization error");
         }
 
-        let from: OwnedValue = literal!({
+        let from = literal!({
             "type": "gce_instance".to_string(),
         })
         .into();
@@ -305,7 +301,7 @@ mod tests {
             anyhow::bail!("Skipped test asserts due to serialization error");
         }
 
-        let from: OwnedValue = literal!({
+        let from = literal!({
             "type": "gce_instance".to_string(),
             "labels": [ "snot" ]
         })
@@ -313,8 +309,7 @@ mod tests {
         let bad_labels = value_to_monitored_resource(Some(&from));
         assert!(bad_labels.is_err());
 
-        let from = literal!(["snot"]);
-        let from: OwnedValue = from.into();
+        let from = literal!(["snot"]).into();
         let bad_value = value_to_monitored_resource(Some(&from));
         assert!(bad_value.is_err());
 

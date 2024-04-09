@@ -14,13 +14,12 @@
 
 #![allow(dead_code)]
 
-use super::common::Error;
 use super::{
-    common::{self, EMPTY},
+    common::{self, Error, EMPTY},
     id,
     resource::{self, resource_to_pb},
 };
-use crate::{prelude::*, utils::pb::maybe_string};
+use crate::utils::pb::maybe_string;
 use tremor_otelapis::opentelemetry::proto::{
     collector::trace::v1::ExportTraceServiceRequest,
     trace::v1::{
@@ -28,6 +27,7 @@ use tremor_otelapis::opentelemetry::proto::{
         InstrumentationLibrarySpans, ResourceSpans, Span, Status,
     },
 };
+use tremor_value::prelude::*;
 
 #[allow(deprecated)]
 pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {

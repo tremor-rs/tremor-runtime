@@ -20,7 +20,7 @@ use tokio::{
     sync::mpsc::{channel, Sender},
     task::{self, JoinHandle},
 };
-use tremor_common::{alias, default_true, url::HttpsDefaults, url::Url};
+use tremor_common::{alias, url::HttpsDefaults, url::Url};
 use tremor_connectors::{
     source::{channel_source::ChannelSource, prelude::*},
     utils::hostname,
@@ -71,7 +71,7 @@ pub(crate) struct Config {
     /// Set this to `true` for accessing s3 compatible backends
     /// that do only support path style access, like e.g. minio.
     /// Defaults to `true` for backward compatibility.
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     path_style_access: bool,
 }
 

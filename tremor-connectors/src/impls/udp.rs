@@ -92,11 +92,10 @@ pub mod client;
 /// UDP server connector
 pub mod server;
 
-use crate::prelude::{default_false, default_true, Defaults};
 use crate::utils::socket::Error;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::{lookup_host, UdpSocket};
-use tremor_common::url::Url;
+use tremor_common::url::{Defaults, Url};
 
 pub(crate) struct UdpDefaults;
 impl Defaults for UdpDefaults {
@@ -146,9 +145,9 @@ pub(crate) async fn udp_socket<D: Defaults>(
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "UPPERCASE")]
 pub(crate) struct UdpSocketOptions {
-    #[serde(default = "default_false")]
+    #[serde(default = "tremor_common::default_false")]
     so_reuseport: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     so_reuseaddr: bool,
     // TODO: add more options
 }

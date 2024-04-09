@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::prelude::*;
 use std::collections::BTreeMap;
 use tremor_common::base64::{Engine, BASE64};
+use tremor_value::prelude::*;
 
 /// converts a maybe null option to a string. if the value is none it returns an empty string
 /// # Errors

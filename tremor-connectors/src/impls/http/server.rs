@@ -18,7 +18,9 @@ use crate::{
         meta::{consolidate_mime, content_type, extract_request_meta, HeaderValueValue},
         utils::RequestId,
     },
-    prelude::*,
+    sink::prelude::*,
+    source::prelude::*,
+    spawn_task,
     utils::{
         mime::MimeCodecMap,
         socket,
@@ -36,8 +38,18 @@ use hyper::{
     Body, Request,
 };
 use std::{convert::Infallible, net::ToSocketAddrs, sync::Arc};
-use tokio::{sync::oneshot, task::JoinHandle};
-use tremor_common::ids::Id;
+use tokio::{
+    sync::{
+        mpsc::{channel, Receiver, Sender},
+        oneshot,
+    },
+    task::JoinHandle,
+};
+use tremor_common::{ids::Id, url::Url};
+use tremor_config::NameWithConfig;
+use tremor_script::ValueAndMeta;
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::prelude::*;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -134,7 +146,7 @@ impl Connector for HttpServer {
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> anyhow::Result<Option<SourceAddr>> {
-        let (request_tx, request_rx) = bounded(qsize());
+        let (request_tx, request_rx) = channel(qsize());
         let source = HttpServerSource {
             url: self.config.url.clone(),
             inflight: self.inflight.clone(),
@@ -592,7 +604,7 @@ impl SinkResponse {
                 response = response.header(header::CONTENT_TYPE, ct.to_string());
             }
         }
-        let (chunk_tx, mut chunk_rx) = bounded(qsize());
+        let (chunk_tx, mut chunk_rx) = channel(qsize());
 
         // we can already send out the response and stream the rest of the chunks upon calling `append`
         let body = Body::wrap_stream(async_stream::stream! {

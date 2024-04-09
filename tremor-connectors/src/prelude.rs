@@ -12,41 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub(crate) use crate::{
-    channel::{bounded, Receiver, Sender},
-    errors::{Error, GenericImplementationError},
-    metrics::make_metrics_payload,
-    qsize,
-    sink::{
-        channel_sink::{ChannelSink, ChannelSinkRuntime},
-        AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkAck, SinkContext,
-        SinkManagerBuilder, SinkReply, SinkRuntime, StreamWriter,
-    },
-    source::{
-        ChannelSource, ChannelSourceRuntime, Source, SourceContext, SourceManagerBuilder,
-        SourceReply, StreamReader,
-    },
-    spawn_task,
-    utils::hostname,
-    CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context, StreamDone,
-    StreamIdGen, ACCEPT_TIMEOUT,
-};
-pub(crate) use std::sync::atomic::Ordering;
-pub use tremor_common::alias;
-pub(crate) use tremor_common::{
-    ports::{Port, ERR, IN, OUT},
-    url::{Defaults, Url},
-};
-pub(crate) use tremor_config::Impl;
-pub use tremor_config::NameWithConfig;
-pub(crate) use tremor_script::prelude::*;
-pub(crate) use tremor_system::connector::sink::Addr as SinkAddr;
-pub(crate) use tremor_system::connector::source::Addr as SourceAddr;
-pub(crate) use tremor_system::connector::Attempt;
-pub(crate) use tremor_system::controlplane::CbAction;
-pub(crate) use tremor_system::event::{Event, EventId, DEFAULT_STREAM_ID};
-pub(crate) use tremor_system::killswitch::{KillSwitch, ShutdownMode};
-pub(crate) use tremor_system::pipeline::OpMeta;
 /// default buf size used for reading from files and streams (sockets etc)
 ///
 /// equals default chunk size for `BufReader`
@@ -68,8 +33,3 @@ const DEFAULT_BACKLOG: i32 = 128;
 pub fn default_backlog() -> i32 {
     DEFAULT_BACKLOG
 }
-
-/// Encapsulates connector configuration
-pub(crate) use crate::config::Connector as ConnectorConfig;
-
-pub(crate) use tremor_common::{default_false, default_true};

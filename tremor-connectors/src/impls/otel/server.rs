@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use super::{common::OtelDefaults, logs, metrics, trace};
-use crate::prelude::*;
+use crate::{sink::prelude::*, source::prelude::*, spawn_task};
 use async_channel::{bounded, Receiver, Sender};
 use tokio::task::JoinHandle;
+use tremor_common::url::Url;
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
+use tremor_system::event::DEFAULT_STREAM_ID;
 const CONNECTOR_TYPE: &str = "otel_server";
 
 // TODO Consider concurrency cap?
@@ -27,13 +29,13 @@ pub(crate) struct Config {
     /// The hostname or IP address for the remote OpenTelemetry collector endpoint
     #[serde(default = "Default::default")]
     pub(crate) url: Url<OtelDefaults>,
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     pub(crate) logs: bool,
     /// Enables the trace service
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     pub(crate) trace: bool,
     /// Enables the metrics service
-    #[serde(default = "default_true")]
+    #[serde(default = "tremor_common::default_true")]
     pub(crate) metrics: bool,
 }
 
@@ -201,6 +203,8 @@ impl Source for OtelSource {
 
 #[cfg(test)]
 mod tests {
+    use tremor_value::literal;
+
     use super::*;
     // use env_logger;
     // use http_types::Method;

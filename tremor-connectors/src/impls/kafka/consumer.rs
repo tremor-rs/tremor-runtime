@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{Error, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR};
-use crate::prelude::*;
+use crate::{sink::prelude::GenericImplementationError, source::prelude::*, Context};
 use futures::StreamExt;
 use halfbrown::HashMap;
 use indexmap::IndexMap;
@@ -26,16 +26,24 @@ use rdkafka::{
     Offset, TopicPartitionList,
 };
 use rdkafka_sys::RDKafkaErrorCode;
-use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::{
-    sync::broadcast::{channel as broadcast, error::TryRecvError, Receiver as BroadcastReceiver},
+    sync::{
+        broadcast::{channel as broadcast, error::TryRecvError, Receiver as BroadcastReceiver},
+        mpsc::{channel, Receiver, Sender},
+    },
     task::{self, JoinHandle},
     time::timeout,
 };
-use tremor_common::time::nanotime;
-use tremor_value::value::StaticValue;
+use tremor_common::{alias, ports::OUT, time::nanotime};
+use tremor_script::EventPayload;
+use tremor_value::{prelude::*, value::StaticValue};
 
 const KAFKA_CONSUMER_META_KEY: &str = "kafka_consumer";
 
@@ -73,7 +81,7 @@ enum Mode {
         ///
         /// This might lead to events being sent multiple times, if no new messages are acknowledged.
         /// DANGER: This should not be used when persistent errors are expected (e.g. if the message content is malformed and will lead to repeated errors)
-        #[serde(default = "default_false")]
+        #[serde(default = "tremor_common::default_false")]
         retry_failed_events: bool,
     },
 }
@@ -277,7 +285,7 @@ impl ConnectorBuilder for Builder {
             path: vec![],
         };
 
-        let client_id = format!("tremor-{}-{alias}", hostname());
+        let client_id = format!("tremor-{}-{alias}", crate::utils::hostname());
         let mut client_config = config.mode.to_config()?;
 
         // we do overwrite the rdkafka options to ensure a sane config
@@ -498,7 +506,7 @@ impl KafkaConsumerSource {
             .map(Duration::from_millis)
             .unwrap_or(Self::DEFAULT_SEEK_TIMEOUT);
 
-        let (source_tx, source_rx) = bounded(qsize());
+        let (source_tx, source_rx) = channel(qsize());
         let offsets = if mode.is_transactional() {
             Some(HashMap::new())
         } else {
@@ -573,7 +581,7 @@ impl Source for KafkaConsumerSource {
             "{} Connecting using rdkafka 0x{:08x}, {}",
             &ctx, version_n, version_s
         );
-        let (connect_result_tx, mut connect_result_rx) = bounded(1);
+        let (connect_result_tx, mut connect_result_rx) = channel(1);
 
         // we only ever want to report on the latest metrics and discard old ones
         // if no messages arrive, no metrics will be reported, so be it.

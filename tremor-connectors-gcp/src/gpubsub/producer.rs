@@ -21,7 +21,6 @@ use googapis::google::pubsub::v1::{
     publisher_client::PublisherClient, PublishRequest, PubsubMessage,
 };
 use serde::Deserialize;
-use simd_json::prelude::{ValueAsScalar, ValueObjectAccess};
 use std::{collections::HashMap, time::Duration};
 use tokio::time::timeout;
 use tonic::{
@@ -35,7 +34,7 @@ use tremor_common::{
 };
 use tremor_connectors::{config, sink::prelude::*, ConnectorContext};
 use tremor_system::connector::Attempt;
-use tremor_value::Value;
+use tremor_value::prelude::*;
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -85,7 +84,7 @@ impl Connector for GpubConnector {
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
-    ) -> anyhow::Result<Option<Addr>> {
+    ) -> anyhow::Result<Option<SinkAddr>> {
         let sink = GpubSink {
             config: self.config.clone(),
             hostname: self

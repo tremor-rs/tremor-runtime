@@ -231,8 +231,11 @@
 
 use super::http::auth::Auth;
 use crate::{
-    errors::error_connector_def, impls::http::utils::Header, prelude::*,
-    sink::concurrency_cap::ConcurrencyCap, utils::tls::TLSClientConfig,
+    errors::error_connector_def,
+    impls::http::utils::Header,
+    sink::{concurrency_cap::ConcurrencyCap, prelude::*},
+    source::prelude::*,
+    utils::tls::TLSClientConfig,
 };
 use either::Either;
 use elasticsearch::{
@@ -247,13 +250,25 @@ use elasticsearch::{
     Bulk, BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, BulkUpdateOperation,
     Elasticsearch,
 };
-use std::sync::Arc;
-use std::time::Duration;
-use std::{fmt::Display, sync::atomic::AtomicBool};
-use tokio::task;
-use tremor_common::time::nanotime;
-use tremor_value::utils::sorted_serialize;
-use tremor_value::value::StaticValue;
+use std::{
+    fmt::Display,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+use tokio::{
+    sync::mpsc::{channel, Receiver, Sender},
+    task,
+};
+use tremor_common::{
+    ports::{ERR, OUT},
+    time::nanotime,
+    url::Url,
+};
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::{prelude::*, utils::sorted_serialize, value::StaticValue};
 
 #[derive(Debug, thiserror::Error)]
 enum Error {
@@ -280,7 +295,7 @@ pub(crate) struct Config {
     concurrency: usize,
 
     /// if true, ES success and error responses will contain the whole event payload they are based upon
-    #[serde(default = "default_false")]
+    #[serde(default = "tremor_common::default_false")]
     include_payload_in_response: bool,
 
     #[serde(default = "Default::default")]
@@ -371,7 +386,7 @@ impl ConnectorBuilder for Builder {
                 } else {
                     CertValidation::None
                 };
-            let (response_tx, response_rx) = bounded(qsize());
+            let (response_tx, response_rx) = channel(qsize());
             let source_is_connected = Arc::new(AtomicBool::new(false));
             Ok(Box::new(Elastic {
                 config,

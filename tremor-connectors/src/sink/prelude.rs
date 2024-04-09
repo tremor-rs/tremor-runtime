@@ -13,9 +13,10 @@
 // limitations under the License.
 
 pub use crate::{
+    config::Connector as ConnectorConfig,
     errors::GenericImplementationError,
     sink::{
-        AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkContext,
+        AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkAck, SinkContext,
         SinkManagerBuilder, SinkReply,
     },
     CodecReq, Connector, ConnectorBuilder, ConnectorType, Context,
@@ -24,9 +25,11 @@ pub use serde::Deserialize;
 pub use tremor_common::alias;
 pub use tremor_config::Impl;
 pub use tremor_system::{
-    connector::{sink::Addr, Attempt},
+    connector::{sink::Addr as SinkAddr, Attempt},
+    controlplane::CbAction,
     event::{Event, EventId},
     killswitch::KillSwitch,
     pipeline::OpMeta,
 };
 pub use tremor_value::Value;
+pub use tremor_script::EventPayload;

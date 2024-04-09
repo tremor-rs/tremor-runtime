@@ -15,8 +15,9 @@
 
 //! UDP Client
 use super::{udp_socket, UdpSocketOptions};
-use crate::{prelude::*, utils::socket};
+use crate::{sink::prelude::*, utils::socket, Error};
 use tokio::net::UdpSocket;
+use tremor_common::url::Url;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]

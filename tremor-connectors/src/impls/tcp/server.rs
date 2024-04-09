@@ -14,18 +14,32 @@
 use super::{TcpDefaults, TcpReader, TcpWriter};
 use crate::{
     errors::error_connector_def,
-    prelude::*,
-    sink::channel_sink::ChannelSinkMsg,
+    sink::{
+        channel_sink::{ChannelSink, ChannelSinkMsg, ChannelSinkRuntime},
+        prelude::*,
+    },
+    source::{channel_source::ChannelSourceRuntime, prelude::*},
+    spawn_task,
     utils::{
         socket::{tcp_server, TcpSocketOptions},
         tls::TLSServerConfig,
         ConnectionMeta,
     },
+    StreamIdGen, ACCEPT_TIMEOUT,
 };
 use rustls::ServerConfig;
-use std::sync::{atomic::AtomicBool, Arc};
-use tokio::{task::JoinHandle, time::timeout};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use tokio::{
+    sync::mpsc::{channel, Receiver, Sender},
+    task::JoinHandle,
+    time::timeout,
+};
 use tokio_rustls::TlsAcceptor;
+use tremor_common::url::Url;
+use tremor_value::prelude::*;
 
 const URL_SCHEME: &str = "tremor-tcp-server";
 
@@ -35,11 +49,11 @@ pub(crate) struct Config {
     url: Url<TcpDefaults>,
     tls: Option<TLSServerConfig>,
     // TCP: receive buffer size
-    #[serde(default = "default_buf_size")]
+    #[serde(default = "crate::prelude::default_buf_size")]
     buf_size: usize,
 
     /// it is an `i32` because the underlying api also accepts an i32
-    #[serde(default = "default_backlog")]
+    #[serde(default = "crate::prelude::default_backlog")]
     backlog: i32,
 
     #[serde(default)]
@@ -82,7 +96,7 @@ impl ConnectorBuilder for Builder {
         } else {
             None
         };
-        let (sink_tx, sink_rx) = bounded(qsize());
+        let (sink_tx, sink_rx) = channel(qsize());
         Ok(Box::new(TcpServer {
             config,
             tls_server_config,
@@ -162,7 +176,7 @@ impl TcpServerSource {
         sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
         sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
-        let (tx, rx) = bounded(qsize());
+        let (tx, rx) = channel(qsize());
         let runtime = ChannelSourceRuntime::new(tx);
         Self {
             config,

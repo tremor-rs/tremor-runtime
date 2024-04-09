@@ -14,10 +14,11 @@
 
 //! Sink implementation that keeps track of multiple streams and keeps channels to send to each stream
 
-use crate::prelude::*;
+use super::{SinkRuntime, StreamWriter};
+use crate::{sink::prelude::*, StreamDone};
 use bimap::BiMap;
 use either::Either;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::atomic::Ordering};
 use std::{
     hash::Hash,
     marker::PhantomData,
@@ -25,11 +26,13 @@ use std::{
     time::Duration,
 };
 use tokio::{
+    sync::mpsc::{channel, Receiver, Sender},
     task::{self, JoinHandle},
     time::timeout,
 };
 use tremor_common::{ids::Id, time::nanotime};
-use tremor_system::dataplane::SignalKind;
+use tremor_system::{dataplane::SignalKind, qsize};
+use tremor_value::prelude::*;
 
 /// Behavioral trait for defining if a Channel Sink needs metadata or not
 pub trait SinkMetaBehaviour: Send + Sync {
@@ -129,7 +132,7 @@ where
         reply_tx: ReplySender,
         sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
-        let (tx, rx) = bounded(qsize());
+        let (tx, rx) = channel(qsize());
         ChannelSink::new(resolver, reply_tx, tx, rx, sink_is_connected)
     }
 }
@@ -280,7 +283,7 @@ where
         W: StreamWriter + 'static,
         C: Context + Send + Sync + 'static,
     {
-        let (stream_tx, mut stream_rx) = bounded::<SinkData>(qsize());
+        let (stream_tx, mut stream_rx) = channel::<SinkData>(qsize());
         let stream_sink_tx = self.tx.clone();
         let ctx = ctx.clone();
         let tx = self.tx.clone();

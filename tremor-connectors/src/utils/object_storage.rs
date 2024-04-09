@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::prelude::*;
+use crate::sink::prelude::*;
+use tremor_system::event::Event;
+use tremor_value::prelude::*;
 
 /// mode of operation for object storage connectors
 #[derive(Debug, Default, Deserialize, Clone, Copy, PartialEq)]

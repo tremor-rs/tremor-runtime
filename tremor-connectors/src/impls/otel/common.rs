@@ -14,10 +14,12 @@
 
 #![allow(dead_code)]
 
-use crate::{prelude::*, utils::pb};
+use crate::utils::pb;
+use tremor_common::url::Defaults;
 use tremor_otelapis::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, InstrumentationLibrary, KeyValue, KeyValueList, StringKeyValue,
 };
+use tremor_value::prelude::*;
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub(crate) enum Error {
@@ -54,7 +56,7 @@ pub(crate) const EMPTY: Vec<Value> = Vec::new();
 
 pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {
     use any_value::Value as Inner;
-    let v: Value = match pb.value {
+    let v = match pb.value {
         Some(Inner::StringValue(v)) => v.into(),
         Some(Inner::BoolValue(v)) => v.into(),
         Some(Inner::IntValue(v)) => v.into(),

@@ -40,12 +40,16 @@
 mod handler;
 mod utils;
 
-use crate::prelude::*;
+use crate::{sink::prelude::*, source::prelude::*, spawn_task};
 use handler::Handler;
 use serenity::prelude::*;
-use tokio::task::JoinHandle;
+use tokio::{
+    sync::mpsc::{channel, Receiver, Sender},
+    task::JoinHandle,
+};
+use tremor_system::event::DEFAULT_STREAM_ID;
+use tremor_value::prelude::*;
 use utils::Intents;
-
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
@@ -79,8 +83,8 @@ impl ConnectorBuilder for Builder {
             port: None,
             path: vec![],
         };
-        let message_channel = bounded(qsize());
-        let (reply_tx, reply_rx) = bounded(qsize());
+        let message_channel = channel(qsize());
+        let (reply_tx, reply_rx) = channel(qsize());
         Ok(Box::new(Discord {
             config,
             origin_uri,
