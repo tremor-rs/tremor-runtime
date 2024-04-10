@@ -14,6 +14,7 @@ jobs:
           override: true
       - uses: katyo/publish-crates@v2
         with:
+          path: './tremor-script'
           registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   invoke-tremor-language-server:
