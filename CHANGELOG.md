@@ -1,8 +1,12 @@
 # Changelog
 
+
+## [Unreleased]
+
+### Fixes
+* fix reconnect issue in HTTP client
+
 ## [0.13.0-rc.17]
-
-
 
 ### New features
 * kafka schema registry codec

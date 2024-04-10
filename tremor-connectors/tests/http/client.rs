@@ -678,7 +678,7 @@ async fn missing_tls_config_https() -> Result<()> {
         .map(|e| e.to_string())
         .unwrap_or_default();
 
-    assert_eq!("[test::test] Invalid definition: missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config.", res);
+    assert_eq!("[harness::test] Invalid definition: missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config.", res);
 
     Ok(())
 }
