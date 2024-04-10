@@ -12,6 +12,6 @@ version = "0.13.0-rc.17"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-value = { path = "../tremor-value" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.17" }
 serde = "1"
 simd-json = "0.13"
