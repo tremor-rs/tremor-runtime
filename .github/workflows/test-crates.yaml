@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+      - run: cargo check -p tremor-common
       - name: Publish tremor-common to crates.io
         uses: katyo/publish-crates@v2
         with:
