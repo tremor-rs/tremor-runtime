@@ -24,7 +24,7 @@ jobs:
 
   test-tremor-value:
     needs: [test-tremor-common]
-    name: Publish tremor value
+    name: Test crate tremor-value
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -37,7 +37,7 @@ jobs:
           dry-run: true
 
   test-tremor-influx:
-    name: Publish tremor influx
+    name: Test crate tremor-influx
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -51,7 +51,7 @@ jobs:
 
   test-tremor-script:
     needs: [test-tremor-common, test-tremor-value, test-tremor-influx]
-    name: Publish tremor script
+    name: Test crate tremor-script
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
