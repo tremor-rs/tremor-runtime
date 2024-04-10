@@ -219,7 +219,7 @@ async fn transactional_retry() -> anyhow::Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::test",
+            "source": "harness::test",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -434,7 +434,7 @@ async fn custom_no_retry() -> anyhow::Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::test",
+            "source": "harness::test",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -638,7 +638,7 @@ async fn performance() -> anyhow::Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::test",
+            "source": "harness::test",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
