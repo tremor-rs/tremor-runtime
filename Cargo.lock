@@ -2191,6 +2191,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "658bd65b1cf4c852a3cc96f18a8ce7b5640f6b703f905c7d74532294c2a63984"
 
 [[package]]
+name = "fenster"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f300c19a2aa163c8fd313c21d195065dcda3bd3e0419a4f49ba42cce8353774"
+dependencies = [
+ "chrono",
+]
+
+[[package]]
 name = "ff"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6617,6 +6626,7 @@ dependencies = [
  "beef",
  "criterion",
  "error-chain",
+ "fenster",
  "halfbrown",
  "indexmap 2.2.6",
  "lazy_static",
@@ -6640,7 +6650,6 @@ dependencies = [
  "tremor-value",
  "url",
  "value-trait",
- "window",
  "xz2",
 ]
 
@@ -7378,14 +7387,6 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
-
-[[package]]
-name = "window"
-version = "0.1.1"
-source = "git+https://github.com/tremor-rs/window.git?tag=v0.1.1#de8324d0fe9db0d6c011a5c0f2fc316f66f1c996"
-dependencies = [
- "chrono",
-]
 
 [[package]]
 name = "windows-core"

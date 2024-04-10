@@ -32,7 +32,7 @@ tremor-value = { version = "0.13.0-rc.17", path = "../tremor-value" }
 tremor-system = { version = "0.13.0-rc.17", path = "../tremor-system" }
 
 url = "2"
-window = { git = "https://github.com/tremor-rs/window.git", tag = "v0.1.1" }
+fenster = { version = "0.1.1" }
 
 [dev-dependencies]
 criterion = "0.5"

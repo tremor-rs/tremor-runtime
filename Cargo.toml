@@ -24,8 +24,8 @@ members = [
   "tremor-pipeline",
   "tremor-script",
   "tremor-value",
-  "tremor-connectors",
   "tremor-system",
+  "tremor-connectors",
   "tremor-connectors-aws",
   "tremor-connectors-gcp",
 ]
