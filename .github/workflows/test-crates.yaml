@@ -23,7 +23,6 @@ jobs:
           dry-run: true
 
   test-tremor-value:
-    needs: [test-tremor-common]
     name: Test crate tremor-value
     runs-on: ubuntu-latest
     steps:
@@ -50,7 +49,6 @@ jobs:
           dry-run: true
 
   test-tremor-script:
-    needs: [test-tremor-common, test-tremor-value, test-tremor-influx]
     name: Test crate tremor-script
     runs-on: ubuntu-latest
     steps:
