@@ -33,7 +33,10 @@ use tremor_connectors::{
     utils::integration::free_port::find_free_tcp_port,
 };
 use tremor_script::ValueAndMeta;
-use tremor_system::event::Event;
+use tremor_system::{
+    controlplane::CbAction,
+    event::{Event, EventId, DEFAULT_PULL_ID},
+};
 use tremor_value::{literal, Value};
 use value_trait::prelude::*;
 
@@ -697,5 +700,67 @@ async fn missing_config() -> Result<()> {
 
     assert!(dbg!(res).contains("Missing Configuration"));
 
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn no_endpoint() -> Result<()> {
+    let _ = env_logger::try_init();
+    let target = find_free_tcp_endpoint_str().await?;
+    let config = literal!({
+        "url": format!("http://{target}"),
+        "method": "GET",
+        "mime_mapping": {
+            "application/json": {"name": "json", "config": {"mode": "sorted"}},
+            "application/yaml": {"name": "yaml"},
+            "*/*": {"name": "string"},
+        },
+    });
+
+    let defn = literal!({
+      "config": config,
+      "reconnect": {
+        "retry": {
+            "interval_ms": 100,
+            "max_retries": 10,
+            "growth_rate": 2.0
+        }
+      }
+    });
+    let mut harness = Harness::new("test", &http_impl::client::Builder::default(), &defn).await?;
+    harness.start().await?;
+    harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
+    // we use source_id 1 to ensure we differ from the default source_id 0
+    let source_id = 1;
+    // we use stream_id 1 to ensure we differ from the default stream_id 0
+    let stream_id = 1;
+
+    for i in 0..10 {
+        let id = EventId::new(source_id, stream_id, i, DEFAULT_PULL_ID);
+
+        let event = Event {
+            id: id.clone(),
+            transactional: true,
+            ..Event::default()
+        };
+        harness.send_to_sink(event).await?;
+
+        let (_, event) = loop {
+            if let Some((port, event)) = harness.get_event()? {
+                log::debug!("Got event in hartness from {port}");
+                if event.id == id {
+                    break (port, event);
+                }
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+            harness.signal_tick_to_sink().await?;
+        };
+
+        assert_eq!(event.cb, CbAction::Fail);
+    }
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
     Ok(())
 }
