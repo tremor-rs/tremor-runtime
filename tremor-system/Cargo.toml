@@ -1,13 +1,13 @@
 [package]
 name = "tremor-system"
-version = "0.13.0-rc.18"
+version = "0.13.0-rc.19"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.18" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.18" }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.19" }
+tremor-script = { path = "../tremor-script", version = "0.13.0-rc.19" }
 
 tokio = { version = "1.34", default-features = false }
 anyhow = { version = "1.0", default-features = true }
@@ -19,4 +19,4 @@ simd-json = { version = "0.13", default-features = false }
 either = { version = "1.6", default-features = false }
 
 [dev-dependencies]
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.18" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.19" }
