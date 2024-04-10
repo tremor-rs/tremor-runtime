@@ -1,18 +1,18 @@
 [package]
 name = "tremor-connectors-aws"
-version = "0.13.0-rc.17"
+version = "0.13.0-rc.18"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.17", default-features = false, features = [
+tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.18", default-features = false, features = [
     "object-storage",
 ] }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.17" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.17" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.17" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.17" }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.18" }
+tremor-system = { path = "../tremor-system", version = "0.13.0-rc.18" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.18" }
+tremor-config = { path = "../tremor-config", version = "0.13.0-rc.18" }
 
 
 async-trait = { version = "0.1", default-features = false }

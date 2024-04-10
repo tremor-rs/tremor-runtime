@@ -1,19 +1,19 @@
 [package]
 name = "tremor-connectors"
-version = "0.13.0-rc.17"
+version = "0.13.0-rc.18"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.17" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.17" }
-tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.17" }
-tremor-pipeline = { path = "../tremor-pipeline", version = "0.13.0-rc.17" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.17" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.17" }
-tremor-interceptor = { path = "../tremor-interceptor", version = "0.13.0-rc.17" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.17" }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.18" }
+tremor-config = { path = "../tremor-config", version = "0.13.0-rc.18" }
+tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.18" }
+tremor-pipeline = { path = "../tremor-pipeline", version = "0.13.0-rc.18" }
+tremor-script = { path = "../tremor-script", version = "0.13.0-rc.18" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.18" }
+tremor-interceptor = { path = "../tremor-interceptor", version = "0.13.0-rc.18" }
+tremor-system = { path = "../tremor-system", version = "0.13.0-rc.18" }
 
 beef = { version = "0.5", default-features = false }
 value-trait = { version = "0.8", default-features = false }
