@@ -21,13 +21,21 @@ COPY .cargo ./.cargo
 
 # Main library
 COPY src ./src
+COPY build.rs ./build.rs
 # supporting libraries
 COPY tremor-pipeline ./tremor-pipeline
 COPY tremor-script ./tremor-script
-COPY tremor-script-nif /app/tremor-script-nif
+COPY tremor-script-nif ./tremor-script-nif
 COPY tremor-api ./tremor-api
 COPY tremor-influx ./tremor-influx
 COPY tremor-value ./tremor-value
+COPY tremor-config ./tremor-config
+COPY tremor-connectors ./tremor-connectors
+COPY tremor-connectors-aws ./tremor-connectors-aws
+COPY tremor-connectors-gcp ./tremor-connectors-gcp
+COPY tremor-system ./tremor-system
+COPY tremor-codec ./tremor-codec
+COPY tremor-interceptor ./tremor-interceptor
 # Binaries
 COPY tremor-cli ./tremor-cli
 COPY tremor-common ./tremor-common
