@@ -9,17 +9,13 @@ on:
     branches: [main]
 
 jobs:
-  publish-tremor-crates:
+  test-tremor-crates:
     name: Test tremor crates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
       - name: Publish dry run tremor-script to crates.io
         uses: katyo/publish-crates@v2
         with:
