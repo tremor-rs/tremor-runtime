@@ -448,6 +448,8 @@ impl Sink for HttpRequestSink {
                                 "Error sending fail contraflow",
                             );
                         }
+                        // We force a reconnect as otherwise the HTTP library can become stale and never progress when sending failed.
+                        task_ctx.notifier().connection_lost().await?;
                     }
                     Err(e) => {
                         error!("{task_ctx} Error sending HTTP request: {e}");
@@ -457,6 +459,7 @@ impl Sink for HttpRequestSink {
                                 "Error sending fail contraflow",
                             );
                         }
+                        // task_ctx.notifier().connection_lost().await?;
                     }
                 }
                 drop(guard);

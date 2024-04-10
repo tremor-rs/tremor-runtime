@@ -33,7 +33,11 @@ use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
-use tokio::{sync::oneshot, task, time::timeout};
+use tokio::{
+    sync::{mpsc::error::TryRecvError, oneshot},
+    task,
+    time::timeout,
+};
 use tremor_common::{
     alias,
     ids::{ConnectorIdGen, Id, SourceId},
@@ -65,7 +69,7 @@ impl Harness {
         input_ports: Vec<Port<'static>>,
         output_ports: Vec<Port<'static>>,
     ) -> anyhow::Result<Self> {
-        let alias = alias::Connector::new("test", alias);
+        let alias = alias::Connector::new("harness", alias);
         let mut connector_id_gen = ConnectorIdGen::new();
         let mut known_connectors = HashMap::new();
 
@@ -87,7 +91,7 @@ impl Harness {
         let mid = NodeMeta::new(Location::yolo(), Location::yolo());
         for port in input_ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = DeployEndpoint::new(&format!("TEST__{port}_pipeline"), IN, &mid);
+            let pipeline_id = DeployEndpoint::new(&format!("HARNESS__{port}_pipeline"), IN, &mid);
             // connect pipeline to connector
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
@@ -106,7 +110,7 @@ impl Harness {
         }
         for port in output_ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = DeployEndpoint::new(&format!("TEST__{port}_pipeline"), IN, &mid);
+            let pipeline_id = DeployEndpoint::new(&format!("HARNESS__{port}_pipeline"), IN, &mid);
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
                 .send(crate::Msg::LinkOutput {
@@ -252,6 +256,8 @@ impl Harness {
         while self.status().await?.connectivity() != &Connectivity::Connected {
             // TODO create my own future here that succeeds on poll when status is connected
             tokio::time::sleep(Duration::from_millis(100)).await;
+            // Ensure ticks happening so we can trigger tick based events while waiting
+            self.signal_tick_to_sink().await?;
         }
         Ok(())
     }
@@ -314,6 +320,19 @@ impl Harness {
         self.get_pipe(ERR)
     }
 
+    /// checks all pipes for events or signals to allow inspecting communications andf errors
+    /// # Errors
+    /// If an error occures while the event was received
+    pub fn get_event(&mut self) -> anyhow::Result<Option<(Port<'static>, Event)>> {
+        for (port, p) in &mut self.pipes {
+            if let Some(event) = p.try_get_event()? {
+                debug!("Got event from {port}: {event:?}");
+                return Ok(Some((port.clone(), event)));
+            }
+        }
+        Ok(None)
+    }
+
     /// Send an event to the connector to a specific port
     /// # Errors
     /// If the event could not be sent
@@ -369,8 +388,6 @@ impl Harness {
 #[derive(Debug)]
 pub struct TestPipeline {
     rx: Receiver<Box<dataplane::Msg>>,
-    // this is only used in some integration tests
-    #[allow(dead_code)]
     rx_cf: UnboundedReceiver<contraflow::Msg>,
     addr: pipeline::Addr,
 }
@@ -399,7 +416,9 @@ impl TestPipeline {
                             error!("Oh no error in test: {e}");
                         }
                     }
-                    _ => {}
+                    other => {
+                        debug!("Ignoring message: {:?}", other);
+                    }
                 }
             }
         });
@@ -442,6 +461,30 @@ impl TestPipeline {
             }
         }
         events
+    }
+
+    /// try to get a single or event event from the pipeline
+    /// # Errors
+    /// If the channel is closed
+    pub fn try_get_event(&mut self) -> anyhow::Result<Option<Event>> {
+        // TODI: this is busy polling we could do this better at one point
+        match self.rx.try_recv() {
+            Ok(msg) => match *msg {
+                dataplane::Msg::Event { event, .. } => Ok(Some(event)),
+                dataplane::Msg::Signal(signal) => {
+                    debug!("Received signal: {:?}", signal.kind);
+                    Ok(Some(signal))
+                }
+            },
+            Err(TryRecvError::Empty) => match self.rx_cf.try_recv() {
+                Ok(contraflow::Msg::Insight(event)) => Ok(Some(event)),
+                Err(TryRecvError::Empty) => Ok(None),
+                Err(TryRecvError::Disconnected) => {
+                    Err(GenericImplementationError::ChannelEmpty.into())
+                }
+            },
+            Err(TryRecvError::Disconnected) => Err(GenericImplementationError::ChannelEmpty.into()),
+        }
     }
 
     /// get a single event from the pipeline
