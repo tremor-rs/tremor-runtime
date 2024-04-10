@@ -1333,8 +1333,9 @@ checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
 
 [[package]]
 name = "clickhouse-rs"
-version = "1.0.0-alpha.1"
-source = "git+https://github.com/suharev7/clickhouse-rs?rev=73d39ba#73d39baeaa7381a86eff95885a7d1d094f96808d"
+version = "1.1.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "802fe62a5480415bcdbb5217b3ea029d748c9a3ce3b884767cf58888e33e7f65"
 dependencies = [
  "byteorder",
  "chrono",
@@ -1363,7 +1364,8 @@ dependencies = [
 [[package]]
 name = "clickhouse-rs-cityhash-sys"
 version = "0.1.2"
-source = "git+https://github.com/suharev7/clickhouse-rs?rev=73d39ba#73d39baeaa7381a86eff95885a7d1d094f96808d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4baf9d4700a28d6cb600e17ed6ae2b43298a5245f1f76b4eab63027ebfd592b9"
 dependencies = [
  "cc",
 ]
@@ -4307,7 +4309,8 @@ dependencies = [
 [[package]]
 name = "qwal"
 version = "0.1.0"
-source = "git+https://github.com/tremor-rs/qwal#60cd4b928a9ee00437d188872a74c3512f7bd8cc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcdf5a6396d0ef123066f094a358b32f8f6b654db6d64da347a6465d4118a4ab"
 dependencies = [
  "byteorder",
  "tokio",
