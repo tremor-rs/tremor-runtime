@@ -12,11 +12,11 @@ jobs:
           fetch-depth: 0
       - uses: katyo/publish-crates@v2
         with:
-          path: './tremor-script'
+          path: "./tremor-script"
           registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   invoke-tremor-language-server:
-    needs: [publish-tremor-script]
+    needs: [publish-tremor-crates]
     name: Trigger Tremor LS release
     runs-on: ubuntu-latest
     steps:
@@ -33,5 +33,5 @@ jobs:
         with:
           workflow: Draft new release
           repo: tremor-rs/tremor-language-server
-          inputs: '{ "version": "${{ env.VER }}"}'
+          inputs: '{ "version": "$VER"}'
           token: ${{ secrets.PAT_TOKEN }}
