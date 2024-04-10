@@ -256,8 +256,6 @@ impl Harness {
         while self.status().await?.connectivity() != &Connectivity::Connected {
             // TODO create my own future here that succeeds on poll when status is connected
             tokio::time::sleep(Duration::from_millis(100)).await;
-            // Ensure ticks happening so we can trigger tick based events while waiting
-            self.signal_tick_to_sink().await?;
         }
         Ok(())
     }
@@ -416,9 +414,7 @@ impl TestPipeline {
                             error!("Oh no error in test: {e}");
                         }
                     }
-                    other => {
-                        debug!("Ignoring message: {:?}", other);
-                    }
+                    _ => (),
                 }
             }
         });
@@ -479,11 +475,9 @@ impl TestPipeline {
             Err(TryRecvError::Empty) => match self.rx_cf.try_recv() {
                 Ok(contraflow::Msg::Insight(event)) => Ok(Some(event)),
                 Err(TryRecvError::Empty) => Ok(None),
-                Err(TryRecvError::Disconnected) => {
-                    Err(GenericImplementationError::ChannelEmpty.into())
-                }
+                Err(e) => Err(e.into()),
             },
-            Err(TryRecvError::Disconnected) => Err(GenericImplementationError::ChannelEmpty.into()),
+            Err(e) => Err(e.into()),
         }
     }
 
