@@ -78,9 +78,9 @@ use std::num::NonZeroUsize;
 use crate::metrics::value_count;
 use crate::op::prelude::*;
 use beef::Cow;
+use fenster::TimeWindow;
 use lru::LruCache;
 use tremor_script::prelude::*;
-use window::TimeWindow;
 
 const BUCKETING: Cow<'static, str> = Cow::const_str("bucketing");
 const CLASS: Cow<'static, str> = Cow::const_str("class");
