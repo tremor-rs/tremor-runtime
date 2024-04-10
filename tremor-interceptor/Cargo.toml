@@ -15,9 +15,9 @@ rust-version = "1.62"
 
 [dependencies]
 error-chain = "0.12"
-tremor-value = { path = "../tremor-value" }
-tremor-config = { path = "../tremor-config" }
-tremor-common = { path = "../tremor-common" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.17" }
+tremor-config = { path = "../tremor-config", version = "0.13.0-rc.17" }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.17" }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 simd-json = "0.13"

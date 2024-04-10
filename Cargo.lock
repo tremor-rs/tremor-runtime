@@ -6415,7 +6415,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors"
-version = "0.1.1-rc.1"
+version = "0.13.0-rc.17"
 dependencies = [
  "anyhow",
  "async-channel 1.9.0",
@@ -6497,7 +6497,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-aws"
-version = "0.1.1-rc.1"
+version = "0.13.0-rc.17"
 dependencies = [
  "anyhow",
  "async-channel 2.2.0",
@@ -6524,7 +6524,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-gcp"
-version = "0.1.1-rc.1"
+version = "0.13.0-rc.17"
 dependencies = [
  "anyhow",
  "async-channel 1.9.0",

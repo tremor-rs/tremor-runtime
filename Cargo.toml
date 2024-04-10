@@ -38,18 +38,18 @@ lto = "thin"
 opt-level = 3
 
 [dependencies]
-tremor-codec = { path = "tremor-codec" }
-tremor-common = { path = "tremor-common" }
-tremor-config = { path = "tremor-config" }
-tremor-connectors = { path = "tremor-connectors" }
-tremor-connectors-aws = { path = "tremor-connectors-aws" }
-tremor-connectors-gcp = { path = "tremor-connectors-gcp" }
-tremor-influx = { path = "tremor-influx" }
-tremor-interceptor = { path = "tremor-interceptor" }
-tremor-pipeline = { path = "tremor-pipeline" }
-tremor-script = { path = "tremor-script" }
-tremor-system = { path = "tremor-system" }
-tremor-value = { path = "tremor-value" }
+tremor-codec = { path = "tremor-codec", version = "0.13.0-rc.17" }
+tremor-common = { path = "tremor-common", version = "0.13.0-rc.17" }
+tremor-config = { path = "tremor-config", version = "0.13.0-rc.17" }
+tremor-connectors = { path = "tremor-connectors", version = "0.13.0-rc.17" }
+tremor-connectors-aws = { path = "tremor-connectors-aws", version = "0.13.0-rc.17" }
+tremor-connectors-gcp = { path = "tremor-connectors-gcp", version = "0.13.0-rc.17" }
+tremor-influx = { path = "tremor-influx", version = "0.13.0-rc.17" }
+tremor-interceptor = { path = "tremor-interceptor", version = "0.13.0-rc.17" }
+tremor-pipeline = { path = "tremor-pipeline", version = "0.13.0-rc.17" }
+tremor-script = { path = "tremor-script", version = "0.13.0-rc.17" }
+tremor-system = { path = "tremor-system", version = "0.13.0-rc.17" }
+tremor-value = { path = "tremor-value", version = "0.13.0-rc.17" }
 
 tokio = { version = "1.34", features = ["full"] }
 tokio-stream = "0.1"
