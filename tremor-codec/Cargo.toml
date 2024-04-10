@@ -7,13 +7,13 @@ documentation = "https://docs.rs/tremor-script"
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.19"
+version = "0.13.0-rc.20"
 
 
 [dependencies]
-tremor-value = { version = "0.13.0-rc.19", path = "../tremor-value" }
-tremor-common = { version = "0.13.0-rc.19", path = "../tremor-common" }
-tremor-config = { version = "0.13.0-rc.19", path = "../tremor-config" }
+tremor-value = { version = "0.13.0-rc.20", path = "../tremor-value" }
+tremor-common = { version = "0.13.0-rc.20", path = "../tremor-common" }
+tremor-config = { version = "0.13.0-rc.20", path = "../tremor-config" }
 tokio = { version = "1.34", features = ["full"] }
 async-trait = "0.1"
 error-chain = "0.12"
@@ -43,7 +43,7 @@ reqwest = { version = "0.11", default-features = false, features = [
     "rustls-tls-native-roots",
 ] }
 csv = "1.2"
-tremor-influx = { version = "0.13.0-rc.19", path = "../tremor-influx" }
+tremor-influx = { version = "0.13.0-rc.20", path = "../tremor-influx" }
 simd-json = "0.13"
 apache-avro = { version = "0.16", features = [
     "snappy",
