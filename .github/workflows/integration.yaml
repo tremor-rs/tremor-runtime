@@ -53,7 +53,7 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          action: codecov/codecov-action@v4
+          action: codecov/codecov-action@v4.2.0
           attempt_limit: 6
           attempt_delay: 10000
           with: |
