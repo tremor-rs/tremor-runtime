@@ -9,53 +9,14 @@ on:
     branches: [main]
 
 jobs:
-  test-tremor-common:
-    name: Test crate tremor-common
+  test-tremor-crates:
+    name: Test tremor crates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - name: Publish tremor-common to crates.io
-        uses: katyo/publish-crates@v2
-        with:
-          path: "./tremor-common"
-          dry-run: true
-
-  test-tremor-value:
-    name: Test crate tremor-value
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - name: Publish tremor-value to crates.io
-        uses: katyo/publish-crates@v2
-        with:
-          path: "./tremor-value"
-          dry-run: true
-
-  test-tremor-influx:
-    name: Test crate tremor-influx
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - name: Publish tremor-influx to crates.io
-        uses: katyo/publish-crates@v2
-        with:
-          path: "./tremor-influx"
-          dry-run: true
-
-  test-tremor-script:
-    name: Test crate tremor-script
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - name: Publish tremor-script to crates.io
+      - name: Publish dry run tremor-script to crates.io
         uses: katyo/publish-crates@v2
         with:
           path: "./tremor-script"
