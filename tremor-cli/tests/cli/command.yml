@@ -199,6 +199,17 @@ suites:
               - "Error:"
               - "3 |   emit event.baz"
               - "  |              ^^^ Trying to access a non existing event key `baz`\n\n"
+      - name: setup for tremor new creates 
+        command: rm -rf test
+        tags:
+          - run
+          - new
+        status: 0
+        expects:
+          - source: stdout
+            is_empty: true
+          - source: stderr
+            is_empty: true
       - name: tremor new creates 
         command: tremor new test
         tags:
