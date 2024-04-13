@@ -34,8 +34,9 @@ jobs:
         run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.6.8
       - name: Print docker-compose version
         run: docker-compose --version
 
