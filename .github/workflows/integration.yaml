@@ -17,7 +17,6 @@ jobs:
           - os: macos-latest
             target_feature: "+avx,+avx2,+sse4.2"
           - os: ubuntu-latest-8-cores
-            exclude_tests: ""
             target_feature: "+avx,+avx2,+sse4.2"
 
     env:
@@ -35,12 +34,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-
       - name: Print docker-compose version
         run: docker-compose --version
 
       - name: run ${{ matrix.kind }} tests
-        run: cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test --timeout 300 ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test --timeout 300 ${{ matrix.kind }} tremor-cli/tests --excludes tcp-reuseport
 
       - name: Upload error logs
         uses: actions/upload-artifact@v3
