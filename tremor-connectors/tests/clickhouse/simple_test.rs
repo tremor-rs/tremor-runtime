@@ -19,7 +19,7 @@ use super::utils;
 use clickhouse_rs::Pool;
 use log::error;
 use std::time::{Duration, Instant};
-use testcontainers::{clients, core::Port, images::generic::GenericImage, RunnableImage};
+use testcontainers::{clients, core::Port, GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_connectors::{harness::Harness, impls::clickhouse, utils::integration::free_port};
 use tremor_system::{
@@ -34,7 +34,7 @@ use tremor_value::literal;
 // ensure that all the data was actually written.
 #[tokio::test(flavor = "multi_thread")]
 async fn simple_insertion() -> anyhow::Result<()> {
-    let docker = clients::Cli::docker();
+    let docker = clients::Cli::default();
 
     // The following lines spin up a regular ClickHouse container and wait for
     // the database to be up and running.

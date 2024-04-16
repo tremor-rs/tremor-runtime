@@ -20,8 +20,7 @@ mod kafka {
 }
 use std::time::Duration;
 use testcontainers::{
-    clients::Cli as DockerCli, core::WaitFor, images::generic::GenericImage, Container,
-    RunnableImage,
+    clients::Cli as DockerCli, core::WaitFor, Container, GenericImage, RunnableImage,
 };
 use tremor_connectors::utils::integration::free_port::find_free_tcp_port;
 
