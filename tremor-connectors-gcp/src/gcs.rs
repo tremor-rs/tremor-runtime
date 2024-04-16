@@ -151,6 +151,48 @@ enum Error {
     Delete(StatusCode),
     #[error("Missing location header")]
     MissingLocationHeader,
-    #[error("Missing or invalite range header")]
+    #[error("Missing or invalid range header")]
     MissingOrInvalidRangeHeader,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn error_to_string_mapping() {
+        assert_eq!("No client available", Error::NoClient.to_string());
+        assert_eq!(
+            "Buffer was marked as done at index 666 which is not in memory anymore",
+            Error::InvalidBuffer(666).to_string()
+        );
+        assert_eq!(
+            "Not enough data in the buffer",
+            Error::NotEnoughData.to_string()
+        );
+        assert_eq!(
+            "Request still failing after 3 retries",
+            Error::RequestFailed(3).to_string()
+        );
+        assert_eq!(
+            "Request for bucket snot failed with 404 Not Found",
+            Error::Bucket("snot".to_string(), StatusCode::NOT_FOUND).to_string()
+        );
+        assert_eq!(
+            "Upload failed with 403 Forbidden",
+            Error::Upload(StatusCode::FORBIDDEN).to_string()
+        );
+        assert_eq!(
+            "Delete failed with 404 Not Found",
+            Error::Delete(StatusCode::NOT_FOUND).to_string()
+        );
+        assert_eq!(
+            "Missing location header",
+            Error::MissingLocationHeader.to_string()
+        );
+        assert_eq!(
+            "Missing or invalid range header",
+            Error::MissingOrInvalidRangeHeader.to_string()
+        );
+    }
 }

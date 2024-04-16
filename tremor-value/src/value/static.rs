@@ -73,3 +73,14 @@ impl std::fmt::Display for StaticValue {
         self.0.fmt(f)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn for_coverage() {
+        let from_null = StaticValue::from(Value::const_null());
+        assert_eq!(from_null.to_string(), "null");
+    }
+}
