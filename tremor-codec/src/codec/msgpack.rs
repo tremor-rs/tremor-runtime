@@ -64,6 +64,17 @@ mod test {
     use super::*;
     use tremor_value::literal;
 
+    #[test]
+    fn for_coverage_gods() {
+        assert_eq!("msgpack", MsgPack {}.name());
+
+        assert_eq!("application/msgpack", MsgPack {}.mime_types()[0]);
+        assert_eq!("application/x-msgpack", MsgPack {}.mime_types()[1]);
+        assert_eq!("application/vnd.msgpack", MsgPack {}.mime_types()[2]);
+
+        let codec_clone: Box<dyn Codec> = MsgPack {}.boxed_clone();
+        assert_eq!("msgpack", codec_clone.name());
+    }
     #[tokio::test(flavor = "multi_thread")]
     async fn test_msgpack_codec() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
