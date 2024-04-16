@@ -35,9 +35,8 @@ mod kv;
 mod re;
 
 use crate::{grok::PATTERNS_FILE_DEFAULT_PATH, prelude::*};
-use crate::{EventContext, Value};
 use re::Regex;
-use std::{fmt, iter::Iterator, result::Result as StdResult};
+use std::{fmt, result::Result as StdResult};
 use tremor_common::base64::{Engine, BASE64};
 
 use self::cidr::SnotCombiner;
@@ -311,15 +310,11 @@ impl Extractor {
 }
 
 fn is_prefix(rule_text: &str) -> bool {
-    Regex::new(r"^[^*?]+\*$")
-        .map(|re| re.is_match(rule_text))
-        .unwrap_or_default()
+    Regex::new(r"^[^*?]+\*$").is_ok_and(|re| re.is_match(rule_text))
 }
 
 fn is_suffix(rule_text: &str) -> bool {
-    Regex::new(r"^\*[^*?]+$")
-        .map(|re| re.is_match(rule_text))
-        .unwrap_or_default()
+    Regex::new(r"^\*[^*?]+$").is_ok_and(|re| re.is_match(rule_text))
 }
 
 impl<T: std::error::Error> From<T> for Error {

@@ -45,7 +45,6 @@
 //! end;
 //! ```
 
-use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
 use tremor_script::prelude::*;
 
@@ -232,9 +231,9 @@ impl Operator for Backpressure {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::SignalKind;
     use simd_json::ObjectHasher;
     use tremor_common::ids::Id;
+    use tremor_system::{dataplane::SignalKind, pipeline::OpMeta};
     use tremor_value::Object;
 
     #[test]

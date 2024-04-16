@@ -27,11 +27,7 @@ fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
         id,
         kind: crate::NodeKind::Operator,
         op_type,
-        config: if config
-            .as_object()
-            .map(HashMap::is_empty)
-            .unwrap_or_default()
-        {
+        config: if config.as_object().is_some_and(HashMap::is_empty) {
             None
         } else {
             Some(config.into_static())

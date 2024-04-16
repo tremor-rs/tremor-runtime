@@ -8,24 +8,15 @@ on:
   push:
     branches: [main]
 
-
 jobs:
   cli-test-harness:
-
     strategy:
       matrix:
         kind: [integration, unit, command]
         include:
-          # - os: windows-2019
-          - os: macos-10.15
-            exclude_tests: "--excludes docker"
-            # GH OS X runners only support very very very very old CPUs so we can't use anything
-            # fancy here and got to fall back to the minimal SSE4.2 requirement for simd_json
-            target_feature: "+sse4.2"
-          - os: macos-11.0
-            target_feature: "+sse4.2"
+          - os: macos-latest
+            target_feature: "+avx,+avx2,+sse4.2"
           - os: ubuntu-latest-8-cores
-            exclude_tests: ""
             target_feature: "+avx,+avx2,+sse4.2"
 
     env:
@@ -35,29 +26,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-
       - name: Install deps
         if: matrix.os == 'ubuntu-latest-8-cores'
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
-      # - name: Free Disk Space (Ubuntu)
-      #   uses: jlumbroso/free-disk-space@main
-      #   with:
-      #     # this might remove tools that are actually needed,
-      #     # if set to "true" but frees about 6 GB
-      #     tool-cache: false
-      - uses: ructions/toolchain@v2
-        with:
-          components: llvm-tools-preview
-
+      - name: Install llvm-tools-preview
+        run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-
       - name: Print docker-compose version
         run: docker-compose --version
 
       - name: run ${{ matrix.kind }} tests
-        run: cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test --timeout 300 ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test --timeout 300 ${{ matrix.kind }} tremor-cli/tests --excludes tcp-reuseport
 
       - name: Upload error logs
         uses: actions/upload-artifact@v3
@@ -67,12 +48,14 @@ jobs:
           path: tremor-cli/tests/**/*.log
       - name: Upload coverage to Codecov
         uses: Wandalen/wretry.action@v1.0.42
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          action: codecov/codecov-action@v3
+          action: codecov/codecov-action@v4
           attempt_limit: 6
           attempt_delay: 10000
           with: |
             files: ./lcov.txt
-            flags: unittests
+            flags: e2etests,e2e-${{ matrix.kind }}
             fail_ci_if_error: ${{ github.event_name == 'pull_request' }}
             verbose: true

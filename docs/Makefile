@@ -16,4 +16,6 @@ extractor-docs:
 	scripts/gen.sh tremor-script/src/extractor extractors
 
 connector-docs: 
-	scripts/gen.sh src/connectors/impls connectors
+	scripts/gen.sh tremor-connectors/src/impls connectors
+	scripts/gen.sh tremor-connectors-gcp/src connectors
+	scripts/gen.sh tremor-connectors-aws/src connectors

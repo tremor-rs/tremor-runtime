@@ -15,7 +15,6 @@
 //! Splits the data using [GELF chunking protocol](https://docs.graylog.org/en/3.0/pages/gelf.html#chunking).
 
 use super::Postprocessor;
-use crate::errors::Result;
 
 #[derive(Clone)]
 pub struct Gelf {
@@ -32,16 +31,24 @@ impl Default for Gelf {
     }
 }
 
+/// Gelf Error
+#[derive(Debug, thiserror::Error)]
+
+enum Error {
+    /// Error
+    #[error("[GELF encoder] Maximum number of chunks is 128 this package would cause {0} chunks.")]
+    ChunkCount(usize),
+}
+
 impl Gelf {
     // We cut i and n to u8 but check that n <= 128 before so it is safe.
     #[allow(clippy::cast_possible_truncation)]
-    fn encode_gelf(&mut self, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn encode_gelf(&mut self, data: &[u8]) -> Result<Vec<Vec<u8>>, Error> {
         let chunks = data.chunks(self.chunk_size - 12);
         let n = chunks.len();
         let id = self.id;
         if n > 128 {
-            return Err(format!("[GELF encoder] Maximum number of chunks is 128 this package would cause {n} chunks.")
-            .into());
+            return Err(Error::ChunkCount(n));
         };
         self.id += 1;
         Ok(chunks
@@ -72,8 +79,13 @@ impl Postprocessor for Gelf {
         "gelf"
     }
 
-    fn process(&mut self, _ingest_ns: u64, _egest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        self.encode_gelf(data)
+    fn process(
+        &mut self,
+        _ingest_ns: u64,
+        _egest_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
+        Ok(self.encode_gelf(data)?)
     }
 }
 
@@ -83,7 +95,7 @@ mod test {
     use crate::preprocessor::{self as pre, prelude::*};
 
     #[test]
-    fn simple_encode_decode() -> Result<()> {
+    fn simple_encode_decode() -> anyhow::Result<()> {
         let mut ingest_ns = 0;
         let egest_ns = 0;
         let input_data = vec![

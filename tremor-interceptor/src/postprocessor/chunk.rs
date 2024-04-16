@@ -47,7 +47,6 @@
 //! ```
 
 use super::Postprocessor;
-use crate::errors::{Error, ErrorKind, Result};
 use log::warn;
 use serde::Deserialize;
 use tremor_value::Value;
@@ -68,7 +67,12 @@ impl Postprocessor for Chunk {
         "chunk"
     }
 
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         let new_len = self.chunk.len() + data.len();
         if data.len() > self.max_bytes {
             // ignore incoming data
@@ -93,7 +97,7 @@ impl Postprocessor for Chunk {
         }
     }
 
-    fn finish(&mut self, data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
+    fn finish(&mut self, data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
         let mut output = vec![];
         std::mem::swap(&mut output, &mut self.chunk);
         let data = data.unwrap_or_default();
@@ -128,6 +132,13 @@ impl Postprocessor for Chunk {
     }
 }
 
+/// Chunk postprocessor error
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    /// MaxBytes is zero
+    #[error("`max_bytes` must be > 0")]
+    MaxBytesZero,
+}
 impl Chunk {
     fn new(max_bytes: usize) -> Self {
         Self {
@@ -142,25 +153,19 @@ impl Chunk {
             len, self.max_bytes
         );
     }
-    pub(crate) fn from_config(config: Option<&Value>) -> Result<Self> {
+    pub(crate) fn from_config(config: Option<&Value>) -> anyhow::Result<Self, super::Error> {
         if let Some(config) = config {
-            let config: Config = tremor_value::structurize(config.clone()).map_err(|e| {
-                let kind = ErrorKind::InvalidConfiguration(
-                    "\"chunk\" postprocessor".to_string(),
-                    e.to_string(),
-                );
-                Error::with_chain(e, kind)
-            })?;
+            let config: Config = tremor_value::structurize(config.clone())
+                .map_err(|e| super::Error::InvalidConfig("chunk", e.into()))?;
             if config.max_bytes == 0 {
-                return Err(ErrorKind::InvalidConfiguration(
-                    "\"chunk\" postprocessor".to_string(),
-                    "`max_bytes` must be > 0".to_string(),
-                )
-                .into());
+                return Err(super::Error::InvalidConfig(
+                    "chunk",
+                    Error::MaxBytesZero.into(),
+                ));
             }
             Ok(Chunk::new(config.max_bytes))
         } else {
-            Err(ErrorKind::MissingConfiguration("\"chunk\" postprocessor".to_string()).into())
+            Err(super::Error::MissingConfig("chunk"))
         }
     }
 }

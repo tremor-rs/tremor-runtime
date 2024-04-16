@@ -24,7 +24,6 @@ use std::{
 use crate::prelude::*;
 use beef::Cow;
 use byteorder::{ByteOrder, NetworkEndian, ReadBytesExt, WriteBytesExt};
-use simd_json::StaticNode;
 
 /// Tremor to Tremor codec
 #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

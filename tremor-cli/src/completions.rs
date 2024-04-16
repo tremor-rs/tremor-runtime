@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{cli::Cli, errors::Result};
-use clap::{self, CommandFactory, ValueEnum};
+use clap::{CommandFactory, ValueEnum};
 use clap_complete::{generate, shells::Shell};
 use std::path::Path;
 

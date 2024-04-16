@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn test_walk_comprehension() -> Result<()> {
         test_walk(
-            r#"
+            "
             for group[0] of
                 case (i, e) when i == 0 =>
                   let event = 42 + i;
@@ -216,7 +216,7 @@ mod tests {
                case (i, e) =>
                  42 + i
             end)
-        "#,
+        ",
             2,
         )
     }

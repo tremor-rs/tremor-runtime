@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #![deny(warnings)]
+#![deny(warnings)]
 // This isn't a external crate so we don't worry about docs
 // #![deny(missing_docs)]
 #![recursion_limit = "1024"]
@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
         // This means we're going to LEAK this memory, however
         // it is fine since as we do actually need it for the
         // rest of the program execution.
-        tremor_runtime::INSTANCE = forget_s;
+        tremor_system::INSTANCE = forget_s;
     }
     let res = run(cli).await;
 

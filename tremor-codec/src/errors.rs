@@ -34,6 +34,11 @@ impl PartialEq for Error {
     }
 }
 
+// TODO: This is a workaround for the fact that `error_chain` does not have sync send errors,
+// this is a temporary solution until we can replace `error_chain` with `anyhow`
+unsafe impl Sync for Error {}
+unsafe impl Send for Error {}
+
 error_chain! {
     foreign_links {
         CsvError(csv::Error);
@@ -102,7 +107,6 @@ error_chain! {
 #[cfg(test)]
 mod test {
     use super::*;
-    use matches::assert_matches;
 
     #[test]
     fn test_type_error() {
@@ -111,7 +115,7 @@ mod test {
             got: ValueType::String,
         })
         .0;
-        assert_matches!(
+        matches!(
             r,
             ErrorKind::TypeError(ValueType::Object, ValueType::String)
         );

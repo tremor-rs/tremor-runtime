@@ -20,13 +20,7 @@ use super::{
     warning::{self, Warning, Warnings},
     ConnectorDefinition, Const, DeployFlow, FlowDefinition, FnDefn, InvokeAggrFn, NodeId,
 };
-use crate::{
-    errors::Result,
-    pos::Span,
-    prelude::*,
-    registry::{Aggr as AggrRegistry, Registry},
-    NodeMeta,
-};
+use crate::{errors::Result, pos::Span, prelude::*, registry::Aggr as AggrRegistry, NodeMeta};
 use beef::Cow;
 use halfbrown::HashMap;
 use std::{collections::BTreeSet, mem};

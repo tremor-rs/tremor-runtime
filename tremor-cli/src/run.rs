@@ -27,7 +27,6 @@ use tremor_common::{
     time::nanotime,
 };
 use tremor_interceptor::{postprocessor, preprocessor};
-use tremor_pipeline::{Event, EventId};
 use tremor_runtime::system::{World, WorldConfig};
 use tremor_script::{
     arena::Arena,
@@ -35,9 +34,9 @@ use tremor_script::{
     lexer::Lexer,
     prelude::*,
     query::Query,
-    script::{AggrType, Return, Script},
+    script::Script,
 };
-use tremor_value::Value;
+use tremor_system::event::{Event, EventId};
 
 struct Ingress {
     is_interactive: bool,
@@ -173,7 +172,7 @@ impl Egress {
         })
     }
 
-    async fn process<'v>(&mut self, _src: &str, event: &Value<'v>, ret: Return<'v>) -> Result<()> {
+    async fn process<'v>(&mut self, event: &Value<'v>, ret: Return<'v>) -> Result<()> {
         match ret {
             Return::Drop => Ok(()),
             Return::Emit { value, port } => {
@@ -255,7 +254,7 @@ impl Run {
                                 state,
                                 &mut global_map,
                             ) {
-                                Ok(r) => block_on(egress.process(&src, &event, r)),
+                                Ok(r) => block_on(egress.process(&event, r)),
                                 Err(e) => {
                                     if let (Some(r), _) = e.context() {
                                         let mut inner = TermHighlighter::stderr();
@@ -400,7 +399,6 @@ impl Run {
 
                     for (port, rvalue) in continuation.drain(..) {
                         block_on(egress.process(
-                            &simd_json::to_string_pretty(&value.suffix().value())?,
                             &event,
                             Return::Emit {
                                 value: rvalue.data.suffix().value().clone_static(),

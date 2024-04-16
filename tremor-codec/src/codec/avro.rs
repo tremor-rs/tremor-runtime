@@ -58,7 +58,6 @@ use apache_avro::{
 };
 use schema_registry_converter::avro_common::AvroSchema;
 use serde::Deserialize;
-use value_trait::TryTypeError;
 
 const AVRO_BUFFER_CAP: usize = 512;
 
@@ -245,7 +244,7 @@ where
         Schema::Decimal(_s) => {
             // TODO: possibly allow other types here
             let d = data.try_as_bytes()?;
-            let d = Decimal::try_from(d).map_err(|e| format!("Invalid decimal: {e}"))?;
+            let d = Decimal::from(d);
             AvroValue::Decimal(d)
         }
         Schema::Uuid => AvroValue::Uuid(data.try_as_str()?.parse()?), // TODO: allow bytes and eventually 128 bit numbers

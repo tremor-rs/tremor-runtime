@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use super::{
-    resolve, resolve_value, set_local_shadow, test_guard, test_predicate_expr, Env, ExecOpts,
-    LocalStack, NULL,
+    resolve, resolve_value, set_local_shadow, test_guard, test_predicate_expr, Env, LocalStack,
 };
+use crate::stry;
 use crate::{
     ast::BinOpKind,
     errors::{
@@ -25,18 +25,17 @@ use crate::{
     },
 };
 use crate::{
-    ast::{
-        BaseExpr, ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath,
-        Expr, IfElse, ImutExpr, Match, Path, Segment,
-    },
-    errors::error_oops_err,
-};
-use crate::{
     ast::{BooleanBinOpKind, ComprehensionFoldOp},
     prelude::*,
 };
+use crate::{
+    ast::{
+        ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath, Expr,
+        IfElse, ImutExpr, Match, Path, Segment,
+    },
+    errors::error_oops_err,
+};
 use crate::{interpreter::exec_binary_numeric, registry::RECUR_PTR};
-use crate::{stry, Value};
 use std::mem;
 use std::{
     borrow::{Borrow, Cow},

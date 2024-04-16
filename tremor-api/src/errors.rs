@@ -120,6 +120,15 @@ impl From<PoisonError<MutexGuard<'_, tremor_script::Registry>>> for Error {
     }
 }
 
+impl From<tremor_system::connector::Error> for Error {
+    fn from(e: tremor_system::connector::Error) -> Self {
+        Self::new(
+            StatusCode::InternalServerError,
+            format!("Connector error: {e}"),
+        )
+    }
+}
+
 impl From<TremorError> for Error {
     fn from(e: TremorError) -> Self {
         match e.0 {

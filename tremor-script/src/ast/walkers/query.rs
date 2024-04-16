@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{
-    module::Content, query::raw::WindowName, CreationalWith, DefinitionalArgs, WithExpr,
-};
+use crate::ast::{module::Content, query::raw::WindowName};
 
 use super::super::visitors::prelude::*;
 macro_rules! stop {

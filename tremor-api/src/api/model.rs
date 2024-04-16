@@ -15,12 +15,10 @@
 use crate::api::prelude::*;
 use halfbrown::HashMap;
 use tremor_common::alias;
-use tremor_runtime::{
-    connectors::{Connectivity, StatusReport as ConnectorStatusReport},
-    instance::State,
-    system::flow::StatusReport as FlowStatusReport,
-};
+use tremor_runtime::system::flow::StatusReport as FlowStatusReport;
 use tremor_script::ast::DeployEndpoint;
+use tremor_system::connector::{Connectivity, StatusReport as ConnectorStatusReport};
+use tremor_system::instance::State;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ApiFlowStatusReport {
@@ -88,5 +86,5 @@ impl From<ConnectorStatusReport> for ApiConnectorStatusReport {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct PatchStatus {
-    pub(crate) status: InstanceState,
+    pub(crate) status: State,
 }

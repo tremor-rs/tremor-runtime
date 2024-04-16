@@ -15,12 +15,9 @@
 // mod test { <- this is for safety.sh
 
 #![allow(clippy::float_cmp)]
+use super::*;
 use crate::op::prelude::trickle::window::{Actions, Trait};
 use crate::query::window_defn_to_impl;
-use crate::EventId;
-
-use super::*;
-
 use tremor_common::ids::Id;
 use tremor_script::ast::{self, Helper, Ident, Literal};
 use tremor_script::{ast::Consts, NodeMeta};
@@ -28,6 +25,7 @@ use tremor_script::{
     ast::{visitors::ConstFolder, walkers::QueryWalker, Stmt},
     lexer::Location,
 };
+use tremor_system::event::EventId;
 use tremor_value::{literal, Value};
 
 fn test_uid() -> OperatorId {
@@ -246,7 +244,7 @@ fn test_tick(ns: u64) -> Event {
 #[test]
 fn select_single_win_with_script_on_signal() -> Result<()> {
     let mut select = select_stmt_from_query(
-        r#"
+        r"
         define window window1 from tumbling
         with
             interval = 5
@@ -254,7 +252,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
             event.time
         end;
         select aggr::stats::count() from in[window1] group by event.g into out having event > 0;
-        "#,
+        ",
     )?;
     let uid = test_uid();
     let mut state = Value::null();
@@ -304,13 +302,13 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
 #[test]
 fn select_single_win_on_signal() -> Result<()> {
     let mut select = select_stmt_from_query(
-        r#"
+        r"
         define window window1 from tumbling
         with
             interval = 2
         end;
         select aggr::win::collect_flattened(event) from in[window1] group by event.g into out;
-        "#,
+        ",
     )?;
     let uid = test_uid();
     let mut state = Value::null();
@@ -366,7 +364,7 @@ fn select_single_win_on_signal() -> Result<()> {
 #[test]
 fn select_multiple_wins_on_signal() -> Result<()> {
     let mut select = select_stmt_from_query(
-        r#"
+        r"
         define window window1 from tumbling
         with
             interval = 100
@@ -376,7 +374,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
             size = 2
         end;
         select aggr::win::collect_flattened(event) from in[window1, window2] group by event.cat into out;
-        "#,
+        ",
     )?;
     let uid = test_uid();
     let mut state = Value::null();
@@ -476,13 +474,13 @@ fn select_multiple_wins_on_signal() -> Result<()> {
 #[test]
 fn test_transactional_single_window() -> Result<()> {
     let mut op = select_stmt_from_query(
-        r#"
+        r"
             define window w2 from tumbling
             with
               size = 2
             end;
             select aggr::stats::count() from in[w2] into out;
-        "#,
+        ",
     )?;
     let uid = test_uid();
     let mut state = Value::null();
@@ -594,7 +592,7 @@ fn test_transactional_multiple_windows() -> Result<()> {
 fn count_tilt() -> Result<()> {
     // Windows are 15s and 30s
     let mut op = select_stmt_from_query(
-        r#"
+        r"
         define window w15s from tumbling
         with
           interval = 15 * 1_000_000_000
@@ -604,7 +602,7 @@ fn count_tilt() -> Result<()> {
           interval = 30 * 1_000_000_000
         end;
         select aggr::stats::count() from in [w15s, w30s] into out;
-        "#,
+        ",
     )?;
 
     // Insert two events prior to 15
@@ -840,13 +838,13 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     let reg = Registry::default();
     let aggr_reg = AggrRegistry::default();
     let q = tremor_script::query::Query::parse(
-        r#"
+        r"
             define window my_window from tumbling
             with
                 interval = 1000000000 # 1 second
             script
                 event.timestamp
-            end;"#,
+            end;",
         &reg,
         &aggr_reg,
     )?;

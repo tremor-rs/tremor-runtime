@@ -15,15 +15,11 @@
 use crate::{
     channel::{bounded, Sender},
     errors::empty_error,
-    qsize,
+    pipeline,
 };
 use crate::{
-    connectors::{self, ConnectorResult, Known},
     errors::{Error, Kind as ErrorKind, Result},
-    instance::State,
     log_error,
-    pipeline::{self, InputTarget},
-    primerge::PriorityMerge,
     system::KillSwitch,
 };
 use futures::StreamExt;
@@ -35,11 +31,13 @@ use tokio_stream::wrappers::ReceiverStream;
 use tremor_common::{
     alias,
     ids::{ConnectorIdGen, OperatorIdGen},
+    primerge::PriorityMerge,
 };
 use tremor_script::{
     ast::{self, ConnectStmt, Helper},
     errors::{error_generic, not_defined_err},
 };
+use tremor_system::{connector, controlplane, dataplane::InputTarget, instance::State, qsize};
 
 #[derive(Debug)]
 /// Control Plane message accepted by each binding control plane handler
@@ -59,9 +57,9 @@ pub(crate) enum Msg {
     /// The sender expects a Result, which makes it easier to signal errors on the message handling path to the sender
     Report(Sender<Result<StatusReport>>),
     /// Get the addr for a single connector
-    GetConnector(alias::Connector, Sender<Result<connectors::Addr>>),
+    GetConnector(alias::Connector, Sender<Result<connector::Addr>>),
     /// Get the addresses for all connectors of this flow
-    GetConnectors(Sender<Result<Vec<connectors::Addr>>>),
+    GetConnectors(Sender<Result<Vec<connector::Addr>>>),
 }
 type Addr = Sender<Msg>;
 
@@ -108,7 +106,7 @@ impl Flow {
     ///
     /// # Errors
     /// if the flow is not running anymore and can't be reached or if the connector is not part of the flow
-    pub async fn get_connector(&self, connector_alias: String) -> Result<connectors::Addr> {
+    pub async fn get_connector(&self, connector_alias: String) -> Result<connector::Addr> {
         let connector_alias = alias::Connector::new(self.id().clone(), connector_alias);
         let (tx, mut rx) = bounded(1);
         self.addr
@@ -121,7 +119,7 @@ impl Flow {
     ///
     /// # Errors
     /// if the flow is not running anymore and can't be reached
-    pub async fn get_connectors(&self) -> Result<Vec<connectors::Addr>> {
+    pub async fn get_connectors(&self) -> Result<Vec<connector::Addr>> {
         let (tx, mut rx) = bounded(1);
         self.addr.send(Msg::GetConnectors(tx)).await?;
         rx.recv().await.ok_or_else(empty_error)?
@@ -149,7 +147,7 @@ impl Flow {
         flow: ast::DeployFlow<'static>,
         operator_id_gen: &mut OperatorIdGen,
         connector_id_gen: &mut ConnectorIdGen,
-        known_connectors: &Known,
+        known_connectors: &tremor_connectors::Known,
         kill_switch: &KillSwitch,
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
@@ -163,7 +161,8 @@ impl Flow {
                     let mut defn = defn.clone();
                     defn.params.ingest_creational_with(&create.with)?;
                     let connector_alias = alias::Connector::new(flow_alias.clone(), alias);
-                    let config = crate::Connector::from_defn(&connector_alias, &defn)?;
+                    let config =
+                        tremor_connectors::config::Connector::from_defn(&connector_alias, &defn)?;
                     let builder =
                         known_connectors
                             .get(&config.connector_type)
@@ -172,7 +171,7 @@ impl Flow {
                             })?;
                     connectors.insert(
                         alias.to_string(),
-                        connectors::spawn(
+                        tremor_connectors::spawn(
                             &connector_alias,
                             connector_id_gen,
                             builder.as_ref(),
@@ -231,8 +230,8 @@ fn key_list<K: ToString, V>(h: &HashMap<K, V>) -> String {
 }
 #[allow(clippy::too_many_lines)]
 async fn link(
-    connectors: &HashMap<String, connectors::Addr>,
-    pipelines: &HashMap<String, pipeline::Addr>,
+    connectors: &HashMap<String, tremor_system::connector::Addr>,
+    pipelines: &HashMap<String, tremor_system::pipeline::Addr>,
     link: &ConnectStmt,
 ) -> Result<()> {
     // this is some odd stuff to have here
@@ -254,7 +253,7 @@ async fn link(
 
             let (tx, mut rx) = bounded(1);
 
-            let msg = connectors::Msg::LinkOutput {
+            let msg = connector::Msg::LinkOutput {
                 port: from.port().to_string().into(),
                 pipeline: (to.clone(), pipeline.clone()),
                 result_tx: tx.clone(),
@@ -284,7 +283,7 @@ async fn link(
 
             // first link the pipeline to the connector
             let (tx, mut rx) = bounded(1);
-            let msg = crate::pipeline::MgmtMsg::ConnectOutput {
+            let msg = controlplane::Msg::ConnectOutput {
                 tx,
                 port: from.port().to_string().into(),
                 endpoint: to.clone(),
@@ -300,7 +299,7 @@ async fn link(
 
             let (tx, mut rx) = bounded(1);
 
-            let msg = connectors::Msg::LinkInput {
+            let msg = connector::Msg::LinkInput {
                 port: to.port().to_string().into(),
                 pipelines: vec![(from.clone(), pipeline.clone())],
                 result_tx: tx.clone(),
@@ -323,14 +322,14 @@ async fn link(
                 key_list(pipelines)
             ))?;
             let (tx_from, mut rx_from) = bounded(1);
-            let msg_from = crate::pipeline::MgmtMsg::ConnectOutput {
+            let msg_from = controlplane::Msg::ConnectOutput {
                 port: from.port().to_string().into(),
                 endpoint: to.clone(),
                 tx: tx_from,
                 target: to_pipeline.clone().into(),
             };
             let (tx_to, mut rx_to) = bounded(1);
-            let msg_to = crate::pipeline::MgmtMsg::ConnectInput {
+            let msg_to = controlplane::Msg::ConnectInput {
                 port: to.port().to_string().into(),
                 endpoint: from.clone(),
                 tx: tx_to,
@@ -357,17 +356,17 @@ async fn link(
 #[allow(clippy::too_many_lines)]
 fn spawn_task(
     id: alias::Flow,
-    pipelines: &HashMap<String, pipeline::Addr>,
-    connectors: HashMap<String, connectors::Addr>,
+    pipelines: &HashMap<String, tremor_system::pipeline::Addr>,
+    connectors: HashMap<String, connector::Addr>,
     links: &[ConnectStmt],
 ) -> Addr {
     #[derive(Debug)]
     /// wrapper for all possible messages handled by the flow task
     enum MsgWrapper {
         Msg(Msg),
-        StartResult(ConnectorResult<()>),
-        DrainResult(ConnectorResult<()>),
-        StopResult(ConnectorResult<()>),
+        StartResult(connector::ResultWrapper<()>),
+        DrainResult(connector::ResultWrapper<()>),
+        StopResult(connector::ResultWrapper<()>),
     }
 
     let (msg_tx, msg_rx) = bounded(qsize());
@@ -680,27 +679,39 @@ fn spawn_task(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{connectors::ConnectorBuilder, instance};
-
     use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
+    use tremor_connectors::ConnectorBuilder;
     use tremor_script::{ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
+    use tremor_system::instance;
     use tremor_value::literal;
 
     mod connector {
 
-        use crate::channel::UnboundedSender;
-        use crate::connectors::prelude::*;
+        use tokio::sync::mpsc::UnboundedSender;
+        use tremor_common::alias;
+        use tremor_connectors::{
+            sink::{EventSerializer, Sink, SinkContext, SinkManagerBuilder, SinkReply},
+            source::{Source, SourceContext, SourceManagerBuilder, SourceReply},
+            CodecReq, Connector, ConnectorBuilder, ConnectorType,
+        };
+        use tremor_script::EventOriginUri;
+        use tremor_system::{
+            connector::{sink, source},
+            event::{Event, DEFAULT_STREAM_ID},
+            killswitch::KillSwitch,
+        };
+        use tremor_value::Value;
 
         struct FakeConnector {
-            tx: UnboundedSender<Event>,
+            tx: UnboundedSender<tremor_system::event::Event>,
         }
         #[async_trait::async_trait]
-        impl Connector for FakeConnector {
+        impl tremor_connectors::Connector for FakeConnector {
             async fn create_source(
                 &mut self,
                 ctx: SourceContext,
                 builder: SourceManagerBuilder,
-            ) -> Result<Option<SourceAddr>> {
+            ) -> anyhow::Result<Option<source::Addr>> {
                 let source = FakeSource {};
                 Ok(Some(builder.spawn(source, ctx)))
             }
@@ -709,7 +720,7 @@ mod tests {
                 &mut self,
                 ctx: SinkContext,
                 builder: SinkManagerBuilder,
-            ) -> Result<Option<SinkAddr>> {
+            ) -> anyhow::Result<Option<sink::Addr>> {
                 let sink = FakeSink::new(self.tx.clone());
                 Ok(Some(builder.spawn(sink, ctx)))
             }
@@ -726,7 +737,8 @@ mod tests {
                 &mut self,
                 _pull_id: &mut u64,
                 _ctx: &SourceContext,
-            ) -> Result<SourceReply> {
+            ) -> anyhow::Result<SourceReply> {
+                use simd_json::ValueBuilder;
                 Ok(SourceReply::Data {
                     origin_uri: EventOriginUri::default(),
                     data: r#"{"snot":"badger"}"#.as_bytes().to_vec(),
@@ -764,7 +776,7 @@ mod tests {
                 _ctx: &SinkContext,
                 _serializer: &mut EventSerializer,
                 _start: u64,
-            ) -> Result<SinkReply> {
+            ) -> anyhow::Result<SinkReply> {
                 self.tx.send(event)?;
                 Ok(SinkReply::NONE)
             }
@@ -787,9 +799,9 @@ mod tests {
             async fn build(
                 &self,
                 _alias: &alias::Connector,
-                _config: &ConnectorConfig,
+                _config: &tremor_connectors::config::Connector,
                 _kill_switch: &KillSwitch,
-            ) -> Result<Box<dyn Connector>> {
+            ) -> anyhow::Result<Box<dyn Connector>> {
                 Ok(Box::new(FakeConnector {
                     tx: self.tx.clone(),
                 }))
@@ -825,7 +837,7 @@ mod tests {
         deploy flow test;
         "#;
         let (tx, _rx) = bounded(128);
-        let kill_switch = KillSwitch(tx);
+        let kill_switch = tremor_system::killswitch::KillSwitch::new(tx);
         let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let deploy = deployable
             .deploy
@@ -836,7 +848,7 @@ mod tests {
                 _other => None,
             })
             .expect("No deploy in the given troy file");
-        let mut known_connectors = Known::new();
+        let mut known_connectors = tremor_connectors::Known::new();
         let (connector_tx, mut connector_rx) = crate::channel::unbounded();
         let builder = connector::FakeBuilder { tx: connector_tx };
         known_connectors.insert(builder.connector_type(), Box::new(builder));
@@ -849,11 +861,11 @@ mod tests {
         )
         .await?;
         let connector = flow.get_connector("foo".to_string()).await?;
-        assert_eq!(String::from("test::foo"), connector.alias.to_string());
+        assert_eq!(String::from("test::foo"), connector.alias().to_string());
 
         let connectors = flow.get_connectors().await?;
         assert_eq!(1, connectors.len());
-        assert_eq!(String::from("test::foo"), connectors[0].alias.to_string());
+        assert_eq!(String::from("test::foo"), connectors[0].alias().to_string());
 
         // assert the flow has started and events are flowing
         let event = connector_rx.recv().await.ok_or("empty")?;

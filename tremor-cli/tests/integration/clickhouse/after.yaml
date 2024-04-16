@@ -12,4 +12,4 @@
   args:
     - "rm"
     - "-f"
-    - "tremor-clickhouse-integration-blabla-unique"
+    - "tremor-integration-tests-clickhouse-blabla-unique"

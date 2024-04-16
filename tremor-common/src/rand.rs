@@ -31,3 +31,22 @@ pub fn octet_string(octets: usize, seed: u64) -> String {
         o
     })
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rand::RngCore;
+
+    #[test]
+    fn test_make_prng() {
+        let mut r0 = make_prng(42);
+        let mut r1 = make_prng(42);
+        assert_eq!(r0.next_u32(), r1.next_u32());
+    }
+
+    #[test]
+    fn test_octet_string() {
+        let s = octet_string(16, 42);
+        assert_eq!(s.len(), 32);
+    }
+}

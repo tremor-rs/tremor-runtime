@@ -59,7 +59,6 @@
 //! Xz compression when wrong compression level is specified gives an `Err`.
 
 use super::Postprocessor;
-use crate::errors::Result;
 use std::{
     io::Write,
     str::{self, FromStr},
@@ -77,10 +76,32 @@ enum Algorithm {
     Lz4,
 }
 
-impl FromStr for Algorithm {
-    type Err = crate::errors::Error;
+/// Compression postprocessor errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Unknown compression algorithm
+    #[error("Unknown compression algorithm: {0}")]
+    UnknownAlgorithm(String),
+    /// Compression level not supported for given algorithm
+    #[error("Compression level not supported for given algorithm")]
+    CompressionLevelNotSupported,
+    /// Missing algorithm
+    #[error("Missing algorithm")]
+    MissingAlgorithm,
+    /// Xz2 Error
+    #[error(transparent)]
+    Xz2(#[from] Xz2Error),
+    /// Lz4 Error
+    #[error(transparent)]
+    Lz4(#[from] Lz4Error),
+    /// Zstd Error
+    #[error(transparent)]
+    Zstd(#[from] ZstdError),
+}
 
-    fn from_str(s: &str) -> Result<Self> {
+impl FromStr for Algorithm {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<Self, Error> {
         match s {
             "gzip" => Ok(Algorithm::Gzip),
             "zlib" => Ok(Algorithm::Zlib),
@@ -88,19 +109,22 @@ impl FromStr for Algorithm {
             "snappy" => Ok(Algorithm::Snappy),
             "lz4" => Ok(Algorithm::Lz4),
             "zstd" => Ok(Algorithm::Zstd),
-            other => Err(format!("Unknown compression algorithm: {other}").into()),
+            other => Err(Error::UnknownAlgorithm(other.to_string())),
         }
     }
 }
 
 impl Algorithm {
-    pub fn into_postprocessor(self, config: Option<&Value>) -> Result<Box<dyn Postprocessor>> {
+    pub fn into_postprocessor(
+        self,
+        config: Option<&Value>,
+    ) -> Result<Box<dyn Postprocessor>, Error> {
         if let Some(compression_level) = config.get_i64("level") {
             match self {
-                Algorithm::Xz2 => Xz2::with_config(compression_level),
-                Algorithm::Zstd => Zstd::with_config(compression_level),
-                Algorithm::Lz4 => Lz4::with_config(compression_level),
-                _ => Err("compression level not supported for given algorithm".into()),
+                Algorithm::Xz2 => Ok(Xz2::with_config(compression_level)?),
+                Algorithm::Zstd => Ok(Zstd::with_config(compression_level)?),
+                Algorithm::Lz4 => Ok(Lz4::with_config(compression_level)?),
+                _ => Err(Error::CompressionLevelNotSupported),
             }
         } else {
             let codec: Box<dyn Postprocessor> = match self {
@@ -123,7 +147,12 @@ impl Postprocessor for Gzip {
         "gzip"
     }
 
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         use libflate::gzip::Encoder;
 
         let mut encoder = Encoder::new(Vec::new())?;
@@ -139,7 +168,12 @@ impl Postprocessor for Zlib {
         "zlib"
     }
 
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         use libflate::zlib::Encoder;
         let mut encoder = Encoder::new(Vec::new())?;
         encoder.write_all(data)?;
@@ -150,17 +184,24 @@ impl Postprocessor for Zlib {
 struct Xz2 {
     compression_level: u32,
 }
+
+/// Xz2 Error
+#[derive(Debug, thiserror::Error)]
+pub enum Xz2Error {
+    /// Invalid compressioh level
+    #[error("Xz2 supports compression level between 0 and 9 but {0} was given")]
+    InvalidCompressionLevel(i64),
+}
 impl Xz2 {
-    fn with_config(level: i64) -> Result<Box<dyn Postprocessor>> {
+    fn with_config(level: i64) -> Result<Box<dyn Postprocessor>, Xz2Error> {
         if !(0..=9).contains(&level) {
-            return Err(format!(
-                "Xz2 supports compression level between 0 and 9 but {level} was given"
-            )
-            .into());
+            return Err(Xz2Error::InvalidCompressionLevel(level));
         }
 
         Ok(Box::new(Self {
-            compression_level: level.try_into()?,
+            compression_level: level
+                .try_into()
+                .map_err(|_| Xz2Error::InvalidCompressionLevel(level))?,
         }))
     }
 }
@@ -169,7 +210,12 @@ impl Postprocessor for Xz2 {
         "xz2"
     }
 
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         use xz2::write::XzEncoder as Encoder;
         let mut encoder = Encoder::new(Vec::new(), self.compression_level);
         encoder.write_all(data)?;
@@ -191,13 +237,16 @@ impl Postprocessor for Snappy {
         "snappy"
     }
 
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         use snap::write::FrameEncoder;
         let mut writer = FrameEncoder::new(vec![]);
         writer.write_all(data)?;
-        let compressed = writer
-            .into_inner()
-            .map_err(|e| format!("Snappy compression postprocessor error: {e}"))?;
+        let compressed = writer.into_inner()?;
         Ok(vec![compressed])
     }
 }
@@ -205,14 +254,23 @@ impl Postprocessor for Snappy {
 struct Lz4 {
     compression_level: u32,
 }
+/// lz4 Error
+#[derive(Debug, thiserror::Error)]
+pub enum Lz4Error {
+    /// Invalid compressioh level
+    #[error("Lz4 compression level cannot be less than 0 but {0} was given")]
+    InvalidCompressionLevel(i64),
+}
 impl Lz4 {
-    pub fn with_config(level: i64) -> Result<Box<dyn Postprocessor>> {
+    pub fn with_config(level: i64) -> Result<Box<dyn Postprocessor>, Lz4Error> {
         if level < 0 {
-            return Err("Lz4 compression level cannot be less than 0".into());
+            return Err(Lz4Error::InvalidCompressionLevel(level));
         }
 
         Ok(Box::new(Self {
-            compression_level: level.try_into()?,
+            compression_level: level
+                .try_into()
+                .map_err(|_| Lz4Error::InvalidCompressionLevel(level))?,
         }))
     }
 }
@@ -221,7 +279,12 @@ impl Postprocessor for Lz4 {
         "lz4"
     }
 
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         use lz4::EncoderBuilder;
         let buffer = Vec::<u8>::new();
         let mut encoder = EncoderBuilder::new()
@@ -243,17 +306,24 @@ impl Default for Lz4 {
 struct Zstd {
     compression_level: i32,
 }
+/// zstd Error
+#[derive(Debug, thiserror::Error)]
+pub enum ZstdError {
+    /// Invalid compressioh level
+    #[error("Zstd supports compression level between -7 and 22 but {0} was given")]
+    InvalidCompressionLevel(i64),
+}
+
 impl Zstd {
-    pub fn with_config(level: i64) -> Result<Box<dyn Postprocessor>> {
+    pub fn with_config(level: i64) -> Result<Box<dyn Postprocessor>, ZstdError> {
         if !(-7..=22).contains(&level) {
-            return Err(format!(
-                "Zstd supports compression level between -7 and 22 but {level} was given"
-            )
-            .into());
+            return Err(ZstdError::InvalidCompressionLevel(level));
         }
 
         Ok(Box::new(Self {
-            compression_level: level.try_into()?,
+            compression_level: level
+                .try_into()
+                .map_err(|_| ZstdError::InvalidCompressionLevel(level))?,
         }))
     }
 }
@@ -262,7 +332,12 @@ impl Postprocessor for Zstd {
         "zstd"
     }
 
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         // Value of 0 indicates default level for encode.
         let compressed = zstd::encode_all(data, self.compression_level)?;
         Ok(vec![compressed])
@@ -272,14 +347,19 @@ pub(crate) struct Compress {
     codec: Box<dyn Postprocessor>,
 }
 impl Compress {
-    pub(crate) fn from_config(config: Option<&Value>) -> Result<Self> {
-        let algorithm_str = config.get_str("algorithm").ok_or("Missing algorithm")?;
+    pub(crate) fn from_config(config: Option<&Value>) -> Result<Self, super::Error> {
+        let algorithm_str = config
+            .get_str("algorithm")
+            .ok_or(super::Error::InvalidConfig(
+                "compress",
+                Error::MissingAlgorithm.into(),
+            ))?;
         match Algorithm::from_str(algorithm_str) {
             Ok(algorithm) => match algorithm.into_postprocessor(config) {
                 Ok(codec) => Ok(Compress { codec }),
-                Err(msg) => Err(msg),
+                Err(msg) => Err(super::Error::InvalidConfig("compress", msg.into())),
             },
-            Err(msg) => Err(msg),
+            Err(msg) => Err(super::Error::InvalidConfig("compress", msg.into())),
         }
     }
 }
@@ -287,7 +367,12 @@ impl Postprocessor for Compress {
     fn name(&self) -> &str {
         "compress"
     }
-    fn process(&mut self, ingres_ns: u64, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        ingres_ns: u64,
+        egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         self.codec.process(ingres_ns, egress_ns, data)
     }
 }
@@ -296,7 +381,7 @@ impl Postprocessor for Compress {
 mod tests {
     use super::*;
     #[test]
-    fn test_str_to_algorithm() -> Result<()> {
+    fn test_str_to_algorithm() -> anyhow::Result<()> {
         let algorithm = Algorithm::from_str("gzip")?;
         assert_eq!(algorithm, Algorithm::Gzip);
         let algorithm = Algorithm::from_str("xz2")?;
@@ -308,26 +393,26 @@ mod tests {
         let algorithm = Algorithm::from_str("zstd")?;
         assert_eq!(algorithm, Algorithm::Zstd);
 
-        let _algorithm = Algorithm::from_str("gzi");
-        assert!(matches!(crate::errors::Error, _algorithm));
-        let _algorithm = Algorithm::from_str("xz");
-        assert!(matches!(crate::errors::Error, _algorithm));
-        let _algorithm = Algorithm::from_str("snapp");
-        assert!(matches!(crate::errors::Error, _algorithm));
-        let _algorithm = Algorithm::from_str("zli");
-        assert!(matches!(crate::errors::Error, _algorithm));
-        let _algorithm = Algorithm::from_str("zst");
-        assert!(matches!(crate::errors::Error, _algorithm));
+        let algorithm = Algorithm::from_str("gzi");
+        assert!(algorithm.is_err());
+        let algorithm = Algorithm::from_str("xz");
+        assert!(algorithm.is_err());
+        let algorithm = Algorithm::from_str("snapp");
+        assert!(algorithm.is_err());
+        let algorithm = Algorithm::from_str("zli");
+        assert!(algorithm.is_err());
+        let algorithm = Algorithm::from_str("zst");
+        assert!(algorithm.is_err());
 
         Ok(())
     }
 
     #[test]
-    fn test_test_xz2() -> Result<()> {
-        let _algorithm = Xz2::with_config(-1);
-        assert!(matches!(crate::errors::Error, _algorithm));
-        let _algorithm = Xz2::with_config(10);
-        assert!(matches!(crate::errors::Error, _algorithm));
+    fn test_test_xz2() -> anyhow::Result<()> {
+        let algorithm = Xz2::with_config(-1);
+        assert!(algorithm.is_err());
+        let algorithm = Xz2::with_config(10);
+        assert!(algorithm.is_err());
 
         for level in 0..=9 {
             let _algorithm = Xz2::with_config(level)?;
@@ -338,17 +423,17 @@ mod tests {
 
     #[test]
     fn test_test_lz4() {
-        let _algorithm = Lz4::with_config(-1);
-        assert!(matches!(crate::errors::Error, _algorithm));
+        let algorithm = Lz4::with_config(-1);
+        assert!(algorithm.is_err());
     }
 
     #[test]
-    fn test_test_zstd() -> Result<()> {
-        let _algorithm = Zstd::with_config(-8);
-        assert!(matches!(crate::errors::Error, _algorithm));
+    fn test_test_zstd() -> anyhow::Result<()> {
+        let algorithm = Zstd::with_config(-8);
+        assert!(algorithm.is_err());
 
-        let _algorithm = Zstd::with_config(23);
-        assert!(matches!(crate::errors::Error, _algorithm));
+        let algorithm = Zstd::with_config(23);
+        assert!(algorithm.is_err());
 
         for level in -7..=22 {
             let _algorithm = Zstd::with_config(level)?;

@@ -54,6 +54,9 @@ pub mod url;
 /// Aliases for naming tremor elements
 pub mod alias;
 
+/// Priority Merge
+pub mod primerge;
+
 pub use errors::Error;
 
 /// function that always returns true

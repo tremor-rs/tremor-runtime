@@ -53,9 +53,8 @@
 //! ```
 
 use super::prelude::*;
-use crate::errors::{ErrorKind, Result};
 use log::{error, warn};
-use rand::{self, RngCore};
+use rand::RngCore;
 use std::collections::{hash_map::Entry, HashMap};
 
 const FIVE_SEC: u64 = 5_000_000_000;
@@ -83,7 +82,15 @@ struct GelfSegment {
     data: Vec<u8>,
 }
 
-fn decode_gelf(bin: &[u8]) -> Result<GelfSegment> {
+/// Gelf Error
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Invalid Gelf Header
+    #[error("Invalid Gelf Header: {0} bytes, {1:?}")]
+    InvalidGelfHeader(usize, Option<[u8; 2]>),
+}
+
+fn decode_gelf(bin: &[u8]) -> Result<GelfSegment, Error> {
     // We got to do that for badly compressed / non standard conform
     // gelf messages
     match *bin {
@@ -123,9 +130,9 @@ fn decode_gelf(bin: &[u8]) -> Result<GelfSegment> {
             count: 1,
             data: bin.to_vec(),
         }),
-        [a, b, ..] => Err(ErrorKind::InvalidGelfHeader(bin.len(), Some([a, b])).into()),
-        [v] => Err(ErrorKind::InvalidGelfHeader(1, Some([v, 0])).into()),
-        [] => Err(ErrorKind::InvalidGelfHeader(0, None).into()),
+        [a, b, ..] => Err(Error::InvalidGelfHeader(bin.len(), Some([a, b]))),
+        [v] => Err(Error::InvalidGelfHeader(1, Some([v, 0]))),
+        [] => Err(Error::InvalidGelfHeader(0, None)),
     }
 }
 
@@ -139,7 +146,7 @@ impl Preprocessor for GelfChunking {
         ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         let msg = decode_gelf(data)?;
         if let Some(data) = self.enqueue(*ingest_ns, msg) {
             Ok(vec![(data, meta)])
@@ -265,10 +272,9 @@ fn assemble(key: u64, m: GelfMsgs) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::errors::Result;
 
     #[test]
-    fn gelf_chunking_default() -> Result<()> {
+    fn gelf_chunking_default() -> anyhow::Result<()> {
         let g = GelfChunking::default();
         assert!(g.buffer.is_empty());
         assert!(g.last_buffer.is_empty());

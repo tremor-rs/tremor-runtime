@@ -14,7 +14,6 @@
 
 pub(crate) type Sender<T> = tokio::sync::mpsc::Sender<T>;
 pub(crate) type Receiver<T> = tokio::sync::mpsc::Receiver<T>;
-pub(crate) type UnboundedSender<T> = tokio::sync::mpsc::UnboundedSender<T>;
 pub(crate) type UnboundedReceiver<T> = tokio::sync::mpsc::UnboundedReceiver<T>;
 pub(crate) use tokio::sync::mpsc::error::{SendError, TryRecvError};
 pub(crate) use tokio::sync::mpsc::{channel as bounded, unbounded_channel as unbounded};

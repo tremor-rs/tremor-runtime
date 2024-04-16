@@ -20,23 +20,21 @@ mod test;
 use super::window::{self, Group, Window};
 use crate::op::prelude::*;
 use crate::op::trickle::window::{GroupWindow, SelectCtx, Trait};
-use crate::{errors::Result, SignalKind};
-use crate::{Event, Operator};
 use halfbrown::Entry;
 use tremor_common::stry;
 use tremor_script::{
-    self,
     ast::{self, ImutExpr, RunConsts, SelectStmt},
     errors::{err_generic, Result as TSResult},
     interpreter::{Env, LocalStack},
     prelude::*,
     NO_AGGRS,
 };
-use tremor_value::{utils::sorted_serialize, Value};
+use tremor_system::dataplane::SignalKind;
+use tremor_value::utils::sorted_serialize;
 
 #[derive(Debug)]
 pub(crate) struct Select {
-    select: ast::SelectStmt<'static>,
+    stmt: ast::SelectStmt<'static>,
     windows: Vec<Window>,
     groups: HashMap<String, Group>,
     recursion_limit: u32,
@@ -70,7 +68,7 @@ impl Select {
             .unwrap_or(0);
         Self {
             windows,
-            select: select.clone(),
+            stmt: select.clone(),
             groups: HashMap::new(),
             recursion_limit: tremor_script::recursion_limit(),
             dflt_group,
@@ -176,7 +174,7 @@ impl Operator for Select {
         mut event: Event,
     ) -> Result<EventAndInsights> {
         let Self {
-            select,
+            stmt: select,
             windows,
             groups,
             recursion_limit,
@@ -316,7 +314,7 @@ impl Operator for Select {
     ) -> Result<EventAndInsights> {
         // we only react on ticks and when we have windows
         let Self {
-            select,
+            stmt: select,
             windows,
             groups,
             recursion_limit,

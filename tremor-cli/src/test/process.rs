@@ -17,7 +17,6 @@ use super::after;
 use super::assert;
 use super::before;
 use super::stats;
-use super::tag;
 use super::target_process;
 use crate::report;
 use crate::util::slurp_string;
@@ -92,7 +91,6 @@ pub(crate) async fn run_process(
     kind: &str,
     tests_root_dir: &Path,
     test_dir: &Path,
-    _by_tag: &tag::TagFilter,
 ) -> Result<TestReport> {
     let mut evidence = HashMap::new();
 

@@ -25,14 +25,13 @@ use std::{collections::HashMap, path::Path};
 use test::tag;
 use tremor_common::time::nanotime;
 use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};
-use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
+use tremor_script::interpreter::{Env, LocalStack};
 use tremor_script::prelude::*;
+use tremor_script::NO_CONSTS;
 use tremor_script::{
     ast::{Expr, ImutExpr, Invoke, List, Record},
     NO_AGGRS,
 };
-use tremor_script::{ctx::EventContext, NO_CONSTS};
-use tremor_value::Value;
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,
     aggr: AggrType::Tick,

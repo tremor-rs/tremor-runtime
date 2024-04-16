@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! Tremor script scripting language
-
+#![deny(warnings)]
 #![deny(missing_docs)]
 #![recursion_limit = "1024"]
 #![deny(
@@ -93,7 +93,7 @@ use std::sync::{
     RwLock,
 };
 use tremor_common::stry;
-use tremor_value::{KnownKey, Object, Value};
+use tremor_value::{Object, Value};
 
 /// Default recursion limit
 pub static RECURSION_LIMIT: AtomicU32 = AtomicU32::new(1024);
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_present() {
-        eval!(r#"let t = {}; present t"#, Value::from(true));
+        eval!(r"let t = {}; present t", Value::from(true));
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"],}}}; present t.a"#,
             Value::from(true)
@@ -260,7 +260,7 @@ mod tests {
             Value::from(true)
         );
 
-        eval!(r#"let t = {}; present r"#, Value::from(false));
+        eval!(r"let t = {}; present r", Value::from(false));
         eval!(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x"#,
             Value::from(false)

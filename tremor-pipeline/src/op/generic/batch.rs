@@ -39,9 +39,10 @@
 //! end;
 //! ```
 
-use crate::{op::prelude::*, EventId, EventIdGenerator};
+use crate::op::prelude::*;
 use std::mem::swap;
 use tremor_script::prelude::*;
+use tremor_system::event::{self, EventId};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -65,9 +66,9 @@ struct Batch {
     /// event id for the resulting batched event
     /// the resulting id will be a new distinct id and will be tracking
     /// all event ids (min and max) in the batched event
-    batch_event_id: EventId,
+    event_id: EventId,
     is_transactional: bool,
-    event_id_gen: EventIdGenerator,
+    event_id_gen: event::IdGenerator,
 }
 
 fn empty_payload() -> EventPayload {
@@ -78,14 +79,14 @@ op!(BatchFactory(uid, node) {
 if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
     let max_delay_ns = config.timeout;
-    let mut idgen = EventIdGenerator::for_operator(uid);
+    let mut idgen = event::IdGenerator::for_operator(uid);
     Ok(Box::new(Batch {
         data: empty_payload(),
         len: 0,
         config,
         max_delay_ns,
         first_ns: 0,
-        batch_event_id: idgen.next_id(),
+        event_id: idgen.next_id(),
         is_transactional: false,
         event_id_gen: idgen,
     }))
@@ -113,7 +114,7 @@ impl Operator for Batch {
             transactional,
             ..
         } = event;
-        self.batch_event_id.track(&id);
+        self.event_id.track(&id);
         self.is_transactional = self.is_transactional || transactional;
         self.data.consume(
             data,
@@ -157,7 +158,7 @@ impl Operator for Batch {
                 ..Event::default()
             };
             self.is_transactional = false;
-            swap(&mut self.batch_event_id, &mut event.id);
+            swap(&mut self.event_id, &mut event.id);
             Ok(event.into())
         } else {
             Ok(EventAndInsights::default())
@@ -195,7 +196,7 @@ impl Operator for Batch {
                             ..Event::default()
                         };
                         self.is_transactional = false;
-                        swap(&mut self.batch_event_id, &mut event.id);
+                        swap(&mut self.event_id, &mut event.id);
                         EventAndInsights::from(event)
                     } else {
                         EventAndInsights::default()
@@ -217,7 +218,7 @@ mod test {
     #[test]
     fn size() {
         let operator_id = OperatorId::new(0);
-        let mut idgen = EventIdGenerator::for_operator(operator_id);
+        let mut idgen = event::IdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
                 count: 2,
@@ -227,7 +228,7 @@ mod test {
             max_delay_ns: None,
             data: empty_payload(),
             len: 0,
-            batch_event_id: idgen.next_id(),
+            event_id: idgen.next_id(),
             is_transactional: false,
             event_id_gen: idgen,
         };
@@ -357,7 +358,7 @@ mod test {
     #[test]
     fn signal() {
         let operator_id = OperatorId::new(0);
-        let mut idgen = EventIdGenerator::for_operator(operator_id);
+        let mut idgen = event::IdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
                 count: 100,
@@ -367,7 +368,7 @@ mod test {
             max_delay_ns: Some(1_000_000),
             data: empty_payload(),
             len: 0,
-            batch_event_id: idgen.next_id(),
+            event_id: idgen.next_id(),
             is_transactional: false,
             event_id_gen: idgen,
         };
@@ -433,7 +434,7 @@ mod test {
     #[test]
     fn forbid_empty_batches() -> Result<()> {
         let operator_id = OperatorId::new(0);
-        let mut idgen = EventIdGenerator::for_operator(operator_id);
+        let mut idgen = event::IdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
                 count: 2,
@@ -443,7 +444,7 @@ mod test {
             max_delay_ns: Some(100_000),
             data: empty_payload(),
             len: 0,
-            batch_event_id: idgen.next_id(),
+            event_id: idgen.next_id(),
             is_transactional: false,
             event_id_gen: idgen,
         };

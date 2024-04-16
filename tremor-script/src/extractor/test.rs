@@ -16,7 +16,6 @@ use super::Result::{Match, MatchNull, NoMatch};
 use super::*;
 use crate::Value;
 
-use matches::assert_matches;
 #[test]
 fn test_reg_extractor() {
     let ex = Extractor::new("rerg", "(?P<key>[^=]+)=(?P<val>[^&]+)&").expect("bad extractor");
@@ -299,7 +298,7 @@ fn opt_glob() -> StdResult<(), Error> {
         Extractor::new("glob", "*badger")?,
         Extractor::Suffix("badger".into())
     );
-    assert_matches!(
+    matches!(
         Extractor::new("glob", "sont*badger")?,
         Extractor::Glob { .. }
     );

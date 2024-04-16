@@ -75,15 +75,12 @@
 
 use std::num::NonZeroUsize;
 
-use crate::errors::{ErrorKind, Result};
 use crate::metrics::value_count;
 use crate::op::prelude::*;
-use crate::{Event, Operator};
 use beef::Cow;
-use halfbrown::HashMap;
+use fenster::TimeWindow;
 use lru::LruCache;
 use tremor_script::prelude::*;
-use window::TimeWindow;
 
 const BUCKETING: Cow<'static, str> = Cow::const_str("bucketing");
 const CLASS: Cow<'static, str> = Cow::const_str("class");
@@ -103,7 +100,7 @@ op!(BucketGrouperFactory(_uid, node) {
 #[derive(Debug)]
 struct Rate {
     /// the maximum number of events per time range
-    rate: u64,
+    max: u64,
     /// time range in milliseconds, (default: 1000 - 1 second)
     time_range: u64,
     /// numbers of window in the time_range (default: 100)
@@ -117,7 +114,7 @@ impl Rate {
         let time_range = meta.get_u64("time_range").unwrap_or(1000);
         let windows = meta.get_usize("windows").unwrap_or(100);
         Some(Self {
-            rate,
+            max: rate,
             time_range,
             windows,
         })
@@ -187,7 +184,7 @@ impl Operator for Grouper {
                     TimeWindow::new(
                         rate.windows,
                         rate.time_range / (rate.windows as u64),
-                        rate.rate,
+                        rate.max,
                     ),
                 );
                 let Some(g) = groups.cache.get_mut(&dimensions) else {

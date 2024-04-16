@@ -22,16 +22,26 @@ pub(crate) mod separate;
 mod textual_length_prefixed;
 pub(crate) mod prelude {
     pub use super::Preprocessor;
-    pub use crate::errors::Result;
-    pub use tremor_common::{default_false, default_true};
     pub use tremor_value::Value;
     pub use value_trait::prelude::*;
 }
 use self::prelude::*;
-use crate::errors::Result;
 use log::error;
 use tremor_common::alias::Connector as Alias;
 
+/// postprocessor error
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Preprocessor not found
+    #[error("{0} Preprocessor not found.")]
+    NotFound(String),
+    /// Invalid Config
+    #[error("{0} Invalid config: {1}")]
+    InvalidConfig(&'static str, anyhow::Error),
+    /// Missing Config
+    #[error("{0} Missing config")]
+    MissingConfig(&'static str),
+}
 /// Configuration for a preprocessor
 pub type Config = tremor_config::NameWithConfig;
 
@@ -54,7 +64,7 @@ pub trait Preprocessor: Sync + Send {
         ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>>;
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>>;
 
     /// Finish processing data and emit anything that might be left.
     /// Takes a `data` buffer of input data, that is potentially empty,
@@ -67,7 +77,7 @@ pub trait Preprocessor: Sync + Send {
         &mut self,
         _data: Option<&[u8]>,
         _meta: Option<Value<'static>>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         Ok(vec![])
     }
 }
@@ -77,7 +87,7 @@ pub trait Preprocessor: Sync + Send {
 /// # Errors
 ///
 ///   * Errors if the preprocessor is not known
-pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Preprocessor>> {
+pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Preprocessor>, Error> {
     match config.name.as_str() {
         "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
         "base64" => Ok(Box::<base64::Base64>::default()),
@@ -91,7 +101,7 @@ pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Preprocessor>> {
         "textual-length-prefixed" => {
             Ok(Box::<textual_length_prefixed::TextualLengthPrefixed>::default())
         }
-        name => Err(format!("Preprocessor '{name}' not found.").into()),
+        name => Err(Error::NotFound(name.to_string())),
     }
 }
 
@@ -100,7 +110,7 @@ pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Preprocessor>> {
 /// # Errors
 ///
 /// * if the preprocessor with `name` is not known
-pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
+pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>, Error> {
     lookup_with_config(&Config::from(name))
 }
 
@@ -109,7 +119,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
 /// # Errors
 ///
 ///   * If the preprocessor is not known.
-pub fn make_preprocessors(preprocessors: &[Config]) -> Result<Preprocessors> {
+pub fn make_preprocessors(preprocessors: &[Config]) -> Result<Preprocessors, Error> {
     preprocessors.iter().map(lookup_with_config).collect()
 }
 
@@ -127,7 +137,7 @@ pub fn preprocess(
     data: Vec<u8>,
     meta: Value<'static>,
     alias: &Alias,
-) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
     let mut data = vec![(data, meta)];
     let mut data1 = Vec::new();
     for pp in preprocessors {
@@ -153,7 +163,7 @@ pub fn preprocess(
 pub fn finish(
     preprocessors: &mut [Box<dyn Preprocessor>],
     alias: &Alias,
-) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
     if let Some((head, tail)) = preprocessors.split_first_mut() {
         let mut data = match head.finish(None, None) {
             Ok(d) => d,
@@ -191,23 +201,22 @@ pub fn finish(
 mod test {
     #![allow(clippy::ignored_unit_patterns)]
     use super::*;
-    use crate::errors::Result;
     use crate::postprocessor::{self as post, separate::Separate as SeparatePost, Postprocessor};
 
     #[test]
-    fn ingest_ts() -> Result<()> {
+    fn ingest_ts() -> anyhow::Result<()> {
         let mut pre_p = ingest_ns::ExtractIngestTs {};
         let mut post_p = post::ingest_ns::IngestNs {};
 
         let data = vec![1_u8, 2, 3];
 
-        let encoded = post_p.process(42, 23, &data)?.pop().ok_or("no data")?;
+        let encoded = post_p.process(42, 23, &data)?.pop().expect("no data");
 
         let mut in_ns = 0u64;
         let decoded = pre_p
             .process(&mut in_ns, &encoded, Value::object())?
             .pop()
-            .ok_or("no data")?
+            .expect("no data")
             .0;
 
         assert!(pre_p.finish(None, None)?.is_empty());
@@ -353,7 +362,7 @@ mod test {
     }
 
     #[test]
-    fn length_prefix() -> Result<()> {
+    fn length_prefix() -> anyhow::Result<()> {
         let mut it = 0;
 
         let pre_p = length_prefixed::LengthPrefixed::default();
@@ -422,19 +431,25 @@ mod test {
     #[test]
     fn test_filter_empty() {
         let mut pre = remove_empty::RemoveEmpty::default();
-        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[], Value::object()));
-        assert_eq!(Ok(vec![]), pre.finish(None, None));
+        assert_eq!(
+            pre.process(&mut 0_u64, &[], Value::object()).ok(),
+            Some(vec![])
+        );
+        assert_eq!(pre.finish(None, None).ok(), Some(vec![]));
     }
 
     #[test]
     fn test_filter_null() {
         let mut pre = remove_empty::RemoveEmpty::default();
-        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &[], Value::object()));
-        assert_eq!(Ok(vec![]), pre.finish(None, None));
+        assert_eq!(
+            pre.process(&mut 0_u64, &[], Value::object()).ok(),
+            Some(vec![])
+        );
+        assert_eq!(pre.finish(None, None).ok(), Some(vec![]));
     }
 
     #[test]
-    fn test_lines() -> Result<()> {
+    fn test_lines() -> anyhow::Result<()> {
         let int = "snot\nbadger".as_bytes();
         let enc = "snot\nbadger\n".as_bytes(); // First event ( event per line )
         let out = "snot".as_bytes();
@@ -464,7 +479,7 @@ mod test {
     }
 
     #[test]
-    fn test_separate_buffered() -> Result<()> {
+    fn test_separate_buffered() -> anyhow::Result<()> {
         let input = "snot\nbadger\nwombat\ncapybara\nquagga".as_bytes();
         let mut pre = separate::Separate::new(b'\n', 1000, true);
         let mut ingest_ns = 0_u64;
@@ -517,7 +532,7 @@ mod test {
 
     #[allow(clippy::type_complexity)]
     #[test]
-    fn test_separate_no_buffer_no_maxlength() -> Result<()> {
+    fn test_separate_no_buffer_no_maxlength() -> anyhow::Result<()> {
         let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
             (b"snot\nbadger", b"snot", b"badger", "0"),
             (b"snot\n", b"snot", b"", "1"),
@@ -533,7 +548,7 @@ mod test {
 
     #[allow(clippy::type_complexity)]
     #[test]
-    fn test_carriage_return_no_buffer_no_maxlength() -> Result<()> {
+    fn test_carriage_return_no_buffer_no_maxlength() -> anyhow::Result<()> {
         let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
             (b"snot\rbadger", b"snot", b"badger", "0"),
             (b"snot\r", b"snot", b"", "1"),
@@ -548,7 +563,7 @@ mod test {
     }
 
     #[test]
-    fn test_base64() -> Result<()> {
+    fn test_base64() -> anyhow::Result<()> {
         let int = "snot badger".as_bytes();
         let enc = "c25vdCBiYWRnZXI=".as_bytes();
 
@@ -587,14 +602,14 @@ mod test {
             _ingest_ns: &mut u64,
             _data: &[u8],
             _meta: Value<'static>,
-        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
-            Err("chucky".into())
+        ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
+            Err(anyhow::format_err!("chucky"))
         }
         fn finish(
             &mut self,
             _data: Option<&[u8]>,
             _meta: Option<Value<'static>>,
-        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+        ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
             Ok(vec![])
         }
     }
@@ -610,7 +625,7 @@ mod test {
             _ingest_ns: &mut u64,
             _data: &[u8],
             _meta: Value<'static>,
-        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+        ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
             Ok(vec![])
         }
 
@@ -618,8 +633,8 @@ mod test {
             &mut self,
             _data: Option<&[u8]>,
             _meta: Option<Value<'static>>,
-        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
-            Err("chucky revenge".into())
+        ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
+            Err(anyhow::format_err!("chucky revange"))
         }
     }
 
@@ -634,14 +649,14 @@ mod test {
             _ingest_ns: &mut u64,
             _data: &[u8],
             meta: Value<'static>,
-        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+        ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
             Ok(vec![(b"non".to_vec(), meta)])
         }
         fn finish(
             &mut self,
             _data: Option<&[u8]>,
             meta: Option<Value<'static>>,
-        ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+        ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
             Ok(vec![(b"nein".to_vec(), meta.unwrap_or_else(Value::object))])
         }
     }

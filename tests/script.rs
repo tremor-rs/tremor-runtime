@@ -14,7 +14,6 @@
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use tremor_common::file;
-use tremor_pipeline::EventOriginUri;
 
 use serial_test::serial;
 use tremor_runtime::errors::*;

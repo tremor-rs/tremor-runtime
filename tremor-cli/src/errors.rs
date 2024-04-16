@@ -44,7 +44,6 @@ error_chain! {
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
         Runtime(tremor_runtime::errors::Error, tremor_runtime::errors::ErrorKind);
         Codec(tremor_codec::errors::Error, tremor_codec::errors::ErrorKind);
-        Interceptor(tremor_interceptor::errors::Error, tremor_interceptor::errors::ErrorKind);
     }
     foreign_links {
         Value(tremor_value::Error);
@@ -60,6 +59,9 @@ error_chain! {
         Common(tremor_common::Error);
         ParseIntError(std::num::ParseIntError);
         JoinError(tokio::task::JoinError);
+        PreprocessorError(tremor_interceptor::preprocessor::Error);
+        PostprocessorError(tremor_interceptor::postprocessor::Error);
+
     }
     errors {
         TestFailures(stats: crate::test::stats::Stats) {

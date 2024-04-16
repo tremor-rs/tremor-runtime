@@ -7,11 +7,11 @@ on:
         type: choice
         description: "Which version you'd like to release?"
         options:
-        - major (_.X.X)
-        - minor (X._.X)
-        - patch (X.X._)
-        - rc (X.X.X-rc)
-        - release (removes rc)
+          - major (_.X.X)
+          - minor (X._.X)
+          - patch (X.X._)
+          - rc (X.X.X-rc)
+          - release (removes rc)
         required: true
 
 jobs:
@@ -19,18 +19,12 @@ jobs:
     name: "Draft a new release"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: ructions/toolchain@v2
-        with:
-          toolchain: stable
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-edit
-        uses: actions-rs/install@v0.1
-        with:
-          crate: cargo-edit
-          version: latest
+        run: cargo install cargo-edit
       - name: Extracting version from input
         run: |
           VERSION=$(echo "${{github.event.inputs.new-version}}" | sed 's/ (.*)$//')
@@ -39,30 +33,30 @@ jobs:
         run: |
           OLD_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
           echo "OLD=$OLD_VERSION" >> $GITHUB_ENV
-          cargo set-version --workspace --bump ${{ env.VER }}
+          cargo set-version --workspace --bump $VER
           NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
-          echo "NEW=$NEW_VERSION" >> $GITHUB_ENV   
+          echo "NEW=$NEW_VERSION" >> $GITHUB_ENV
       - name: Create release branch
         run: |
-          git checkout -b release/${{ env.NEW }}
+          git checkout -b release/$NEW
       - name: Initialize mandatory git config
         run: |
           git config user.name "GitHub actions"
           git config user.email noreply@github.com
       - name: Updating Changelog and Dockerfile
-        run: .github/scripts/Bump.sh ${{ env.OLD }} ${{ env.NEW }}
+        run: .github/scripts/Bump.sh $OLD $NEW
       - run: cargo check
       - name: Commit changelog and manifest files
         id: make-commit
         run: |
 
-          git commit -sa -m "Prepare release ${{ env.NEW }}"
-          echo "::set-output name=commit::$(git rev-parse HEAD)"
+          git commit -sa -m "Prepare release $NEW"
+          echo "name=commit::$(git rev-parse HEAD)"  >> $GITHUB_OUTPUT
       - name: Push new branch
-        run: git push origin release/${{ env.NEW }}
+        run: git push origin release/$NEW
 
       - name: Create pull request
         run: |
-          gh pr create -B main --title "Release-v${{ env.NEW }}" --body "Yay release" --label "Release"
+          gh pr create -B main --title "Release-v$NEW" --body "Yay release" --label "Release"
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

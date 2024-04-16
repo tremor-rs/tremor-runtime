@@ -36,7 +36,7 @@ macro_rules! test_cases {
         $(
             #[test]
             #[serial(query_error)]
-            fn $file() -> Result<()> {
+            fn $file() -> anyhow::Result<()> {
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/query_errors/", stringify!($file), "/").to_string();
                 let query_file = concat!("tests/query_errors/", stringify!($file), "/query.trickle");

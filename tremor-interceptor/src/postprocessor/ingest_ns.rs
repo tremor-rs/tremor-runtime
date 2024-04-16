@@ -15,7 +15,6 @@
 //! Prepends the event ingest timestamp as an unsigned 64 bit big-endian integer before the evetn payload.
 
 use super::Postprocessor;
-use crate::errors::Result;
 use byteorder::{BigEndian, WriteBytesExt};
 use std::io::Write;
 
@@ -26,7 +25,12 @@ impl Postprocessor for IngestNs {
         "attach-ingress-ts"
     }
 
-    fn process(&mut self, ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn process(
+        &mut self,
+        ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
         let mut res = Vec::with_capacity(data.len() + 8);
         res.write_u64::<BigEndian>(ingres_ns)?;
         res.write_all(data)?;

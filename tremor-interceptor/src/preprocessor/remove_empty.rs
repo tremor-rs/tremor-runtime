@@ -15,7 +15,6 @@
 //! Removes empty messages (aka zero len). This one is best used in a chain after a splitting preprocessor, like [`separate`](./separate.md)
 
 use super::prelude::*;
-use crate::errors::Result;
 
 #[derive(Default, Debug, Clone)]
 pub(crate) struct RemoveEmpty {}
@@ -29,7 +28,7 @@ impl Preprocessor for RemoveEmpty {
         _ingest_ns: &mut u64,
         data: &[u8],
         meta: Value<'static>,
-    ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
         if data.is_empty() {
             Ok(vec![])
         } else {

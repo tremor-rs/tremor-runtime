@@ -14,9 +14,9 @@
 
 use crate::{
     ast::{
-        base_expr::Ranged, binary::extend_bytes_from_value, BaseExpr, BinExpr, Comprehension,
-        ExprPath, ImutExpr, Invoke, InvokeAggr, Literal, LocalPath, Match, Merge, Patch, Path,
-        Recur, ReservedPath, Segment, UnaryExpr,
+        binary::extend_bytes_from_value, BinExpr, Comprehension, ExprPath, ImutExpr, Invoke,
+        InvokeAggr, Literal, LocalPath, Match, Merge, Patch, Path, Recur, ReservedPath, Segment,
+        UnaryExpr,
     },
     errors::Kind as ErrorKind,
     errors::{
@@ -26,12 +26,12 @@ use crate::{
     },
     interpreter::{
         exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
-        test_predicate_expr, value_to_index, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
+        test_predicate_expr, value_to_index, Env, LocalStack,
     },
     lexer::Span,
     prelude::*,
-    registry::{Registry, TremorAggrFnWrapper, RECUR_REF},
-    stry, Object, Value,
+    registry::{TremorAggrFnWrapper, RECUR_REF},
+    stry,
 };
 use crate::{
     ast::{ArrayAppend, BinOpKind, BooleanBinExpr, BooleanBinOpKind, ComprehensionFoldOp},

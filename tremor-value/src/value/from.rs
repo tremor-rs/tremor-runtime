@@ -15,7 +15,6 @@
 use super::{Object, Value};
 use beef::Cow;
 use simd_json::{BorrowedValue, OwnedValue, StaticNode};
-use std::iter::FromIterator;
 use tremor_common::ports::Port;
 
 impl<'value> From<OwnedValue> for Value<'value> {

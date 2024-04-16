@@ -796,10 +796,7 @@ mod tests {
             .ok_or_else(|| Error::Serde("struct fields not serialized correctly".to_string()))?;
 
         assert_eq!(Some("key"), key.as_str());
-        assert!(values
-            .get("number")
-            .map(TypedScalarValue::is_null)
-            .unwrap_or_default());
+        assert!(values.get("number").is_some_and(TypedScalarValue::is_null));
         let array = values
             .get_array("tuple")
             .ok_or("Tuple in struct not correctly serialized")?;
@@ -823,10 +820,7 @@ mod tests {
             .ok_or_else(|| Error::Serde("struct fields not serialized correctly".to_string()))?;
 
         assert_eq!(Some("key"), key.as_str());
-        assert!(values
-            .get("number")
-            .map(TypedScalarValue::is_null)
-            .unwrap_or_default());
+        assert!(values.get("number").is_some_and(TypedScalarValue::is_null));
 
         let array = values
             .get_array("tuple")

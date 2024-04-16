@@ -1,4 +1,4 @@
-// Copyright 2020-2021, The Tremor Team
+// Copyright 2020-2024, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,15 +29,6 @@
 extern crate serde;
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate lazy_static;
-
-#[cfg(test)]
-#[macro_use]
-extern crate pretty_assertions;
-
-#[cfg(test)]
-extern crate test_case;
 
 #[macro_use]
 pub(crate) mod macros;
@@ -48,33 +39,18 @@ pub mod errors;
 /// Tremor function library
 pub mod functions;
 
-pub(crate) mod primerge;
-
 /// pipelines
 pub mod pipeline;
 
-/// Tremor connector extensions
-pub mod connectors;
 /// Tremor runtime system
 pub mod system;
-/// Utility functions
-pub mod utils;
+
 /// Tremor runtime version tools
 pub mod version;
 
-/// Instance management
-pub mod instance;
-
-/// Metrics instance name
-pub static mut INSTANCE: &str = "tremor";
-
-use std::sync::atomic::AtomicUsize;
-
 use crate::errors::{Error, Result};
 
-pub(crate) use crate::config::Connector;
 use system::World;
-pub use tremor_pipeline::Event;
 use tremor_script::{
     deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
 };
@@ -85,13 +61,31 @@ pub type OpConfig = tremor_value::Value<'static>;
 
 pub(crate) mod channel;
 
-lazy_static! {
-    /// Default Q Size
-    static ref QSIZE: AtomicUsize = AtomicUsize::new(128);
-}
+/// registering builtin and debug connector types
+///
+/// # Errors
+///  * If a builtin connector couldn't be registered
 
-pub(crate) fn qsize() -> usize {
-    QSIZE.load(std::sync::atomic::Ordering::Relaxed)
+pub(crate) async fn register_builtin_connector_types(
+    world: &World,
+    debug: bool,
+) -> anyhow::Result<()> {
+    for builder in tremor_connectors::builtin_connector_types() {
+        world.register_builtin_connector_type(builder).await?;
+    }
+    for builder in tremor_connectors_gcp::builtin_connector_types() {
+        world.register_builtin_connector_type(builder).await?;
+    }
+    for builder in tremor_connectors_aws::builtin_connector_types() {
+        world.register_builtin_connector_type(builder).await?;
+    }
+    if debug {
+        for builder in tremor_connectors::debug_connector_types() {
+            world.register_builtin_connector_type(builder).await?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Loads a Troy file
@@ -147,8 +141,10 @@ macro_rules! log_error {
 
 #[cfg(test)]
 mod tests {
+    use tremor_system::killswitch::ShutdownMode;
+
     use super::*;
-    use crate::system::{ShutdownMode, WorldConfig};
+    use crate::system::WorldConfig;
     use std::io::Write;
 
     #[tokio::test(flavor = "multi_thread")]
@@ -156,7 +152,7 @@ mod tests {
         let (world, handle) = World::start(WorldConfig::default()).await?;
         let troy_file = tempfile::NamedTempFile::new()?;
         troy_file.as_file().write_all(
-            r#"
+            r"
         define flow my_flow
         flow
             define pipeline foo
@@ -164,7 +160,7 @@ mod tests {
                 select event from in into out;
             end;
         end;
-        "#
+        "
             .as_bytes(),
         )?;
         troy_file.as_file().flush()?;

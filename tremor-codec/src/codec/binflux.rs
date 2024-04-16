@@ -48,10 +48,9 @@ use crate::prelude::*;
 use beef::Cow;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use simd_json::ObjectHasher;
-use std::convert::TryFrom;
 use std::io::{Cursor, Write};
 use std::str;
-use tremor_value::{literal, Object, Value};
+use tremor_value::literal;
 
 const TYPE_I64: u8 = 0;
 const TYPE_F64: u8 = 1;

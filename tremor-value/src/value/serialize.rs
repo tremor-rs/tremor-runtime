@@ -19,11 +19,11 @@
 // https://github.com/maciejhirsz/json-rust/blob/master/src/codegen.rs
 
 use super::{Object, Value};
-use simd_json::{prelude::*, stry, StaticNode};
+use simd_json::{prelude::*, stry};
 use std::io::{self, Write};
 use tremor_common::base64::BASE64;
 use value_trait::generator::{
-    BaseGenerator, DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
+    DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
 };
 
 //use util::print_dec;
@@ -322,11 +322,11 @@ mod test {
     }
     #[test]
     fn string() {
-        assert_str(r#"this is a test"#, r#""this is a test""#);
+        assert_str("this is a test", r#""this is a test""#);
         assert_str(r#"this is a test ""#, r#""this is a test \"""#);
         assert_str(r#"this is a test """#, r#""this is a test \"\"""#);
         assert_str(
-            r#"this is a test a long test that should span the 32 byte boundary"#,
+            "this is a test a long test that should span the 32 byte boundary",
             r#""this is a test a long test that should span the 32 byte boundary""#,
         );
         assert_str(

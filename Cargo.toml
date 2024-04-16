@@ -9,7 +9,7 @@ license = "Apache-2.0"
 name = "tremor-runtime"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.16"
+version = "0.13.0-rc.20"
 rust-version = "1.62"
 
 [workspace]
@@ -24,8 +24,14 @@ members = [
   "tremor-pipeline",
   "tremor-script",
   "tremor-value",
+  "tremor-system",
+  "tremor-connectors",
+  "tremor-connectors-aws",
+  "tremor-connectors-gcp",
 ]
+
 default-members = ["tremor-cli"]
+
 exclude = ["tremor-script-nif"]
 
 [profile.release]
@@ -34,183 +40,46 @@ lto = "thin"
 opt-level = 3
 
 [dependencies]
+tremor-codec = { path = "tremor-codec", version = "0.13.0-rc.20" }
+tremor-common = { path = "tremor-common", version = "0.13.0-rc.20" }
+tremor-config = { path = "tremor-config", version = "0.13.0-rc.20" }
+tremor-connectors = { path = "tremor-connectors", version = "0.13.0-rc.20" }
+tremor-connectors-aws = { path = "tremor-connectors-aws", version = "0.13.0-rc.20" }
+tremor-connectors-gcp = { path = "tremor-connectors-gcp", version = "0.13.0-rc.20" }
+tremor-influx = { path = "tremor-influx", version = "0.13.0-rc.20" }
+tremor-interceptor = { path = "tremor-interceptor", version = "0.13.0-rc.20" }
+tremor-pipeline = { path = "tremor-pipeline", version = "0.13.0-rc.20" }
+tremor-script = { path = "tremor-script", version = "0.13.0-rc.20" }
+tremor-system = { path = "tremor-system", version = "0.13.0-rc.20" }
+tremor-value = { path = "tremor-value", version = "0.13.0-rc.20" }
+
 tokio = { version = "1.34", features = ["full"] }
 tokio-stream = "0.1"
 anyhow = "1"
-async-compression = { version = "0.4", features = ["xz", "tokio"] }
-async-std = { version = "1.12.0", default-features = false, features = [
-  "std",
-  "async-io",
-] }
-async-stream = "0.3"
 async-trait = "0.1"
-base64 = "0.21"
-beef = { version = "0.5", features = ["impl_serde"] }
-bimap = { version = "0.6", features = ["serde"] }
-chrono = "0.4"
-chrono-tz = "0.8"
 
-# Once a new version of clickhouse-rs is released, we can stop using a git
-# repository as a dependency. The declaration can then be replaced with the
-# following:
-#
-# clickhouse-rs = { version = "...", default-features = false, features = [
-#   "async_std",
-# ] }
-#
-# Releases can be tracked at [1].
-#
-# [1]: https://crates.io/crates/clickhouse-rs/versions
-clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "73d39ba" }
-dashmap = "5.5"
-either = { version = "1.9", features = ["serde"] }
 error-chain = "0.12"
-file-mode = "0.1"
 futures = "0.3.29"
-event-listener = "4"
-glob = "0.3"
 halfbrown = "0.2"
 hashbrown = { version = "0.14", features = ["serde"] }
-hex = "0.4"
-hostname = "0.3"
-http-types = "2.12"
-http-body = "0.4"
 indexmap = "2"
-lazy_static = "1"
 log = { version = "0.4", features = ["kv_unstable"] }
-pin-project-lite = "0.2"
-rand = "0.8.5"
-regex = "1.9"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 simd-json = { version = "0.13", features = ["known-key"] }
 simd-json-derive = "0.13"
-socket2 = { version = "0.5", features = ["all"] }
-tremor-common = { path = "tremor-common" }
-tremor-config = { path = "tremor-config" }
-tremor-codec = { path = "tremor-codec" }
-tremor-influx = { path = "tremor-influx" }
-tremor-pipeline = { path = "tremor-pipeline" }
-tremor-script = { path = "tremor-script" }
-tremor-value = { path = "tremor-value" }
-tremor-interceptor = { path = "tremor-interceptor" }
-url = "2.5"
 value-trait = "0.8"
 
 
-# blaster / blackhole# codecs
-hdrhistogram = "7"
-xz2 = "0.1"
-
-# http
-hyper = { version = "0.14", features = ["full"] }
-hyper-rustls = { version = "0.24", features = ["http2"] }
-mime = "0.3"
-# elasticsearch
-elasticsearch = { version = "=8.5.0-alpha.1", default-features = false, features = [
-  "rustls-tls",
-] }
-
-
-# for tcp & ws
-tokio-rustls = "0.24"
-async-channel = "2.1"
-rustls = "0.21"
-rustls-pemfile = "1"
-rustls-native-certs = "0.6"
-tokio-tungstenite = "0.20"
-
-# dns
-trust-dns-resolver = { version = "0.23" }
-
-rdkafka = { version = "0.36", features = [
-  "cmake-build",
-  "libz-static",
-  "tokio",
-], default-features = false }
-
-# tracking the version rdkafka depends on
-rdkafka-sys = { version = "4.6", features = [
-  "cmake-build",
-  "libz-static",
-], default-features = false }
-
-# crononome
-cron = "0.12"
-
-# logstash grok patterns
-grok = "2"
-
-# discord
-serenity = { version = "0.11", default-features = false, features = [
-  "client",
-  "gateway",
-  "rustls_backend",
-  "model",
-  "cache",
-] }
-
-# kv
-sled = "0.34"
-
-# opentelemetry
-tonic = { version = "0.6.1", default-features = false, features = [
-  "transport",
-  "tls",
-] }
-prost = "0.9.0"
-prost-types = "0.9.0"
-# This is related to https://github.com/tremor-rs/tremor-runtime/issues/1688 the otel API's need to
-# be updated together with tonic
-tremor-otelapis = { version = "=0.2.4" }
-
-# aws-s3
-aws-sdk-s3 = { version = "1.4", features = ["behavior-version-latest"] }
-aws-types = "1"
-aws-config = "1"
-aws-smithy-http = "0.60"
-
-# gcp
-googapis = { version = "0.6", default-features = false, features = [
-  "google-pubsub-v1",
-  "google-cloud-bigquery-storage-v1",
-  "google-logging-v2",
-  "google-storage-v2",
-] }
-gouth = { version = "0.2" }
-http = "0.2"
-reqwest = { version = "0.11", default-features = false, features = [
-  "rustls-tls",
-  "rustls-tls-native-roots",
-] }
-
-# http
-uuid = { version = "1.6", features = ["v4"] }
-
-# wal
-qwal = { git = "https://github.com/tremor-rs/qwal" }
-itoa = "1"
-ryu = "1"
-lexical = "6"
-simdutf8 = "0.1"
-
 [dev-dependencies]
 port_scanner = "0.1"
-serial_test = { version = "2.0", features = ["logging"] }
-env_logger = "0.10"
-matches = "0.1"
-pretty_assertions = "1.4"
+env_logger = "0.11"
 proptest = "1.4"
 regex = "1"
-# We downgraded to 0.6 because:
-# in the face of high concurrency serial_test 0.7.0 panics after 60 seconds
-signal-hook = "0.3"
-signal-hook-tokio = "0.3"
 tempfile = { version = "3.8" }
-test-case = "3.3"
-testcontainers = { version = "0.14", features = ["watchdog"] }
 num_cpus = "1"
-bytes = "1"
+serial_test = "3"
+pretty_assertions = "1"
 
 [features]
 default = []
@@ -219,38 +88,6 @@ default = []
 128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
 
-integration = ["integration-docker", "integration-local"]
-integration-docker = [
-  "es-integration",
-  "s3-integration",
-  "kafka-integration",
-  "gcp-integration",
-  "clickhouse-integration",
-]
-integration-local = [
-  "ws-integration",
-  "http-integration",
-  "file-integration",
-  "crononome-integration",
-  "metronome-integration",
-  "socket-integration",
-  "net-integration",
-  "wal-integration",
-]
-gcp-integration = []
-es-integration = []
-s3-integration = []
-kafka-integration = []
-ws-integration = []
-http-integration = []
-file-integration = []
-crononome-integration = []
-metronome-integration = []
-socket-integration = []
-net-integration = []
-wal-integration = []
-clickhouse-integration = []
-tarpaulin-exclude = []
 # those are falky tests
 flaky-test = []
 

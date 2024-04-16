@@ -13,9 +13,8 @@
 // limitations under the License.
 
 use super::{FResult, FunctionError, Result};
-use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
+use crate::interpreter::{Cont, Env, LocalStack};
 use crate::prelude::*;
-use crate::Value;
 use crate::{
     ast::{visitors::IsConstFn, Expr, Exprs, FnDefn, ImutExpr, ImutExprs, NodeMeta},
     NO_AGGRS,

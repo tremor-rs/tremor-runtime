@@ -45,8 +45,8 @@ pub mod warning;
 
 pub use self::helper::Helper;
 pub use self::node_id::{BaseRef, NodeId};
+use self::visitors::ConstFolder;
 use self::walkers::ImutExprWalker;
-use self::{base_expr::Ranged, visitors::ConstFolder};
 use crate::{
     arena,
     ast::{
@@ -56,13 +56,12 @@ use crate::{
     errors::{err_generic, error_no_locals, Kind as ErrorKind, Result},
     extractor::Extractor,
     impl_expr, impl_expr_ex, impl_expr_no_lt,
-    interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
+    interpreter::{Cont, Env, LocalStack},
     lexer::Span,
     pos::Location,
     prelude::*,
-    registry::{CustomFn, FResult, TremorAggrFnWrapper, TremorFnWrapper},
-    script::Return,
-    stry, KnownKey, Value,
+    registry::{CustomFn, FResult, TremorAggrFnWrapper},
+    stry, Value,
 };
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
@@ -170,13 +169,6 @@ impl NodeMeta {
     pub(crate) fn aid(&self) -> arena::Index {
         self.range.aid()
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-struct Function<'script> {
-    is_const: bool,
-    argc: usize,
-    name: Cow<'script, str>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -1283,30 +1275,27 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                         pattern: Pattern::Record(RecordPattern { fields, .. }),
                         mid,
                         ..
-                    } if fields.len() == 1 => fields
-                        .first()
-                        .map(|f| {
-                            // where the record key is a binary equal
-                            match f {
-                                PredicatePattern::Bin {
-                                    kind: BinOpKind::Eq,
-                                    key,
-                                    ..
-                                }
-                                | PredicatePattern::TildeEq { key, .. } => {
-                                    // and the key of this equal is the same in all patterns
-                                    if let Some((first, _)) = &first_key {
-                                        first == key
-                                    } else {
-                                        first_key = Some((key.clone(), mid.clone()));
-                                        // this is the first item so we can assume so far it's all OK
-                                        true
-                                    }
-                                }
-                                _ => false,
+                    } if fields.len() == 1 => fields.first().is_some_and(|f| {
+                        // where the record key is a binary equal
+                        match f {
+                            PredicatePattern::Bin {
+                                kind: BinOpKind::Eq,
+                                key,
+                                ..
                             }
-                        })
-                        .unwrap_or_default(),
+                            | PredicatePattern::TildeEq { key, .. } => {
+                                // and the key of this equal is the same in all patterns
+                                if let Some((first, _)) = &first_key {
+                                    first == key
+                                } else {
+                                    first_key = Some((key.clone(), mid.clone()));
+                                    // this is the first item so we can assume so far it's all OK
+                                    true
+                                }
+                            }
+                            _ => false,
+                        }
+                    }),
                     _ => false,
                 }
             }) {
@@ -1896,8 +1885,7 @@ impl<'script> RecordPattern<'script> {
             self.fields
                 .first()
                 .and_then(|f1| Some((f1, other.fields.first()?)))
-                .map(|(f1, f2)| f1.is_exclusive_to(f2) || f2.is_exclusive_to(f1))
-                .unwrap_or_default()
+                .is_some_and(|(f1, f2)| f1.is_exclusive_to(f2) || f2.is_exclusive_to(f1))
         } else {
             false
         }

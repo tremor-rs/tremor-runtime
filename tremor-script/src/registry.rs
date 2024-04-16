@@ -24,7 +24,6 @@ use crate::{
 };
 use downcast_rs::{impl_downcast, DowncastSync};
 use halfbrown::HashMap;
-use std::default::Default;
 use std::fmt;
 use std::ops::RangeInclusive;
 

@@ -56,7 +56,7 @@ mod prelude {
     pub use super::Codec;
     pub use crate::errors::*;
     pub use simd_json::prelude::*;
-    pub use tremor_value::{literal, Object, Value};
+    pub use tremor_value::{Object, Value};
 }
 
 /// Configuration, commonly used for codecs

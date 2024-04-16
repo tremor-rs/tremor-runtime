@@ -4,6 +4,6 @@
     "args": [
         "rm",
         "-f",
-        "tremor-elasticsearch-integration-sink-only-unique"
+        "tremor-integration-tests-elasticsearch-sink-only-unique"
     ]
 }
