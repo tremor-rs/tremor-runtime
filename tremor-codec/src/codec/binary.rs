@@ -58,6 +58,8 @@ impl Codec for Binary {
 
 #[cfg(test)]
 mod test {
+    use tremor_value::literal;
+
     use super::*;
 
     #[tokio::test(flavor = "multi_thread")]
@@ -65,6 +67,9 @@ mod test {
         let seed = Value::Bytes("snot badger".as_bytes().into());
 
         let mut codec = Binary {};
+        assert_eq!("bytes", codec.name());
+        assert_eq!("application/octet-stream", codec.mime_types()[0]);
+
         let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
         assert_eq!(as_raw, b"snot badger");
         let as_value = codec
@@ -72,6 +77,30 @@ mod test {
             .await?
             .unwrap_or_default();
         assert_eq!(as_value.0, seed);
+
+        let mut as_raw = codec
+            .encode(&Value::from("snot badger"), &Value::const_null())
+            .await?;
+        let as_value = codec
+            .decode(as_raw.as_mut_slice(), 0, Value::object())
+            .await?
+            .unwrap_or_default();
+        assert_eq!(as_value.0, seed);
+
+        let mut as_raw = codec
+            .encode(&literal!([1, 2, 3]), &Value::const_null())
+            .await?;
+        let as_value = codec
+            .decode(as_raw.as_mut_slice(), 0, Value::object())
+            .await?
+            .unwrap_or_default();
+        assert_eq!(
+            "[1,2,3]",
+            &String::from_utf8_lossy(as_value.0.as_bytes().expect("bytes"))
+        );
+
+        let codec_clone = codec.boxed_clone();
+        assert_eq!("bytes", codec_clone.name());
 
         Ok(())
     }
