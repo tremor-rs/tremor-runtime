@@ -113,6 +113,13 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_can_decode_csv() -> Result<()> {
+        assert_eq!("csv", Csv {}.name());
+
+        assert_eq!("text/csv", Csv {}.mime_types()[0]);
+
+        let codec_clone = Csv {}.boxed_clone();
+        assert_eq!("csv", codec_clone.name());
+
         let mut codec = Csv {};
         let mut data = b"a,b,c,123".to_vec();
         let result = codec
