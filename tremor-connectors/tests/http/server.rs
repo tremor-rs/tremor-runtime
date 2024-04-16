@@ -13,7 +13,7 @@
 // limitations under the License.
 use anyhow::{anyhow, Result};
 use http::StatusCode;
-use http_body::Body as BodyTrait;
+use hyper::body::HttpBody;
 use hyper::{body::to_bytes, Body, Request, Response};
 use hyper_rustls::HttpsConnectorBuilder;
 use std::{
