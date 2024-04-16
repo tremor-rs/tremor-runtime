@@ -25,7 +25,7 @@ use crate::{
 };
 use either::Either;
 use halfbrown::HashMap;
-use http_body::Body;
+use hyper::body::HttpBody;
 use hyper::{
     client::{Client as HyperClient, HttpConnector},
     Method,

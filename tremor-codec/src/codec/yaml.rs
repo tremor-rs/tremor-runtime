@@ -60,6 +60,13 @@ mod test {
     async fn test_yaml_codec() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
 
+        assert_eq!("yaml", Yaml {}.name());
+
+        assert_eq!("application/yaml", Yaml {}.mime_types()[0]);
+
+        let codec_clone = Yaml {}.boxed_clone();
+        assert_eq!("yaml", codec_clone.name());
+
         let mut codec = Yaml {};
         let mut as_raw = codec.encode(&seed, &Value::const_null()).await?;
         let as_json = codec

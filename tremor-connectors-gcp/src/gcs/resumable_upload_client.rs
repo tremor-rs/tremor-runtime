@@ -18,7 +18,7 @@ use super::Error;
 
 #[cfg(not(test))]
 use gouth::Token;
-use http_body::Body as BodyTrait;
+use hyper::body::HttpBody as BodyTrait;
 use hyper::{header, Body, Method, Request, Response, StatusCode};
 use hyper_rustls::HttpsConnectorBuilder;
 use log::{debug, error, warn};

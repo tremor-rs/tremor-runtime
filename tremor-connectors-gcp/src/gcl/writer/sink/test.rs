@@ -21,8 +21,8 @@ use futures::future::Ready;
 use googapis::google::logging::r#type::LogSeverity;
 use googapis::google::logging::v2::WriteLogEntriesResponse;
 use http::{HeaderMap, HeaderValue};
-use http_body::Body;
 use hyper::body::Bytes;
+use hyper::body::HttpBody;
 use prost::Message;
 use std::task::Poll;
 use std::{
@@ -85,10 +85,7 @@ impl Service<http::Request<BoxBody>> for MockService {
             .encode_length_delimited(&mut buffer)
             .unwrap();
 
-        let body = Bytes::from(buffer);
-        let body = http_body::Full::new(body);
-        let body = http_body::combinators::BoxBody::new(body).map_err(|err| match err {});
-        let mut response = tonic::body::BoxBody::new(body);
+        let mut response = tonic::transport::Body::from(buffer);
         let (mut tx, body) = tonic::transport::Body::channel();
 
         let jh = tokio::task::spawn(async move {
