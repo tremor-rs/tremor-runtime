@@ -26,7 +26,7 @@ use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
-use testcontainers::{clients::Cli, images::generic::GenericImage, Container, RunnableImage};
+use testcontainers::{clients::Cli, Container, GenericImage, RunnableImage};
 use tremor_connectors::utils::integration::free_port::find_free_tcp_port;
 
 const IMAGE: &str = "minio/minio";
