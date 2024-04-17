@@ -1,4 +1,4 @@
-// Copyright 2022, The Tremor Team
+// Copyright 2022-2024, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,8 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![deny(warnings)]
+#![deny(missing_docs)]
+#![recursion_limit = "1024"]
+#![deny(
+    clippy::all,
+    clippy::unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic,
+    clippy::mod_module_files
+)]
 
-use crate::sink::prelude::*;
+//! Tremor object storage helpers
+use log::{debug, error, warn};
+use tremor_connectors::sink::prelude::*;
 use tremor_value::prelude::*;
 
 /// mode of operation for object storage connectors

@@ -19,9 +19,6 @@ pub mod metrics;
 /// MIME encoding utilities
 #[cfg(feature = "mime")]
 pub(crate) mod mime;
-/// Some common things for object storage connectors like gcs and s3
-#[cfg(feature = "object-storage")]
-pub mod object_storage;
 
 /// Quiescence support facilities
 pub mod quiescence;

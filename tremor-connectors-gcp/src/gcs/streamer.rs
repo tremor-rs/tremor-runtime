@@ -30,12 +30,9 @@ use tremor_common::{
     time::nanotime,
     url::{HttpsDefaults, Url},
 };
-use tremor_connectors::{
-    config,
-    sink::prelude::*,
-    utils::object_storage::{
-        BufferPart, Common, ConsistentSink, Mode, ObjectId, SinkImpl, Upload, YoloSink,
-    },
+use tremor_connectors::{config, sink::prelude::*};
+use tremor_connectors_object_storage::{
+    BufferPart, Common, ConsistentSink, Mode, ObjectId, SinkImpl, Upload, YoloSink,
 };
 
 const CONNECTOR_TYPE: &str = "gcs_streamer";
@@ -403,7 +400,7 @@ pub(crate) mod tests {
     use tremor_connectors::{
         config::Reconnect,
         spawn,
-        utils::{object_storage, quiescence::QuiescenceBeacon, reconnect::ConnectionLostNotifier},
+        utils::{quiescence::QuiescenceBeacon, reconnect::ConnectionLostNotifier},
     };
     use tremor_system::event::EventId;
     use tremor_value::literal;
@@ -470,7 +467,7 @@ pub(crate) mod tests {
                 Ok(end)
             } else {
                 error!("[TestUploadClient] Upload data but no file: {url}");
-                Err(object_storage::Error::NoUpload.into())
+                Err(tremor_connectors_object_storage::Error::NoUpload.into())
             }
         }
         async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> anyhow::Result<()> {
@@ -485,7 +482,7 @@ pub(crate) mod tests {
                 Ok(())
             } else {
                 error!("[TestUploadClient] Finish upload but no file: {url}");
-                Err(object_storage::Error::NoUpload.into())
+                Err(tremor_connectors_object_storage::Error::NoUpload.into())
             }
         }
         async fn delete_upload(&mut self, url: &url::Url) -> anyhow::Result<()> {
@@ -496,7 +493,7 @@ pub(crate) mod tests {
                 Ok(())
             } else {
                 error!("[TestUploadClient] Delete upload but no file: {url}");
-                Err(object_storage::Error::NoUpload.into())
+                Err(tremor_connectors_object_storage::Error::NoUpload.into())
             }
         }
         async fn bucket_exists(
