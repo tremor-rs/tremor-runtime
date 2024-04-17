@@ -14,4 +14,3 @@ version = "0.13.0-rc.20"
 [dependencies]
 tremor-value = { path = "../tremor-value", version = "0.13.0-rc.20" }
 serde = "1"
-simd-json = "0.13"

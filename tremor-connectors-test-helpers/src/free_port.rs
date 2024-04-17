@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use lazy_static::lazy_static;
 use std::{io, ops::RangeInclusive};
 use tokio::{
     net::{TcpListener, UdpSocket},
@@ -54,7 +55,7 @@ impl FreePort {
     }
 }
 
-lazy_static::lazy_static! {
+lazy_static! {
     static ref FREE_PORT: Mutex<FreePort> = Mutex::new(FreePort::new());
 }
 /// Find free TCP port for use in test server endpoints

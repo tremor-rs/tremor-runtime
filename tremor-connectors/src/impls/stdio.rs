@@ -49,6 +49,7 @@
 //! :::
 
 use crate::{sink::prelude::*, source::prelude::*};
+use lazy_static::lazy_static;
 use tokio::{
     io::{stderr, stdin, stdout, AsyncReadExt, AsyncWriteExt, Stderr, Stdout},
     sync::broadcast::{channel as broadcast, error::RecvError, Receiver},
@@ -57,7 +58,7 @@ use tremor_common::ports::{Port, IN};
 use tremor_system::event::DEFAULT_STREAM_ID;
 const INPUT_SIZE_BYTES: usize = 8192;
 
-lazy_static::lazy_static! {
+lazy_static! {
     pub(crate) static ref STDIN: Receiver<Vec<u8>> = {
         // This gets initialized only once - the first time a stdio connector
         // is created, after that we simply clone the channel.

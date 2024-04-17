@@ -18,7 +18,6 @@ anyhow = { version = "1", default-features = true }
 async-trait = { version = "0.1", default-features = true }
 futures = { version = "0.3", default-features = true }
 http = { version = "0.2", default-features = true }
-http-body = { version = "1.0", default-features = true }
 log = { version = "0.4", default-features = true }
 serde = { version = "1.0", default-features = true, features = ["derive"] }
 thiserror = { version = "1", default-features = true }

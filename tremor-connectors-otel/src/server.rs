@@ -15,6 +15,7 @@
 use super::{common::OtelDefaults, logs, metrics, trace};
 use async_channel::{bounded, Receiver, Sender};
 use log::warn;
+use serde::Deserialize;
 use tokio::task::JoinHandle;
 use tremor_common::url::Url;
 use tremor_connectors::{sink::prelude::*, source::prelude::*, spawn_task};

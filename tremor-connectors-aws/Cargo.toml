@@ -13,7 +13,6 @@ tremor-system = { path = "../tremor-system", version = "0.13.0-rc.20" }
 tremor-value = { path = "../tremor-value", version = "0.13.0-rc.20" }
 tremor-config = { path = "../tremor-config", version = "0.13.0-rc.20" }
 
-
 async-trait = { version = "0.1", default-features = false }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 anyhow = { version = "1", default-features = false }
@@ -38,6 +37,7 @@ rand = { version = "0.8", default-features = false }
 testcontainers = { version = "0.15", default-features = false }
 serial_test = { version = "3.0", default-features = false }
 bytes = { version = "1.1", default-features = true }
+tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.20" }
 
 [features]
 integration-harness = []
