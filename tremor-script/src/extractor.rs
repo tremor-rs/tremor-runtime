@@ -287,8 +287,11 @@ impl Extractor {
                         .split(',')
                         .map(|x| x.trim().to_owned())
                         .collect::<Vec<String>>();
+                    let range = SnotCombiner::from_rules(rules.clone()).map_err(|e| Error {
+                        msg: format!("Failed to parse CIDR range: {e}"),
+                    })?;
                     Extractor::Cidr {
-                        range: Some(SnotCombiner::from_rules(rules.clone())?),
+                        range: Some(range),
                         rules,
                     }
                 }
