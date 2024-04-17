@@ -1,4 +1,4 @@
-// Copyright 2020-2021, The Tremor Team
+// Copyright 2020-2024, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ pub fn load() -> Result<()> {
 /// # Errors
 ///  * if we can't install extensions
 pub fn install(reg: &mut Registry) -> Result<()> {
-    tremor_connectors::impls::otel::load(reg);
+    tremor_connectors_otel::load(reg);
     tremor_connectors_gcp::gcl::load(reg);
     reg.insert(tremor_fn!(system|instance(_context) {
         Ok(Value::from(instance!()))

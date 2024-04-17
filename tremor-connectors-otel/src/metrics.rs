@@ -14,12 +14,12 @@
 
 #![allow(dead_code)]
 
-use super::{
+use crate::{
     common::{self, Error},
     id,
+    pb::{self, maybe_from_value},
     resource::{self, resource_to_pb},
 };
-use crate::utils::pb::{self, maybe_from_value};
 use tremor_otelapis::opentelemetry::proto::{
     collector::metrics::v1::ExportMetricsServiceRequest,
     metrics::v1::{
