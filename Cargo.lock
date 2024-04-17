@@ -6500,6 +6500,7 @@ dependencies = [
  "tremor-common",
  "tremor-config",
  "tremor-connectors",
+ "tremor-connectors-object-storage",
  "tremor-system",
  "tremor-value",
  "value-trait",
@@ -6538,11 +6539,25 @@ dependencies = [
  "tremor-common",
  "tremor-config",
  "tremor-connectors",
+ "tremor-connectors-object-storage",
  "tremor-script",
  "tremor-system",
  "tremor-value",
  "url",
  "value-trait",
+]
+
+[[package]]
+name = "tremor-connectors-object-storage"
+version = "0.13.0-rc.20"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "log",
+ "serde",
+ "thiserror",
+ "tremor-connectors",
+ "tremor-value",
 ]
 
 [[package]]

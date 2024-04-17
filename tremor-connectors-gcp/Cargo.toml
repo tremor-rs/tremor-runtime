@@ -6,9 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.20", default-features = false, features = [
-    "object-storage",
-] }
+tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.20", default-features = false }
+tremor-connectors-object-storage = { path = "../tremor-connectors-object-storage", version = "0.13.0-rc.20" }
 tremor-common = { path = "../tremor-common", version = "0.13.0-rc.20" }
 tremor-system = { path = "../tremor-system", version = "0.13.0-rc.20" }
 tremor-value = { path = "../tremor-value", version = "0.13.0-rc.20" }
@@ -73,7 +72,6 @@ tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.20" }
 tempfile = { version = "3", default-features = true }
 env_logger = { version = "0.11", default-features = true }
 tremor-connectors = { path = "../tremor-connectors", default-features = false, features = [
-    "object-storage",
     "integration-utils",
 ] }
 

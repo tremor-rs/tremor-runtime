@@ -24,11 +24,9 @@ use tremor_common::{
     time::nanotime,
     url::{HttpsDefaults, Url},
 };
-use tremor_connectors::{
-    sink::prelude::*,
-    utils::object_storage::{
-        Buffer, BufferPart, Common, ConsistentSink, Mode, ObjectId, SinkImpl, Upload, YoloSink,
-    },
+use tremor_connectors::sink::prelude::*;
+use tremor_connectors_object_storage::{
+    Buffer, BufferPart, Common, ConsistentSink, Mode, ObjectId, SinkImpl, Upload, YoloSink,
 };
 
 pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";

@@ -181,7 +181,6 @@ default = [
     "integration-harness-local",
 ]
 
-object-storage = []
 128bit = ["tremor-value/128bit"]
 mime = []
 socket = ["dep:socket2"]

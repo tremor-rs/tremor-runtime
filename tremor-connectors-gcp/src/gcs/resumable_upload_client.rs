@@ -25,7 +25,7 @@ use log::{debug, error, warn};
 use std::time::Duration;
 use tokio::time::sleep;
 use tremor_common::url::{HttpsDefaults, Url};
-use tremor_connectors::utils::object_storage::{BufferPart, ObjectId};
+use tremor_connectors_object_storage::{BufferPart, ObjectId};
 
 pub(crate) type GcsHttpClient =
     hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>;

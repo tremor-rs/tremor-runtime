@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::Error;
-use tremor_connectors::utils::object_storage::{Buffer, BufferPart};
+use tremor_connectors_object_storage::{Buffer, BufferPart};
 
 /// This structure is similar to a Vec<u8>, but with some special methods.
 /// `write` will add data (any size of data is accepted)
