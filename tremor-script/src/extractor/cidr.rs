@@ -223,48 +223,14 @@ fn cidr_to_value(x: IpCidr) -> Result<'static> {
             // prefix
             let prefix = y.first_address().octets();
             let mask = y.mask().octets();
-            let mask: Vec<u64> = vec![
-                // NOTE TODO Upgrade literal and conversions for a[x] in tremor-value
-                mask[0].into(),
-                mask[1].into(),
-                mask[2].into(),
-                mask[3].into(),
-            ];
             r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
-            r.insert_nocheck("mask".into(), literal!(mask));
+            r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
         }
         IpCidr::V6(y) => {
-            let prefix = y.first_address().octets();
-            let mut new_prefix: [u16; 8] = [0; 8];
-            #[allow(clippy::needless_range_loop)]
-            // NOTE I failed at making this idiomatic, thanks clippy!
-            for i in 0..8usize {
-                let lhs = prefix.get(i * 2);
-                let rhs = prefix.get(i * 2 + 1usize);
-                new_prefix[i] = match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => u16::from(*lhs) << 8 | u16::from(*rhs),
-                    _otherwise => {
-                        return Result::NoMatch;
-                    }
-                };
-            }
-
-            let mask: [u8; 16] = y.mask().octets();
-            let mut new_mask: [u16; 8] = [0; 8];
-            #[allow(clippy::needless_range_loop)]
-            // NOTE I failed at making this idiomatic, thanks clippy!
-            for i in 0..8usize {
-                let lhs = mask.get(i * 2);
-                let rhs = mask.get(i * 2 + 1usize);
-                new_mask[i] = match (lhs, rhs) {
-                    (Some(lhs), Some(rhs)) => u16::from(*lhs) << 8 | u16::from(*rhs),
-                    _otherwise => {
-                        return Result::NoMatch;
-                    }
-                };
-            }
-            r.insert_nocheck("prefix".into(), literal!(new_prefix.to_vec()));
-            r.insert_nocheck("mask".into(), literal!(new_mask.to_vec()));
+            let prefix = y.first_address().segments();
+            let mask = y.mask().segments();
+            r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
+            r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
         }
     }
     Result::Match(Value::from(Object::from(r)))
