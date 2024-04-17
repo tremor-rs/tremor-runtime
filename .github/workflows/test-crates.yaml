@@ -21,3 +21,4 @@ jobs:
         with:
           path: "./tremor-script"
           dry-run: true
+          ignore-unpublished-changes: true
