@@ -96,22 +96,18 @@
 //! ## Output: "no match"
 //! ```
 
-use super::{Error, Result};
-use beef::Cow;
+use super::Result;
+// use beef::Cow;
 use cidr_utils::{
-    cidr::{IpCidr, Ipv4Cidr},
-    utils::IpCidrCombiner,
+    cidr::{IpCidr, Ipv4Cidr, Ipv6Cidr},
+    combiner::Ipv4CidrCombiner,
 };
 use halfbrown::HashMap;
 use simd_json::ObjectHasher;
-use std::{
-    iter::Peekable,
-    net::{IpAddr, Ipv4Addr},
-    result::Result as StdResult,
-    slice::Iter,
-    str::FromStr,
-};
-use tremor_value::{Object, Value};
+use std::net::Ipv4Addr;
+use std::result::Result as StdResult;
+use std::{iter::Peekable, slice::Iter, str::FromStr};
+use tremor_value::{literal, Object, Value};
 
 fn parse_network(address: Ipv4Addr, mut itr: Peekable<Iter<u8>>) -> Option<IpCidr> {
     let mut network_length = match itr.next()? {
@@ -126,9 +122,7 @@ fn parse_network(address: Ipv4Addr, mut itr: Peekable<Iter<u8>>) -> Option<IpCid
     if network_length > 32 {
         None
     } else {
-        Some(IpCidr::V4(
-            Ipv4Cidr::from_prefix_and_bits(address, network_length).ok()?,
-        ))
+        Some(IpCidr::V4(Ipv4Cidr::new(address, network_length).ok()?))
     }
 }
 
@@ -156,7 +150,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
     }
     if itr.peek().is_none() {
         return Some(IpCidr::V4(
-            Ipv4Cidr::from_prefix_and_bits(Ipv4Addr::new(0, 0, 0, a), 32).ok()?,
+            Ipv4Cidr::new(Ipv4Addr::new(0, 0, 0, a), 32).ok()?,
         ));
     };
 
@@ -174,9 +168,9 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
         }
     }
     if itr.peek().is_none() {
-        return Some(IpCidr::V4(
-            Ipv4Cidr::from_prefix_and_bits(Ipv4Addr::new(a, 0, 0, b), 32).ok()?,
-        ));
+        let ipv4_addr = Ipv4Addr::new(a, 0, 0, b);
+        let ipv4_cidr = Ipv4Cidr::new(ipv4_addr, 32).ok();
+        return Some(IpCidr::V4(ipv4_cidr?));
     };
 
     //// C
@@ -194,7 +188,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
     }
     if itr.peek().is_none() {
         return Some(IpCidr::V4(
-            Ipv4Cidr::from_prefix_and_bits(Ipv4Addr::new(a, b, 0, c), 32).ok()?,
+            Ipv4Cidr::new(Ipv4Addr::new(a, b, 0, c), 32).ok()?,
         ));
     };
 
@@ -208,65 +202,65 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
         }
     }
     let address = Ipv4Addr::new(a, b, c, d);
-    Some(IpCidr::V4(
-        Ipv4Cidr::from_prefix_and_bits(address, 32).ok()?,
-    ))
+
+    Some(IpCidr::V4(Ipv4Cidr::new(address, 32).ok()?))
 }
 
 fn parse_ipv6_fast(s: &str) -> Option<IpCidr> {
-    IpCidr::from_str(s).ok()
+    let ipv6_cidr = Ipv6Cidr::from_str(s).ok()?;
+
+    if ipv6_cidr.network_length() > 128 {
+        None
+    } else {
+        Some(IpCidr::V6(ipv6_cidr))
+    }
 }
 
-#[derive(Debug)]
-pub struct Cidr(pub IpCidr);
-
-impl Cidr {
-    pub fn from_str(s: &str) -> StdResult<Self, Error> {
-        if let Some(cidr) = parse_ipv4_fast(s) {
-            Ok(Self(cidr))
-        } else {
-            Err(Error {
-                msg: format!("Invalid CIDR: '{s}'"),
-            })
+fn cidr_to_value<'x>(x: IpCidr) -> Value<'x> {
+    let mut r = HashMap::with_capacity_and_hasher(2, ObjectHasher::default());
+    match x {
+        IpCidr::V4(y) => {
+            // prefix
+            let prefix = y.first_address().octets();
+            let mask = y.mask().octets();
+            let mask: Vec<u64> = vec![
+                // NOTE TODO Upgrade literal and conversions for a[x] in tremor-value
+                mask[0].into(),
+                mask[1].into(),
+                mask[2].into(),
+                mask[3].into(),
+            ];
+            r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
+            r.insert_nocheck("mask".into(), literal!(mask));
+        }
+        IpCidr::V6(y) => {
+            let prefix = y.first_address().octets();
+            let prefix = vec![
+                (u16::from(prefix[0]) << 8) + u16::from(prefix[1]),
+                (u16::from(prefix[2]) << 8) + u16::from(prefix[3]),
+                (u16::from(prefix[4]) << 8) + u16::from(prefix[5]),
+                (u16::from(prefix[6]) << 8) + u16::from(prefix[7]),
+                (u16::from(prefix[8]) << 8) + u16::from(prefix[9]),
+                (u16::from(prefix[10]) << 8) + u16::from(prefix[11]),
+                (u16::from(prefix[12]) << 8) + u16::from(prefix[13]),
+                (u16::from(prefix[14]) << 8) + u16::from(prefix[15]),
+            ];
+            let mask: [u8; 16] = y.mask().octets();
+            let mask = vec![
+                (u16::from(mask[0]) << 8) + u16::from(mask[1]),
+                (u16::from(mask[2]) << 8) + u16::from(mask[3]),
+                (u16::from(mask[4]) << 8) + u16::from(mask[5]),
+                (u16::from(mask[6]) << 8) + u16::from(mask[7]),
+                (u16::from(mask[8]) << 8) + u16::from(mask[9]),
+                (u16::from(mask[10]) << 8) + u16::from(mask[11]),
+                (u16::from(mask[12]) << 8) + u16::from(mask[13]),
+                (u16::from(mask[14]) << 8) + u16::from(mask[15]),
+            ];
+            r.insert_nocheck("prefix".into(), literal!(prefix));
+            r.insert_nocheck("mask".into(), literal!(mask));
         }
     }
-}
-
-impl std::ops::Deref for Cidr {
-    type Target = IpCidr;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<'cidr> From<Cidr> for HashMap<Cow<'cidr, str>, Value<'cidr>, ObjectHasher> {
-    fn from(x: Cidr) -> Self {
-        let mut r = HashMap::with_capacity_and_hasher(2, ObjectHasher::default());
-        match x.0 {
-            IpCidr::V4(y) => {
-                r.insert_nocheck(
-                    "prefix".into(),
-                    Value::from(y.get_prefix_as_u8_array().to_vec()),
-                );
-                r.insert_nocheck(
-                    "mask".into(),
-                    Value::from(y.get_mask_as_u8_array().to_vec()),
-                );
-            }
-            IpCidr::V6(y) => {
-                r.insert_nocheck(
-                    "prefix".into(),
-                    Value::from(y.get_prefix_as_u16_array().to_vec()),
-                );
-                r.insert_nocheck(
-                    "mask".into(),
-                    Value::from(y.get_mask_as_u16_array().to_vec()),
-                );
-            }
-        }
-        r
-    }
+    Value::from(Object::from(r))
 }
 
 pub(crate) fn execute(
@@ -275,12 +269,11 @@ pub(crate) fn execute(
     range: Option<&SnotCombiner>,
 ) -> Result<'static> {
     if let Some(combiner) = range {
-        IpAddr::from_str(s).map_or(Result::NoMatch, |input| {
-            if combiner.combiner.contains(input) {
+        Ipv4Addr::from_str(s).map_or(Result::NoMatch, |input| {
+            if combiner.combiner.contains(&input) {
                 if result_needed {
-                    Cidr::from_str(s).map_or(Result::NoMatch, |cidr| {
-                        Result::Match(Value::from(Object::from(cidr)))
-                    })
+                    IpCidr::from_str(s)
+                        .map_or(Result::NoMatch, |cidr| Result::Match(cidr_to_value(cidr)))
                 } else {
                     Result::MatchNull
                 }
@@ -289,9 +282,9 @@ pub(crate) fn execute(
             }
         })
     } else {
-        Cidr::from_str(s).map_or(Result::NoMatch, |c| {
+        IpCidr::from_str(s).map_or(Result::NoMatch, |c| {
             if result_needed {
-                Result::Match(Value::from(Object::from(c)))
+                Result::Match(cidr_to_value(c))
             } else {
                 Result::MatchNull
             }
@@ -299,23 +292,24 @@ pub(crate) fn execute(
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct SnotCombiner {
     rules: Vec<String>,
     #[serde(skip)]
-    combiner: IpCidrCombiner,
+    combiner: Ipv4CidrCombiner,
 }
 
+// NOTE We need this for the extractor
 impl SnotCombiner {
-    pub(crate) fn from_rules(rules: Vec<String>) -> StdResult<Self, Error> {
-        let mut combiner = IpCidrCombiner::new();
+    pub(crate) fn from_rules(rules: Vec<String>) -> StdResult<Self, Box<dyn std::error::Error>> {
+        let mut combiner = Ipv4CidrCombiner::new();
         for x in &rules {
-            if let Some(y) = parse_ipv4_fast(x) {
-                combiner.push(y);
+            if let Some(IpCidr::V4(cidr)) = parse_ipv4_fast(x) {
+                combiner.push(cidr);
+            } else if let Some(IpCidr::V6(_)) = parse_ipv6_fast(x) {
+                return Err(format!("IPv6 CIDR not supported: '{x}'").into());
             } else {
-                return Err(Error {
-                    msg: format!("could not parse CIDR: '{x}'"),
-                });
+                return Err(format!("could not parse CIDR: '{x}'").into());
             }
         }
         Ok(Self { rules, combiner })
@@ -328,54 +322,84 @@ impl PartialEq for SnotCombiner {
     }
 }
 
-impl Clone for SnotCombiner {
-    fn clone(&self) -> Self {
-        if let Ok(clone) = Self::from_rules(self.rules.clone()) {
-            clone
-        } else {
-            Self {
-                combiner: IpCidrCombiner::new(),
-                rules: vec![],
-            }
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_ipv4_fast() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(parse_ipv4_fast("snot"), None);
+
+        assert_eq!(parse_ipv4_fast("0no"), None);
+        assert_eq!(parse_ipv4_fast("0."), None);
+        assert_eq!(
+            parse_ipv4_fast("0"),
+            Some(IpCidr::V4(Ipv4Cidr::from_str("0.0.0.0/32")?))
+        );
+        assert_eq!(
+            parse_ipv4_fast("0/24"),
+            Some(IpCidr::V4(Ipv4Cidr::from_str("0.0.0.0/24")?))
+        );
+
+        assert_eq!(parse_ipv4_fast("1.2no"), None);
+        assert_eq!(parse_ipv4_fast("1.2."), None);
+        assert_eq!(
+            parse_ipv4_fast("1.2"),
+            Some(IpCidr::V4(Ipv4Cidr::from_str("1.0.0.2/32")?))
+        );
+        assert_eq!(
+            parse_ipv4_fast("1.0/16"),
+            Some(IpCidr::V4(Ipv4Cidr::from_str("1.0.0.0/16")?))
+        );
+
+        assert_eq!(parse_ipv4_fast("1.2.3no"), None);
+        assert_eq!(parse_ipv4_fast("1.2.3."), None);
+        assert_eq!(
+            parse_ipv4_fast("1.2.3"),
+            Some(IpCidr::V4(Ipv4Cidr::from_str("1.2.0.3/32")?))
+        );
+        // assert_eq!(
+        //     parse_ipv4_fast("1.2.3/24"),
+        //     Some(IpCidr::V4(Ipv4Cidr::from_str("1.2.0.3/24")?))
+        // );
+        assert_eq!(parse_ipv4_fast("1.2.3.4no"), None);
+        assert_eq!(parse_ipv4_fast("1.2.3.4."), None);
+        assert_eq!(
+            parse_ipv4_fast("1.2.3.4"),
+            Some(IpCidr::V4(Ipv4Cidr::from_str("1.2.3.4/32")?))
+        );
+        // assert_eq!(
+        //     parse_ipv4_fast("1.2.3/24"),
+        //     Some(IpCidr::V4(Ipv4Cidr::from_str("1.2.3.4/24")?))
+        // );
+
+        Ok(())
     }
-}
 
-#[test]
-fn test_parse_ipv4_fast() {
-    assert_eq!(parse_ipv4_fast("snot"), None);
+    #[test]
+    fn test_cidr_utils_v0_6_behavior_change() {
+        // CIDR utils crate is now stricter w.r.t. network ranges
+        // NOTE that this indirectly affects the behavior of the `cidr` extractor and may
+        // need some warnings or documentation updates accordingly.
+        assert_eq!(
+            parse_ipv4_fast("1.2/16"),
+            // Some(IpCidr::V4(Ipv4Cidr::from_str("1.0.0.0/16")?))
+            None
+        );
+    }
 
-    assert_eq!(parse_ipv4_fast("0no"), None);
-    assert_eq!(parse_ipv4_fast("0."), None);
-    assert_eq!(parse_ipv4_fast("0"), IpCidr::from_str("0.0.0.0/32").ok());
-    assert_eq!(parse_ipv4_fast("0/24"), IpCidr::from_str("0.0.0.0/24").ok());
+    #[test]
+    fn test_cidr_utils_v0_6_regression2() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        // This test shows how 1.2/16 or similar need to update/change to be compatible with the new CIDR utils crate as it is now stricter w.r.t. network ranges.
+        assert_eq!(
+            parse_ipv4_fast("1.0/16"),
+            Some(IpCidr::V4(Ipv4Cidr::from_str("1.0.0.0/16")?))
+        );
+        assert_eq!(
+            parse_ipv4_fast("1.0/24"),
+            Some(IpCidr::V4(Ipv4Cidr::from_str("1.0.0.0/24")?))
+        );
 
-    assert_eq!(parse_ipv4_fast("1.2no"), None);
-    assert_eq!(parse_ipv4_fast("1.2."), None);
-    assert_eq!(parse_ipv4_fast("1.2"), IpCidr::from_str("1.0.0.2/32").ok());
-    assert_eq!(
-        parse_ipv4_fast("1.2/24"),
-        IpCidr::from_str("1.0.0.2/24").ok()
-    );
-
-    assert_eq!(parse_ipv4_fast("1.2.3no"), None);
-    assert_eq!(parse_ipv4_fast("1.2.3."), None);
-    assert_eq!(
-        parse_ipv4_fast("1.2.3"),
-        IpCidr::from_str("1.2.0.3/32").ok()
-    );
-    assert_eq!(
-        parse_ipv4_fast("1.2.3/24"),
-        IpCidr::from_str("1.2.0.3/24").ok()
-    );
-    assert_eq!(parse_ipv4_fast("1.2.3.4no"), None);
-    assert_eq!(parse_ipv4_fast("1.2.3.4."), None);
-    assert_eq!(
-        parse_ipv4_fast("1.2.3.4"),
-        IpCidr::from_str("1.2.3.4/32").ok()
-    );
-    assert_eq!(
-        parse_ipv4_fast("1.2.3.4/24"),
-        IpCidr::from_str("1.2.3.4/24").ok()
-    );
+        Ok(())
+    }
 }

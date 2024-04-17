@@ -177,8 +177,8 @@ fn test_cidr_extractor() {
     match ex {
         Extractor::Cidr { .. } => {
             let mut v = Value::object();
-            v.try_insert("prefix", vec![192, 168, 1, 0]);
-            v.try_insert("mask", vec![255, 255, 255, 255]);
+            v.try_insert("prefix", vec![192u64, 168, 1, 0]);
+            v.try_insert("mask", vec![255u64, 255, 255, 255]);
 
             assert_eq!(
                 ex.extract(
@@ -189,8 +189,8 @@ fn test_cidr_extractor() {
                 Match(v)
             );
             let mut v = Value::object();
-            v.try_insert("prefix", vec![192, 168, 1, 0]);
-            v.try_insert("mask", vec![255, 255, 255, 0]);
+            v.try_insert("prefix", vec![192u64, 168, 1, 0]);
+            v.try_insert("mask", vec![255u64, 255, 255, 0]);
             assert_eq!(
                 ex.extract(
                     true,
@@ -201,10 +201,10 @@ fn test_cidr_extractor() {
             );
 
             let mut v = Value::object();
-            v.try_insert("prefix", vec![8193, 18528, 18528, 0, 0, 0, 0, 34952]);
+            v.try_insert("prefix", vec![8193u64, 18528, 18528, 0, 0, 0, 0, 34952]);
             v.try_insert(
                 "mask",
-                vec![65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535],
+                vec![65535u64, 65535, 65535, 65535, 65535, 65535, 65535, 65535],
             );
             assert_eq!(
                 ex.extract(
