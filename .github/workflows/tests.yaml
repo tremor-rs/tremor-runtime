@@ -25,6 +25,7 @@ jobs:
             "tremor-system",
             "tremor-runtime",
             "tremor-connectors-object-storage",
+            "tremor-connectors-test-helpers"
 
           ]
     runs-on: ubuntu-latest-16-cores

@@ -31,10 +31,6 @@ pub mod socket;
 #[cfg(feature = "tls")]
 pub mod tls;
 
-/// Integration test utils
-#[cfg(any(test, feature = "integration-utils"))]
-pub mod integration;
-
 /// default buf size used for reading from files and streams (sockets etc)
 ///
 /// equals default chunk size for `BufReader`

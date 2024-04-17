@@ -29,7 +29,7 @@ members = [
   "tremor-connectors-aws",
   "tremor-connectors-gcp",
   "tremor-connectors-otel",
-  "tremor-connectors-object-storage",
+  "tremor-connectors-object-storage", "tremor-connectors-test-helpers",
 ]
 
 default-members = ["tremor-cli"]

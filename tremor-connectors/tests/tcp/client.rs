@@ -15,11 +15,8 @@
 use crate::EchoServer;
 use std::time::Duration;
 use tokio::net::lookup_host;
-use tremor_connectors::{
-    harness::Harness,
-    impls::tcp,
-    utils::integration::{free_port, setup_for_tls},
-};
+use tremor_connectors::{harness::Harness, impls::tcp};
+use tremor_connectors_test_helpers::{free_port, setup_for_tls};
 use tremor_system::{
     controlplane::CbAction,
     event::{Event, EventId},

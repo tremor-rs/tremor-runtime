@@ -19,7 +19,7 @@ use hyper::{
 };
 use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
 use tokio::task::JoinHandle;
-use tremor_connectors::utils::integration::free_port;
+use tremor_connectors_test_helpers::free_port;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct ServiceAccount {

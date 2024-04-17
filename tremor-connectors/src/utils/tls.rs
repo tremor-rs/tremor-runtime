@@ -419,10 +419,9 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "integration-utils")]
     #[test]
     fn client_config() -> anyhow::Result<()> {
-        use crate::utils::integration::setup_for_tls;
+        use tremor_connectors_test_helpers::setup_for_tls;
 
         setup_for_tls();
         let tls_config = TLSClientConfig {

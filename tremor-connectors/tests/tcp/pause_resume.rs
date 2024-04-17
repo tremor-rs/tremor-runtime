@@ -17,9 +17,8 @@ use log::debug;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
-use tremor_connectors::{
-    harness::Harness, impls::tcp, utils::integration::free_port::find_free_tcp_port,
-};
+use tremor_connectors::{harness::Harness, impls::tcp};
+use tremor_connectors_test_helpers::free_port::find_free_tcp_port;
 use tremor_system::{connector::source, instance::State};
 use tremor_value::prelude::*;
 
