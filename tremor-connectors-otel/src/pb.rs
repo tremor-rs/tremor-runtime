@@ -17,7 +17,7 @@ use tremor_value::prelude::*;
 /// converts a maybe null option to a string. if the value is none it returns an empty string
 /// # Errors
 /// It errors if the value is some but not a string
-pub fn maybe_string(data: Option<&Value<'_>>) -> Result<String, TryTypeError> {
+pub(crate) fn maybe_string(data: Option<&Value<'_>>) -> Result<String, TryTypeError> {
     if data.is_none() {
         Ok(String::new())
     } else {
@@ -26,7 +26,7 @@ pub fn maybe_string(data: Option<&Value<'_>>) -> Result<String, TryTypeError> {
 }
 
 /// *sob* this is a trait that should not exist
-pub trait FromValue: Sized {
+pub(crate) trait FromValue: Sized {
     /// *sob* this is a trait that should not exist
     /// # Errors
     /// It errors if the value is some but not the right type
@@ -45,14 +45,16 @@ pub trait FromValue: Sized {
 ///
 /// # Errors
 /// It errors if the value is some but not a the right type
-pub fn maybe_from_value<T: FromValue>(data: Option<&Value<'_>>) -> Result<Option<T>, TryTypeError> {
+pub(crate) fn maybe_from_value<T: FromValue>(
+    data: Option<&Value<'_>>,
+) -> Result<Option<T>, TryTypeError> {
     T::maybe_from_value(data)
 }
 
 /// Converts a json array of f64 values to a protobuf repeated f64
 /// # Errors
 /// It errors if the value is not an array or if any of the values are not `f64`
-pub fn f64_repeated(json: Option<&Value<'_>>) -> Result<Vec<f64>, TryTypeError> {
+pub(crate) fn f64_repeated(json: Option<&Value<'_>>) -> Result<Vec<f64>, TryTypeError> {
     json.try_as_array()?
         .iter()
         .map(Some)
@@ -63,7 +65,7 @@ pub fn f64_repeated(json: Option<&Value<'_>>) -> Result<Vec<f64>, TryTypeError> 
 /// Converts a json array of u64 values to a protobuf repeated u64
 /// # Errors
 /// It errors if the value is not an array or if any of the values are not `u64`
-pub fn u64_repeated(json: Option<&Value<'_>>) -> Result<Vec<u64>, TryTypeError> {
+pub(crate) fn u64_repeated(json: Option<&Value<'_>>) -> Result<Vec<u64>, TryTypeError> {
     json.try_as_array()?
         .iter()
         .map(Some)
