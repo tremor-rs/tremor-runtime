@@ -39,7 +39,7 @@ tremor-otelapis = { version = "=0.2.4", default-features = false, features = [
 ] }
 rand = { version = "0.8.5", default-features = false }
 async-channel = { version = "1.9", default-features = false }
-hex = { version = "0.4", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc", "std"] }
 
 [dev-dependencies]
 tokio = { version = "1.34", default-features = true }
