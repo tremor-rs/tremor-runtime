@@ -35,8 +35,8 @@ use tremor_common::ports::IN;
 use tremor_connectors::{
     harness::Harness,
     impls::{elastic, http::auth::Auth},
-    utils::integration::{free_port::find_free_tcp_port, setup_for_tls},
 };
+use tremor_connectors_test_helpers::{free_port::find_free_tcp_port, setup_for_tls};
 use tremor_system::{
     controlplane::CbAction,
     event::{Event, EventId},

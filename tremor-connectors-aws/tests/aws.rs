@@ -27,7 +27,7 @@ use std::{
     time::{Duration, Instant},
 };
 use testcontainers::{clients::Cli, Container, GenericImage, RunnableImage};
-use tremor_connectors::utils::integration::free_port::find_free_tcp_port;
+use tremor_connectors_test_helpers::free_port::find_free_tcp_port;
 
 const IMAGE: &str = "minio/minio";
 const VERSION: &str = "RELEASE.2023-01-12T02-06-16Z";
