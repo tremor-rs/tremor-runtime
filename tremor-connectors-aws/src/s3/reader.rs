@@ -15,6 +15,7 @@ use super::auth;
 use super::Error;
 use aws_sdk_s3::{primitives::ByteStream, types::Object, Client as S3Client};
 use log::debug;
+use serde::Deserialize;
 use std::sync::Arc;
 use tokio::{
     sync::mpsc::{channel, Sender},

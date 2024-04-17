@@ -14,6 +14,7 @@
 
 use super::{common::OtelDefaults, logs, metrics, trace};
 use log::{error, warn};
+use serde::Deserialize;
 use tonic::transport::{Channel as TonicChannel, Endpoint as TonicEndpoint};
 use tremor_common::url::Url;
 use tremor_connectors::sink::prelude::*;
@@ -24,7 +25,6 @@ use tremor_otelapis::opentelemetry::proto::collector::{
 };
 use tremor_script::EventOriginUri;
 use tremor_value::prelude::*;
-
 const CONNECTOR_TYPE: &str = "otel_client";
 
 // TODO Consider concurrency cap?

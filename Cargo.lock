@@ -6399,7 +6399,6 @@ name = "tremor-config"
 version = "0.13.0-rc.20"
 dependencies = [
  "serde",
- "simd-json",
  "tremor-value",
 ]
 
@@ -6502,6 +6501,7 @@ dependencies = [
  "tremor-config",
  "tremor-connectors",
  "tremor-connectors-object-storage",
+ "tremor-connectors-test-helpers",
  "tremor-system",
  "tremor-value",
  "value-trait",
@@ -6521,7 +6521,6 @@ dependencies = [
  "googapis",
  "gouth",
  "http 0.2.12",
- "http-body 1.0.0",
  "hyper",
  "hyper-rustls",
  "log",
@@ -6569,14 +6568,9 @@ dependencies = [
  "anyhow",
  "async-channel 1.9.0",
  "async-trait",
- "futures",
  "hex",
- "http 0.2.12",
- "http-body 1.0.0",
  "log",
  "proptest",
- "prost",
- "prost-types",
  "rand 0.8.5",
  "serde",
  "simd-json",
@@ -6591,7 +6585,6 @@ dependencies = [
  "tremor-script",
  "tremor-system",
  "tremor-value",
- "value-trait",
 ]
 
 [[package]]
@@ -6623,7 +6616,6 @@ dependencies = [
  "anyhow",
  "byteorder",
  "bytes",
- "error-chain",
  "libflate",
  "log",
  "lz4",
@@ -6631,7 +6623,6 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "serde",
- "simd-json",
  "snap",
  "thiserror",
  "tremor-common",

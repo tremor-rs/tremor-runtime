@@ -8,9 +8,9 @@ else
 fi
 
 cnt=0
-
+echo "Checking dependencies in $path/Cargo.toml"
 for d in $( remarshal -i $path/Cargo.toml -of json | jq -r '.dependencies | keys []' | if  [ -f $path/.depignore ]; then grep -v -f  $path/.depignore; else cat; fi )
-do
+do 
     dep=$(echo $d | sed -e 's/-/_/g')
     if ! rg "use $dep(::|;| )" $path -trust > /dev/null
     then

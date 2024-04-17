@@ -47,6 +47,20 @@ jobs:
         run: ./.github/checks/deps.sh tremor-value
       - name: Check for unused dependencies (tremor-codec)
         run: ./.github/checks/deps.sh tremor-codec
+      - name: Check for unused dependencies (tremor-system)
+        run: ./.github/checks/deps.sh tremor-system
+      - name: Check for unused dependencies (tremor-connectors)
+        run: ./.github/checks/deps.sh tremor-connectors
+      - name: Check for unused dependencies (tremor-connectors-gcp)
+        run: ./.github/checks/deps.sh tremor-connectors-gcp
+      - name: Check for unused dependencies (tremor-connectors-aws)
+        run: ./.github/checks/deps.sh tremor-connectors-aws
+      - name: Check for unused dependencies (tremor-connectors-otel)
+        run: ./.github/checks/deps.sh tremor-connectors-otel
+      - name: Check for unused dependencies (tremor-connectors-test-helpers)
+        run: ./.github/checks/deps.sh tremor-connectors-test-helpers
+      - name: Check for unused dependencies (tremor-connectors-object-storage)
+        run: ./.github/checks/deps.sh tremor-connectors-object-storage
 
   format:
     runs-on: ubuntu-latest

@@ -24,6 +24,7 @@
 
 //! Tremor object storage helpers
 use log::{debug, error, warn};
+use serde::Deserialize;
 use tremor_connectors::sink::prelude::*;
 use tremor_value::prelude::*;
 
