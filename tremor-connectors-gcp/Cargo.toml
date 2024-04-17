@@ -71,9 +71,7 @@ anyhow = { version = "1" }
 tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.20" }
 tempfile = { version = "3", default-features = true }
 env_logger = { version = "0.11", default-features = true }
-tremor-connectors = { path = "../tremor-connectors", default-features = false, features = [
-    "integration-utils",
-] }
+tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.20" }
 
 [features]
-integration-harness = ["tremor-connectors/integration-utils"]
+integration-harness = []

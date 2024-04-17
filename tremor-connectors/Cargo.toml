@@ -156,6 +156,7 @@ http-types = "2.0"
 bytes = "1.0"
 tempfile = { version = "3.8", default-features = false }
 env_logger = "0.11"
+tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.20" }
 
 [features]
 default = [
@@ -240,8 +241,6 @@ tcp = ["socket", "tls"]
 udp = ["socket"]
 unix-socket = ["socket", "dep:file-mode"]
 
-integration-utils = []
-
 integration-harness = [
     "integration-harness-docker",
     "integration-harness-local",
@@ -265,15 +264,15 @@ integration-harness-local = [
 ]
 
 integration-tests-bench = ["bench"]
-integration-tests-clickhouse = ["clickhouse", "dep:chrono", "integration-utils"]
+integration-tests-clickhouse = ["clickhouse", "dep:chrono"]
 integration-tests-crononome = ["crononome"]
-integration-tests-elasticsearch = ["elasticsearch", "integration-utils"]
+integration-tests-elasticsearch = ["elasticsearch"]
 integration-tests-file = ["file"]
-integration-tests-http = ["http", "integration-utils"]
-integration-tests-kafka = ["kafka", "integration-utils"]
+integration-tests-http = ["http"]
+integration-tests-kafka = ["kafka"]
 integration-tests-metronome = ["metronome"]
-integration-tests-tcp = ["tcp", "integration-utils"]
+integration-tests-tcp = ["tcp"]
 integration-tests-udp = ["udp"]
 integration-tests-unix-socket = ["unix-socket"]
 integration-tests-wal = ["wal"]
-websocket-integration = ["websocket", "integration-utils"]
+websocket-integration = ["websocket"]

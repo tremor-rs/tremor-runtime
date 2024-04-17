@@ -31,7 +31,8 @@ use tokio::{
     net::TcpListener,
     task::{self, JoinHandle},
 };
-use tremor_connectors::{utils::integration::setup_for_tls, utils::tls::TLSServerConfig};
+use tremor_connectors::utils::tls::TLSServerConfig;
+use tremor_connectors_test_helpers::setup_for_tls;
 
 struct EchoServer {
     addr: String,

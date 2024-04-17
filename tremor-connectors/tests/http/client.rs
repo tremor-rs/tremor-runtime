@@ -30,8 +30,8 @@ use tremor_common::url::Url;
 use tremor_connectors::{
     harness::Harness,
     impls::http::{self as http_impl, meta::content_type},
-    utils::integration::free_port::find_free_tcp_port,
 };
+use tremor_connectors_test_helpers::free_port::find_free_tcp_port;
 use tremor_script::ValueAndMeta;
 use tremor_system::{
     controlplane::CbAction,

@@ -20,7 +20,8 @@ use tokio::{
     net::TcpStream,
     time::timeout,
 };
-use tremor_connectors::{harness::Harness, impls::tcp, utils::integration::free_port};
+use tremor_connectors::{harness::Harness, impls::tcp};
+use tremor_connectors_test_helpers::free_port;
 use tremor_system::event::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 

@@ -6466,6 +6466,7 @@ dependencies = [
  "tremor-codec",
  "tremor-common",
  "tremor-config",
+ "tremor-connectors-test-helpers",
  "tremor-interceptor",
  "tremor-pipeline",
  "tremor-script",
@@ -6540,6 +6541,7 @@ dependencies = [
  "tremor-config",
  "tremor-connectors",
  "tremor-connectors-object-storage",
+ "tremor-connectors-test-helpers",
  "tremor-script",
  "tremor-system",
  "tremor-value",
@@ -6590,6 +6592,16 @@ dependencies = [
  "tremor-system",
  "tremor-value",
  "value-trait",
+]
+
+[[package]]
+name = "tremor-connectors-test-helpers"
+version = "0.13.0-rc.20"
+dependencies = [
+ "lazy_static",
+ "log",
+ "rand 0.8.5",
+ "tokio",
 ]
 
 [[package]]
