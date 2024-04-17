@@ -2061,19 +2061,6 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cd405aab171cb85d6735e5c8d9db038c17d3ca007a4d2c25f337935c3d90580"
-dependencies = [
- "humantime",
- "is-terminal",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38b35839ba51819680ba087cd351788c9a3c476841207e0b8cee0b04722343b9"
@@ -4647,9 +4634,9 @@ checksum = "3582f63211428f83597b51b2ddb88e2a91a9d52d12831f9d08f5e624e8977422"
 
 [[package]]
 name = "rmp"
-version = "0.8.12"
+version = "0.8.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f9860a6cc38ed1da53456442089b4dfa35e7cedaa326df63017af88385e6b20"
+checksum = "bddb316f4b9cae1a3e89c02f1926d557d1142d0d2e684b038c11c1b77705229a"
 dependencies = [
  "byteorder",
  "num-traits",
@@ -4658,9 +4645,9 @@ dependencies = [
 
 [[package]]
 name = "rmp-serde"
-version = "1.1.2"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bffea85eea980d8a74453e5d02a8d93028f3c34725de143085a844ebe953258a"
+checksum = "938a142ab806f18b88a97b0dea523d39e0fd730a064b035726adcfc58a8a5188"
 dependencies = [
  "byteorder",
  "rmp",
@@ -6288,7 +6275,7 @@ dependencies = [
 name = "tremor-api"
 version = "0.13.0-rc.20"
 dependencies = [
- "env_logger 0.10.2",
+ "env_logger",
  "halfbrown",
  "http-types",
  "log",
@@ -6315,7 +6302,7 @@ dependencies = [
  "clap_complete",
  "criterion",
  "difference",
- "env_logger 0.10.2",
+ "env_logger",
  "error-chain",
  "float-cmp",
  "futures",
@@ -6421,7 +6408,6 @@ name = "tremor-connectors"
 version = "0.13.0-rc.20"
 dependencies = [
  "anyhow",
- "async-channel 1.9.0",
  "async-compression",
  "async-stream",
  "async-trait",
@@ -6436,17 +6422,15 @@ dependencies = [
  "dashmap",
  "either",
  "elasticsearch",
- "env_logger 0.11.3",
+ "env_logger",
  "event-listener 5.3.0",
  "file-mode",
  "futures",
  "gouth",
  "halfbrown",
  "hdrhistogram",
- "hex",
  "hostname",
  "http 0.2.12",
- "http-body 1.0.0",
  "http-types",
  "hyper",
  "hyper-rustls",
@@ -6455,8 +6439,6 @@ dependencies = [
  "log",
  "mime",
  "proptest",
- "prost",
- "prost-types",
  "qwal",
  "rand 0.8.5",
  "rdkafka",
@@ -6481,12 +6463,10 @@ dependencies = [
  "tokio-rustls 0.24.1",
  "tokio-stream",
  "tokio-tungstenite",
- "tonic",
  "tremor-codec",
  "tremor-common",
  "tremor-config",
  "tremor-interceptor",
- "tremor-otelapis",
  "tremor-pipeline",
  "tremor-script",
  "tremor-system",
@@ -6534,7 +6514,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "bytes",
- "env_logger 0.11.3",
+ "env_logger",
  "futures",
  "googapis",
  "gouth",
@@ -6562,6 +6542,38 @@ dependencies = [
  "tremor-system",
  "tremor-value",
  "url",
+ "value-trait",
+]
+
+[[package]]
+name = "tremor-connectors-otel"
+version = "0.13.0-rc.20"
+dependencies = [
+ "anyhow",
+ "async-channel 1.9.0",
+ "async-trait",
+ "futures",
+ "hex",
+ "http 0.2.12",
+ "http-body 1.0.0",
+ "log",
+ "proptest",
+ "prost",
+ "prost-types",
+ "rand 0.8.5",
+ "serde",
+ "simd-json",
+ "test-case",
+ "thiserror",
+ "tokio",
+ "tonic",
+ "tremor-common",
+ "tremor-config",
+ "tremor-connectors",
+ "tremor-otelapis",
+ "tremor-script",
+ "tremor-system",
+ "tremor-value",
  "value-trait",
 ]
 
@@ -6665,7 +6677,7 @@ version = "0.13.0-rc.20"
 dependencies = [
  "anyhow",
  "async-trait",
- "env_logger 0.11.3",
+ "env_logger",
  "error-chain",
  "futures",
  "halfbrown",
@@ -6691,6 +6703,7 @@ dependencies = [
  "tremor-connectors",
  "tremor-connectors-aws",
  "tremor-connectors-gcp",
+ "tremor-connectors-otel",
  "tremor-influx",
  "tremor-interceptor",
  "tremor-pipeline",

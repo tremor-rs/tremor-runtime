@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::sink::prelude::*;
-use tremor_system::event::Event;
 use tremor_value::prelude::*;
 
 /// mode of operation for object storage connectors

@@ -13,10 +13,11 @@
 // limitations under the License.
 
 use super::{common::OtelDefaults, logs, metrics, trace};
-use crate::{sink::prelude::*, source::prelude::*, spawn_task};
 use async_channel::{bounded, Receiver, Sender};
+use log::warn;
 use tokio::task::JoinHandle;
 use tremor_common::url::Url;
+use tremor_connectors::{sink::prelude::*, source::prelude::*, spawn_task};
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
 use tremor_system::event::DEFAULT_STREAM_ID;
 const CONNECTOR_TYPE: &str = "otel_server";
@@ -129,10 +130,16 @@ impl Connector for Server {
         _attempt: &Attempt,
     ) -> anyhow::Result<bool> {
         let host = self.config.url.host_str().ok_or_else(|| {
-            crate::Error::InvalidConfiguration(ctx.alias().clone(), "Missing host for otel server")
+            tremor_connectors::errors::Error::InvalidConfiguration(
+                ctx.alias().clone(),
+                "Missing host for otel server",
+            )
         })?;
         let port = self.config.url.port().ok_or_else(|| {
-            crate::Error::InvalidConfiguration(ctx.alias().clone(), "Missing port for otel server")
+            tremor_connectors::errors::Error::InvalidConfiguration(
+                ctx.alias().clone(),
+                "Missing port for otel server",
+            )
         })?;
         let endpoint = format!("{host}:{port}").parse()?;
 
@@ -203,6 +210,7 @@ impl Source for OtelSource {
 
 #[cfg(test)]
 mod tests {
+    use tremor_connectors::config;
     use tremor_value::literal;
 
     use super::*;
@@ -217,11 +225,8 @@ mod tests {
                 "url": "localhost:4317",
             },
         });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            &alias,
-            ConnectorType("otel_server".into()),
-            &with_processors,
-        )?;
+        let config: ConnectorConfig =
+            config::Connector::from_config(&alias, "otel_server".into(), &with_processors)?;
         let alias = alias::Connector::new("flow", "my_otel_server");
 
         let builder = super::Builder::default();

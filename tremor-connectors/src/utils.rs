@@ -22,9 +22,7 @@ pub(crate) mod mime;
 /// Some common things for object storage connectors like gcs and s3
 #[cfg(feature = "object-storage")]
 pub mod object_storage;
-/// Protocol Buffer utilities
-#[cfg(feature = "protobuf")]
-pub mod pb;
+
 /// Quiescence support facilities
 pub mod quiescence;
 /// Reconnection facilities

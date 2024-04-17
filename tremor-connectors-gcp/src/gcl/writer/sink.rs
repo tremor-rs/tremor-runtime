@@ -21,18 +21,17 @@ use googapis::google::logging::v2::{
     WriteLogEntriesRequest,
 };
 use log::{error, info};
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 use tokio::time::timeout;
 use tonic::{
     codegen::InterceptedService,
     transport::{Certificate, Channel, ClientTlsConfig},
     Code,
 };
-use tremor_common::time::nanotime;
+use tremor_common::{base64, time::nanotime};
 use tremor_connectors::{
     sink::{concurrency_cap::ConcurrencyCap, prelude::*},
     spawn_task,
-    utils::pb,
 };
 use tremor_value::prelude::*;
 
@@ -67,6 +66,77 @@ where
     channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
 }
 
+pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value, TryTypeError> {
+    use prost_types::value::Kind;
+    Ok(match json {
+        Value::Static(StaticNode::Null) => prost_types::Value {
+            kind: Some(Kind::NullValue(0)),
+        },
+        Value::Static(StaticNode::Bool(v)) => prost_types::Value {
+            kind: Some(Kind::BoolValue(*v)),
+        },
+        #[allow(clippy::cast_precision_loss)]
+        Value::Static(StaticNode::I64(v)) => prost_types::Value {
+            kind: Some(Kind::NumberValue(*v as f64)),
+        },
+        #[allow(clippy::cast_precision_loss)]
+        Value::Static(StaticNode::U64(v)) => prost_types::Value {
+            kind: Some(Kind::NumberValue(*v as f64)),
+        },
+        Value::Static(StaticNode::F64(v)) => prost_types::Value {
+            kind: Some(Kind::NumberValue(*v)),
+        },
+        Value::String(v) => prost_types::Value {
+            kind: Some(Kind::StringValue(v.to_string())),
+        },
+        Value::Array(v) => {
+            let mut arr: Vec<prost_types::Value> = vec![];
+            for val in v {
+                arr.push(value_to_prost_value(val)?);
+            }
+            prost_types::Value {
+                kind: Some(Kind::ListValue(prost_types::ListValue { values: arr })),
+            }
+        }
+        Value::Object(v) => {
+            let mut fields = BTreeMap::new();
+            for (key, val) in v.iter() {
+                fields.insert(key.to_string(), value_to_prost_value(val)?);
+            }
+            prost_types::Value {
+                kind: Some(Kind::StructValue(prost_types::Struct { fields })),
+            }
+        }
+        Value::Bytes(v) => {
+            let encoded = base64::encode(v);
+            prost_types::Value {
+                kind: Some(Kind::StringValue(encoded)),
+            }
+        }
+    })
+}
+
+/// Converts a json object to a protobuf struct
+/// # Errors
+/// It errors if the value is not an object or the content of the object is not convertible to a protobuf struct
+
+fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Struct, TryTypeError> {
+    use prost_types::value::Kind;
+
+    if json.is_object() {
+        if let prost_types::Value {
+            kind: Some(Kind::StructValue(s)),
+        } = value_to_prost_value(json)?
+        {
+            return Ok(s);
+        }
+    }
+    Err(TryTypeError {
+        expected: ValueType::Object,
+        got: json.value_type(),
+    })
+}
+
 fn value_to_log_entry(
     timestamp: u64,
     config: &Config,
@@ -87,7 +157,7 @@ fn value_to_log_entry(
         span_id: meta::span_id(meta),
         trace_sampled: meta::trace_sampled(meta)?,
         source_location: meta::source_location(meta),
-        payload: Some(Payload::JsonPayload(pb::value_to_prost_struct(data)?)),
+        payload: Some(Payload::JsonPayload(value_to_prost_struct(data)?)),
     })
 }
 

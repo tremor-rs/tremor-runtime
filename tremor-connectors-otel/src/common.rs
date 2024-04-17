@@ -14,7 +14,7 @@
 
 #![allow(dead_code)]
 
-use crate::utils::pb;
+use crate::pb;
 use tremor_common::url::Defaults;
 use tremor_otelapis::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, InstrumentationLibrary, KeyValue, KeyValueList, StringKeyValue,

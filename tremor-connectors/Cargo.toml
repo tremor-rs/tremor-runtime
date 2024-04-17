@@ -35,15 +35,14 @@ thiserror = { version = "1.0", default-features = false }
 anyhow = { version = "1.0", default-features = true }
 event-listener = { version = "5", default-features = false }
 lazy_static = { version = "1", default-features = false }
-hex = { version = "0.4", optional = true, default-features = false }
 either = { version = "1.10", default-features = false, features = ["serde"] }
+rand = { version = "0.8.5", default-features = false }
 
 # shared
 simd-json-derive = { version = "0.13", optional = true, default-features = false }
 uuid = { version = "1.6", optional = true, default-features = false, features = [
     "v4",
 ] }
-http-body = { version = "1.0", optional = true, default-features = false }
 hyper = { version = "0.14", optional = true, default-features = false, features = [
     "server",
     "http1",
@@ -86,21 +85,6 @@ reqwest = { version = "0.11", optional = true, default-features = false, feature
 ] }
 base64 = { version = "0.22", optional = true, default-features = false }
 dashmap = { version = "5.5", optional = true, default-features = false }
-
-# opentelemetry
-tonic = { version = "0.6.1", optional = true, default-features = false, features = [
-    "transport",
-    "tls",
-] }
-prost = { version = "0.9.0", optional = true, default-features = false }
-prost-types = { version = "0.9.0", optional = true, default-features = false }
-# This is related to https://github.com/tremor-rs/tremor-runtime/issues/1688 the otel API's need to
-# be updated together with tonic
-tremor-otelapis = { version = "=0.2.4", optional = true, default-features = false, features = [
-    "otel-all",
-] }
-rand = { version = "0.8.5", default-features = false }
-async-channel = { version = "1.9", optional = true, default-features = false }
 
 # kafka
 rdkafka = { version = "0.36", optional = true, features = [
@@ -160,7 +144,6 @@ chrono = { version = "0.4", optional = true, default-features = false }
 cron = { version = "0.12", optional = true, default-features = false }
 
 # udp
-
 socket2 = { version = "0.5", optional = true, default-features = false }
 
 [dev-dependencies]
@@ -179,7 +162,6 @@ default = [
     "dns",
     "elasticsearch",
     "http",
-    "otel",
     "kafka",
     "websocket",
     "discord",
@@ -213,8 +195,6 @@ tls = [
     "dep:rustls",
     "dep:tokio-rustls",
 ]
-protobuf = ["dep:prost", "dep:prost-types"]
-
 
 dns = ["dep:trust-dns-resolver"]
 elasticsearch = [
@@ -229,7 +209,6 @@ http = [
     "dep:base64",
     "dep:dashmap",
     "dep:gouth",
-    "dep:http-body",
     "dep:http",
     "dep:hyper-rustls",
     "dep:hyper",
@@ -243,13 +222,6 @@ http = [
     "socket",
 ]
 
-otel = [
-    "dep:tonic",
-    "protobuf",
-    "dep:tremor-otelapis",
-    "dep:hex",
-    "dep:async-channel",
-]
 kafka = ["dep:rdkafka", "dep:rdkafka-sys", "dep:indexmap"]
 websocket = ["dep:tokio-tungstenite", "tls", "socket"]
 discord = ["dep:serenity"]

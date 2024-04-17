@@ -26,7 +26,7 @@ anyhow = "1"
 clap = { version = "4", features = ["color", "derive"] }
 clap_complete = "4"
 difference = "2"
-env_logger = "0.10"
+env_logger = "0.11"
 futures = "0.3"
 halfbrown = "0.2"
 http-types = "2"

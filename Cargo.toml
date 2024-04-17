@@ -28,6 +28,7 @@ members = [
   "tremor-connectors",
   "tremor-connectors-aws",
   "tremor-connectors-gcp",
+  "tremor-connectors-otel",
 ]
 
 default-members = ["tremor-cli"]
@@ -46,6 +47,7 @@ tremor-config = { path = "tremor-config", version = "0.13.0-rc.20" }
 tremor-connectors = { path = "tremor-connectors", version = "0.13.0-rc.20" }
 tremor-connectors-aws = { path = "tremor-connectors-aws", version = "0.13.0-rc.20" }
 tremor-connectors-gcp = { path = "tremor-connectors-gcp", version = "0.13.0-rc.20" }
+tremor-connectors-otel = { path = "tremor-connectors-otel", version = "0.13.0-rc.20" }
 tremor-influx = { path = "tremor-influx", version = "0.13.0-rc.20" }
 tremor-interceptor = { path = "tremor-interceptor", version = "0.13.0-rc.20" }
 tremor-pipeline = { path = "tremor-pipeline", version = "0.13.0-rc.20" }

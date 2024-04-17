@@ -13,14 +13,9 @@
 // limitations under the License.
 
 use crate::{
-    impls::otel::{
-        common::{
-            self, instrumentation_library_to_pb, maybe_instrumentation_library_to_json, EMPTY,
-        },
-        id,
-        resource::{self, resource_to_pb},
-    },
-    utils::pb,
+    common::{self, instrumentation_library_to_pb, maybe_instrumentation_library_to_json, EMPTY},
+    id, pb,
+    resource::{self, resource_to_pb},
 };
 use tremor_otelapis::opentelemetry::proto::{
     collector::logs::v1::ExportLogsServiceRequest,

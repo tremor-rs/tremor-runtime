@@ -64,10 +64,6 @@ pub mod null;
 #[cfg(feature = "websocket")]
 pub mod ws;
 
-/// `OpenTelemetry`
-#[cfg(feature = "otel")]
-pub mod otel;
-
 /// std streams connector (stdout, stderr, stdin)
 #[cfg(feature = "stdio")]
 pub mod stdio;

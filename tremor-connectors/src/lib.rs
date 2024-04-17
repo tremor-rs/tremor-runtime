@@ -1053,10 +1053,6 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::<impls::http::client::Builder>::default(),
         #[cfg(feature = "http")]
         Box::<impls::http::server::Builder>::default(),
-        #[cfg(feature = "otel")]
-        Box::<impls::otel::client::Builder>::default(),
-        #[cfg(feature = "otel")]
-        Box::<impls::otel::server::Builder>::default(),
         #[cfg(feature = "clickhouse")]
         Box::<impls::clickhouse::Builder>::default(),
         #[cfg(feature = "null")]

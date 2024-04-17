@@ -27,4 +27,4 @@ tremor-system = { version = "0.13.0-rc.20", path = "../tremor-system" }
 surf = { version = "2.3", default-features = false, features = [
 	"h1-client-rustls",
 ] }
-env_logger = "0.10"
+env_logger = "0.11"

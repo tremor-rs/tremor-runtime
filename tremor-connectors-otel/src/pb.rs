@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
-use tremor_common::base64::{Engine, BASE64};
 use tremor_value::prelude::*;
 
 /// converts a maybe null option to a string. if the value is none it returns an empty string
 /// # Errors
 /// It errors if the value is some but not a string
-pub fn maybe_string(data: Option<&Value<'_>>) -> Result<String, TryTypeError> {
+pub(crate) fn maybe_string(data: Option<&Value<'_>>) -> Result<String, TryTypeError> {
     if data.is_none() {
         Ok(String::new())
     } else {
@@ -28,7 +26,7 @@ pub fn maybe_string(data: Option<&Value<'_>>) -> Result<String, TryTypeError> {
 }
 
 /// *sob* this is a trait that should not exist
-pub trait FromValue: Sized {
+pub(crate) trait FromValue: Sized {
     /// *sob* this is a trait that should not exist
     /// # Errors
     /// It errors if the value is some but not the right type
@@ -47,14 +45,16 @@ pub trait FromValue: Sized {
 ///
 /// # Errors
 /// It errors if the value is some but not a the right type
-pub fn maybe_from_value<T: FromValue>(data: Option<&Value<'_>>) -> Result<Option<T>, TryTypeError> {
+pub(crate) fn maybe_from_value<T: FromValue>(
+    data: Option<&Value<'_>>,
+) -> Result<Option<T>, TryTypeError> {
     T::maybe_from_value(data)
 }
 
 /// Converts a json array of f64 values to a protobuf repeated f64
 /// # Errors
 /// It errors if the value is not an array or if any of the values are not `f64`
-pub fn f64_repeated(json: Option<&Value<'_>>) -> Result<Vec<f64>, TryTypeError> {
+pub(crate) fn f64_repeated(json: Option<&Value<'_>>) -> Result<Vec<f64>, TryTypeError> {
     json.try_as_array()?
         .iter()
         .map(Some)
@@ -65,83 +65,12 @@ pub fn f64_repeated(json: Option<&Value<'_>>) -> Result<Vec<f64>, TryTypeError> 
 /// Converts a json array of u64 values to a protobuf repeated u64
 /// # Errors
 /// It errors if the value is not an array or if any of the values are not `u64`
-pub fn u64_repeated(json: Option<&Value<'_>>) -> Result<Vec<u64>, TryTypeError> {
+pub(crate) fn u64_repeated(json: Option<&Value<'_>>) -> Result<Vec<u64>, TryTypeError> {
     json.try_as_array()?
         .iter()
         .map(Some)
         .map(|v| v.try_as_u64())
         .collect()
-}
-
-pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value, TryTypeError> {
-    use prost_types::value::Kind;
-    Ok(match json {
-        Value::Static(StaticNode::Null) => prost_types::Value {
-            kind: Some(Kind::NullValue(0)),
-        },
-        Value::Static(StaticNode::Bool(v)) => prost_types::Value {
-            kind: Some(Kind::BoolValue(*v)),
-        },
-        #[allow(clippy::cast_precision_loss)]
-        Value::Static(StaticNode::I64(v)) => prost_types::Value {
-            kind: Some(Kind::NumberValue(*v as f64)),
-        },
-        #[allow(clippy::cast_precision_loss)]
-        Value::Static(StaticNode::U64(v)) => prost_types::Value {
-            kind: Some(Kind::NumberValue(*v as f64)),
-        },
-        Value::Static(StaticNode::F64(v)) => prost_types::Value {
-            kind: Some(Kind::NumberValue(*v)),
-        },
-        Value::String(v) => prost_types::Value {
-            kind: Some(Kind::StringValue(v.to_string())),
-        },
-        Value::Array(v) => {
-            let mut arr: Vec<prost_types::Value> = vec![];
-            for val in v {
-                arr.push(value_to_prost_value(val)?);
-            }
-            prost_types::Value {
-                kind: Some(Kind::ListValue(prost_types::ListValue { values: arr })),
-            }
-        }
-        Value::Object(v) => {
-            let mut fields = BTreeMap::new();
-            for (key, val) in v.iter() {
-                fields.insert(key.to_string(), value_to_prost_value(val)?);
-            }
-            prost_types::Value {
-                kind: Some(Kind::StructValue(prost_types::Struct { fields })),
-            }
-        }
-        Value::Bytes(v) => {
-            let encoded = BASE64.encode(v);
-            prost_types::Value {
-                kind: Some(Kind::StringValue(encoded)),
-            }
-        }
-    })
-}
-
-/// Converts a json object to a protobuf struct
-/// # Errors
-/// It errors if the value is not an object or the content of the object is not convertible to a protobuf struct
-
-pub fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Struct, TryTypeError> {
-    use prost_types::value::Kind;
-
-    if json.is_object() {
-        if let prost_types::Value {
-            kind: Some(Kind::StructValue(s)),
-        } = value_to_prost_value(json)?
-        {
-            return Ok(s);
-        }
-    }
-    Err(TryTypeError {
-        expected: ValueType::Object,
-        got: json.value_type(),
-    })
 }
 
 #[cfg(test)]
@@ -234,74 +163,5 @@ mod test {
         // error by construction
         assert!(f64_repeated(None).is_err());
         assert!(u64_repeated(None).is_err());
-    }
-
-    #[test]
-    fn prost_value_mappings() -> anyhow::Result<()> {
-        use prost_types::value::Kind;
-        let v = value_to_prost_value(&literal!(null))?;
-        assert_eq!(Some(Kind::NullValue(0)), v.kind);
-
-        let v = value_to_prost_value(&literal!(true))?;
-        assert_eq!(Some(Kind::BoolValue(true)), v.kind);
-
-        let v = value_to_prost_value(&literal!(1i64))?;
-        assert_eq!(Some(Kind::NumberValue(1f64)), v.kind);
-
-        let v = value_to_prost_value(&literal!(1u64))?;
-        assert_eq!(Some(Kind::NumberValue(1f64)), v.kind);
-
-        let v = value_to_prost_value(&literal!(1f64))?;
-        assert_eq!(Some(Kind::NumberValue(1f64)), v.kind);
-
-        let v = value_to_prost_value(&literal!("snot"))?;
-        assert_eq!(Some(Kind::StringValue("snot".to_string())), v.kind);
-
-        let v = literal!([1u64, 2u64, 3u64]);
-        let v = value_to_prost_value(&v)?;
-        assert_eq!(
-            prost_types::Value {
-                kind: Some(Kind::ListValue(prost_types::ListValue {
-                    values: vec![
-                        value_to_prost_value(&literal!(1u64))?,
-                        value_to_prost_value(&literal!(2u64))?,
-                        value_to_prost_value(&literal!(3u64))?,
-                    ]
-                }))
-            },
-            v
-        );
-
-        let v = literal!({ "snot": "badger"});
-        let v = value_to_prost_value(&v)?;
-        let mut fields = BTreeMap::new();
-        fields.insert(
-            "snot".to_string(),
-            value_to_prost_value(&literal!("badger"))?,
-        );
-        assert_eq!(
-            prost_types::Value {
-                kind: Some(Kind::StructValue(prost_types::Struct { fields }))
-            },
-            v
-        );
-
-        let v: beef::Cow<[u8]> = beef::Cow::owned("snot".as_bytes().to_vec());
-        let v = Value::Bytes(v);
-        let v = value_to_prost_value(&v)?;
-        assert_eq!(Some(Kind::StringValue("c25vdA==".to_string())), v.kind);
-
-        Ok(())
-    }
-
-    #[test]
-    fn prost_struct_mapping() {
-        let v = literal!({ "snot": "badger"});
-        let v = value_to_prost_struct(&v);
-        assert!(v.is_ok());
-
-        let v = literal!(null);
-        let v = value_to_prost_struct(&v);
-        assert!(v.is_err());
     }
 }

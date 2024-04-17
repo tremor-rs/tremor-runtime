@@ -13,9 +13,10 @@
 // limitations under the License.
 
 use super::{common::OtelDefaults, logs, metrics, trace};
-use crate::sink::prelude::*;
+use log::{error, warn};
 use tonic::transport::{Channel as TonicChannel, Endpoint as TonicEndpoint};
 use tremor_common::url::Url;
+use tremor_connectors::sink::prelude::*;
 use tremor_otelapis::opentelemetry::proto::collector::{
     logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
     metrics::v1::{metrics_service_client::MetricsServiceClient, ExportMetricsServiceRequest},
@@ -208,6 +209,7 @@ impl Sink for OtelSink {
 #[cfg(test)]
 mod tests {
     use tremor_common::alias;
+    use tremor_connectors::config;
     use tremor_value::literal;
 
     use super::*;
@@ -220,11 +222,8 @@ mod tests {
                 "url": "localhost:4317",
             },
         });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            &alias,
-            ConnectorType("otel_client".into()),
-            &with_processors,
-        )?;
+        let config: ConnectorConfig =
+            config::Connector::from_config(&alias, "otel_client".into(), &with_processors)?;
 
         let builder = super::Builder::default();
         let kill_switch = KillSwitch::dummy();
