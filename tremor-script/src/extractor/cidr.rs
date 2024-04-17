@@ -216,7 +216,7 @@ fn parse_ipv6_fast(s: &str) -> Option<IpCidr> {
     }
 }
 
-fn cidr_to_value<'x>(x: IpCidr) -> Value<'x> {
+fn cidr_to_value(x: IpCidr) -> Result<'static> {
     let mut r = HashMap::with_capacity_and_hasher(2, ObjectHasher::default());
     match x {
         IpCidr::V4(y) => {
@@ -235,32 +235,39 @@ fn cidr_to_value<'x>(x: IpCidr) -> Value<'x> {
         }
         IpCidr::V6(y) => {
             let prefix = y.first_address().octets();
-            let prefix = vec![
-                (u16::from(prefix[0]) << 8) + u16::from(prefix[1]),
-                (u16::from(prefix[2]) << 8) + u16::from(prefix[3]),
-                (u16::from(prefix[4]) << 8) + u16::from(prefix[5]),
-                (u16::from(prefix[6]) << 8) + u16::from(prefix[7]),
-                (u16::from(prefix[8]) << 8) + u16::from(prefix[9]),
-                (u16::from(prefix[10]) << 8) + u16::from(prefix[11]),
-                (u16::from(prefix[12]) << 8) + u16::from(prefix[13]),
-                (u16::from(prefix[14]) << 8) + u16::from(prefix[15]),
-            ];
+            let mut new_prefix: [u16; 8] = [0; 8];
+            #[allow(clippy::needless_range_loop)]
+            // NOTE I failed at making this idiomatic, thanks clippy!
+            for i in 0..8usize {
+                let lhs = prefix.get(i * 2);
+                let rhs = prefix.get(i * 2 + 1usize);
+                new_prefix[i] = match (lhs, rhs) {
+                    (Some(lhs), Some(rhs)) => u16::from(*lhs) << 8 | u16::from(*rhs),
+                    _otherwise => {
+                        return Result::NoMatch;
+                    }
+                };
+            }
+
             let mask: [u8; 16] = y.mask().octets();
-            let mask = vec![
-                (u16::from(mask[0]) << 8) + u16::from(mask[1]),
-                (u16::from(mask[2]) << 8) + u16::from(mask[3]),
-                (u16::from(mask[4]) << 8) + u16::from(mask[5]),
-                (u16::from(mask[6]) << 8) + u16::from(mask[7]),
-                (u16::from(mask[8]) << 8) + u16::from(mask[9]),
-                (u16::from(mask[10]) << 8) + u16::from(mask[11]),
-                (u16::from(mask[12]) << 8) + u16::from(mask[13]),
-                (u16::from(mask[14]) << 8) + u16::from(mask[15]),
-            ];
-            r.insert_nocheck("prefix".into(), literal!(prefix));
-            r.insert_nocheck("mask".into(), literal!(mask));
+            let mut new_mask: [u16; 8] = [0; 8];
+            #[allow(clippy::needless_range_loop)]
+            // NOTE I failed at making this idiomatic, thanks clippy!
+            for i in 0..8usize {
+                let lhs = mask.get(i * 2);
+                let rhs = mask.get(i * 2 + 1usize);
+                new_mask[i] = match (lhs, rhs) {
+                    (Some(lhs), Some(rhs)) => u16::from(*lhs) << 8 | u16::from(*rhs),
+                    _otherwise => {
+                        return Result::NoMatch;
+                    }
+                };
+            }
+            r.insert_nocheck("prefix".into(), literal!(new_prefix.to_vec()));
+            r.insert_nocheck("mask".into(), literal!(new_mask.to_vec()));
         }
     }
-    Value::from(Object::from(r))
+    Result::Match(Value::from(Object::from(r)))
 }
 
 pub(crate) fn execute(
@@ -272,8 +279,7 @@ pub(crate) fn execute(
         Ipv4Addr::from_str(s).map_or(Result::NoMatch, |input| {
             if combiner.combiner.contains(&input) {
                 if result_needed {
-                    IpCidr::from_str(s)
-                        .map_or(Result::NoMatch, |cidr| Result::Match(cidr_to_value(cidr)))
+                    IpCidr::from_str(s).map_or(Result::NoMatch, cidr_to_value)
                 } else {
                     Result::MatchNull
                 }
@@ -284,7 +290,7 @@ pub(crate) fn execute(
     } else {
         IpCidr::from_str(s).map_or(Result::NoMatch, |c| {
             if result_needed {
-                Result::Match(cidr_to_value(c))
+                cidr_to_value(c)
             } else {
                 Result::MatchNull
             }
