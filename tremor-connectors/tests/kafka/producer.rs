@@ -28,7 +28,8 @@ use std::time::Duration;
 use testcontainers::clients::Cli as DockerCli;
 use tokio::time::timeout;
 use tremor_common::ports::IN;
-use tremor_connectors::{harness::Harness, impls::kafka, utils::integration::free_port};
+use tremor_connectors::{harness::Harness, impls::kafka};
+use tremor_connectors_test_helpers::free_port;
 
 use tremor_system::event::{Event, EventId};
 use tremor_value::literal;

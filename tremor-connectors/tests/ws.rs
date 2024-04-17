@@ -49,9 +49,9 @@ use tremor_common::{ports::IN, url::Url};
 use tremor_connectors::{
     harness::Harness,
     impls::ws::{self, Defaults},
-    utils::integration::{free_port::find_free_tcp_port, setup_for_tls},
     utils::tls::TLSClientConfig,
 };
+use tremor_connectors_test_helpers::{free_port::find_free_tcp_port, setup_for_tls};
 use tremor_system::event::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 
