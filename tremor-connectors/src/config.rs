@@ -128,8 +128,10 @@ impl Connector {
         Self::from_config(alias, defn.builtin_kind.clone().into(), &conf)
     }
     /// Creates a connector from it's definition (aka config + settings)
+    /// # Errors
+    ///  * If the connector definition is invalid
     #[allow(clippy::too_many_lines)]
-    pub(crate) fn from_config(
+    pub fn from_config(
         connector_alias: &alias::Connector,
         connector_type: ConnectorType,
         connector_config: &Value<'static>,

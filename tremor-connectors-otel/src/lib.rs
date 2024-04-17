@@ -1,4 +1,4 @@
-// Copyright 2022, The Tremor Team
+// Copyright 2022-2024, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -193,22 +193,32 @@
 //! The `OpenTelemetry` connector ships with a [module](../stdlib/cncf/otel) of convenience functions and
 //! definitions that make working with, consuming and producing `OpenTelemetry` event streams easier.
 
+#![deny(warnings)]
+#![deny(missing_docs)]
+#![deny(
+    clippy::all,
+    clippy::unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic,
+    clippy::mod_module_files
+)]
+
 mod common;
 mod id;
 mod logs;
 mod metrics;
+mod pb;
 mod resource;
 mod trace;
 
 pub(crate) mod client;
 pub(crate) mod server;
 
-use crate::utils::pb::FromValue;
-use simd_json::prelude::ValueTryAsScalar;
+use crate::pb::FromValue;
+use tremor_connectors::ConnectorBuilder;
 use tremor_otelapis::opentelemetry::proto::metrics::v1;
 use tremor_script::{tremor_fn, Registry};
-use tremor_value::Value;
-use value_trait::TryTypeError;
+use tremor_value::prelude::*;
 
 /// Extend function registry with `CNCF OpenTelemetry` support
 pub fn load(registry: &mut Registry) {
@@ -243,6 +253,15 @@ impl FromValue for v1::number_data_point::Value {
     fn from_value(data: &Value<'_>) -> Result<Self, TryTypeError> {
         Ok(v1::number_data_point::Value::AsDouble(data.try_as_f64()?))
     }
+}
+
+/// builtin connector types
+#[must_use]
+pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
+    vec![
+        Box::<client::Builder>::default(),
+        Box::<server::Builder>::default(),
+    ]
 }
 
 #[cfg(test)]

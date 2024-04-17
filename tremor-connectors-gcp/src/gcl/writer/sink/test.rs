@@ -291,3 +291,72 @@ async fn log_severity_override() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn prost_value_mappings() -> anyhow::Result<()> {
+    use prost_types::value::Kind;
+    let v = value_to_prost_value(&literal!(null))?;
+    assert_eq!(Some(Kind::NullValue(0)), v.kind);
+
+    let v = value_to_prost_value(&literal!(true))?;
+    assert_eq!(Some(Kind::BoolValue(true)), v.kind);
+
+    let v = value_to_prost_value(&literal!(1i64))?;
+    assert_eq!(Some(Kind::NumberValue(1f64)), v.kind);
+
+    let v = value_to_prost_value(&literal!(1u64))?;
+    assert_eq!(Some(Kind::NumberValue(1f64)), v.kind);
+
+    let v = value_to_prost_value(&literal!(1f64))?;
+    assert_eq!(Some(Kind::NumberValue(1f64)), v.kind);
+
+    let v = value_to_prost_value(&literal!("snot"))?;
+    assert_eq!(Some(Kind::StringValue("snot".to_string())), v.kind);
+
+    let v = literal!([1u64, 2u64, 3u64]);
+    let v = value_to_prost_value(&v)?;
+    assert_eq!(
+        prost_types::Value {
+            kind: Some(Kind::ListValue(prost_types::ListValue {
+                values: vec![
+                    value_to_prost_value(&literal!(1u64))?,
+                    value_to_prost_value(&literal!(2u64))?,
+                    value_to_prost_value(&literal!(3u64))?,
+                ]
+            }))
+        },
+        v
+    );
+
+    let v = literal!({ "snot": "badger"});
+    let v = value_to_prost_value(&v)?;
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        "snot".to_string(),
+        value_to_prost_value(&literal!("badger"))?,
+    );
+    assert_eq!(
+        prost_types::Value {
+            kind: Some(Kind::StructValue(prost_types::Struct { fields }))
+        },
+        v
+    );
+
+    let v = "snot".as_bytes().to_vec().into();
+    let v = Value::Bytes(v);
+    let v = value_to_prost_value(&v)?;
+    assert_eq!(Some(Kind::StringValue("c25vdA==".to_string())), v.kind);
+
+    Ok(())
+}
+
+#[test]
+fn prost_struct_mapping() {
+    let v = literal!({ "snot": "badger"});
+    let v = value_to_prost_struct(&v);
+    assert!(v.is_ok());
+
+    let v = literal!(null);
+    let v = value_to_prost_struct(&v);
+    assert!(v.is_err());
+}
