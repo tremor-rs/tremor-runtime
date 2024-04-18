@@ -6,7 +6,6 @@ description = "Tremor Preprocessors, Postprocessors, and maybe soon: Interceptor
 documentation = "https://docs.tremor.rs"
 homepage = "https://www.tremor.rs"
 license = "Apache-2.0"
-readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
 version = "0.13.0-rc.20"
 rust-version = "1.62"

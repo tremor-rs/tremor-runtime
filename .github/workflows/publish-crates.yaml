@@ -3,20 +3,62 @@ name: "Publish crates"
 on: workflow_dispatch
 
 jobs:
-  publish-tremor-crates:
-    name: Publish tremor crates
+  publish-tremor-common:
+    name: Publish tremor common
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: katyo/publish-crates@v2
+      - run: cargo install cargo-release
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo release publish -p tremor-common -x
+
+  publish-tremor-value:
+    needs: [publish-tremor-common]
+    name: Publish tremor value
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
         with:
-          path: "./tremor-script"
-          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          fetch-depth: 0
+      - run: cargo install cargo-release
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo release publish -p tremor-value -x
+
+  publish-tremor-influx:
+    name: Publish tremor influx
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - run: cargo install cargo-release
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo release publish -p tremor-influx -x
+
+  publish-tremor-script:
+    needs: [publish-tremor-common, publish-tremor-value, publish-tremor-influx]
+    name: Publish tremor script
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - run: cargo install cargo-release
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo release publish -p tremor-script -x
 
   invoke-tremor-language-server:
-    needs: [publish-tremor-crates]
+    needs: [publish-tremor-script]
     name: Trigger Tremor LS release
     runs-on: ubuntu-latest
     steps:

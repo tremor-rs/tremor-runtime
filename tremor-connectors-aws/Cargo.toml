@@ -2,6 +2,9 @@
 name = "tremor-connectors-aws"
 version = "0.13.0-rc.20"
 edition = "2021"
+license = "Apache-2.0"
+homepage = "https://www.tremor.rs"
+authors = ["The Tremor Team"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
