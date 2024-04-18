@@ -6273,7 +6273,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-api"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "env_logger",
  "halfbrown",
@@ -6295,7 +6295,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-cli"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "anyhow",
  "clap",
@@ -6341,7 +6341,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-codec"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "apache-avro",
  "async-recursion",
@@ -6377,7 +6377,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-common"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "base64 0.22.0",
  "beef",
@@ -6396,7 +6396,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-config"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "serde",
  "tremor-value",
@@ -6404,7 +6404,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -6480,7 +6480,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-aws"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "anyhow",
  "async-channel 2.2.0",
@@ -6509,7 +6509,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-gcp"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "anyhow",
  "async-channel 1.9.0",
@@ -6550,7 +6550,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-object-storage"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6563,7 +6563,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-otel"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "anyhow",
  "async-channel 1.9.0",
@@ -6589,7 +6589,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-test-helpers"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "lazy_static",
  "log",
@@ -6599,7 +6599,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-influx"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "criterion",
  "lexical",
@@ -6611,7 +6611,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-interceptor"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -6657,7 +6657,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-pipeline"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "beef",
  "criterion",
@@ -6691,7 +6691,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6733,7 +6733,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-script"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "atty",
  "beef",
@@ -6784,7 +6784,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-system"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "anyhow",
  "either",
@@ -6801,7 +6801,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-value"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 dependencies = [
  "base64 0.22.0",
  "beef",

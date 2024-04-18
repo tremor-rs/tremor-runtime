@@ -6,7 +6,7 @@ license = "Apache-2.0"
 name = "tremor-influx"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.20"
+version = "0.13.0-rc.21"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
