@@ -47,7 +47,7 @@ jobs:
           name: test-errors
           path: tremor-cli/tests/**/*.log
       - name: Upload coverage to Codecov
-        uses: Wandalen/wretry.action@v1.0.42
+        uses: Wandalen/wretry.action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:

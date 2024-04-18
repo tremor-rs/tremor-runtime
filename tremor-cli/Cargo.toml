@@ -5,6 +5,7 @@ edition = "2021"
 license = "Apache-2.0"
 name = "tremor-cli"
 version = "0.13.0-rc.20"
+homepage = "https://www.tremor.rs"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"

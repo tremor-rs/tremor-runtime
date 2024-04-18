@@ -50,7 +50,7 @@ jobs:
           echo "$flags"
           echo "flags=$flags" >> $GITHUB_ENV
       - name: Upload coverage to Codecov
-        uses: Wandalen/wretry.action@v1.0.42
+        uses: Wandalen/wretry.action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -97,7 +97,7 @@ jobs:
           echo "flags=$flags" >> $GITHUB_ENV
 
       - name: Upload coverage to Codecov
-        uses: Wandalen/wretry.action@v1.0.42
+        uses: Wandalen/wretry.action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:

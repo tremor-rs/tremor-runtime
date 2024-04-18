@@ -9,6 +9,13 @@ on:
     branches: [main]
 
 jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check bans licenses sources 
   license:
     runs-on: ubuntu-latest
     steps:
@@ -87,6 +94,6 @@ jobs:
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
-    needs: [format, clippy-check, unused-deps, safety, license]
+    needs: [format, clippy-check, unused-deps, safety, license, audit]
     steps:
       - run: echo "All tests passed"

@@ -5,6 +5,7 @@ edition = "2021"
 license = "Apache-2.0"
 name = "tremor-api"
 version = "0.13.0-rc.20"
+homepage = "https://www.tremor.rs"
 
 [dependencies]
 halfbrown = "0.2"
