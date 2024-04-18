@@ -128,6 +128,6 @@ jobs:
   tests:
     name: Tests
     runs-on: ubuntu-latest
-    needs: [connector-tests,tests-linux]
+    needs: [connector-tests, core-tests]
     steps:
       - run: echo "All tests passed"
