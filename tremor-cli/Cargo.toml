@@ -56,7 +56,7 @@ tremor-value = { version = "0.13.0-rc.20", path = "../tremor-value" }
 tremor-system = { version = "0.13.0-rc.20", path = "../tremor-system" }
 url = "2"
 error-chain = "0.12"
-globwalk = "0.8"
+globwalk = "0.9"
 port_scanner = "0.1"
 shell-words = "1"
 tch = { version = "0.13", optional = true }
