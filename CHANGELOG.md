@@ -3,6 +3,9 @@
 
 ## [Unreleased]
 
+### New features
+* add collect postprocessor
+
 ### Fixes
 * fix reconnect issue in HTTP client
 

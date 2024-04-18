@@ -14,6 +14,7 @@
 
 pub(crate) mod base64;
 mod chunk;
+pub(crate) mod collect;
 pub(crate) mod compress;
 pub(crate) mod gelf_chunking;
 pub(crate) mod ingest_ns;
@@ -78,9 +79,12 @@ pub trait Postprocessor: Send + Sync {
 ///
 ///   * Errors if the postprocessor is not known
 
-pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Postprocessor>, Error> {
+pub fn lookup_with_config(config: &Config) -> anyhow::Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
         "chunk" => Ok(Box::new(chunk::Chunk::from_config(config.config.as_ref())?)),
+        "collect" => Ok(Box::new(collect::Postprocessor::from_config(
+            &config.config,
+        )?)),
         "compress" => Ok(Box::new(compress::Compress::from_config(
             config.config.as_ref(),
         )?)),
@@ -92,7 +96,7 @@ pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Postprocessor>, Err
         "textual-length-prefixed" => {
             Ok(Box::<textual_length_prefixed::TextualLengthPrefixed>::default())
         }
-        name => Err(Error::NotFound(name.to_string())),
+        name => Err(Error::NotFound(name.to_string()).into()),
     }
 }
 
@@ -101,7 +105,7 @@ pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Postprocessor>, Err
 ///
 /// # Errors
 ///   * if the postprocessor with `name` is not known
-pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>, Error> {
+pub fn lookup(name: &str) -> anyhow::Result<Box<dyn Postprocessor>> {
     lookup_with_config(&Config::from(name))
 }
 
@@ -110,7 +114,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>, Error> {
 /// # Errors
 ///
 ///   * If any postprocessor is not known.
-pub fn make_postprocessors(postprocessors: &[Config]) -> Result<Postprocessors, Error> {
+pub fn make_postprocessors(postprocessors: &[Config]) -> anyhow::Result<Postprocessors> {
     postprocessors.iter().map(lookup_with_config).collect()
 }
 
