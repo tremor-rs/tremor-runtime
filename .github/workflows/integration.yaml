@@ -59,3 +59,10 @@ jobs:
             flags: e2etests,e2e-${{ matrix.kind }}
             fail_ci_if_error: ${{ github.event_name == 'pull_request' }}
             verbose: true
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: cli-test-harness
+    steps:
+      - run: echo "All tests passed"
