@@ -222,10 +222,7 @@ impl HttpRequestBuilder {
     ) -> anyhow::Result<()> {
         // finalize the stream
         let rest = serializer.finish_stream(self.request_id.get())?;
-        if !rest.is_empty() {
-            self.append_data(rest).await?;
-        }
-        Ok(())
+        self.append_data(rest).await
     }
 }
 /// Extract the content type from the headers
