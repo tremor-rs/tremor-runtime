@@ -49,6 +49,10 @@ jobs:
         run: ./.github/checks/deps.sh tremor-codec
       - name: Check for unused dependencies (tremor-system)
         run: ./.github/checks/deps.sh tremor-system
+      - name: Check for unused dependencies (tremor-config)
+        run: ./.github/checks/deps.sh tremor-config
+      - name: Check for unused dependencies (tremor-interceptor)
+        run: ./.github/checks/deps.sh tremor-interceptor
       - name: Check for unused dependencies (tremor-connectors)
         run: ./.github/checks/deps.sh tremor-connectors
       - name: Check for unused dependencies (tremor-connectors-gcp)

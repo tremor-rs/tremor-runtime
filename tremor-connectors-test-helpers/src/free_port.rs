@@ -73,3 +73,32 @@ pub async fn find_free_udp_port() -> io::Result<u16> {
     drop(socket);
     Ok(port)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_find_free_tcp_port() {
+        let port = find_free_tcp_port().await.unwrap();
+        assert!(port >= *FreePort::RANGE.start());
+        assert!(port <= *FreePort::RANGE.end());
+
+        let listener: Result<TcpListener, io::Error> =
+            TcpListener::bind(format!("127.0.0.1:{port}")).await;
+        assert!(listener.is_ok());
+        let listener2: Result<TcpListener, io::Error> =
+            TcpListener::bind(format!("127.0.0.1:{port}")).await;
+        assert!(listener2.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_find_free_udp_port() {
+        let port = find_free_udp_port().await.unwrap();
+        assert!(port >= *FreePort::RANGE.start());
+        assert!(port <= *FreePort::RANGE.end());
+
+        let socket = UdpSocket::bind(format!("127.0.0.1:{port}")).await;
+        assert!(socket.is_ok());
+    }
+}
