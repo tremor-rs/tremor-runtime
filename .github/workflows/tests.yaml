@@ -121,7 +121,7 @@ jobs:
   connector-tests:
     name: Connector Tests
     runs-on: ubuntu-latest
-    needs: [tests-linux]
+    needs: [connectors-linux]
     steps:
       - run: echo "All tests passed"
   
