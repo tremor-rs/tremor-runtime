@@ -13,7 +13,7 @@ jobs:
     name: Test tremor crates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Publish dry run tremor-script to crates.io

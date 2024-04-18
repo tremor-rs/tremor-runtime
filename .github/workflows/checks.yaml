@@ -12,13 +12,13 @@ jobs:
   license:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check license headers
         run: ./.github/checks/copyright.sh
   safety:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Safety checks
         run: ./.github/checks/safety.sh -a
   unused-deps:
@@ -49,21 +49,21 @@ jobs:
         run: sudo snap install remarshal
       - name: Install deps
         run: sudo snap install --classic ripgrep
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check for unused dependencies
         run: ./.github/checks/deps.sh ${{ matrix.crate }}
 
   format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check Formating
         run: cargo fmt --all -- --check
 
   clippy-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
@@ -75,11 +75,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run clippy action to produce annotations
-        uses: actions-rs/clippy-check@v1
+        uses: giraffate/clippy-action@v1
         if: steps.check_permissions.outputs.has-permission
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          clippy_flags: --all -- -Dwarnings
       - name: Run clippy manually without annotations
         if: ${{ !steps.check_permissions.outputs.has-permission }}
         run: cargo clippy --all

@@ -11,7 +11,7 @@ jobs:
   docs:
     runs-on: ubuntu-latest-8-cores
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
       - uses: Swatinem/rust-cache@v2
