@@ -7,7 +7,7 @@ jobs:
     name: Publish tremor crates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: katyo/publish-crates@v2
@@ -20,7 +20,7 @@ jobs:
     name: Trigger Tremor LS release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Find updated version

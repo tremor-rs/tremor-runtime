@@ -6,7 +6,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v1
         with:
           command: check bans licenses sources #we do not check advisories here as they get filed as issues from a different action

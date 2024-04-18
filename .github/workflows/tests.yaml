@@ -26,11 +26,10 @@ jobs:
             "tremor-runtime",
             "tremor-connectors-object-storage",
             "tremor-connectors-test-helpers"
-
           ]
     runs-on: ubuntu-latest-16-cores
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
       - name: Install llvm-tools-preview
@@ -76,7 +75,7 @@ jobs:
 
     runs-on: ubuntu-latest-16-cores
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
       - name: Install llvm-tools-preview
