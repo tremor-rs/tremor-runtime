@@ -154,7 +154,7 @@ mod test {
         assert_eq!(credentials.session_token(), None);
         Ok(())
     }
-    
+
     #[tokio::test]
     async fn resolve_key_with_token() -> Result<()> {
         let config = EndpointConfig {
