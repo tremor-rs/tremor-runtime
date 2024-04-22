@@ -1,4 +1,4 @@
-// Copyright 2022, The Tremor Team
+// Copyright 2022-2024, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::Error;
-use crate::s3::auth;
+use crate::EndpointConfig;
+
+use super::{get_client, Error};
 use aws_sdk_s3::{
     types::{CompletedMultipartUpload, CompletedPart},
     Client as S3Client,
 };
 use log::{debug, warn};
-use tremor_common::{
-    alias,
-    time::nanotime,
-    url::{HttpsDefaults, Url},
-};
+use tremor_common::{alias, time::nanotime};
 use tremor_connectors::sink::prelude::*;
 use tremor_connectors_object_storage::{
     Buffer, BufferPart, Common, ConsistentSink, Mode, ObjectId, SinkImpl, Upload, YoloSink,
@@ -36,30 +33,16 @@ const MORE_THEN_FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to k
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
-    aws_region: Option<String>,
-    url: Option<Url<HttpsDefaults>>,
+    #[serde(flatten)]
+    endpoint: EndpointConfig,
     /// optional default bucket
-    bucket: Option<String>,
+    pub(crate) bucket: Option<String>,
+
     #[serde(default = "Default::default")]
     mode: Mode,
 
     #[serde(default = "Config::fivembs")]
     buffer_size: usize,
-
-    /// Enable path-style access
-    /// So e.g. creating a bucket is done using:
-    ///
-    /// PUT http://<host>:<port>/<bucket>
-    ///
-    /// instead of
-    ///
-    /// PUT http://<bucket>.<host>:<port>/
-    ///
-    /// Set this to `true` for accessing s3 compatible backends
-    /// that do only support path style access, like e.g. minio.
-    /// Defaults to `true` for backward compatibility.
-    #[serde(default = "tremor_common::default_true")]
-    path_style_access: bool,
 }
 
 // Defaults for the config.
@@ -223,14 +206,7 @@ impl SinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
         self.config.buffer_size
     }
     async fn connect(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
-        self.client = Some(
-            auth::get_client(
-                self.config.aws_region.clone(),
-                self.config.url.as_ref(),
-                self.config.path_style_access,
-            )
-            .await,
-        );
+        self.client = Some(get_client(&self.config.endpoint).await);
         Ok(())
     }
 
@@ -472,8 +448,8 @@ mod tests {
     fn config_defaults() -> anyhow::Result<()> {
         let config = literal!({});
         let res = Config::new(&config)?;
-        assert!(res.aws_region.is_none());
-        assert!(res.url.is_none());
+        assert!(res.endpoint.aws_region.is_none());
+        assert!(res.endpoint.url.is_none());
         assert!(res.bucket.is_none());
         assert_eq!(Mode::Yolo, res.mode);
         assert_eq!(5_242_980, res.buffer_size);

@@ -24,10 +24,18 @@
     clippy::mod_module_files
 )]
 
+use auth::AWSAuth;
+use aws_config::{meta::region::RegionProviderChain, BehaviorVersion};
+use aws_types::{region::Region, SdkConfig};
+use serde::Deserialize;
+use tremor_common::url::{HttpsDefaults, Url};
 use tremor_connectors::ConnectorBuilder;
 
 /// AWS S3 connector
 pub mod s3;
+
+/// AWS authentication
+pub(crate) mod auth;
 
 /// builtin connector types
 #[must_use]
@@ -36,6 +44,45 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::<s3::streamer::Builder>::default(),
         Box::<s3::reader::Builder>::default(),
     ]
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct EndpointConfig {
+    pub(crate) aws_region: Option<String>,
+    pub(crate) url: Option<Url<HttpsDefaults>>,
+
+    #[serde(default = "Default::default")]
+    auth: AWSAuth,
+
+    /// Enable path-style access
+    /// So e.g. creating a bucket is done using:
+    ///
+    /// PUT http://<host>:<port>/<bucket>
+    ///
+    /// instead of
+    ///
+    /// PUT http://<bucket>.<host>:<port>/
+    ///
+    /// Set this to `true` for accessing s3 compatible backends
+    /// that do only support path style access, like e.g. minio.
+    /// Defaults to `true` for backward compatibility.
+    #[serde(default = "tremor_common::default_true")]
+    pub(crate) path_style_access: bool,
+}
+
+pub(crate) async fn make_config(config: &EndpointConfig) -> SdkConfig {
+    let region_provider =
+        RegionProviderChain::first_try(config.aws_region.clone().map(Region::new))
+            .or_default_provider();
+
+    let region: Option<Region> = region_provider.region().await;
+
+    let sdk_config = aws_config::defaults(BehaviorVersion::latest()).region(region);
+
+    let sdk_config = auth::resolve(config, sdk_config);
+
+    sdk_config.load().await
 }
 
 #[cfg(test)]

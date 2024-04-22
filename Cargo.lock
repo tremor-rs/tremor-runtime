@@ -6486,6 +6486,7 @@ dependencies = [
  "async-channel 2.2.0",
  "async-trait",
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-s3",
  "aws-types",
  "bytes",

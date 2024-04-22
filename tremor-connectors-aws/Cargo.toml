@@ -34,6 +34,7 @@ aws-sdk-s3 = { version = "1", default-features = false, features = [
 ] }
 aws-types = { version = "1", default-features = false }
 aws-config = { version = "1", default-features = false }
+aws-credential-types = { version = "1", default-features = false }
 
 [dev-dependencies]
 rand = { version = "0.8", default-features = false }

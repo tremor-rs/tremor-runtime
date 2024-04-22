@@ -5,6 +5,7 @@
 
 ### New features
 * add collect postprocessor
+* add support for access tokens for aws connectors
 
 ### Fixes
 * fix reconnect issue in HTTP client
