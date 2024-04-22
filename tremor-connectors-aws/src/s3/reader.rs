@@ -1,3 +1,5 @@
+use crate::EndpointConfig;
+
 // Copyright 2022-2024, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,8 +13,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use super::auth;
-use super::Error;
+use super::{get_client, Error};
 use aws_sdk_s3::{primitives::ByteStream, types::Object, Client as S3Client};
 use log::debug;
 use serde::Deserialize;
@@ -21,7 +22,7 @@ use tokio::{
     sync::mpsc::{channel, Sender},
     task::{self, JoinHandle},
 };
-use tremor_common::{alias, url::HttpsDefaults, url::Url};
+use tremor_common::alias;
 use tremor_connectors::{
     source::{channel_source::ChannelSource, prelude::*},
     utils::hostname,
@@ -41,11 +42,10 @@ const URL_SCHEME: &str = "tremor-s3";
 #[derive(Deserialize, Debug, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
-    // if not provided here explicitly, the region is taken from environment variable or local AWS config
-    // NOTE: S3 will fail if NO region could be found.
-    aws_region: Option<String>,
-    url: Option<Url<HttpsDefaults>>,
-    bucket: String,
+    #[serde(flatten)]
+    endpoint: EndpointConfig,
+    /// optional default bucket
+    pub(crate) bucket: String,
 
     /// prefix filter - if provided, it will fetch all keys with this prefix
     prefix: Option<String>,
@@ -59,21 +59,6 @@ pub(crate) struct Config {
 
     #[serde(default = "Config::default_max_connections")]
     max_connections: usize,
-
-    /// Enable path-style access
-    /// So e.g. creating a bucket is done using:
-    ///
-    /// PUT http://<host>:<port>/<bucket>
-    ///
-    /// instead of
-    ///
-    /// PUT http://<bucket>.<host>:<port>/
-    ///
-    /// Set this to `true` for accessing s3 compatible backends
-    /// that do only support path style access, like e.g. minio.
-    /// Defaults to `true` for backward compatibility.
-    #[serde(default = "tremor_common::default_true")]
-    path_style_access: bool,
 }
 
 struct KeyPayload {
@@ -150,12 +135,7 @@ impl Connector for S3Reader {
         for handle in self.handles.drain(..) {
             handle.abort();
         }
-        let client = auth::get_client(
-            self.config.aws_region.clone(),
-            self.config.url.as_ref(),
-            self.config.path_style_access,
-        )
-        .await;
+        let client = get_client(&self.config.endpoint).await;
 
         // Check the existence of the bucket.
         client

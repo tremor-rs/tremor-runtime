@@ -109,14 +109,15 @@
 //!
 //! ### Configuration
 //!
-//! | Option              | Description                                                                                                                                                                      | Type                   | Required | Default Value             |
-//! |---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------|----------|---------------------------|
-//! | `mode`              | [Mode of operation](#modes-of-operation)                                                                                                                                         | `yolo` or `consistent` | no       | `yolo`                    |
-//! | `aws_region`        | Name of the AWS region the bucket is in                                                                                                                                          | string                 | yes      |                           |
-//! | `url`               | Endpoint / URL to connect to. Useful for connecting to local or non-AWS systems.                                                                                                 | URL                    | no       |                           |
-//! | `bucket`            | Name of the bucket to stream objects to                                                                                                                                          | string                 | yes      |                           |
-//! | `buffer_size`       | Minimum chunk size in bytes for multipart uploads. AWS S3 demands this to be greater than 5MB.                                                                                   | positive integer       | no       | 5242980 (5MB + 100 Bytes) |
-//! | `path_style_access` | If set to `false`, the connector will access the bucket via subdomain (e.g. `mybucket.s3.amazonaws.com`). Set this to `true` for accessing s3-compatible stores like e.g. minio. | boolean                | no       | `true`                    |
+//! | Option              | Description                                                                                                                                                                      | Type                                  | Required | Default Value             |
+//! |---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------|----------|---------------------------|
+//! | `mode`              | [Mode of operation](#modes-of-operation)                                                                                                                                         | `yolo` or `consistent`                | no       | `yolo`                    |
+//! | `aws_region`        | Name of the AWS region the bucket is in                                                                                                                                          | string                                | yes      |                           |
+//! | `url`               | Endpoint / URL to connect to. Useful for connecting to local or non-AWS systems.                                                                                                 | URL                                   | no       |                           |
+//! | `bucket`            | Name of the bucket to stream objects to                                                                                                                                          | string                                | yes      |                           |
+//! | `buffer_size`       | Minimum chunk size in bytes for multipart uploads. AWS S3 demands this to be greater than 5MB.                                                                                   | positive integer                      | no       | 5242980 (5MB + 100 Bytes) |
+//! | `path_style_access` | If set to `false`, the connector will access the bucket via subdomain (e.g. `mybucket.s3.amazonaws.com`). Set this to `true` for accessing s3-compatible stores like e.g. minio. | boolean                               | no       | `true`                    |
+//! | `auth`              | [AWS authentication configuration](#aws-authentication)                                                                                                                          | `"Default"` or `{"AccessKey": {...}}` | no       | `default`                 |
 //!
 //!
 //! Example:
@@ -135,6 +136,7 @@
 //!       "mode": "yolo",
 //!       # increase minimum part size from 5 to 10MB
 //!       "min_part_size": size::MiB(10)
+//!       "auth": "Default"
 //!     },
 //!   end;
 //! ```
@@ -146,8 +148,35 @@
 //!
 //!    The region in Minio settings should be the same as configured in the server startup.
 //! :::
+//!
+//! ### AWS Authentication
+//!
+//! The aws authentication configuration. If not set it is set to `default` which
+//! uses the default credential configuration as described in the [aws docs](https://docs.aws.amazon.com/sdk-for-rust/latest/dg/credentials.html#providing-credentials).
+//!
+//! Alternatively the authentication keys can be set manually using the `AccessKey` variant:
+//!
+//! ```tremor title="config.troy"
+//!   define connector s3_streamer from s3_streamer
+//!   with
+//!     codec = "json",
+//!     preprocessors = ["separate"],
+//!     postprocessors = ["separate"],
+//!     config = {
+//!       "aws_region":  "eu-central-1",
+//!       "bucket": "snot",
+//!       "auth": {
+//!         "access_key_id": "snot",
+//!         "secret_access_key": "shhh it's secret!"
+//!        }
+//!     },
+//!   end;
+//! ```
 
-mod auth;
+use aws_sdk_s3::{config, Client};
+
+use crate::{make_config, EndpointConfig};
+
 /// The `s3_reader` connector reads objects from an S3 bucket with the given `prefix`, or all object in that bucket if no prefix was provided.
 pub mod reader;
 /// The `s3_streamer` connector will write events to the configured AWS S3 bucket.
@@ -166,4 +195,27 @@ enum Error {
     /// Error when trying to send to internal channel
     #[error("Failed to send to internal channel")]
     SendToChannel,
+}
+
+/// Get an S3 client for the given region and the optionally provided endpoint URL.
+///
+/// This client will use the default auth provider chain defined here:
+/// <https://docs.rs/aws-config/latest/aws_config/default_provider/credentials/struct.DefaultCredentialsChain.html>
+///
+/// It will try the following providers in order: (Based on aws-config 0.6.0)
+/// 1. Environment variables
+/// 2. Shared config (~/.aws/config, ~/.aws/credentials)
+/// 3. Web Identity Tokens
+/// 4. ECS (IAM Roles for Tasks) & General HTTP credentials
+/// 5. EC2 `IMDSv2`
+pub(crate) async fn get_client(config: &EndpointConfig) -> Client {
+    let sdk_config = make_config(config).await;
+    let mut config_builder =
+        config::Builder::from(&sdk_config).force_path_style(config.path_style_access);
+
+    if let Some(endpoint) = &config.url {
+        config_builder = config_builder.endpoint_url(endpoint.to_string());
+    }
+
+    Client::from_conf(config_builder.build())
 }
