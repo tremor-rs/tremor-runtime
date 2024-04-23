@@ -18,11 +18,6 @@ tremor-config = { path = "../tremor-config", version = "0.13.0-rc.22" }
 tremor-common = { path = "../tremor-common", version = "0.13.0-rc.22" }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
-libflate = "2"
-xz2 = "0.1"
-lz4 = "1"
-snap = "1"
-zstd = "0.13"
 byteorder = "1"
 value-trait = "0.8"
 rand = "0.8"
@@ -30,6 +25,14 @@ bytes = "1.5.0"
 memchr = "2.6"
 anyhow = { version = "1.0", default-features = true }
 thiserror = { version = "1.0", default-features = false }
+
+# Compression
+brotli = { version = "5", default-features = false, features = ["std"] }
+xz2 = "0.1"
+lz4 = "1"
+snap = "1"
+zstd = "0.13"
+libflate = "2"
 
 [dev-dependencies]
 proptest = "1.4"

@@ -22,10 +22,11 @@
 //! |----------|------------------------------------------------------------------------------------|
 //! | `gzip`   | `GZip`                                                                             |
 //! | `zlib`   | `ZLib`                                                                             |
-//! | `xz`     | `Xz2` level 9 (default)                                                            |
+//! | `xz2`    | `Xz2` level 9 (default)                                                            |
 //! | `snappy` | `Snappy`                                                                           |
 //! | `lz4`    | `Lz` level 4 compression (default)                                                 |
 //! | `zstd`   | [`Zstandard`](https://datatracker.ietf.org/doc/html/rfc8878) (defaults to level 0) |
+//! | `br`     | `Brotli`                                                                           |
 //!
 //! Example configuration:
 //!
@@ -60,7 +61,7 @@
 
 use super::Postprocessor;
 use std::{
-    io::Write,
+    io::{Cursor, Write},
     str::{self, FromStr},
 };
 use tremor_value::Value;
@@ -74,6 +75,7 @@ enum Algorithm {
     Zstd,
     Snappy,
     Lz4,
+    Brotli,
 }
 
 /// Compression postprocessor errors
@@ -97,6 +99,9 @@ pub enum Error {
     /// Zstd Error
     #[error(transparent)]
     Zstd(#[from] ZstdError),
+    /// IO Error
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 impl FromStr for Algorithm {
@@ -109,6 +114,7 @@ impl FromStr for Algorithm {
             "snappy" => Ok(Algorithm::Snappy),
             "lz4" => Ok(Algorithm::Lz4),
             "zstd" => Ok(Algorithm::Zstd),
+            "br" => Ok(Algorithm::Brotli),
             other => Err(Error::UnknownAlgorithm(other.to_string())),
         }
     }
@@ -134,6 +140,7 @@ impl Algorithm {
                 Algorithm::Zstd => Box::<Zstd>::default(),
                 Algorithm::Snappy => Box::<Snappy>::default(),
                 Algorithm::Lz4 => Box::<Lz4>::default(),
+                Algorithm::Brotli => Box::<Brotli>::default(),
             };
             Ok(codec)
         }
@@ -158,6 +165,29 @@ impl Postprocessor for Gzip {
         let mut encoder = Encoder::new(Vec::new())?;
         encoder.write_all(data)?;
         Ok(vec![encoder.finish().into_result()?])
+    }
+}
+
+#[derive(Default)]
+struct Brotli {
+    params: brotli::enc::BrotliEncoderParams,
+}
+impl Postprocessor for Brotli {
+    fn name(&self) -> &str {
+        "br"
+    }
+
+    fn process(
+        &mut self,
+        _ingres_ns: u64,
+        _egress_ns: u64,
+        data: &[u8],
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
+        // Heuristic because it's nice to avoid some allocations
+        let mut res = Vec::with_capacity(data.len() / 10);
+        let mut c = Cursor::new(data);
+        brotli::BrotliCompress(&mut c, &mut res, &self.params)?;
+        Ok(vec![res])
     }
 }
 
