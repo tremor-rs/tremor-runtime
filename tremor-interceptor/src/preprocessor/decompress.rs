@@ -45,9 +45,17 @@
 //!## zlib
 //!
 //!Decompress Zlib (deflate) compressed payload.
+//!
+//!### br
+//!
+//!Decompress Brotli compressed payload. This is not supported for the `autodetect` mode.
+//!
+//!### autodetect
+//!
+//! Try to autodetect the compression algorithm based on the magic bytes of the compressed data.
 
 use super::prelude::*;
-use std::io::{self, Read};
+use std::io::{self, Cursor, Read};
 
 #[derive(Clone, Default, Debug)]
 struct Gzip {}
@@ -67,6 +75,26 @@ impl Preprocessor for Gzip {
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
         Ok(vec![(decompressed, meta)])
+    }
+}
+
+#[derive(Clone, Default, Debug)]
+struct Brotli {}
+impl Preprocessor for Brotli {
+    fn name(&self) -> &str {
+        "br"
+    }
+
+    fn process(
+        &mut self,
+        _ingest_ns: &mut u64,
+        data: &[u8],
+        meta: Value<'static>,
+    ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
+        let mut res = Vec::with_capacity(data.len() / 10);
+        let mut c = Cursor::new(data);
+        brotli::BrotliDecompress(&mut c, &mut res)?;
+        Ok(vec![(res, meta)])
     }
 }
 
@@ -251,6 +279,7 @@ impl Decompress {
             Some("snappy") => Box::<Snappy>::default(),
             Some("lz4") => Box::<Lz4>::default(),
             Some("zstd") => Box::<Zstd>::default(),
+            Some("br") => Box::<Brotli>::default(),
             Some("autodetect") | None => Box::<Fingerprinted>::default(),
             Some(other) => {
                 return Err(super::Error::InvalidConfig(
@@ -282,7 +311,7 @@ mod test {
     use crate::postprocessor::{self as post, Postprocessor};
     use tremor_value::literal;
 
-    fn decode_magic(data: &[u8]) -> &'static str {
+    fn decode_magic(data: &[u8], algo: &str) -> &'static str {
         match data.get(0..6) {
             Some(&[0x1f, 0x8b, _, _, _, _]) => "gzip",
             Some(&[0x78, _, _, _, _, _]) => "zlib",
@@ -290,7 +319,14 @@ mod test {
             Some(b"sNaPpY" | &[0xff, 0x6, 0x0, 0x0, _, _]) => "snappy",
             Some(&[0x04, 0x22, 0x4d, 0x18, _, _]) => "lz4",
             Some(&[0x28, 0xb5, 0x2f, 0xfd, _, _]) => "zstd",
-            _ => "fail/unknown",
+            _ => {
+                if algo == "br" {
+                    // br does not have magic bytes
+                    "br"
+                } else {
+                    "fail/unknown"
+                }
+            }
         }
     } // Assert pre and post processors have a sensible default() ctor
 
@@ -307,7 +343,7 @@ mod test {
         let ext = &r?[0];
         let ext = ext.as_slice();
         // Assert actual encoded form is as expected ( magic code only )
-        assert_eq!(algo, decode_magic(ext));
+        assert_eq!(algo, decode_magic(ext, algo));
 
         let r = pre.process(&mut ingest_ns, ext, Value::object());
         let out = &r?[0].0;
@@ -348,6 +384,13 @@ mod test {
     fn test_gzip() -> anyhow::Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "gzip")?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_br() -> anyhow::Result<()> {
+        let int = "snot".as_bytes();
+        assert_simple_symmetric(int, "br")?;
         Ok(())
     }
 
