@@ -1,6 +1,6 @@
 [package]
 name = "tremor-connectors-aws"
-version = "0.13.0-rc.22"
+version = "0.13.0-rc.23"
 edition = "2021"
 license = "Apache-2.0"
 homepage = "https://www.tremor.rs"
@@ -9,12 +9,12 @@ authors = ["The Tremor Team"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.22", default-features = false }
-tremor-connectors-object-storage = { path = "../tremor-connectors-object-storage", version = "0.13.0-rc.22" }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.22" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.22" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.22" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.22" }
+tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.23", default-features = false }
+tremor-connectors-object-storage = { path = "../tremor-connectors-object-storage", version = "0.13.0-rc.23" }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.23" }
+tremor-system = { path = "../tremor-system", version = "0.13.0-rc.23" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.23" }
+tremor-config = { path = "../tremor-config", version = "0.13.0-rc.23" }
 
 async-trait = { version = "0.1", default-features = false }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
@@ -41,7 +41,7 @@ rand = { version = "0.8", default-features = false }
 testcontainers = { version = "0.15", default-features = false }
 serial_test = { version = "3.0", default-features = false }
 bytes = { version = "1.1", default-features = true }
-tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.22" }
+tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.23" }
 
 [features]
 integration-harness = []

@@ -7,15 +7,15 @@ documentation = "https://docs.tremor.rs"
 homepage = "https://www.tremor.rs"
 license = "Apache-2.0"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.22"
+version = "0.13.0-rc.23"
 rust-version = "1.62"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.22" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.22" }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.22" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.23" }
+tremor-config = { path = "../tremor-config", version = "0.13.0-rc.23" }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.23" }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 byteorder = "1"

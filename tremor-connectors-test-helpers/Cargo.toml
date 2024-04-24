@@ -1,6 +1,6 @@
 [package]
 name = "tremor-connectors-test-helpers"
-version = "0.13.0-rc.22"
+version = "0.13.0-rc.23"
 edition = "2021"
 license = "Apache-2.0"
 homepage = "https://www.tremor.rs"
