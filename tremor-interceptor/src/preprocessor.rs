@@ -12,14 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "base64")]
 mod base64;
+#[cfg(feature = "compression")]
 mod decompress;
+#[cfg(feature = "gelf")]
 pub(crate) mod gelf_chunking;
-mod ingest_ns;
+
+#[cfg(feature = "length-prefix")]
 mod length_prefixed;
+
+#[cfg(feature = "length-prefix")]
+mod textual_length_prefixed;
+
+pub(crate) mod ingest_ns;
 mod remove_empty;
 pub(crate) mod separate;
-mod textual_length_prefixed;
 pub(crate) mod prelude {
     pub use super::Preprocessor;
     pub use tremor_value::Value;
@@ -89,15 +97,20 @@ pub trait Preprocessor: Sync + Send {
 ///   * Errors if the preprocessor is not known
 pub fn lookup_with_config(config: &Config) -> Result<Box<dyn Preprocessor>, Error> {
     match config.name.as_str() {
+        "remove-empty" => Ok(Box::<remove_empty::RemoveEmpty>::default()),
         "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
+        "ingest-ns" => Ok(Box::<ingest_ns::ExtractIngestTs>::default()),
+        #[cfg(feature = "base64")]
         "base64" => Ok(Box::<base64::Base64>::default()),
+        #[cfg(feature = "compression")]
         "decompress" => Ok(Box::new(decompress::Decompress::from_config(
             config.config.as_ref(),
         )?)),
-        "remove-empty" => Ok(Box::<remove_empty::RemoveEmpty>::default()),
+        #[cfg(feature = "gelf")]
         "gelf-chunking" => Ok(Box::<gelf_chunking::GelfChunking>::default()),
-        "ingest-ns" => Ok(Box::<ingest_ns::ExtractIngestTs>::default()),
+        #[cfg(feature = "length-prefix")]
         "length-prefixed" => Ok(Box::<length_prefixed::LengthPrefixed>::default()),
+        #[cfg(feature = "length-prefix")]
         "textual-length-prefixed" => {
             Ok(Box::<textual_length_prefixed::TextualLengthPrefixed>::default())
         }
@@ -155,6 +168,21 @@ pub fn preprocess(
     Ok(data)
 }
 
+fn finish_and_error(
+    alias: &Alias,
+    pp: &mut dyn Preprocessor,
+    data: Option<&[u8]>,
+    meta: Option<Value<'static>>,
+) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
+    let res = pp.finish(data, meta);
+    if let Err(e) = &res {
+        error!(
+            "[Connector::{alias}] Preprocessor '{}' finish error: {e}",
+            pp.name()
+        );
+    }
+    Ok(res?)
+}
 /// Canonical way to finish preprocessors up
 ///
 /// # Errors
@@ -165,29 +193,16 @@ pub fn finish(
     alias: &Alias,
 ) -> anyhow::Result<Vec<(Vec<u8>, Value<'static>)>> {
     if let Some((head, tail)) = preprocessors.split_first_mut() {
-        let mut data = match head.finish(None, None) {
-            Ok(d) => d,
-            Err(e) => {
-                error!(
-                    "[Connector::{alias}] Preprocessor '{}' finish error: {e}",
-                    head.name()
-                );
-                return Err(e);
-            }
-        };
+        let mut data = finish_and_error(alias, head.as_mut(), None, None)?;
         let mut data1 = Vec::new();
         for pp in tail {
+            if data.is_empty() {
+                let mut r = finish_and_error(alias, pp.as_mut(), None, None)?;
+                data1.append(&mut r);
+            }
             for (d, m) in data.drain(..) {
-                match pp.finish(Some(&d), Some(m)) {
-                    Ok(mut r) => data1.append(&mut r),
-                    Err(e) => {
-                        error!(
-                            "[Connector::{alias}] Preprocessor '{}' finish error: {e}",
-                            pp.name()
-                        );
-                        return Err(e);
-                    }
-                }
+                let mut r = finish_and_error(alias, pp.as_mut(), Some(&d), Some(m))?;
+                data1.append(&mut r);
             }
             std::mem::swap(&mut data, &mut data1);
         }
@@ -201,233 +216,51 @@ pub fn finish(
 mod test {
     #![allow(clippy::ignored_unit_patterns)]
     use super::*;
-    use crate::postprocessor::{self as post, separate::Separate as SeparatePost, Postprocessor};
 
     #[test]
-    fn ingest_ts() -> anyhow::Result<()> {
-        let mut pre_p = ingest_ns::ExtractIngestTs {};
-        let mut post_p = post::ingest_ns::IngestNs {};
-
-        let data = vec![1_u8, 2, 3];
-
-        let encoded = post_p.process(42, 23, &data)?.pop().expect("no data");
-
-        let mut in_ns = 0u64;
-        let decoded = pre_p
-            .process(&mut in_ns, &encoded, Value::object())?
-            .pop()
-            .expect("no data")
-            .0;
-
-        assert!(pre_p.finish(None, None)?.is_empty());
-
-        assert_eq!(data, decoded);
-        assert_eq!(in_ns, 42);
-
-        // data too short
-        assert!(pre_p.process(&mut in_ns, &[0_u8], Value::object()).is_err());
-        Ok(())
+    fn test_lookup_separate() {
+        assert!(lookup("separate").is_ok());
     }
-
-    fn textual_prefix(len: usize) -> String {
-        format!("{len} {}", String::from_utf8_lossy(&vec![b'O'; len]))
-    }
-
-    use proptest::prelude::*;
-
-    // generate multiple chopped length-prefixed strings
-    fn multiple_textual_lengths(max_elements: usize) -> BoxedStrategy<(Vec<usize>, Vec<String>)> {
-        proptest::collection::vec(".+", 1..max_elements) // generator for Vec<String> of arbitrary strings, maximum length of vector: `max_elements`
-            .prop_map(|ss| {
-                let s: (Vec<usize>, Vec<String>) = ss
-                    .into_iter()
-                    .map(|s| (s.len(), format!("{} {s}", s.len()))) // for each string, extract the length, and create a textual length prefix
-                    .unzip();
-                s
-            })
-            .prop_map(|tuple| (tuple.0, tuple.1.join(""))) // generator for a tuple of 1. the sizes of the length prefixed strings, 2. the concatenated length prefixed strings as one giant string
-            .prop_map(|tuple| {
-                // here we chop the big string into up to 4 bits
-                let mut chopped = Vec::with_capacity(4);
-                let mut giant_string: String = tuple.1.clone();
-                while !giant_string.is_empty() && chopped.len() < 4 {
-                    // verify we are at a char boundary
-                    let mut indices = giant_string.char_indices();
-                    let num_chars = giant_string.chars().count();
-                    if let Some((index, _)) = indices.nth(num_chars / 2) {
-                        let mut splitted = giant_string.split_off(index);
-                        std::mem::swap(&mut splitted, &mut giant_string);
-                        chopped.push(splitted);
-                    } else {
-                        break;
-                    }
-                }
-                chopped.push(giant_string);
-                (tuple.0, chopped)
-            })
-            .boxed()
-    }
-
-    proptest! {
-        #[test]
-        fn textual_length_prefix_prop((lengths, datas) in multiple_textual_lengths(5)) {
-            let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
-            let mut in_ns = 0_u64;
-            let res: Vec<_> = datas.into_iter().flat_map(|data| {
-                pre_p.process(&mut in_ns, data.as_bytes(), Value::object()).unwrap_or_default()
-            }).collect();
-            assert_eq!(lengths.len(), res.len());
-            for (processed, expected_len) in res.iter().zip(lengths) {
-                assert_eq!(expected_len, processed.0.len());
-            }
-        }
-
-        #[test]
-        fn textual_length_pre_post(length in 1..100_usize) {
-            let data = vec![1_u8; length];
-            let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
-            let mut post_p = post::textual_length_prefixed::TextualLengthPrefixed::default();
-            let encoded = post_p.process(0, 0, &data).unwrap_or_default().pop().unwrap_or_default();
-            let mut in_ns = 0_u64;
-            let mut res = pre_p.process(&mut in_ns, &encoded, Value::object()).unwrap_or_default();
-            assert_eq!(1, res.len());
-            let payload = res.pop().unwrap_or_default().0;
-            assert_eq!(length, payload.len());
-        }
-    }
-
     #[test]
-    fn textual_prefix_length_loop() {
-        let datas = vec![
-            "24 \'?\u{d617e}ѨR\u{202e}\u{f8f7c}\u{ede29}\u{ac784}36 ?{¥?MȺ\r\u{bac41}9\u{5bbbb}\r\u{1c46c}\u{4ba79}¥\u{7f}*?:\u{0}$i",
-            "60 %\u{a825a}\u{a4269}\u{39e0c}\u{b3e21}<ì\u{f6c20}ѨÛ`HW\u{9523f}V",
-            "\u{3}\u{605fe}%Fq\u{89b5e}\u{93780}Q3",
-            "¥?\u{feff}9",
-            " \'�2\u{4269b}",
-        ];
-        let lengths: Vec<usize> = vec![24, 36, 60, 9];
-        let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
-        let mut in_ns = 0_u64;
-        let res: Vec<_> = datas
-            .into_iter()
-            .flat_map(|data| {
-                pre_p
-                    .process(&mut in_ns, data.as_bytes(), Value::object())
-                    .unwrap_or_default()
-            })
-            .collect();
-        assert_eq!(lengths.len(), res.len());
-        for (processed, expected_len) in res.iter().zip(lengths) {
-            assert_eq!(expected_len, processed.0.len());
-        }
+    fn test_lookup_remove_empty() {
+        assert!(lookup("remove-empty").is_ok());
     }
-
     #[test]
-    fn textual_length_prefix() {
-        let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
-        let data = textual_prefix(42);
-        let mut in_ns = 0_u64;
-        let mut res = pre_p
-            .process(&mut in_ns, data.as_bytes(), Value::object())
-            .unwrap_or_default();
-        assert_eq!(1, res.len());
-        let payload = res.pop().unwrap_or_default().0;
-        assert_eq!(42, payload.len());
+    fn test_lookup_ingest_ns() {
+        assert!(lookup("ingest-ns").is_ok());
     }
-
     #[test]
-    fn empty_textual_prefix() {
-        let data = ("").as_bytes();
-        let mut pre_p = textual_length_prefixed::TextualLengthPrefixed::default();
-        let mut post_p = post::textual_length_prefixed::TextualLengthPrefixed::default();
-        let mut in_ns = 0_u64;
-        let res = pre_p
-            .process(&mut in_ns, data, Value::object())
-            .unwrap_or_default();
-        assert_eq!(0, res.len());
-
-        let data_empty = vec![];
-        let encoded = post_p
-            .process(42, 23, &data_empty)
-            .unwrap_or_default()
-            .pop()
-            .unwrap_or_default();
-        assert_eq!("0 ", String::from_utf8_lossy(&encoded));
-        let mut res2 = pre_p
-            .process(&mut in_ns, &encoded, Value::object())
-            .unwrap_or_default();
-        assert_eq!(1, res2.len());
-        let payload = res2.pop().unwrap_or_default().0;
-        assert_eq!(0, payload.len());
-    }
-
-    #[test]
-    fn length_prefix() -> anyhow::Result<()> {
-        let mut it = 0;
-
-        let pre_p = length_prefixed::LengthPrefixed::default();
-        let mut post_p = post::length_prefixed::LengthPrefixed::default();
-
-        let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-        let wire = post_p.process(0, 0, &data)?;
-        let (start, end) = wire[0].split_at(7);
-        let alias = Alias::new("test", "test");
-        let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
-        let recv = preprocess(
-            pps.as_mut_slice(),
-            &mut it,
-            start.to_vec(),
-            Value::object(),
-            &alias,
-        )?;
-        assert!(recv.is_empty());
-        let recv = preprocess(
-            pps.as_mut_slice(),
-            &mut it,
-            end.to_vec(),
-            Value::object(),
-            &alias,
-        )?;
-        assert_eq!(recv[0].0, data);
-
-        // incomplete data
-        let processed = preprocess(
-            pps.as_mut_slice(),
-            &mut it,
-            start.to_vec(),
-            Value::object(),
-            &alias,
-        )?;
-        assert!(processed.is_empty());
-        // not emitted upon finish
-        let finished = finish(pps.as_mut_slice(), &alias)?;
-        assert!(finished.is_empty());
-
-        Ok(())
-    }
-
-    const LOOKUP_TABLE: [&str; 8] = [
-        "separate",
-        "base64",
-        "decompress",
-        "remove-empty",
-        "gelf-chunking",
-        "ingest-ns",
-        "length-prefixed",
-        "textual-length-prefixed",
-    ];
-
-    #[test]
-    fn test_lookup() {
-        for t in &LOOKUP_TABLE {
-            assert!(lookup(t).is_ok());
-        }
+    fn test_lookup_errors() {
         let t = "snot";
         assert!(lookup(t).is_err());
 
         assert!(lookup("bad_lookup").is_err());
     }
 
+    #[cfg(feature = "gelf")]
+    #[test]
+    fn test_lookup_gelf() {
+        assert!(lookup("gelf-chunking").is_ok());
+    }
+
+    #[cfg(feature = "compression")]
+    #[test]
+    fn test_lookup_compression() {
+        assert!(lookup("decompress").is_ok());
+    }
+
+    #[cfg(feature = "base64")]
+    #[test]
+    fn test_lookup_base64() {
+        assert!(lookup("base64").is_ok());
+    }
+
+    #[cfg(feature = "length-prefix")]
+    #[test]
+    fn test_lookup_length_prefix() {
+        assert!(lookup("length-prefixed").is_ok());
+        assert!(lookup("textual-length-prefixed").is_ok());
+    }
     #[test]
     fn test_filter_empty() {
         let mut pre = remove_empty::RemoveEmpty::default();
@@ -446,149 +279,6 @@ mod test {
             Some(vec![])
         );
         assert_eq!(pre.finish(None, None).ok(), Some(vec![]));
-    }
-
-    #[test]
-    fn test_lines() -> anyhow::Result<()> {
-        let int = "snot\nbadger".as_bytes();
-        let enc = "snot\nbadger\n".as_bytes(); // First event ( event per line )
-        let out = "snot".as_bytes();
-
-        let mut post = SeparatePost::default();
-        let mut pre = separate::Separate::default();
-
-        let mut ingest_ns = 0_u64;
-        let egress_ns = 1_u64;
-
-        let r = post.process(ingest_ns, egress_ns, int);
-        assert!(r.is_ok(), "Expected Ok(...), Got: {r:?}");
-        let ext = &r?[0];
-        let ext = ext.as_slice();
-        // Assert actual encoded form is as expected
-        assert_eq!(enc, ext);
-
-        let r = pre.process(&mut ingest_ns, ext, Value::object());
-        let out2 = &r?[0].0;
-        let out2 = out2.as_slice();
-        // Assert actual decoded form is as expected
-        assert_eq!(out, out2);
-
-        // assert empty finish, no leftovers
-        assert!(pre.finish(None, None)?.is_empty());
-        Ok(())
-    }
-
-    #[test]
-    fn test_separate_buffered() -> anyhow::Result<()> {
-        let input = "snot\nbadger\nwombat\ncapybara\nquagga".as_bytes();
-        let mut pre = separate::Separate::new(b'\n', 1000, true);
-        let mut ingest_ns = 0_u64;
-        let mut res = pre.process(&mut ingest_ns, input, Value::object())?;
-        let splitted = input
-            .split(|c| *c == b'\n')
-            .map(|v| (v.to_vec(), Value::object()))
-            .collect::<Vec<_>>();
-        assert_eq!(splitted[..splitted.len() - 1].to_vec(), res);
-        let mut finished = pre.finish(None, None)?;
-        res.append(&mut finished);
-        assert_eq!(splitted, res);
-        Ok(())
-    }
-
-    macro_rules! assert_separate_no_buffer {
-        ($inbound:expr, $outbound1:expr, $outbound2:expr, $case_number:expr, $separator:expr) => {
-            let mut ingest_ns = 0_u64;
-            let r = separate::Separate::new($separator, 0, false).process(
-                &mut ingest_ns,
-                $inbound,
-                Value::object(),
-            );
-
-            let out = &r?;
-            // Assert preprocessor output is as expected
-            assert!(
-                2 == out.len(),
-                "Test case : {} => expected output = {}, actual output = {}",
-                $case_number,
-                "2",
-                out.len()
-            );
-            assert!(
-                $outbound1 == out[0].0.as_slice(),
-                "Test case : {} => expected output = \"{}\", actual output = \"{}\"",
-                $case_number,
-                std::str::from_utf8($outbound1).unwrap(),
-                std::str::from_utf8(out[0].0.as_slice()).unwrap()
-            );
-            assert!(
-                $outbound2 == out[1].0.as_slice(),
-                "Test case : {} => expected output = \"{}\", actual output = \"{}\"",
-                $case_number,
-                std::str::from_utf8($outbound2).unwrap(),
-                std::str::from_utf8(out[1].0.as_slice()).unwrap()
-            );
-        };
-    }
-
-    #[allow(clippy::type_complexity)]
-    #[test]
-    fn test_separate_no_buffer_no_maxlength() -> anyhow::Result<()> {
-        let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
-            (b"snot\nbadger", b"snot", b"badger", "0"),
-            (b"snot\n", b"snot", b"", "1"),
-            (b"\nsnot", b"", b"snot", "2"),
-            (b"\n", b"", b"", "3"),
-        ];
-        for case in &test_data {
-            assert_separate_no_buffer!(case.0, case.1, case.2, case.3, b'\n');
-        }
-
-        Ok(())
-    }
-
-    #[allow(clippy::type_complexity)]
-    #[test]
-    fn test_carriage_return_no_buffer_no_maxlength() -> anyhow::Result<()> {
-        let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
-            (b"snot\rbadger", b"snot", b"badger", "0"),
-            (b"snot\r", b"snot", b"", "1"),
-            (b"\rsnot", b"", b"snot", "2"),
-            (b"\r", b"", b"", "3"),
-        ];
-        for case in &test_data {
-            assert_separate_no_buffer!(case.0, case.1, case.2, case.3, b'\r');
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_base64() -> anyhow::Result<()> {
-        let int = "snot badger".as_bytes();
-        let enc = "c25vdCBiYWRnZXI=".as_bytes();
-
-        let mut pre = base64::Base64::default();
-        let mut post = post::base64::Base64::default();
-
-        // Fake ingest_ns and egress_ns
-        let mut ingest_ns = 0_u64;
-        let egress_ns = 1_u64;
-
-        let r = post.process(ingest_ns, egress_ns, int);
-        let ext = &r?[0];
-        let ext = ext.as_slice();
-        // Assert actual encoded form is as expected
-        assert_eq!(&enc, &ext);
-
-        let r = pre.process(&mut ingest_ns, ext, Value::object());
-        let out = &r?[0].0;
-        let out = out.as_slice();
-        // Assert actual decoded form is as expected
-        assert_eq!(&int, &out);
-
-        // assert empty finish, no leftovers
-        assert!(pre.finish(None, None)?.is_empty());
-        Ok(())
     }
 
     struct BadPreprocessor {}

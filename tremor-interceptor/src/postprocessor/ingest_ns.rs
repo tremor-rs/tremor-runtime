@@ -19,7 +19,9 @@ use byteorder::{BigEndian, WriteBytesExt};
 use std::io::Write;
 
 #[derive(Default)]
-pub(crate) struct IngestNs {}
+pub(crate) struct IngestNs {
+    last_ns: u64,
+}
 impl Postprocessor for IngestNs {
     fn name(&self) -> &str {
         "attach-ingress-ts"
@@ -31,10 +33,51 @@ impl Postprocessor for IngestNs {
         _egress_ns: u64,
         data: &[u8],
     ) -> anyhow::Result<Vec<Vec<u8>>> {
+        self.last_ns = ingres_ns;
         let mut res = Vec::with_capacity(data.len() + 8);
         res.write_u64::<BigEndian>(ingres_ns)?;
         res.write_all(data)?;
 
         Ok(vec![res])
+    }
+
+    fn finish(&mut self, data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
+        if let Some(data) = data {
+            self.process(self.last_ns, 0, data)
+        } else {
+            Ok(vec![])
+        }
+    }
+}
+#[cfg(test)]
+mod test {
+    use tremor_value::prelude::*;
+
+    use super::*;
+    use crate::preprocessor::{ingest_ns::ExtractIngestTs, Preprocessor};
+    #[test]
+    fn ingest_ts() -> anyhow::Result<()> {
+        let mut pre_p = ExtractIngestTs {};
+        let mut post_p = IngestNs { last_ns: 0 };
+
+        let data = vec![1_u8, 2, 3];
+
+        let encoded = post_p.process(42, 23, &data)?.pop().expect("no data");
+
+        let mut in_ns = 0u64;
+        let decoded = pre_p
+            .process(&mut in_ns, &encoded, Value::object())?
+            .pop()
+            .expect("no data")
+            .0;
+
+        assert!(pre_p.finish(None, None)?.is_empty());
+
+        assert_eq!(data, decoded);
+        assert_eq!(in_ns, 42);
+
+        // data too short
+        assert!(pre_p.process(&mut in_ns, &[0_u8], Value::object()).is_err());
+        Ok(())
     }
 }

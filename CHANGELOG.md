@@ -10,6 +10,7 @@
 
 ### Fixes
 * fix reconnect issue in HTTP client
+* fix issue where post and preprocessors that hold state might not finalize correctly
 
 ## [0.13.0-rc.17]
 
