@@ -59,7 +59,7 @@
 //!
 //! Xz compression when wrong compression level is specified gives an `Err`.
 
-use super::Postprocessor;
+use super::StatelessPostprocessor;
 use std::{
     io::{Cursor, Write},
     str::{self, FromStr},
@@ -124,7 +124,7 @@ impl Algorithm {
     pub fn into_postprocessor(
         self,
         config: Option<&Value>,
-    ) -> Result<Box<dyn Postprocessor>, Error> {
+    ) -> Result<Box<dyn StatelessPostprocessor>, Error> {
         if let Some(compression_level) = config.get_i64("level") {
             match self {
                 Algorithm::Xz2 => Ok(Xz2::with_config(compression_level)?),
@@ -133,7 +133,7 @@ impl Algorithm {
                 _ => Err(Error::CompressionLevelNotSupported),
             }
         } else {
-            let codec: Box<dyn Postprocessor> = match self {
+            let codec: Box<dyn StatelessPostprocessor> = match self {
                 Algorithm::Gzip => Box::<Gzip>::default(),
                 Algorithm::Zlib => Box::<Zlib>::default(),
                 Algorithm::Xz2 => Box::<Xz2>::default(),
@@ -149,17 +149,12 @@ impl Algorithm {
 
 #[derive(Default)]
 struct Gzip {}
-impl Postprocessor for Gzip {
+impl StatelessPostprocessor for Gzip {
     fn name(&self) -> &str {
         "gzip"
     }
 
-    fn process(
-        &mut self,
-        _ingres_ns: u64,
-        _egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
         use libflate::gzip::Encoder;
 
         let mut encoder = Encoder::new(Vec::new())?;
@@ -172,17 +167,12 @@ impl Postprocessor for Gzip {
 struct Brotli {
     params: brotli::enc::BrotliEncoderParams,
 }
-impl Postprocessor for Brotli {
+impl StatelessPostprocessor for Brotli {
     fn name(&self) -> &str {
         "br"
     }
 
-    fn process(
-        &mut self,
-        _ingres_ns: u64,
-        _egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
         // Heuristic because it's nice to avoid some allocations
         let mut res = Vec::with_capacity(data.len() / 10);
         let mut c = Cursor::new(data);
@@ -193,17 +183,12 @@ impl Postprocessor for Brotli {
 
 #[derive(Default)]
 struct Zlib {}
-impl Postprocessor for Zlib {
+impl StatelessPostprocessor for Zlib {
     fn name(&self) -> &str {
         "zlib"
     }
 
-    fn process(
-        &mut self,
-        _ingres_ns: u64,
-        _egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
         use libflate::zlib::Encoder;
         let mut encoder = Encoder::new(Vec::new())?;
         encoder.write_all(data)?;
@@ -223,7 +208,7 @@ pub enum Xz2Error {
     InvalidCompressionLevel(i64),
 }
 impl Xz2 {
-    fn with_config(level: i64) -> Result<Box<dyn Postprocessor>, Xz2Error> {
+    fn with_config(level: i64) -> Result<Box<dyn StatelessPostprocessor>, Xz2Error> {
         if !(0..=9).contains(&level) {
             return Err(Xz2Error::InvalidCompressionLevel(level));
         }
@@ -235,17 +220,12 @@ impl Xz2 {
         }))
     }
 }
-impl Postprocessor for Xz2 {
+impl StatelessPostprocessor for Xz2 {
     fn name(&self) -> &str {
         "xz2"
     }
 
-    fn process(
-        &mut self,
-        _ingres_ns: u64,
-        _egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
         use xz2::write::XzEncoder as Encoder;
         let mut encoder = Encoder::new(Vec::new(), self.compression_level);
         encoder.write_all(data)?;
@@ -262,17 +242,12 @@ impl Default for Xz2 {
 
 #[derive(Default)]
 struct Snappy {}
-impl Postprocessor for Snappy {
+impl StatelessPostprocessor for Snappy {
     fn name(&self) -> &str {
         "snappy"
     }
 
-    fn process(
-        &mut self,
-        _ingres_ns: u64,
-        _egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
         use snap::write::FrameEncoder;
         let mut writer = FrameEncoder::new(vec![]);
         writer.write_all(data)?;
@@ -292,7 +267,7 @@ pub enum Lz4Error {
     InvalidCompressionLevel(i64),
 }
 impl Lz4 {
-    pub fn with_config(level: i64) -> Result<Box<dyn Postprocessor>, Lz4Error> {
+    pub fn with_config(level: i64) -> Result<Box<dyn StatelessPostprocessor>, Lz4Error> {
         if level < 0 {
             return Err(Lz4Error::InvalidCompressionLevel(level));
         }
@@ -304,17 +279,12 @@ impl Lz4 {
         }))
     }
 }
-impl Postprocessor for Lz4 {
+impl StatelessPostprocessor for Lz4 {
     fn name(&self) -> &str {
         "lz4"
     }
 
-    fn process(
-        &mut self,
-        _ingres_ns: u64,
-        _egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
         use lz4::EncoderBuilder;
         let buffer = Vec::<u8>::new();
         let mut encoder = EncoderBuilder::new()
@@ -345,7 +315,7 @@ pub enum ZstdError {
 }
 
 impl Zstd {
-    pub fn with_config(level: i64) -> Result<Box<dyn Postprocessor>, ZstdError> {
+    pub fn with_config(level: i64) -> Result<Box<dyn StatelessPostprocessor>, ZstdError> {
         if !(-7..=22).contains(&level) {
             return Err(ZstdError::InvalidCompressionLevel(level));
         }
@@ -357,24 +327,19 @@ impl Zstd {
         }))
     }
 }
-impl Postprocessor for Zstd {
+impl StatelessPostprocessor for Zstd {
     fn name(&self) -> &str {
         "zstd"
     }
 
-    fn process(
-        &mut self,
-        _ingres_ns: u64,
-        _egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
         // Value of 0 indicates default level for encode.
         let compressed = zstd::encode_all(data, self.compression_level)?;
         Ok(vec![compressed])
     }
 }
 pub(crate) struct Compress {
-    codec: Box<dyn Postprocessor>,
+    codec: Box<dyn StatelessPostprocessor>,
 }
 impl Compress {
     pub(crate) fn from_config(config: Option<&Value>) -> Result<Self, super::Error> {
@@ -393,17 +358,12 @@ impl Compress {
         }
     }
 }
-impl Postprocessor for Compress {
+impl StatelessPostprocessor for Compress {
     fn name(&self) -> &str {
         "compress"
     }
-    fn process(
-        &mut self,
-        ingres_ns: u64,
-        egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
-        self.codec.process(ingres_ns, egress_ns, data)
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
+        self.codec.process(data)
     }
 }
 

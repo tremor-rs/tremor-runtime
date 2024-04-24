@@ -18,7 +18,7 @@
 //! |-------------|--------------------------------------------------------|----------|---------------|
 //! | `separator` | The separator to append after each event's byte stream | no       | `\n`          |
 
-use super::Postprocessor;
+use super::StatelessPostprocessor;
 use crate::preprocessor::separate::{default_separator, DEFAULT_SEPARATOR};
 use serde::Deserialize;
 use tremor_config::{Impl as ConfigImpl, Map as ConfigMap};
@@ -74,17 +74,12 @@ impl Separate {
     }
 }
 
-impl Postprocessor for Separate {
+impl StatelessPostprocessor for Separate {
     fn name(&self) -> &str {
         "join"
     }
 
-    fn process(
-        &mut self,
-        _ingres_ns: u64,
-        _egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
         // padding capacity with 1 to account for the new line char we will be pushing
         let mut framed: Vec<u8> = Vec::with_capacity(data.len() + 1);
         framed.extend_from_slice(data);
@@ -103,27 +98,25 @@ mod tests {
         let config = Some(literal!({
             "separator": "|"
         }));
-        let mut separate = Separate::from_config(&config)?;
+        let separate = Separate::from_config(&config)?;
         let data: [u8; 0] = [];
-        assert_eq!(separate.process(0, 0, &data).ok(), Some(vec![vec![b'|']]));
+        assert_eq!(separate.process(&data).ok(), Some(vec![vec![b'|']]));
         assert_eq!(
-            separate.process(0, 0, b"foob").ok(),
+            separate.process(b"foob").ok(),
             Some(vec![vec![b'f', b'o', b'o', b'b', b'|']]),
         );
-        assert!(separate.finish(None)?.is_empty());
         Ok(())
     }
 
     #[test]
     fn separate_postprocessor_default() -> anyhow::Result<()> {
-        let mut separate = Separate::from_config(&None)?;
+        let separate = Separate::from_config(&None)?;
         let data: [u8; 0] = [];
-        assert_eq!(separate.process(0, 0, &data).ok(), Some(vec![vec![b'\n']]));
+        assert_eq!(separate.process(&data).ok(), Some(vec![vec![b'\n']]));
         assert_eq!(
-            separate.process(0, 0, b"foob").ok(),
+            separate.process(b"foob").ok(),
             Some(vec![vec![b'f', b'o', b'o', b'b', b'\n']]),
         );
-        assert!(separate.finish(None)?.is_empty());
         Ok(())
     }
 

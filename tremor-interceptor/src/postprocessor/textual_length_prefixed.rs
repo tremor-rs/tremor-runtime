@@ -14,22 +14,17 @@
 
 //! Prefixes the data with the length of the event data in bytes as an unsigned 64 bit big-endian integer.
 
-use super::Postprocessor;
+use super::StatelessPostprocessor;
 use std::io::Write;
 
 #[derive(Clone, Default)]
 pub(crate) struct TextualLengthPrefixed {}
-impl Postprocessor for TextualLengthPrefixed {
+impl StatelessPostprocessor for TextualLengthPrefixed {
     fn name(&self) -> &str {
         "textual-length-prefixed"
     }
 
-    fn process(
-        &mut self,
-        _ingres_ns: u64,
-        _egress_ns: u64,
-        data: &[u8],
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
+    fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {
         let size = data.len();
         let mut digits: Vec<u8> = size.to_string().into_bytes();
         let mut res = Vec::with_capacity(digits.len() + 1 + size);
@@ -37,5 +32,18 @@ impl Postprocessor for TextualLengthPrefixed {
         res.push(32);
         res.write_all(data)?;
         Ok(vec![res])
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn textual_length_prefix_postp() -> anyhow::Result<()> {
+        let post = TextualLengthPrefixed {};
+        let data = vec![1_u8, 2, 3];
+        let encoded = post.process(&data)?.pop().unwrap_or_default();
+        assert_eq!("3 \u{1}\u{2}\u{3}", std::str::from_utf8(&encoded)?);
+        Ok(())
     }
 }

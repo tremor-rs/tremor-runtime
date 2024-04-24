@@ -58,3 +58,59 @@ impl Preprocessor for LengthPrefixed {
         Ok(res)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use tremor_common::alias::Connector;
+
+    use crate::{
+        postprocessor::{self, Postprocessor},
+        preprocessor::{finish, preprocess},
+    };
+
+    use super::*;
+    #[test]
+    fn length_prefix() -> anyhow::Result<()> {
+        let mut it = 0;
+
+        let pre_p = LengthPrefixed::default();
+        let mut post_p = postprocessor::length_prefixed::LengthPrefixed::default();
+
+        let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let wire = post_p.process(0, 0, &data)?;
+        let (start, end) = wire[0].split_at(7);
+        let alias = Connector::new("test", "test");
+        let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
+        let recv = preprocess(
+            pps.as_mut_slice(),
+            &mut it,
+            start.to_vec(),
+            Value::object(),
+            &alias,
+        )?;
+        assert!(recv.is_empty());
+        let recv = preprocess(
+            pps.as_mut_slice(),
+            &mut it,
+            end.to_vec(),
+            Value::object(),
+            &alias,
+        )?;
+        assert_eq!(recv[0].0, data);
+
+        // incomplete data
+        let processed = preprocess(
+            pps.as_mut_slice(),
+            &mut it,
+            start.to_vec(),
+            Value::object(),
+            &alias,
+        )?;
+        assert!(processed.is_empty());
+        // not emitted upon finish
+        let finished = finish(pps.as_mut_slice(), &alias)?;
+        assert!(finished.is_empty());
+
+        Ok(())
+    }
+}

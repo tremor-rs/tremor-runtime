@@ -32,3 +32,39 @@ impl Preprocessor for Base64 {
         Ok(vec![(base64::decode(data)?, meta)])
     }
 }
+
+#[cfg(test)]
+
+mod test {
+    use crate::postprocessor::{self, Postprocessor};
+
+    use super::*;
+    #[test]
+    fn test_base64() -> anyhow::Result<()> {
+        let int = "snot badger".as_bytes();
+        let enc = "c25vdCBiYWRnZXI=".as_bytes();
+
+        let mut pre = Base64::default();
+        let mut post = postprocessor::base64::Base64::default();
+
+        // Fake ingest_ns and egress_ns
+        let mut ingest_ns = 0_u64;
+        let egress_ns = 1_u64;
+
+        let r = post.process(ingest_ns, egress_ns, int);
+        let ext = &r?[0];
+        let ext = ext.as_slice();
+        // Assert actual encoded form is as expected
+        assert_eq!(&enc, &ext);
+
+        let r = pre.process(&mut ingest_ns, ext, Value::object());
+        let out = &r?[0].0;
+        let out = out.as_slice();
+        // Assert actual decoded form is as expected
+        assert_eq!(&int, &out);
+
+        // assert empty finish, no leftovers
+        assert!(pre.finish(None, None)?.is_empty());
+        Ok(())
+    }
+}

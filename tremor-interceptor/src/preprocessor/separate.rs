@@ -317,6 +317,8 @@ impl Preprocessor for Separate {
 mod test {
     use tremor_value::literal;
 
+    use crate::postprocessor::Postprocessor;
+
     use super::*;
 
     #[test]
@@ -749,6 +751,119 @@ mod test {
         assert_eq!(2, r.len());
         assert_eq!(10, r[0].0.len());
         assert_eq!(1, r[1].0.len());
+        Ok(())
+    }
+    #[test]
+    fn test_lines() -> anyhow::Result<()> {
+        let int = "snot\nbadger".as_bytes();
+        let enc = "snot\nbadger\n".as_bytes(); // First event ( event per line )
+        let out = "snot".as_bytes();
+
+        let mut post = crate::postprocessor::separate::Separate::default();
+        let mut pre = Separate::default();
+
+        let mut ingest_ns = 0_u64;
+        let egress_ns = 1_u64;
+
+        let r = post.process(ingest_ns, egress_ns, int);
+        assert!(r.is_ok(), "Expected Ok(...), Got: {r:?}");
+        let ext = &r?[0];
+        let ext = ext.as_slice();
+        // Assert actual encoded form is as expected
+        assert_eq!(enc, ext);
+
+        let r = pre.process(&mut ingest_ns, ext, Value::object());
+        let out2 = &r?[0].0;
+        let out2 = out2.as_slice();
+        // Assert actual decoded form is as expected
+        assert_eq!(out, out2);
+
+        // assert empty finish, no leftovers
+        assert!(pre.finish(None, None)?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_separate_buffered() -> anyhow::Result<()> {
+        let input = "snot\nbadger\nwombat\ncapybara\nquagga".as_bytes();
+        let mut pre = Separate::new(b'\n', 1000, true);
+        let mut ingest_ns = 0_u64;
+        let mut res = pre.process(&mut ingest_ns, input, Value::object())?;
+        let splitted = input
+            .split(|c| *c == b'\n')
+            .map(|v| (v.to_vec(), Value::object()))
+            .collect::<Vec<_>>();
+        assert_eq!(splitted[..splitted.len() - 1].to_vec(), res);
+        let mut finished = pre.finish(None, None)?;
+        res.append(&mut finished);
+        assert_eq!(splitted, res);
+        Ok(())
+    }
+
+    macro_rules! assert_separate_no_buffer {
+        ($inbound:expr, $outbound1:expr, $outbound2:expr, $case_number:expr, $separator:expr) => {
+            let mut ingest_ns = 0_u64;
+            let r = Separate::new($separator, 0, false).process(
+                &mut ingest_ns,
+                $inbound,
+                Value::object(),
+            );
+
+            let out = &r?;
+            // Assert preprocessor output is as expected
+            assert!(
+                2 == out.len(),
+                "Test case : {} => expected output = {}, actual output = {}",
+                $case_number,
+                "2",
+                out.len()
+            );
+            assert!(
+                $outbound1 == out[0].0.as_slice(),
+                "Test case : {} => expected output = \"{}\", actual output = \"{}\"",
+                $case_number,
+                std::str::from_utf8($outbound1).unwrap(),
+                std::str::from_utf8(out[0].0.as_slice()).unwrap()
+            );
+            assert!(
+                $outbound2 == out[1].0.as_slice(),
+                "Test case : {} => expected output = \"{}\", actual output = \"{}\"",
+                $case_number,
+                std::str::from_utf8($outbound2).unwrap(),
+                std::str::from_utf8(out[1].0.as_slice()).unwrap()
+            );
+        };
+    }
+
+    #[allow(clippy::type_complexity)]
+    #[test]
+    fn test_separate_no_buffer_no_maxlength() -> anyhow::Result<()> {
+        let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
+            (b"snot\nbadger", b"snot", b"badger", "0"),
+            (b"snot\n", b"snot", b"", "1"),
+            (b"\nsnot", b"", b"snot", "2"),
+            (b"\n", b"", b"", "3"),
+        ];
+        for case in &test_data {
+            assert_separate_no_buffer!(case.0, case.1, case.2, case.3, b'\n');
+        }
+
+        Ok(())
+    }
+
+    #[allow(clippy::type_complexity)]
+    #[test]
+    fn test_carriage_return_no_buffer_no_maxlength() -> anyhow::Result<()> {
+        let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
+            (b"snot\rbadger", b"snot", b"badger", "0"),
+            (b"snot\r", b"snot", b"", "1"),
+            (b"\rsnot", b"", b"snot", "2"),
+            (b"\r", b"", b"", "3"),
+        ];
+        for case in &test_data {
+            assert_separate_no_buffer!(case.0, case.1, case.2, case.3, b'\r');
+        }
+
         Ok(())
     }
 }

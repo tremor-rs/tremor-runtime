@@ -82,10 +82,18 @@ impl Postprocessor for Gelf {
     fn process(
         &mut self,
         _ingest_ns: u64,
-        _egest_ns: u64,
+        _egress_ns: u64,
         data: &[u8],
     ) -> anyhow::Result<Vec<Vec<u8>>> {
         Ok(self.encode_gelf(data)?)
+    }
+
+    fn finish(&mut self, data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
+        if let Some(data) = data {
+            Ok(self.encode_gelf(data)?)
+        } else {
+            Ok(vec![])
+        }
     }
 }
 
