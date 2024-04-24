@@ -4,7 +4,7 @@ description = "Tremor CLI Tool"
 edition = "2021"
 license = "Apache-2.0"
 name = "tremor-cli"
-version = "0.13.0-rc.22"
+version = "0.13.0-rc.23"
 homepage = "https://www.tremor.rs"
 
 [package.metadata.docs.rs]
@@ -46,15 +46,15 @@ surf = { version = "=2.3.2", default-features = false, features = [
   "h1-client-rustls",
   "middleware-logger",
 ] }
-tremor-api = { version = "0.13.0-rc.22", path = "../tremor-api" }
-tremor-codec = { version = "0.13.0-rc.22", path = "../tremor-codec" }
-tremor-interceptor = { version = "0.13.0-rc.22", path = "../tremor-interceptor" }
-tremor-common = { version = "0.13.0-rc.22", path = "../tremor-common" }
-tremor-pipeline = { version = "0.13.0-rc.22", path = "../tremor-pipeline" }
-tremor-runtime = { version = "0.13.0-rc.22", path = "../" }
-tremor-script = { version = "0.13.0-rc.22", path = "../tremor-script" }
-tremor-value = { version = "0.13.0-rc.22", path = "../tremor-value" }
-tremor-system = { version = "0.13.0-rc.22", path = "../tremor-system" }
+tremor-api = { version = "0.13.0-rc.23", path = "../tremor-api" }
+tremor-codec = { version = "0.13.0-rc.23", path = "../tremor-codec" }
+tremor-interceptor = { version = "0.13.0-rc.23", path = "../tremor-interceptor" }
+tremor-common = { version = "0.13.0-rc.23", path = "../tremor-common" }
+tremor-pipeline = { version = "0.13.0-rc.23", path = "../tremor-pipeline" }
+tremor-runtime = { version = "0.13.0-rc.23", path = "../" }
+tremor-script = { version = "0.13.0-rc.23", path = "../tremor-script" }
+tremor-value = { version = "0.13.0-rc.23", path = "../tremor-value" }
+tremor-system = { version = "0.13.0-rc.23", path = "../tremor-system" }
 url = "2"
 error-chain = "0.12"
 globwalk = "0.9"
