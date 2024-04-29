@@ -12,21 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
+use http_body_util::BodyExt;
+use hyper::body::Incoming;
 use hyper::StatusCode;
-use hyper::{
-    body::to_bytes,
-    server::conn::AddrStream,
-    service::{make_service_fn, service_fn},
-    Body, Response,
-};
-use std::{
-    convert::Infallible,
-    net::{SocketAddr, ToSocketAddrs},
-};
+use hyper::{service::service_fn, Response};
+use hyper_util::rt::TokioIo;
+use log::error;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
 use tokio::task::{spawn, JoinHandle};
 use tremor_common::url::HttpDefaults;
 use tremor_common::url::Url;
+use tremor_connectors::impls::http::utils::Body;
 use tremor_connectors::{
     harness::Harness,
     impls::http::{self as http_impl, meta::content_type},
@@ -52,20 +50,19 @@ struct TestHttpServer {
 
 async fn fake_server_dispatch(
     _addr: SocketAddr,
-    reqest: hyper::Request<Body>,
+    req: hyper::Request<Incoming>,
 ) -> std::result::Result<Response<Body>, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let mut res = Response::builder().status(StatusCode::OK);
 
-    let ct = content_type(Some(reqest.headers()))?;
-    let body = reqest.into_body();
-    let data: Vec<u8> = to_bytes(body).await?.to_vec();
-
+    let ct = content_type(Some(req.headers()))?;
+    let body = req.collect().await?;
+    let data: Vec<u8> = body.to_bytes().to_vec();
     res = res.header(
         hyper::header::CONTENT_TYPE,
         ct.unwrap_or(mime::TEXT_PLAIN).to_string(),
     );
-
-    Ok(res.body(Body::from(data))?)
+    let body = Body::new(data);
+    Ok(res.body(body)?)
 }
 
 impl TestHttpServer {
@@ -76,6 +73,7 @@ impl TestHttpServer {
             let host = url.host().expect("no host").to_string();
             let port = url.port().expect("no port");
 
+            let addr = format!("{}:{}", host, port).parse::<SocketAddr>()?;
             if "https" == url.scheme() {
                 todo!();
                 // let cert_file = "./tests/localhost.cert";
@@ -98,27 +96,20 @@ impl TestHttpServer {
                 //     error!("Error listening on {url}: {e}");
                 // }
             } else {
-                let make_service = make_service_fn(move |conn: &AddrStream| {
-                    // We have to clone the context to share it with each invocation of
-                    // `make_service`. If your data doesn't implement `Clone` consider using
-                    // an `std::sync::Arc`.
+                let listener = TcpListener::bind(addr).await?;
+                let (tcp_stream, _remote_addr) = listener.accept().await?;
+                let io = TokioIo::new(tcp_stream);
 
-                    // You can grab the address of the incoming connection like so.
-                    let addr = conn.remote_addr();
-
-                    // Create a `Service` for responding to the request.
+                tokio::task::spawn(async move {
                     let service = service_fn(move |req| fake_server_dispatch(addr, req));
 
-                    // Return the service to hyper.
-                    async move { Ok::<_, Infallible>(service) }
-                });
-                let addr = (host, port)
-                    .to_socket_addrs()?
-                    .next()
-                    .ok_or(anyhow!("no address"))?;
-
-                let listener = hyper::Server::bind(&addr).serve(make_service);
-                listener.await?;
+                    if let Err(err) = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(io, service)
+                        .await
+                    {
+                        error!("Error serving connection: {err}");
+                    }
+                })
             };
             Ok(())
         }));

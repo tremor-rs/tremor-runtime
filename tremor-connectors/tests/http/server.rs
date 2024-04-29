@@ -13,14 +13,16 @@
 // limitations under the License.
 use anyhow::{anyhow, Result};
 use http::StatusCode;
-use hyper::body::HttpBody;
-use hyper::{body::to_bytes, Body, Request, Response};
+use http_body_util::BodyExt;
+use hyper::{body::Incoming, Request, Response};
 use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
+use tremor_connectors::impls::http::utils::Body;
 use tremor_connectors::{
     harness::Harness,
     impls::http::{meta::content_type, server},
@@ -42,7 +44,7 @@ async fn handle_req<F>(
     handle_req_fn: F,
     mut connector: Harness,
     is_batch: bool,
-) -> Result<Response<Body>>
+) -> Result<Response<Incoming>>
 where
     F: Fn(&ValueAndMeta<'_>) -> ValueAndMeta<'static> + Send + 'static,
 {
@@ -65,11 +67,15 @@ where
 
         anyhow::Ok(())
     });
-    let response = timeout(
-        Duration::from_secs(5),
-        hyper::client::Client::new().request(req),
-    )
-    .await??;
+
+    let transport = HttpsConnectorBuilder::new()
+        .with_native_roots()?
+        .https_or_http()
+        .enable_http1()
+        .enable_http2()
+        .build();
+    let client = Client::builder(TokioExecutor::new()).build(transport);
+    let response = timeout(Duration::from_secs(5), client.request(req)).await??;
     handle.abort();
     Ok(response)
 }
@@ -145,7 +151,8 @@ async fn http_server_test_basic() -> Result<()> {
         .headers()
         .get("content-type")
         .map(|a| a.as_bytes().to_vec());
-    let mut body = to_bytes(result.into_body()).await?.to_vec();
+    let body = result.collect().await?;
+    let mut body = body.to_bytes().to_vec();
     let body = simd_json::from_slice::<Value>(&mut body)?.into_static();
     assert_eq!(Some(b"application/json; charset=UTF-8".to_vec()), h);
     assert_eq!(
@@ -173,11 +180,12 @@ async fn http_server_test_query() -> Result<()> {
     // and return the request meta and body as a json (codec picked up from connector config)
     let (connector, url, port) = harness_dflt("http").await?;
     let req_url = format!("{url}path/path/path?query=yes&another");
+    let body_bytes = "snot, badger".bytes().collect::<Vec<u8>>();
     let req = Request::builder()
         .method("PATCH")
         .uri(req_url.clone())
         .header("content-type", "text/plain")
-        .body(Body::from("snot, badger"))?;
+        .body(Body::new(body_bytes))?;
 
     let  result = handle_req(
         req,
@@ -214,7 +222,8 @@ async fn http_server_test_query() -> Result<()> {
         .iter()
         .map(|h| String::from_utf8_lossy(h.as_bytes()).to_string())
         .collect();
-    let mut body = to_bytes(result.into_body()).await?.to_vec();
+    let body = result.collect().await?;
+    let mut body = body.to_bytes().to_vec();
     let body = simd_json::from_slice::<Value>(&mut body)?.into_static();
     assert_eq!(Some("application/json".to_string()), h1);
     assert_eq!(vec!["foo".to_string(), "bar".to_string()], h2);
@@ -225,8 +234,9 @@ async fn http_server_test_query() -> Result<()> {
                 "protocol": "http",
                 "uri": "/path/path/path?query=yes&another",
                 "headers": {
-                    "content-length": ["12"],
+                    // "content-length": ["12"],
                     "content-type": ["text/plain"],
+                    "transfer-encoding": ["chunked"],
                     "host": [format!("localhost:{port}")],
                 },
                 "method": "PATCH",
@@ -237,6 +247,7 @@ async fn http_server_test_query() -> Result<()> {
     );
     Ok(())
 }
+
 #[tokio::test(flavor = "multi_thread")]
 async fn http_server_test_chunked() -> Result<()> {
     // TODO: test batched event with chunked encoding
@@ -248,7 +259,7 @@ async fn http_server_test_chunked() -> Result<()> {
             hyper::header::CONTENT_TYPE,
             mime::APPLICATION_OCTET_STREAM.to_string(),
         )
-        .body(Body::from("A".repeat(1024)))?;
+        .body(Body::new("A".repeat(1024).into_bytes()))?;
 
     let result = handle_req(
         req,
@@ -316,7 +327,8 @@ async fn http_server_test_chunked() -> Result<()> {
             .get(hyper::header::TRANSFER_ENCODING)
             .map(http::HeaderValue::as_bytes)
     );
-    let body = to_bytes(result.into_body()).await?.to_vec();
+    let body = result.collect().await?;
+    let body = body.to_bytes().to_vec();
     assert_eq!(b"chunk_01|chunk_02|chunk_03|AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", body.as_slice());
 
     Ok(())
@@ -382,21 +394,20 @@ async fn https_server_test() -> Result<()> {
         None,
     )
     .to_client_config()?;
+
     let transport = HttpsConnectorBuilder::new()
         .with_tls_config(tls_config)
+        // .with_native_roots()?
         .https_or_http()
         .enable_http1()
         .enable_http2()
         .build();
-
-    // HttpsConnector::from((HttpConnector::new(), Arc::new(tls_config))).;
-
-    let client = hyper::Client::builder().build(transport);
+    let client = Client::builder(TokioExecutor::new()).build(transport);
 
     let req = hyper::Request::builder()
         .method("DELETE")
         .uri(&url)
-        .body(hyper::Body::empty())?;
+        .body(Body::empty())?;
     let one_sec = Duration::from_secs(1);
     let mut response = timeout(one_sec, client.request(req)).await;
 
@@ -407,17 +418,17 @@ async fn https_server_test() -> Result<()> {
         let req = hyper::Request::builder()
             .method("DELETE")
             .uri(&url)
-            .body(hyper::Body::empty())?;
+            .body(Body::empty())?;
         if start.elapsed() > max_timeout {
             return Err(anyhow!("Timeout waiting for HTTPS server to boot up: {e}"));
         }
         response = timeout(one_sec, client.request(req)).await;
     }
-    let mut response = response??;
-    let mut data: Vec<u8> = Vec::new();
-    while let Some(chunk) = response.data().await.transpose()? {
-        data.extend_from_slice(&chunk);
-    }
+    let response = response??;
+    let status = response.status();
+    let headers = response.headers().clone();
+    let body = response.collect().await?;
+    let data = body.to_bytes().to_vec();
     let body = String::from_utf8(data)?;
     let body = serde_yaml::from_str::<serde_yaml::Value>(&body)?;
     let expected = serde_yaml::from_str::<serde_yaml::Value>(&format!(
@@ -429,18 +440,17 @@ meta:
   headers:
     host:
     - localhost:{port}
+    transfer-encoding:
+    - chunked
   method: DELETE
 value: null
   "#
     ))?;
     assert_eq!(expected, body);
-    assert_eq!(StatusCode::OK, response.status());
+    assert_eq!(StatusCode::OK, status);
     assert_eq!(
         Some("application/yaml; charset=UTF-8"),
-        response
-            .headers()
-            .get("content-type")
-            .and_then(|c| c.to_str().ok())
+        headers.get("content-type").and_then(|c| c.to_str().ok())
     );
     handle.abort();
     Ok(())
