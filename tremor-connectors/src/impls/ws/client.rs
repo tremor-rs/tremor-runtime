@@ -31,7 +31,7 @@ use crate::{
 };
 use either::Either;
 use futures::StreamExt;
-use rustls::ServerName;
+use rustls::pki_types::ServerName;
 use std::sync::Arc;
 use std::{net::SocketAddr, sync::atomic::AtomicBool};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -168,7 +168,7 @@ impl Sink for WsClientSink {
         if let Some(tls_connector) = self.tls_connector.as_ref() {
             // TLS
             // wrap it into arcmutex, because we need to clone it in order to close it properly
-            let server_name = ServerName::try_from(self.tls_domain.as_str())?;
+            let server_name = ServerName::try_from(self.tls_domain.clone())?;
             let tls_stream = tls_connector.connect(server_name, tcp_stream).await?;
             let (ws_stream, _http_response) =
                 client_async(self.config.url.as_str(), tls_stream).await?;
