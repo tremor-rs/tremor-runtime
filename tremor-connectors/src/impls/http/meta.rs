@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::impls::http::utils::Body;
 use crate::{
     impls::http::{client, utils::RequestId},
     sink::EventSerializer,
@@ -22,7 +23,7 @@ use http::{
     header::{self, HeaderName, ToStrError},
     HeaderMap, Uri,
 };
-use hyper::{header::HeaderValue, Body, Method, Request, Response};
+use hyper::{header::HeaderValue, Method, Request, Response};
 use mime::Mime;
 use tokio::sync::mpsc::{channel, Sender};
 use tremor_config::NameWithConfig;
@@ -168,7 +169,7 @@ impl HttpRequestBuilder {
         let (chunk_tx, mut chunk_rx) = channel(qsize());
         let body = Body::wrap_stream(async_stream::stream! {
             while let Some(item) = chunk_rx.recv().await {
-                yield Ok::<_, std::convert::Infallible>(item);
+                yield Ok::<_, std::io::Error>(item);
             }
         });
         let request = request.body(body)?;
@@ -287,8 +288,8 @@ fn extract_headers(headers: &HeaderMap) -> Result<Value<'static>, ToStrError> {
         .collect::<Result<Value<'static>, ToStrError>>()
 }
 /// Extract request metadata
-pub(super) fn extract_request_meta(
-    request: &Request<Body>,
+pub(super) fn extract_request_meta<T>(
+    request: &Request<T>,
     scheme: &'static str,
 ) -> Result<Value<'static>, ToStrError> {
     // collect header values into an array for each header

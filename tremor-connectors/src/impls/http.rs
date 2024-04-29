@@ -205,4 +205,4 @@ pub mod meta;
 /// HTTP server connect
 pub mod server;
 /// HTTP utils
-pub(crate) mod utils;
+pub mod utils;

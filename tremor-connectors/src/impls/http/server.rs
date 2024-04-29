@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::impls::http::utils::Body;
 use crate::{
     errors::error_connector_def,
     impls::http::{
@@ -21,30 +22,25 @@ use crate::{
     sink::prelude::*,
     source::prelude::*,
     spawn_task,
-    utils::{
-        mime::MimeCodecMap,
-        socket,
-        tls::{self, TLSServerConfig},
-    },
+    utils::{mime::MimeCodecMap, socket, tls::TLSServerConfig},
 };
 use dashmap::DashMap;
 use halfbrown::{Entry, HashMap};
 use http::{header, Response};
 use http::{header::HeaderName, StatusCode};
-use hyper::{
-    body::to_bytes,
-    server::conn::{AddrIncoming, AddrStream},
-    service::{make_service_fn, service_fn},
-    Body, Request,
-};
-use std::{convert::Infallible, net::ToSocketAddrs, sync::Arc};
+use hyper::body::Incoming;
+use hyper::{service::service_fn, Request};
+use hyper_util::rt::TokioIo;
+use std::{net::ToSocketAddrs, sync::Arc};
 use tokio::{
+    net::TcpListener,
     sync::{
         mpsc::{channel, Receiver, Sender},
         oneshot,
     },
     task::JoinHandle,
 };
+use tokio_rustls::TlsAcceptor;
 use tremor_common::{ids::Id, url::Url};
 use tremor_config::NameWithConfig;
 use tremor_script::ValueAndMeta;
@@ -230,48 +226,73 @@ impl Source for HttpServerSource {
         // Server task - this is the main receive loop for http server instances
         self.server_task = Some(spawn_task(ctx.clone(), async move {
             if let Some(server_config) = tls_server_config {
-                let make_service = make_service_fn(move |_conn: &tls::Stream| {
+                let incoming = TcpListener::bind(addr).await?;
+
+                let acceptor = TlsAcceptor::from(server_config);
+
+                loop {
                     // We have to clone the context to share it with each invocation of
                     // `make_service`. If your data doesn't implement `Clone` consider using
                     // an `std::sync::Arc`.
                     let server_context = server_context.clone();
 
-                    async move {
-                        // Create a `Service` for responding to the request.
-                        let service =
-                            service_fn(move |req| handle_request(server_context.clone(), req));
+                    let (tcp_stream, _remote_addr) = incoming.accept().await?;
 
-                        // Return the service to hyper.
-                        anyhow::Ok(service)
-                    }
-                });
-                let incoming = AddrIncoming::bind(&addr)?;
-                let listener = hyper::Server::builder(tls::Acceptor::new(server_config, incoming))
-                    .serve(make_service);
-                listener.await?;
+                    let tls_acceptor = acceptor.clone();
+                    tokio::spawn(async move {
+                        let service = service_fn(move |req: Request<Incoming>| {
+                            handle_request(server_context.clone(), req)
+                        });
+
+                        let tls_stream = match tls_acceptor.accept(tcp_stream).await {
+                            Ok(tls_stream) => tls_stream,
+                            Err(err) => {
+                                eprintln!("failed to perform tls handshake: {err:#}");
+                                return;
+                            }
+                        };
+
+                        let io = TokioIo::new(tls_stream);
+                        if let Err(err) = hyper::server::conn::http1::Builder::new()
+                            .serve_connection(io, service)
+                            .await
+                        {
+                            eprintln!("Error serving connection: {err}");
+                        }
+                    });
+                }
             } else {
-                let make_service = make_service_fn(move |_conn: &AddrStream| {
-                    // We have to clone the context to share it with each invocation of
-                    // `make_service`. If your data doesn't implement `Clone` consider using
-                    // an `std::sync::Arc`.
-                    let server_context = server_context.clone();
-
-                    // Create a `Service` for responding to the request.
-                    let service =
-                        service_fn(move |req| handle_request(server_context.clone(), req));
-
-                    // Return the service to hyper.
-                    async move { Ok::<_, Infallible>(service) }
-                });
-                let listener = hyper::Server::bind(&addr).serve(make_service);
+                let listener = TcpListener::bind(addr).await?;
                 info!(
-                    "{ctx} Listening for HTTP requests on {}",
+                    "{ctx} Listening for HTTP requests on {:?}",
                     listener.local_addr()
                 );
 
-                listener.await?;
+                loop {
+                    let (tcp_stream, _remote_addr) = listener.accept().await?;
+                    info!("{ctx} Accepted connection from {:?}", _remote_addr);
+
+                    let io = TokioIo::new(tcp_stream);
+
+                    // We have to clone the context to share it with each invocation of
+                    // `service_fn` inside the spawned task.
+                    let server_context = server_context.clone();
+
+                    tokio::task::spawn(async move {
+                        let service = service_fn(move |req: Request<Incoming>| {
+                            handle_request(server_context.clone(), req)
+                        });
+
+                        if let Err(err) = hyper::server::conn::http1::Builder::new()
+                            .serve_connection(io, service)
+                            .await
+                        {
+                            eprintln!("Error serving connection: {err}");
+                        }
+                    });
+                }
             };
-            Ok(())
+            // Ok(())
         }));
 
         Ok(true)
@@ -609,7 +630,7 @@ impl SinkResponse {
         // we can already send out the response and stream the rest of the chunks upon calling `append`
         let body = Body::wrap_stream(async_stream::stream! {
             while let Some(item) = chunk_rx.recv().await {
-                yield Ok::<_, Infallible>(item);
+                yield Ok::<_, std::io::Error>(item);
             }
         });
         tx.send(response.body(body)?)
@@ -683,7 +704,7 @@ struct RawRequestData {
 
 async fn handle_request(
     mut context: HttpServerState,
-    req: Request<Body>,
+    req: Request<Incoming>,
 ) -> http::Result<Response<Body>> {
     // NOTE We wrap and crap as tide doesn't report donated route handler's errors
     let result = _handle_request(&mut context, req).await;
@@ -703,14 +724,15 @@ async fn handle_request(
 
 async fn _handle_request(
     context: &mut HttpServerState,
-    req: Request<Body>,
+    req: Request<Incoming>,
 ) -> anyhow::Result<Response<Body>> {
+    use http_body_util::BodyExt;
     let request_meta = extract_request_meta(&req, context.scheme)?;
     let content_type =
         content_type(Some(req.headers()))?.map(|mime| mime.essence_str().to_string());
 
-    let body = req.into_body();
-    let data: Vec<u8> = to_bytes(body).await?.to_vec(); // Vec::new();
+    let body = req.collect().await?;
+    let data: Vec<u8> = body.to_bytes().to_vec();
 
     // Dispatch
     let (response_tx, response_rx) = oneshot::channel();

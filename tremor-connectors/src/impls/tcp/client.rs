@@ -244,8 +244,8 @@ impl Sink for TcpClientSink {
             let tls_stream = tls_connector
                 .connect(
                     self.tls_domain
-                        .as_ref()
-                        .map_or_else(|| self.config.url.host_or_local(), String::as_str)
+                        .clone()
+                        .unwrap_or_else(|| self.config.url.host_or_local().to_string())
                         .try_into()?,
                     stream,
                 )

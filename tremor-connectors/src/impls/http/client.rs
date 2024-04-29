@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::utils::Body;
 use crate::{
     errors::error_connector_def,
     impls::http::{
@@ -25,12 +26,12 @@ use crate::{
 };
 use either::Either;
 use halfbrown::HashMap;
-use hyper::body::HttpBody;
-use hyper::{
-    client::{Client as HyperClient, HttpConnector},
-    Method,
-};
+use http_body_util::BodyExt;
+use hyper::Method;
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::client::legacy::Client as HyperClient;
+use hyper_util::rt::TokioExecutor;
 use serde::{Deserialize, Deserializer};
 use std::{
     sync::{
@@ -252,7 +253,7 @@ impl Source for HttpRequestSource {
 
 struct HttpRequestSink {
     request_counter: u64,
-    client: Option<Arc<HyperClient<HttpsConnector<HttpConnector>>>>,
+    client: Option<Arc<HyperClient<HttpsConnector<HttpConnector>, Body>>>,
     response_tx: Sender<SourceReply>,
     reply_tx: ReplySender,
     config: Config,
@@ -312,13 +313,13 @@ impl Sink for HttpRequestSink {
                 .build()
         } else {
             HttpsConnectorBuilder::new()
-                .with_native_roots()
+                .with_native_roots()?
                 .https_or_http()
                 .enable_http1()
                 .enable_http2()
                 .build()
         };
-        let client = HyperClient::builder().build(https);
+        let client = HyperClient::builder(TokioExecutor::new()).build(https);
 
         self.client = Some(Arc::new(client));
 
@@ -390,15 +391,18 @@ impl Sink for HttpRequestSink {
                     .split('/')
                     .map(ToString::to_string)
                     .collect();
-                match timeout(t, client.request(request)).await {
-                    Ok(Ok(mut response)) => {
-                        let mut data: Vec<u8> = Vec::new();
-                        while let Some(chunk) = response.data().await.transpose()? {
-                            data.extend_from_slice(&chunk);
-                        }
+                let response = client.request(request);
+                match timeout(t, response).await {
+                    Ok(Ok(response)) => {
+                        // let stream = response.into_body();
+                        // We know stream is a http_body::Body, so we can safely unwrap here
+                        let response_meta = extract_response_meta(&response)?;
+                        let headers = response.headers().clone();
+
+                        let body = response.collect().await?;
+                        let data = body.to_bytes().to_vec();
 
                         if let Some(response_tx) = response_tx {
-                            let response_meta = extract_response_meta(&response)?;
                             let mut meta = task_ctx.meta(literal!({
                                 "request": req_meta,
                                 "request_id": request_id.get(),
@@ -409,7 +413,7 @@ impl Sink for HttpRequestSink {
                                 meta.try_insert("correlation", corr_meta);
                             }
                             let codec_name = if let Some(mime_header) =
-                                response.headers().get(hyper::header::CONTENT_TYPE)
+                                headers.get(hyper::header::CONTENT_TYPE)
                             {
                                 // https://static.wikia.nocookie.net/disney-fan-fiction/images/9/99/Nemo-Seagulls_.jpg/revision/latest?cb=20130722023815
                                 let mime: mime::Mime = mime_header.to_str()?.parse()?;
