@@ -422,7 +422,6 @@ impl Sink for HttpRequestSink {
                             let data = body.to_bytes().to_vec();
                             let content_length = data.len() as u64;
 
-                            // response_meta.try_insert("content-length", dbg!(content_length));
                             let mut meta = task_ctx.meta(literal!({
                                 "request": req_meta,
                                 "request_id": request_id.get(),
