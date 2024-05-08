@@ -216,8 +216,9 @@ fn value_to_monitored_resource(
     }
 }
 
+/// Connector Builder for Google Cloud Logging
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 struct Gcl {
     config: Config,

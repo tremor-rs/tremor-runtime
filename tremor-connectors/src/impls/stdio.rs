@@ -86,8 +86,9 @@ lazy_static! {
 /// connector handling 1 std stream (stdout, stderr or stdin)
 pub(crate) struct StdStreamConnector {}
 
+/// Builder for the stdio connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
@@ -259,7 +260,7 @@ impl Connector for StdStreamConnector {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     #[test]
     fn source_consts() {

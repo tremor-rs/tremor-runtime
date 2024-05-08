@@ -40,8 +40,9 @@ enum Error {
     InvalidRecordType(String),
 }
 
+/// DNS client connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
@@ -281,7 +282,7 @@ fn lookup_to_value(l: &Lookup) -> Value<'static> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     #[test]
     fn test_str_to_record_type() {

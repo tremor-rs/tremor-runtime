@@ -299,8 +299,9 @@ pub(crate) struct Config {
 
 impl tremor_config::Impl for Config {}
 
+/// KV connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 impl Builder {
     const INVALID_DIR: &'static str = "Invalid `dir`. Not a directory or not accessible.";

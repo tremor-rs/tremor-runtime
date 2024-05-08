@@ -37,8 +37,9 @@ fn default_request_size_limit() -> usize {
     10 * 1024 * 1024
 }
 
+/// Connector Builder for big query
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 struct Gbq {
     config: Config,

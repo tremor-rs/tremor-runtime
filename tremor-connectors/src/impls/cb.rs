@@ -142,8 +142,9 @@ fn default_timeout() -> u64 {
 
 impl tremor_config::Impl for Config {}
 
+/// The `cb` connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
