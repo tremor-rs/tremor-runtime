@@ -270,8 +270,10 @@ pub trait StreamWriter: Send + Sync {
     }
 }
 
+/// Sink runtime
 #[async_trait::async_trait]
-pub(crate) trait SinkRuntime: Send + Sync {
+pub trait SinkRuntime: Send + Sync {
+    /// unregister a stream writer
     async fn unregister_stream_writer(&mut self, stream: u64) -> anyhow::Result<()>;
 }
 /// context for the connector sink
