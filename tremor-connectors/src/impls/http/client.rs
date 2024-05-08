@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::utils::Body;
 use crate::{
     errors::error_connector_def,
     impls::http::{
         auth::Auth,
         meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder},
-        utils::{Header, RequestId},
+        utils::{Body, Header, RequestId},
     },
     sink::{concurrency_cap::ConcurrencyCap, prelude::*},
     source::prelude::*,
@@ -26,7 +25,7 @@ use crate::{
 };
 use either::Either;
 use halfbrown::HashMap;
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt, BodyStream};
 use hyper::Method;
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::client::legacy::connect::HttpConnector;
@@ -253,7 +252,7 @@ impl Source for HttpRequestSource {
 
 struct HttpRequestSink {
     request_counter: u64,
-    client: Option<Arc<HyperClient<HttpsConnector<HttpConnector>, Body>>>,
+    client: Option<Arc<HyperClient<HttpsConnector<HttpConnector>, BodyStream<Body>>>>,
     response_tx: Sender<SourceReply>,
     reply_tx: ReplySender,
     config: Config,
@@ -369,6 +368,14 @@ impl Sink for HttpRequestSink {
                 HttpRequestBuilder::new(request_id, http_meta, &self.codec_map, &self.config),
                 "Error turning event into an HTTP Request",
             )?;
+
+            for (value, meta) in event.value_meta_iter() {
+                ctx.bail_err(
+                    builder.append(value, meta, ingest_ns, serializer).await,
+                    "Error serializing event into request body",
+                )?;
+            }
+
             let codec_map = self.codec_map.clone();
             let request = builder.take_request()?;
 
@@ -394,24 +401,11 @@ impl Sink for HttpRequestSink {
                 let response = client.request(request);
                 match timeout(t, response).await {
                     Ok(Ok(response)) => {
-                        // let stream = response.into_body();
-                        // We know stream is a http_body::Body, so we can safely unwrap here
                         let response_meta = extract_response_meta(&response)?;
-                        let headers = response.headers().clone();
 
-                        let body = response.collect().await?;
-                        let data = body.to_bytes().to_vec();
+                        let headers = response.headers();
 
                         if let Some(response_tx) = response_tx {
-                            let mut meta = task_ctx.meta(literal!({
-                                "request": req_meta,
-                                "request_id": request_id.get(),
-                                "response": response_meta
-                            }));
-
-                            if let Some(corr_meta) = correlation_meta {
-                                meta.try_insert("correlation", corr_meta);
-                            }
                             let codec_name = if let Some(mime_header) =
                                 headers.get(hyper::header::CONTENT_TYPE)
                             {
@@ -423,6 +417,23 @@ impl Sink for HttpRequestSink {
                                 None
                             };
                             let codec_overwrite = codec_name.cloned();
+
+                            let body = response.collect().await?;
+                            let data = body.to_bytes().to_vec();
+                            let content_length = data.len() as u64;
+
+                            // response_meta.try_insert("content-length", dbg!(content_length));
+                            let mut meta = task_ctx.meta(literal!({
+                                "request": req_meta,
+                                "request_id": request_id.get(),
+                                "response": response_meta,
+                                "content-length": content_length,
+                            }));
+
+                            if let Some(corr_meta) = correlation_meta {
+                                meta.try_insert("correlation", corr_meta);
+                            }
+
                             let reply = SourceReply::Data {
                                 origin_uri,
                                 data,

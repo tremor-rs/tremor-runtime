@@ -13,95 +13,24 @@
 // limitations under the License.
 
 use either::Either;
-use futures::Stream;
+use http_body_util::Full;
 use hyper::body::Bytes;
-use std::pin::Pin;
-use std::task::Poll;
 
-/// A body of an HTTP request or response.
-pub struct Body {
-    pub(crate) data: Pin<Box<dyn Stream<Item = Result<Vec<u8>, std::io::Error>> + Send>>,
-}
-unsafe impl Send for Body {}
-unsafe impl Sync for Body {}
+/// We re-use Full from `http_body_util` crate which is a wrapper around
+/// `hyper::body::Bytes` and implements `http_body::Body` trait. This
+/// avoids introducing our own Body type
+pub type Body = Full<Bytes>;
 
-impl std::fmt::Debug for Body {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Body").finish()
-    }
+/// An empty body
+#[must_use]
+pub fn empty_body() -> Body {
+    Full::new(Bytes::new())
 }
 
-impl Default for Body {
-    fn default() -> Self {
-        Self::empty()
-    }
-}
-
-impl Body {
-    #[must_use]
-    /// Create a new body
-    pub fn new(data: Vec<u8>) -> Self {
-        Self {
-            data: Box::pin(futures::stream::once(async move { Ok(data) })),
-        }
-    }
-
-    #[must_use]
-    /// Create an empty body
-    pub fn empty() -> Self {
-        Self {
-            data: Box::pin(futures::stream::empty()),
-        }
-    }
-
-    pub(crate) fn wrap_stream(
-        stream: impl Stream<Item = Result<Vec<u8>, std::io::Error>> + Send + 'static,
-    ) -> Self {
-        Self {
-            data: Box::pin(stream),
-        }
-    }
-
-    // #[cfg(test)]
-    /// Create a new body from a string.
-    /// This is a test-only function.
-    /// It is not recommended to use this function in production code.
-    /// Use `Body::new` instead.
-    /// # Errors
-    /// Returns an error if the string cannot be converted to bytes.
-    pub async fn to_bytes(mut self) -> Result<Vec<u8>, std::io::Error> {
-        use futures::StreamExt;
-        let mut bytes_vec = Vec::new();
-
-        let mut data = self.data.as_mut();
-        // While there are items in the stream, append them to the bytes_vec.
-        while let Some(chunk) = data.next().await {
-            match chunk {
-                Ok(bytes) => {
-                    bytes_vec.extend_from_slice(&bytes);
-                }
-                Err(e) => return Err(e), // Return early with the error.
-            }
-        }
-
-        Ok(bytes_vec)
-    }
-}
-
-impl http_body::Body for Body {
-    type Data = Bytes;
-    type Error = std::io::Error;
-
-    fn poll_frame(
-        self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
-        let this = self.get_mut();
-        this.data
-            .as_mut()
-            .poll_next(cx)
-            .map(|opt| opt.map(|res| res.map(|data| http_body::Frame::data(data.into()))))
-    }
+/// Create a new body from bytes
+#[must_use]
+pub fn body_from_bytes(bytes: Vec<u8>) -> Body {
+    Full::new(Bytes::from(bytes))
 }
 
 #[derive(Deserialize, Debug, Clone)]
