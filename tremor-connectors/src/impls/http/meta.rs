@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::impls::http::utils::Body;
 use crate::{
-    impls::http::{client, utils::RequestId},
+    impls::http::{client, utils::Body, utils::RequestId},
     sink::EventSerializer,
     utils::mime::MimeCodecMap,
 };
@@ -23,12 +22,15 @@ use http::{
     header::{self, HeaderName, ToStrError},
     HeaderMap, Uri,
 };
+use http_body_util::BodyStream;
 use hyper::{header::HeaderValue, Method, Request, Response};
 use mime::Mime;
-use tokio::sync::mpsc::{channel, Sender};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tremor_config::NameWithConfig;
 use tremor_system::qsize;
 use tremor_value::prelude::*;
+
+use super::utils::body_from_bytes;
 
 /// HTTP Connector Errors
 #[derive(Debug, thiserror::Error)]
@@ -42,14 +44,19 @@ pub enum Error {
     /// Request already consumed
     #[error("Request already consumed")]
     RequestAlreadyConsumed,
+    /// Response already consumed
+    #[error("Response already consumed")]
+    ResponseAlreadyConsumed,
 }
 
 /// Utility for building an HTTP request from a possibly batched event
 /// and some configuration values
 pub(crate) struct HttpRequestBuilder {
     request_id: RequestId,
-    request: Option<hyper::Request<Body>>,
+    builder: Option<http::request::Builder>,
+    //request: Option<hyper::Request<BodyStream<Body>>>,
     chunk_tx: Sender<Vec<u8>>,
+    chunk_rx: Receiver<Vec<u8>>,
     codec_overwrite: Option<NameWithConfig>,
 }
 
@@ -166,20 +173,15 @@ impl HttpRequestBuilder {
             request = request.header(hyper::header::AUTHORIZATION, auth_header);
         }
 
-        let (chunk_tx, mut chunk_rx) = channel(qsize());
-        let body = Body::wrap_stream(async_stream::stream! {
-            while let Some(item) = chunk_rx.recv().await {
-                yield Ok::<_, std::io::Error>(item);
-            }
-        });
-        let request = request.body(body)?;
+        let (chunk_tx, chunk_rx) = channel::<Vec<u8>>(qsize());
 
         // extract headers
         // determine content-type, override codec and chunked encoding
         Ok(Self {
             request_id,
-            request: Some(request),
+            builder: Some(request),
             chunk_tx,
+            chunk_rx,
             codec_overwrite,
         })
     }
@@ -210,8 +212,20 @@ impl HttpRequestBuilder {
         Ok(())
     }
 
-    pub(super) fn take_request(&mut self) -> Result<Request<Body>, Error> {
-        self.request.take().ok_or(Error::RequestAlreadyConsumed)
+    pub(super) fn take_request(&mut self) -> Result<Request<BodyStream<Body>>, Error> {
+        let mut data = Vec::new();
+
+        // drain the channel
+        while let Ok(chunk) = self.chunk_rx.try_recv() {
+            data.extend(chunk);
+        }
+
+        let builder = self.builder.take().ok_or(Error::RequestAlreadyConsumed)?;
+        let body_stream = BodyStream::new(body_from_bytes(data));
+        let request = builder
+            .body(body_stream)
+            .map_err(|_| Error::RequestAlreadyConsumed)?;
+        Ok(request)
     }
     /// Finalize and send the response.
     /// In the chunked case we have already sent it before.
@@ -344,8 +358,10 @@ mod test {
         )?;
         let config = client::Config::new(&c)?;
 
+        dbg!("got here 0");
         let mut b = HttpRequestBuilder::new(request_id, meta, &codec_map, &config)?;
 
+        dbg!("got here 1");
         let r = b.take_request()?;
         b.finalize(&mut s).await?;
         assert_eq!(r.headers().get_all("pie").iter().count(), 1);

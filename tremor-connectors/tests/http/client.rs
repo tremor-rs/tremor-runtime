@@ -19,12 +19,13 @@ use hyper::StatusCode;
 use hyper::{service::service_fn, Response};
 use hyper_util::rt::TokioIo;
 use log::error;
-use std::net::SocketAddr;
+use rand::{seq::SliceRandom, thread_rng};
+use std::net::ToSocketAddrs;
 use tokio::net::TcpListener;
 use tokio::task::{spawn, JoinHandle};
 use tremor_common::url::HttpDefaults;
 use tremor_common::url::Url;
-use tremor_connectors::impls::http::utils::Body;
+use tremor_connectors::impls::http::utils::{body_from_bytes, Body};
 use tremor_connectors::{
     harness::Harness,
     impls::http::{self as http_impl, meta::content_type},
@@ -44,12 +45,28 @@ pub(crate) async fn find_free_tcp_endpoint_str() -> Result<String> {
     Ok(format!("localhost:{port}")) // NOTE we use localhost rather than an IP for cmopat with TLS
 }
 
+fn host_to_sockaddr(hostport: &str) -> Result<std::net::SocketAddr, String> {
+    let mut rng = thread_rng();
+    let socket_addrs: Vec<_> = hostport
+        .to_socket_addrs()
+        .map_err(|e| e.to_string())?
+        .collect();
+
+    if socket_addrs.is_empty() {
+        Err("No addresses found.".to_string())
+    } else {
+        socket_addrs
+            .choose(&mut rng) // Might be multihomed
+            .cloned()
+            .ok_or_else(|| "Random selection failed.".to_string())
+    }
+}
+
 struct TestHttpServer {
     acceptor: Option<JoinHandle<Result<()>>>,
 }
 
 async fn fake_server_dispatch(
-    _addr: SocketAddr,
     req: hyper::Request<Incoming>,
 ) -> std::result::Result<Response<Body>, Box<dyn std::error::Error + Send + Sync + 'static>> {
     let mut res = Response::builder().status(StatusCode::OK);
@@ -61,7 +78,8 @@ async fn fake_server_dispatch(
         hyper::header::CONTENT_TYPE,
         ct.unwrap_or(mime::TEXT_PLAIN).to_string(),
     );
-    let body = Body::new(data);
+
+    let body = body_from_bytes(data);
     Ok(res.body(body)?)
 }
 
@@ -70,10 +88,10 @@ impl TestHttpServer {
         let mut instance = TestHttpServer { acceptor: None };
         instance.acceptor = Some(spawn(async move {
             let url: Url<HttpDefaults> = Url::parse(&raw_url)?;
-            let host = url.host().expect("no host").to_string();
-            let port = url.port().expect("no port");
-
-            let addr = format!("{}:{}", host, port).parse::<SocketAddr>()?;
+            let host = url.host_str().unwrap_or("localhost");
+            let port = url.port().unwrap_or(666);
+            let hostport = format!("{host}:{port}");
+            let addr = host_to_sockaddr(&hostport).unwrap();
             if "https" == url.scheme() {
                 todo!();
                 // let cert_file = "./tests/localhost.cert";
@@ -101,7 +119,7 @@ impl TestHttpServer {
                 let io = TokioIo::new(tcp_stream);
 
                 tokio::task::spawn(async move {
-                    let service = service_fn(move |req| fake_server_dispatch(addr, req));
+                    let service = service_fn(fake_server_dispatch);
 
                     if let Err(err) = hyper::server::conn::http1::Builder::new()
                         .serve_connection(io, service)
@@ -152,6 +170,7 @@ async fn rtt(
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
+
     harness.send_to_sink(event).await?;
     let event = harness.out()?.get_event().await;
     let event = match event {
@@ -397,9 +416,8 @@ async fn http_client_request_override_headers() -> Result<()> {
         );
     });
 
-    assert_with_response_headers!(res, meta, {
-        assert_eq!(Some(&literal!(["2"])), meta.get("content-length"));
-    });
+    let length = res.meta().get("http_client").unwrap().get("content-length");
+    assert_eq!(Some(&literal!(2)), length);
 
     assert_eq!(Value::from("42"), res.value());
     Ok(())
@@ -446,12 +464,15 @@ async fn http_client_request_override_content_type() -> Result<()> {
     });
 
     assert_with_response_headers!(res, meta, {
-        assert_eq!(Some(&literal!(["24"])), meta.get("content-length"));
+        // assert_eq!(Some(&literal!(["24"])), meta.get("content-length")); - NOTE - changes in hyper from 0.14 - 1x - see below for alternate
         assert_eq!(
             Some(&literal!(["application/json"])),
             meta.get("content-type")
         );
     });
+
+    let length = res.meta().get("http_client").unwrap().get("content-length");
+    assert_eq!(Some(&literal!(24)), length);
 
     assert_eq!(
         literal!([
@@ -504,13 +525,16 @@ async fn http_client_request_auth_none() -> Result<()> {
     });
 
     assert_with_response_headers!(res, meta, {
-        assert_eq!(Some(&literal!(["17"])), meta.get("content-length"));
+        // assert_eq!(Some(&literal!(["17"])), meta.get("content-length")); NOTE - changes in hyper from 0.14 - 1x - see below for alternate
         // the server mirrors the request content-type
         assert_eq!(
             Some(&literal!(["application/json"])),
             meta.get(hyper::header::CONTENT_TYPE.as_str())
         );
     });
+
+    let length = res.meta().get("http_client").unwrap().get("content-length");
+    assert_eq!(Some(&literal!(17)), length);
 
     assert_eq!(
         literal!({
@@ -579,12 +603,15 @@ async fn http_client_request_auth_basic() -> Result<()> {
     });
 
     assert_with_response_headers!(res, meta, {
-        assert_eq!(Some(&literal!(["17"])), meta.get("content-length"));
+        // assert_eq!(Some(&literal!(["17"])), res.meta().get("content-length"));
         assert_eq!(
             Some(&literal!(["application/json"])),
             meta.get("content-type")
         );
     });
+
+    let length = res.meta().get("http_client").unwrap().get("content-length");
+    assert_eq!(Some(&literal!(17)), length);
 
     assert_eq!(literal!({"snot": "badger"}), res.value());
     Ok(())

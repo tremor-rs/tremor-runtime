@@ -22,7 +22,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
-use tremor_connectors::impls::http::utils::Body;
+use tremor_connectors::impls::http::utils::{empty_body, Body};
 use tremor_connectors::{
     harness::Harness,
     impls::http::{meta::content_type, server},
@@ -64,7 +64,6 @@ where
             connector.send_to_sink(event).await?;
         }
         let (_out, _err) = connector.stop().await?;
-
         anyhow::Ok(())
     });
 
@@ -119,7 +118,7 @@ async fn http_server_test_basic() -> Result<()> {
         let req = Request::builder()
             .method("GET")
             .uri(url.as_str())
-            .body(Body::empty())?;
+            .body(empty_body())?;
         result = handle_req(
             req,
             |req_data| {
@@ -146,7 +145,7 @@ async fn http_server_test_basic() -> Result<()> {
     }
     let result = result?;
 
-    assert_eq!(StatusCode::CREATED, result.status());
+    let status = result.status();
     let h = result
         .headers()
         .get("content-type")
@@ -154,7 +153,9 @@ async fn http_server_test_basic() -> Result<()> {
     let body = result.collect().await?;
     let mut body = body.to_bytes().to_vec();
     let body = simd_json::from_slice::<Value>(&mut body)?.into_static();
+
     assert_eq!(Some(b"application/json; charset=UTF-8".to_vec()), h);
+    assert_eq!(StatusCode::CREATED, status);
     assert_eq!(
         literal!({
             "meta": {
@@ -185,7 +186,7 @@ async fn http_server_test_query() -> Result<()> {
         .method("PATCH")
         .uri(req_url.clone())
         .header("content-type", "text/plain")
-        .body(Body::new(body_bytes))?;
+        .body(Body::new(body_bytes.into()))?;
 
     let  result = handle_req(
         req,
@@ -200,7 +201,7 @@ async fn http_server_test_query() -> Result<()> {
                         "status": 400,
                         "headers": {
                             "some-other-header": ["foo", "bar"],
-                            "content-type": "application/json"
+                            "content-type": "application/json",
                         }
                     }
                 }
@@ -234,9 +235,8 @@ async fn http_server_test_query() -> Result<()> {
                 "protocol": "http",
                 "uri": "/path/path/path?query=yes&another",
                 "headers": {
-                    // "content-length": ["12"],
+                    "content-length": ["12"],
                     "content-type": ["text/plain"],
-                    "transfer-encoding": ["chunked"],
                     "host": [format!("localhost:{port}")],
                 },
                 "method": "PATCH",
@@ -259,7 +259,7 @@ async fn http_server_test_chunked() -> Result<()> {
             hyper::header::CONTENT_TYPE,
             mime::APPLICATION_OCTET_STREAM.to_string(),
         )
-        .body(Body::new("A".repeat(1024).into_bytes()))?;
+        .body(Body::new("A".repeat(1024).into()))?;
 
     let result = handle_req(
         req,
@@ -407,7 +407,7 @@ async fn https_server_test() -> Result<()> {
     let req = hyper::Request::builder()
         .method("DELETE")
         .uri(&url)
-        .body(Body::empty())?;
+        .body(empty_body())?;
     let one_sec = Duration::from_secs(1);
     let mut response = timeout(one_sec, client.request(req)).await;
 
@@ -418,7 +418,7 @@ async fn https_server_test() -> Result<()> {
         let req = hyper::Request::builder()
             .method("DELETE")
             .uri(&url)
-            .body(Body::empty())?;
+            .body(empty_body())?;
         if start.elapsed() > max_timeout {
             return Err(anyhow!("Timeout waiting for HTTPS server to boot up: {e}"));
         }
@@ -440,8 +440,6 @@ meta:
   headers:
     host:
     - localhost:{port}
-    transfer-encoding:
-    - chunked
   method: DELETE
 value: null
   "#
