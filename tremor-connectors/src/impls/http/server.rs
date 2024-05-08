@@ -59,7 +59,7 @@ pub(crate) struct Config {
     url: Url,
     /// TLS configuration, if required
     tls: Option<TLSServerConfig>,
-    /// custom codecs mapping from mime_type to custom codec name
+    /// custom codecs mapping from `mime_type` to custom codec name
     /// e.g. for handling `application/json` with the `binary` codec, if desired
     /// the mime type of `*/*` serves as a default / fallback
     mime_mapping: Option<HashMap<String, NameWithConfig>>,

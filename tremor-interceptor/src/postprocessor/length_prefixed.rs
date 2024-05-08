@@ -18,11 +18,11 @@ use std::io::Write;
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-use super::StatelessPostprocessor;
+use super::Stateless;
 
 #[derive(Clone, Default)]
 pub(crate) struct LengthPrefixed {}
-impl StatelessPostprocessor for LengthPrefixed {
+impl Stateless for LengthPrefixed {
     fn name(&self) -> &str {
         "length-prefix"
     }

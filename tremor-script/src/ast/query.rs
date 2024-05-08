@@ -230,7 +230,7 @@ pub type Config<'script> = Vec<(String, ImutExpr<'script>)>;
 /// A pipeline definition
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PipelineDefinition<'script> {
-    /// The ID and Module of the PipelineDefinition
+    /// The ID and Module of the `PipelineDefinition`
     pub id: String,
     /// metadata id
     pub(crate) mid: Box<NodeMeta>,
@@ -366,7 +366,7 @@ impl<'script> WindowDefinition<'script> {
 /// A select statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Select<'script> {
-    /// MetadataID of the statement
+    /// `MetadataID` of the statement
     pub mid: Box<NodeMeta>,
     /// The from clause
     pub from: (Ident<'script>, Ident<'script>),

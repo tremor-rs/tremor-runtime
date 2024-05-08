@@ -127,7 +127,7 @@ pub(crate) const NO_CONTEXT: EventContext<'static> = EventContext {
 /// Context in that an event is executed
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize)]
 pub struct EventContext<'run> {
-    /// The ingest_ns
+    /// The `ingest_ns`
     at: u64,
     /// URI of the origin
     pub origin_uri: Option<&'run EventOriginUri>,

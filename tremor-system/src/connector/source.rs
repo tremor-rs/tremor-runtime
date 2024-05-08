@@ -77,7 +77,7 @@ pub enum Msg {
     Resume,
     /// stop the source
     Stop(Sender<Result<(), anyhow::Error>>),
-    /// drain the source - bears a sender for sending out a SourceDrained status notification
+    /// drain the source - bears a sender for sending out a `SourceDrained` status notification
     Drain(Sender<connector::Msg>),
     /// Forces syncronization with the source
     Synchronize(tokio::sync::oneshot::Sender<()>),

@@ -591,9 +591,9 @@ impl Highlighter for Dumb {
     }
 }
 
-impl ToString for Dumb {
-    fn to_string(&self) -> String {
-        String::from_utf8_lossy(&self.buff).to_string()
+impl std::fmt::Display for Dumb {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{}", String::from_utf8_lossy(&self.buff))
     }
 }
 
@@ -667,9 +667,9 @@ impl Highlighter for Term {
     }
 }
 
-impl ToString for Term {
-    fn to_string(&self) -> String {
-        String::from_utf8_lossy(self.buff.as_slice()).to_string()
+impl std::fmt::Display for Term {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{}", String::from_utf8_lossy(self.buff.as_slice()))
     }
 }
 

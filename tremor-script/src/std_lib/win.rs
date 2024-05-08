@@ -46,7 +46,7 @@ impl TremorAggrFn for First {
         // we had no value
         if let Some(other) = src.downcast_ref::<Self>() {
             if self.0.is_none() {
-                self.0 = other.0.clone();
+                self.0.clone_from(&other.0);
             }
         }
         Ok(())
@@ -83,7 +83,7 @@ impl TremorAggrFn for Last {
             // On self is earlier then other, so as long
             // as other has a value we take it
             if other.0.is_some() {
-                self.0 = other.0.clone();
+                self.0.clone_from(&other.0);
             }
         }
         Ok(())

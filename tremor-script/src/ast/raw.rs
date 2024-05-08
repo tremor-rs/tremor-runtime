@@ -296,9 +296,9 @@ impl<'script> IdentRaw<'script> {
     }
 }
 
-impl<'script> ToString for IdentRaw<'script> {
-    fn to_string(&self) -> String {
-        self.id.to_string()
+impl<'script> std::fmt::Display for IdentRaw<'script> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.id.fmt(f)
     }
 }
 

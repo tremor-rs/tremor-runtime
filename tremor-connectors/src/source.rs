@@ -67,7 +67,7 @@ pub enum SourceReply {
         /// stream id of the data
         /// if no stream is provided, this data is treated as a discrete unit,
         /// not part of any stream. preprocessors will be finalized after this etc.
-        /// The event_id will have the `DEFAULT_STREAM_ID` set as stream_id.
+        /// The `event_id` will have the `DEFAULT_STREAM_ID` set as `stream_id`.
         stream: Option<u64>,
         /// Port to send to, defaults to `out`
         port: Option<Port<'static>>,

@@ -25,16 +25,17 @@ pub struct ConstDoc {
     pub value_type: ValueType,
 }
 
-impl ToString for ConstDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
+impl std::fmt::Display for ConstDoc {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            r"
 ### {}
 
 *type*: {:?}
 
 {}
-"#,
+",
             self.name,
             self.value_type,
             &self.doc.clone().unwrap_or_default()
@@ -56,14 +57,15 @@ pub struct FnDoc {
     pub open: bool,
 }
 
-impl ToString for FnDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
+impl std::fmt::Display for FnDoc {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            r"
 ### {}({})
 
 {}
-"#,
+",
             self.name,
             self.args.join(", "),
             self.doc.clone().unwrap_or_default()
@@ -85,11 +87,11 @@ impl ModDoc {
     #[must_use]
     pub fn print_with_name(&self, name: &str) -> String {
         format!(
-            r#"
+            r"
 # {}
 
 {}
-"#,
+",
             name,
             &self.doc.clone().unwrap_or_default()
         )
@@ -105,14 +107,15 @@ pub struct QueryDoc {
     pub doc: Option<String>,
 }
 
-impl ToString for QueryDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
+impl std::fmt::Display for QueryDoc {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            r"
 ### {}
 
 {}
-"#,
+",
             self.name,
             &self.doc.clone().unwrap_or_default()
         )
@@ -128,14 +131,15 @@ pub struct FlowDoc {
     pub doc: Option<String>,
 }
 
-impl ToString for FlowDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
+impl std::fmt::Display for ModDoc {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            r"
 ### {}
 
 {}
-"#,
+",
             self.name,
             &self.doc.clone().unwrap_or_default()
         )

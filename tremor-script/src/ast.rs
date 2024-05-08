@@ -558,7 +558,7 @@ impl_expr!(Const);
 pub enum Expr<'script> {
     /// Match expression
     Match(Box<Match<'script, Self>>),
-    /// IfElse style match expression
+    /// `IfElse` style match expression
     IfElse(Box<IfElse<'script, Self>>),
     /// Assignment expression
     Assign {

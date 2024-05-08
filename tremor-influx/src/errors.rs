@@ -30,7 +30,7 @@ pub enum EncoderError {
     Io(io::Error),
     /// a required field is missing
     MissingField(&'static str),
-    /// InvalidType
+    /// `InvalidType`
     TypeError(value_trait::TryTypeError),
 }
 
