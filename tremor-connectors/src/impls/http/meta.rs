@@ -360,7 +360,6 @@ mod test {
 
         let mut b = HttpRequestBuilder::new(request_id, meta, &codec_map, &config)?;
 
-        dbg!("got here 1");
         let r = b.take_request()?;
         b.finalize(&mut s).await?;
         assert_eq!(r.headers().get_all("pie").iter().count(), 1);
