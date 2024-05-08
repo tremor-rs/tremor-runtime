@@ -6764,7 +6764,6 @@ version = "0.13.0-rc.23"
 dependencies = [
  "anyhow",
  "async-compression",
- "async-stream",
  "async-trait",
  "base64 0.22.1",
  "beef",
@@ -6781,7 +6780,6 @@ dependencies = [
  "event-listener 5.3.0",
  "file-mode",
  "futures",
- "futures-core",
  "gouth",
  "halfbrown",
  "hdrhistogram",
@@ -7061,7 +7059,6 @@ dependencies = [
  "async-trait",
  "aws-config",
  "aws-sdk-s3",
- "aws-smithy-http",
  "aws-types",
  "cron",
  "elasticsearch",
