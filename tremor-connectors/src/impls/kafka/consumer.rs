@@ -1014,7 +1014,7 @@ impl TopicResolver {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     #![allow(clippy::ignored_unit_patterns)]
     use super::{Config, Offset, TopicResolver};
     use proptest::prelude::*;

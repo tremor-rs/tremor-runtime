@@ -117,8 +117,9 @@ impl Default for Config {
     }
 }
 
+/// Exit connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {

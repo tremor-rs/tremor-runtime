@@ -60,8 +60,9 @@ pub(crate) struct Config {
 
 impl tremor_config::Impl for Config {}
 
+/// Discord connector
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
