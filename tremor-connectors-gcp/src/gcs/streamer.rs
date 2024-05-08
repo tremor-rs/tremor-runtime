@@ -97,8 +97,9 @@ impl Config {
     }
 }
 
+/// Builder for GCS Streamer
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 /// stolen from rust std-lib, where it is still guarded behind an unstable feature #yolo
 const fn next_multiple_of(l: usize, multiple: usize) -> usize {

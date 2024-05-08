@@ -60,8 +60,9 @@ impl std::fmt::Debug for Client {
     }
 }
 
+/// The `OpenTelemetry` client connector builder
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {

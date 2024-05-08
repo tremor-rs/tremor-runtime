@@ -333,7 +333,7 @@ pub(super) fn extract_response_meta<B>(
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::CodecReq;
     use crate::ConnectorType;
     use tremor_common::alias;

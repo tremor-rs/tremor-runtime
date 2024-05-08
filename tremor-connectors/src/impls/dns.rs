@@ -85,4 +85,5 @@
 //! If type is not specified `A` records will be looked up by default
 //! :::
 
-pub(crate) mod client;
+/// The dns connector provides integration with the `dns` service and is able to query dns servers
+pub mod client;

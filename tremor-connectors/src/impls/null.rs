@@ -88,8 +88,9 @@
 
 use crate::{sink::prelude::*, source::prelude::*};
 
+/// The `null` connector is a connector that deletes all incoming data
 #[derive(Default, Debug)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {

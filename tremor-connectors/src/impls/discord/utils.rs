@@ -223,7 +223,7 @@ pub(crate) fn to_reactions(v: &Value) -> Option<Vec<ReactionType>> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     #[test]
     fn to_reaction_test() {

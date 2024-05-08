@@ -189,9 +189,8 @@ enum Error {
 }
 
 /// builder for the metrics connector
-
 #[derive(Debug, Default)]
-pub(crate) struct Builder {}
+pub struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
