@@ -103,7 +103,7 @@ struct Rate {
     max: u64,
     /// time range in milliseconds, (default: 1000 - 1 second)
     time_range: u64,
-    /// numbers of window in the time_range (default: 100)
+    /// numbers of window in the `time_range` (default: 100)
     windows: usize,
 }
 

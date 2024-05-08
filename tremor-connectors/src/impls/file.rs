@@ -198,7 +198,7 @@ pub(crate) struct Config {
     pub(crate) path: PathBuf,
     /// how to interface with the file
     pub(crate) mode: Mode, // whether we read or write (in various forms)
-    /// chunk_size to read from the file
+    /// `chunk_size` to read from the file
     #[serde(default = "crate::utils::default_buf_size")]
     pub(crate) chunk_size: usize,
 }

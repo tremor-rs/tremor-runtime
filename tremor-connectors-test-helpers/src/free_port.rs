@@ -80,7 +80,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_free_tcp_port() {
-        let port = find_free_tcp_port().await.unwrap();
+        let port = find_free_tcp_port().await.expect("no port found");
         assert!(port >= *FreePort::RANGE.start());
         assert!(port <= *FreePort::RANGE.end());
 
@@ -94,7 +94,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_free_udp_port() {
-        let port = find_free_udp_port().await.unwrap();
+        let port = find_free_udp_port().await.expect("no port found");
         assert!(port >= *FreePort::RANGE.start());
         assert!(port <= *FreePort::RANGE.end());
 

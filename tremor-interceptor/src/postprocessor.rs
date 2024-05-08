@@ -79,8 +79,8 @@ pub trait Postprocessor: Send + Sync {
 }
 
 /// A simpliefied version of `Postprocessor` that does not require any state, it ignores the `ingres_ns` and `egress_ns` parameters.
-/// and `finish`` is implemented as a passthrough to `process``.
-pub trait StatelessPostprocessor: Send + Sync {
+/// and `finish` is implemented as a passthrough to `process`.
+pub trait Stateless: Send + Sync {
     /// Canonical name of the postprocessor
     fn name(&self) -> &str;
     /// process data
@@ -93,7 +93,7 @@ pub trait StatelessPostprocessor: Send + Sync {
 
 impl<T> Postprocessor for T
 where
-    T: StatelessPostprocessor,
+    T: Stateless,
 {
     fn name(&self) -> &str {
         self.name()
@@ -105,12 +105,12 @@ where
         _egress_ns: u64,
         data: &[u8],
     ) -> anyhow::Result<Vec<Vec<u8>>> {
-        StatelessPostprocessor::process(&*self, data)
+        Stateless::process(&*self, data)
     }
 
     fn finish(&mut self, data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
         if let Some(data) = data {
-            (&*self).process(data)
+            (*self).process(data)
         } else {
             Ok(vec![])
         }
@@ -308,7 +308,7 @@ mod test {
     #[derive(Default)]
     struct Reverse {}
 
-    impl StatelessPostprocessor for Reverse {
+    impl Stateless for Reverse {
         fn name(&self) -> &str {
             "reverse"
         }

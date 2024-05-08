@@ -18,7 +18,7 @@
 //! |-------------|--------------------------------------------------------|----------|---------------|
 //! | `separator` | The separator to append after each event's byte stream | no       | `\n`          |
 
-use super::StatelessPostprocessor;
+use super::Stateless;
 use crate::preprocessor::separate::{default_separator, DEFAULT_SEPARATOR};
 use serde::Deserialize;
 use tremor_config::{Impl as ConfigImpl, Map as ConfigMap};
@@ -74,7 +74,7 @@ impl Separate {
     }
 }
 
-impl StatelessPostprocessor for Separate {
+impl Stateless for Separate {
     fn name(&self) -> &str {
         "join"
     }

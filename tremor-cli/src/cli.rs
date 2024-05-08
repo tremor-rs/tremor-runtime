@@ -20,7 +20,7 @@ pub(crate) struct Cli {
     /// Instance identifier
     #[clap(short, long, default_value = "tremor", value_parser = clap::value_parser!(String))]
     pub(crate) instance: String,
-    /// Configuration for Log4RS
+    /// Configuration for `Log4RS`
     #[clap(short, long, value_parser = clap::value_parser!(String))]
     pub(crate) logger_config: Option<String>,
     #[clap(subcommand)]
@@ -112,14 +112,14 @@ pub(crate) enum TestMode {
     Unit,
 }
 
-impl ToString for TestMode {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for TestMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TestMode::Bench => "bench".to_string(),
-            TestMode::Integration => "integration".to_string(),
-            TestMode::Command => "command".to_string(),
-            TestMode::Unit => "unit".to_string(),
-            TestMode::All => "all".to_string(),
+            TestMode::All => write!(f, "all"),
+            TestMode::Bench => write!(f, "bench"),
+            TestMode::Command => write!(f, "command"),
+            TestMode::Integration => write!(f, "integration"),
+            TestMode::Unit => write!(f, "unit"),
         }
     }
 }

@@ -142,7 +142,7 @@ mod test {
 
         let resolved = resolve(&config, sdk_config).load().await;
 
-        matches!(resolved.credentials_provider(), Some(_));
+        assert!(resolved.credentials_provider().is_some());
         let credentials = resolved
             .credentials_provider()
             .expect("credentials provider")
@@ -172,7 +172,7 @@ mod test {
 
         let resolved = resolve(&config, sdk_config).load().await;
 
-        matches!(resolved.credentials_provider(), Some(_));
+        assert!(resolved.credentials_provider().is_some());
         let credentials = resolved
             .credentials_provider()
             .expect("credentials provider")

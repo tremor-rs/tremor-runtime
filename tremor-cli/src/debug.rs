@@ -55,7 +55,7 @@ impl Dbg {
 
             h.finalize()?;
             h.reset()?;
-            println!("{}", h.to_string());
+            println!("{h}");
             r?;
         } else {
             let mut h = TermHighlighter::default();
