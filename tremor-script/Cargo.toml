@@ -59,6 +59,7 @@ tremor-kv = "0.6"
 unicode-xid = "0.2"
 url = "2"
 xz2 = "0.1"
+qwal = "0.1.0"
 
 [build-dependencies]
 lalrpop = "0.20"
