@@ -358,7 +358,6 @@ mod test {
         )?;
         let config = client::Config::new(&c)?;
 
-        dbg!("got here 0");
         let mut b = HttpRequestBuilder::new(request_id, meta, &codec_map, &config)?;
 
         dbg!("got here 1");
