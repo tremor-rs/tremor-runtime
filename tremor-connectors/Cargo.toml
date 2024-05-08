@@ -107,7 +107,7 @@ tokio-tungstenite = { version = "0.20", optional = true, default-features = fals
 ] }
 
 # discord
-serenity = { version = "0.11", optional = true, default-features = false, features = [
+serenity = { version = "0.12", optional = true, default-features = false, features = [
     "client",
     "gateway",
     "rustls_backend",
