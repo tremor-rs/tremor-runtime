@@ -14,12 +14,12 @@
 
 //! Encodes raw data into base64 encoded bytes.
 
-use super::StatelessPostprocessor;
+use super::Stateless;
 use tremor_common::base64;
 
 #[derive(Default)]
 pub(crate) struct Base64 {}
-impl StatelessPostprocessor for Base64 {
+impl Stateless for Base64 {
     fn name(&self) -> &str {
         "base64"
     }
@@ -33,7 +33,7 @@ impl StatelessPostprocessor for Base64 {
 mod test {
     use super::*;
     #[test]
-    fn base64() -> anyhow::Result<()> {
+    fn base64() {
         let post = Base64 {};
         let data: [u8; 0] = [];
 
@@ -42,6 +42,5 @@ mod test {
         assert_eq!(post.process(b"\n").ok(), Some(vec![b"Cg==".to_vec()]));
 
         assert_eq!(post.process(b"snot").ok(), Some(vec![b"c25vdA==".to_vec()]));
-        Ok(())
     }
 }

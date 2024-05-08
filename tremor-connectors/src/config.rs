@@ -34,7 +34,7 @@ pub enum Reconnect {
     Retry {
         /// start interval to wait after a failing connect attempt
         interval_ms: u64,
-        /// growth rate for consecutive connect attempts, will be added to interval_ms
+        /// growth rate for consecutive connect attempts, will be added to `interval_ms`
         #[serde(default = "default_growth_rate")]
         growth_rate: f64,
         /// maximum number of retries to execute

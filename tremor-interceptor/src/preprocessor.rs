@@ -181,7 +181,7 @@ fn finish_and_error(
             pp.name()
         );
     }
-    Ok(res?)
+    res
 }
 /// Canonical way to finish preprocessors up
 ///

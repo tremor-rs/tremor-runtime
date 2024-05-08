@@ -59,7 +59,7 @@
 //!
 //! Xz compression when wrong compression level is specified gives an `Err`.
 
-use super::StatelessPostprocessor;
+use super::Stateless;
 use std::{
     io::{Cursor, Write},
     str::{self, FromStr},
@@ -121,10 +121,7 @@ impl FromStr for Algorithm {
 }
 
 impl Algorithm {
-    pub fn into_postprocessor(
-        self,
-        config: Option<&Value>,
-    ) -> Result<Box<dyn StatelessPostprocessor>, Error> {
+    pub fn into_postprocessor(self, config: Option<&Value>) -> Result<Box<dyn Stateless>, Error> {
         if let Some(compression_level) = config.get_i64("level") {
             match self {
                 Algorithm::Xz2 => Ok(Xz2::with_config(compression_level)?),
@@ -133,7 +130,7 @@ impl Algorithm {
                 _ => Err(Error::CompressionLevelNotSupported),
             }
         } else {
-            let codec: Box<dyn StatelessPostprocessor> = match self {
+            let codec: Box<dyn Stateless> = match self {
                 Algorithm::Gzip => Box::<Gzip>::default(),
                 Algorithm::Zlib => Box::<Zlib>::default(),
                 Algorithm::Xz2 => Box::<Xz2>::default(),
@@ -149,7 +146,7 @@ impl Algorithm {
 
 #[derive(Default)]
 struct Gzip {}
-impl StatelessPostprocessor for Gzip {
+impl Stateless for Gzip {
     fn name(&self) -> &str {
         "gzip"
     }
@@ -167,7 +164,7 @@ impl StatelessPostprocessor for Gzip {
 struct Brotli {
     params: brotli::enc::BrotliEncoderParams,
 }
-impl StatelessPostprocessor for Brotli {
+impl Stateless for Brotli {
     fn name(&self) -> &str {
         "br"
     }
@@ -183,7 +180,7 @@ impl StatelessPostprocessor for Brotli {
 
 #[derive(Default)]
 struct Zlib {}
-impl StatelessPostprocessor for Zlib {
+impl Stateless for Zlib {
     fn name(&self) -> &str {
         "zlib"
     }
@@ -208,7 +205,7 @@ pub enum Xz2Error {
     InvalidCompressionLevel(i64),
 }
 impl Xz2 {
-    fn with_config(level: i64) -> Result<Box<dyn StatelessPostprocessor>, Xz2Error> {
+    fn with_config(level: i64) -> Result<Box<dyn Stateless>, Xz2Error> {
         if !(0..=9).contains(&level) {
             return Err(Xz2Error::InvalidCompressionLevel(level));
         }
@@ -220,7 +217,7 @@ impl Xz2 {
         }))
     }
 }
-impl StatelessPostprocessor for Xz2 {
+impl Stateless for Xz2 {
     fn name(&self) -> &str {
         "xz2"
     }
@@ -242,7 +239,7 @@ impl Default for Xz2 {
 
 #[derive(Default)]
 struct Snappy {}
-impl StatelessPostprocessor for Snappy {
+impl Stateless for Snappy {
     fn name(&self) -> &str {
         "snappy"
     }
@@ -267,7 +264,7 @@ pub enum Lz4Error {
     InvalidCompressionLevel(i64),
 }
 impl Lz4 {
-    pub fn with_config(level: i64) -> Result<Box<dyn StatelessPostprocessor>, Lz4Error> {
+    pub fn with_config(level: i64) -> Result<Box<dyn Stateless>, Lz4Error> {
         if level < 0 {
             return Err(Lz4Error::InvalidCompressionLevel(level));
         }
@@ -279,7 +276,7 @@ impl Lz4 {
         }))
     }
 }
-impl StatelessPostprocessor for Lz4 {
+impl Stateless for Lz4 {
     fn name(&self) -> &str {
         "lz4"
     }
@@ -315,7 +312,7 @@ pub enum ZstdError {
 }
 
 impl Zstd {
-    pub fn with_config(level: i64) -> Result<Box<dyn StatelessPostprocessor>, ZstdError> {
+    pub fn with_config(level: i64) -> Result<Box<dyn Stateless>, ZstdError> {
         if !(-7..=22).contains(&level) {
             return Err(ZstdError::InvalidCompressionLevel(level));
         }
@@ -327,7 +324,7 @@ impl Zstd {
         }))
     }
 }
-impl StatelessPostprocessor for Zstd {
+impl Stateless for Zstd {
     fn name(&self) -> &str {
         "zstd"
     }
@@ -339,7 +336,7 @@ impl StatelessPostprocessor for Zstd {
     }
 }
 pub(crate) struct Compress {
-    codec: Box<dyn StatelessPostprocessor>,
+    codec: Box<dyn Stateless>,
 }
 impl Compress {
     pub(crate) fn from_config(config: Option<&Value>) -> Result<Self, super::Error> {
@@ -358,7 +355,7 @@ impl Compress {
         }
     }
 }
-impl StatelessPostprocessor for Compress {
+impl Stateless for Compress {
     fn name(&self) -> &str {
         "compress"
     }

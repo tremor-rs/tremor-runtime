@@ -49,7 +49,7 @@ pub enum Error {
     /// Missing configuration
     #[error("{0} Missing Configuration")]
     MissingConfiguration(alias::Connector),
-    /// BuildCfg is unimplemented
+    /// `BuildCfg` is unimplemented
     #[error("{0} build_cfg is unimplemented")]
     BuildCfg(alias::Connector),
     /// Value error

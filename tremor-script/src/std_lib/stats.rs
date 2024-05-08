@@ -477,7 +477,7 @@ impl TremorAggrFn for Dds {
         let other: Option<&Self> = src.downcast_ref::<Self>();
         if let Some(other) = other {
             if !self.percentiles_set {
-                self.percentiles = other.percentiles.clone();
+                self.percentiles.clone_from(&other.percentiles);
                 self.percentiles_set = true;
             };
 
@@ -636,7 +636,7 @@ impl TremorAggrFn for Hdr {
             // On self is earlier then other, so as long
             // as other has a value we take it
             if !self.percentiles_set {
-                self.percentiles = other.percentiles.clone();
+                self.percentiles.clone_from(&other.percentiles);
                 self.percentiles_set = true;
             };
             self.high_bound = max(self.high_bound, other.high_bound);

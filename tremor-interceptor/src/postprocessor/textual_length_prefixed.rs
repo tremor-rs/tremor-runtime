@@ -14,12 +14,12 @@
 
 //! Prefixes the data with the length of the event data in bytes as an unsigned 64 bit big-endian integer.
 
-use super::StatelessPostprocessor;
+use super::Stateless;
 use std::io::Write;
 
 #[derive(Clone, Default)]
 pub(crate) struct TextualLengthPrefixed {}
-impl StatelessPostprocessor for TextualLengthPrefixed {
+impl Stateless for TextualLengthPrefixed {
     fn name(&self) -> &str {
         "textual-length-prefixed"
     }

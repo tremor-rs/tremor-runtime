@@ -30,37 +30,37 @@ use tremor_value::prelude::*;
 pub(crate) enum Intents {
     /// Guilds Grouping
     Guilds,
-    /// GuildMembers Grouping
+    /// `GuildMembers` Grouping
     GuildMembers,
-    /// GuildBans Grouping
+    /// `GuildBans` Grouping
     GuildBans,
-    /// GuildEmojis Grouping
+    /// `GuildEmojis` Grouping
     GuildEmojis,
-    /// GuildIntegrations Grouping
+    /// `GuildIntegrations` Grouping
     GuildIntegrations,
-    /// GuildWebHooks Grouping
+    /// `GuildWebHooks` Grouping
     GuildWebHooks,
-    /// GuildInvites Grouping
+    /// `GuildInvites` Grouping
     GuildInvites,
-    /// GuildVoiceStates
+    /// `GuildVoiceStates`
     GuildVoiceStates,
-    /// GuildPresence
+    /// `GuildPresence`
     GuildPresence,
-    /// GuildMessages
+    /// `GuildMessages`
     GuildMessages,
-    /// GuildMessageReactions
+    /// `GuildMessageReactions`
     GuildMessageReactions,
-    /// GuildMessageTyping
+    /// `GuildMessageTyping`
     GuildMessageTyping,
-    /// DirectMessages
+    /// `DirectMessages`
     DirectMessages,
-    /// DirectMessageReactions
+    /// `DirectMessageReactions`
     DirectMessageReactions,
-    /// DirectMessageTyping
+    /// `DirectMessageTyping`
     DirectMessageTyping,
-    /// MessageContent
+    /// `MessageContent`
     MessageContent,
-    /// ScheduledEvents
+    /// `ScheduledEvents`
     ScheduledEvents,
     /// All intents
     All,

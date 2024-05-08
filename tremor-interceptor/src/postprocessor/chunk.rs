@@ -135,7 +135,7 @@ impl Postprocessor for Chunk {
 /// Chunk postprocessor error
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    /// MaxBytes is zero
+    /// `MaxBytes` is zero
     #[error("`max_bytes` must be > 0")]
     MaxBytesZero,
 }
