@@ -18,7 +18,10 @@ tremor-value = { path = "../tremor-value", version = "0.13.0-rc.23" }
 tremor-interceptor = { path = "../tremor-interceptor", version = "0.13.0-rc.23" }
 tremor-system = { path = "../tremor-system", version = "0.13.0-rc.23" }
 
-tokio = { version = "1.34", default-features = false, features = ["test-util"] }
+tokio = { version = "1.34", default-features = false, features = [
+    "full",
+    "test-util",
+] }
 beef = { version = "0.5", default-features = false }
 value-trait = { version = "0.8", default-features = false }
 futures = { version = "0.3", default-features = false }
@@ -97,7 +100,7 @@ reqwest = { version = "0.11", optional = true, default-features = false, feature
 ] }
 base64 = { version = "0.22", optional = true, default-features = false }
 dashmap = { version = "5.5", optional = true, default-features = false }
-tide = { version = "0.16", optional = true, default-features = false } # TODO remove tide from TestHttpServer
+
 # kafka
 rdkafka = { version = "0.36", optional = true, features = [
     "cmake-build",
@@ -170,6 +173,7 @@ bytes = "1.0"
 tempfile = { version = "3.8", default-features = false }
 env_logger = "0.11"
 tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.23" }
+tide = { version = "0.16", default-features = false }      # TODO remove tide from TestHttpServer
 
 [features]
 default = [
@@ -229,7 +233,6 @@ http = [
     "dep:hyper-util",
     "dep:hyper",
     "dep:mime",
-    "dep:tide",
     "dep:reqwest",
     "hyper/http1",
     "hyper/http2",
