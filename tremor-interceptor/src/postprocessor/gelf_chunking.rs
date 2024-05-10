@@ -107,7 +107,7 @@ mod test {
         let gelf = super::Gelf::default();
         assert_eq!(gelf.name(), "gelf");
     }
-    
+
     #[test]
     fn simple_encode_decode() -> anyhow::Result<()> {
         let mut ingest_ns = 0;
