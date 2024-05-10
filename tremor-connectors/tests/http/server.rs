@@ -186,7 +186,7 @@ async fn http_server_test_query() -> Result<()> {
         .method("PATCH")
         .uri(req_url.clone())
         .header("content-type", "text/plain")
-        .body(Body::new(body_bytes.into()))?;
+        .body(Full<Bytes>::new(body_bytes.into()))?;
 
     let  result = handle_req(
         req,
