@@ -259,7 +259,7 @@ async fn http_server_test_chunked() -> Result<()> {
             hyper::header::CONTENT_TYPE,
             mime::APPLICATION_OCTET_STREAM.to_string(),
         )
-        .body(Body::new("A".repeat(1024).into()))?;
+        .body(Full<Bytes>::new("A".repeat(1024).into()))?;
 
     let result = handle_req(
         req,
