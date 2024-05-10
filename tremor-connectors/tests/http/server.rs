@@ -14,7 +14,8 @@
 use anyhow::{anyhow, Result};
 use http::StatusCode;
 use http_body_util::BodyExt;
-use hyper::{body::Incoming, Request, Response};
+use http_body_util::Full;
+use hyper::{body::Bytes, body::Incoming, Request, Response};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use std::{
@@ -22,7 +23,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
-use tremor_connectors::impls::http::utils::Body;
 use tremor_connectors::{
     harness::Harness,
     impls::http::{meta::content_type, server},
@@ -40,7 +40,7 @@ use value_trait::prelude::*;
 /// in the meantime it creates a new hyper client and sends the provided `req` to the source
 /// then returns the response after it went through `source`, `handle_req_fn` and `sink`
 async fn handle_req<F>(
-    req: Request<Body>,
+    req: Request<Full<Bytes>>,
     handle_req_fn: F,
     mut connector: Harness,
     is_batch: bool,
