@@ -418,7 +418,7 @@ async fn https_server_test() -> Result<()> {
         let req = hyper::Request::builder()
             .method("DELETE")
             .uri(&url)
-            .body(empty_body())?;
+            .body(Full::new(Bytes::new()))?;
         if start.elapsed() > max_timeout {
             return Err(anyhow!("Timeout waiting for HTTPS server to boot up: {e}"));
         }
