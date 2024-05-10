@@ -19,7 +19,7 @@ use hyper::body::Bytes;
 /// We re-use Full from `http_body_util` crate which is a wrapper around
 /// `hyper::body::Bytes` and implements `http_body::Body` trait. This
 /// avoids introducing our own Body type
-pub type Body = Full<Bytes>;
+pub(crate) type Body = Full<Bytes>;
 
 /// An empty body
 #[must_use]
