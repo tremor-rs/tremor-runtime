@@ -23,7 +23,7 @@ pub(crate) type Body = Full<Bytes>;
 
 /// An empty body
 #[must_use]
-pub fn empty_body() -> Body {
+pub(crate) fn empty_body() -> Body {
     Full::new(Bytes::new())
 }
 
