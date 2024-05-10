@@ -79,6 +79,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[allow(clippy::unwrap_used)] // Don't care in this test
     async fn test_find_free_tcp_port() {
         let port = find_free_tcp_port().await.unwrap();
         assert!(port >= *FreePort::RANGE.start());
@@ -93,6 +94,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::unwrap_used)] // Don't care in this test
     async fn test_find_free_udp_port() {
         let port = find_free_udp_port().await.unwrap();
         assert!(port >= *FreePort::RANGE.start());
