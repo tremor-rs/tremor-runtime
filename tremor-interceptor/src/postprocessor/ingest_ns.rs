@@ -55,6 +55,12 @@ mod test {
 
     use super::*;
     use crate::preprocessor::{ingest_ns::ExtractIngestTs, Preprocessor};
+
+    #[test]
+    fn name() {
+        let post = IngestNs::default();
+        assert_eq!(post.name(), "attach-ingress-ts");
+    }
     #[test]
     fn ingest_ts() -> anyhow::Result<()> {
         let mut pre_p = ExtractIngestTs {};

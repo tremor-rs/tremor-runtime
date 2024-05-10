@@ -39,6 +39,8 @@ mod test {
 
         assert_eq!(post.process(&data).ok(), Some(vec![vec![]]));
 
+        assert_eq!(post.name(), "base64");
+
         assert_eq!(post.process(b"\n").ok(), Some(vec![b"Cg==".to_vec()]));
 
         assert_eq!(post.process(b"snot").ok(), Some(vec![b"c25vdA==".to_vec()]));

@@ -115,6 +115,12 @@ mod test {
             .boxed()
     }
 
+    #[test]
+    fn name() {
+        let pre = TextualLengthPrefixed::default();
+        assert_eq!("textual-length-prefixed", pre.name());
+    }
+
     proptest! {
         #[test]
         fn textual_length_prefix_prop((lengths, datas) in multiple_textual_lengths(5)) {

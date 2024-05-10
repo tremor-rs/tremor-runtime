@@ -311,6 +311,14 @@ mod test {
     use crate::postprocessor::{self as post, Postprocessor};
     use tremor_value::literal;
 
+    #[test]
+    fn name() -> anyhow::Result<()> {
+        let config = literal!({ "algorithm": "gzip" });
+        let pre = super::Decompress::from_config(Some(&config))?;
+        assert_eq!(pre.name(), "decompress");
+        Ok(())
+    }
+
     fn decode_magic(data: &[u8], algo: &str) -> &'static str {
         match data.get(0..6) {
             Some(&[0x1f, 0x8b, _, _, _, _]) => "gzip",

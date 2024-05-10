@@ -36,3 +36,34 @@ impl Preprocessor for RemoveEmpty {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn name() {
+        let pre = RemoveEmpty {};
+        assert_eq!(pre.name(), "remove-empty");
+    }
+
+    #[test]
+    fn test_remove_empty() -> anyhow::Result<()> {
+        let int = "snot badger".as_bytes();
+
+        let mut pre = RemoveEmpty::default();
+
+        // Fake ingest_ns
+        let mut ingest_ns = 0_u64;
+
+        let r = pre.process(&mut ingest_ns, int, Value::null())?;
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].0, int);
+        assert_eq!(r[0].1, Value::null());
+
+        let r = pre.process(&mut ingest_ns, b"", Value::null())?;
+        assert_eq!(r.len(), 0);
+
+        Ok(())
+    }
+}

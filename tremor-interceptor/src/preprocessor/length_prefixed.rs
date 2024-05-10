@@ -68,6 +68,12 @@ mod test {
         preprocessor::{finish, preprocess},
     };
 
+    #[test]
+    fn name() {
+        let pre = super::LengthPrefixed::default();
+        assert_eq!(pre.name(), "length-prefixed");
+    }
+
     use super::*;
     #[test]
     fn length_prefix() -> anyhow::Result<()> {
