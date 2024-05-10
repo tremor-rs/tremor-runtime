@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use anyhow::Result;
-use http_body_util::BodyExt;
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::StatusCode;
 use hyper::{service::service_fn, Response};
@@ -25,7 +26,6 @@ use tokio::net::TcpListener;
 use tokio::task::{spawn, JoinHandle};
 use tremor_common::url::HttpDefaults;
 use tremor_common::url::Url;
-use tremor_connectors::impls::http::utils::{body_from_bytes, Body};
 use tremor_connectors::{
     harness::Harness,
     impls::http::{self as http_impl, meta::content_type},
@@ -68,7 +68,8 @@ struct TestHttpServer {
 
 async fn fake_server_dispatch(
     req: hyper::Request<Incoming>,
-) -> std::result::Result<Response<Body>, Box<dyn std::error::Error + Send + Sync + 'static>> {
+) -> std::result::Result<Response<Full<Bytes>>, Box<dyn std::error::Error + Send + Sync + 'static>>
+{
     let mut res = Response::builder().status(StatusCode::OK);
 
     let ct = content_type(Some(req.headers()))?;
@@ -79,7 +80,7 @@ async fn fake_server_dispatch(
         ct.unwrap_or(mime::TEXT_PLAIN).to_string(),
     );
 
-    let body = body_from_bytes(data);
+    let body = Full::new(Bytes::from(data));
     Ok(res.body(body)?)
 }
 
