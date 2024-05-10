@@ -22,7 +22,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
-use tremor_connectors::impls::http::utils::{empty_body, Body};
+use tremor_connectors::impls::http::utils::Body;
 use tremor_connectors::{
     harness::Harness,
     impls::http::{meta::content_type, server},
@@ -186,7 +186,7 @@ async fn http_server_test_query() -> Result<()> {
         .method("PATCH")
         .uri(req_url.clone())
         .header("content-type", "text/plain")
-        .body(Full<Bytes>::new(body_bytes.into()))?;
+        .body(Full::<Bytes>::new(body_bytes.into()))?;
 
     let  result = handle_req(
         req,
@@ -259,7 +259,7 @@ async fn http_server_test_chunked() -> Result<()> {
             hyper::header::CONTENT_TYPE,
             mime::APPLICATION_OCTET_STREAM.to_string(),
         )
-        .body(Full<Bytes>::new("A".repeat(1024).into()))?;
+        .body(Full::<Bytes>::new("A".repeat(1024).into()))?;
 
     let result = handle_req(
         req,
