@@ -18,7 +18,6 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ClientConfig, RootCertStore, ServerConfig};
 use rustls_native_certs::load_native_certs;
 use rustls_pemfile::{pkcs8_private_keys, rsa_private_keys, Item};
-use std::fs::File;
 use std::io::{self, BufReader};
 use std::{path::PathBuf, sync::Arc};
 use tokio_rustls::TlsConnector;
@@ -69,7 +68,6 @@ impl TLSServerConfig {
         let key = load_keys(key)?;
 
         let server_config = ServerConfig::builder()
-            // .with_safe_defaults()
             .with_no_client_auth()
             // set this server to use one cert together with the loaded private key
             .with_single_cert(certs, key)?;
@@ -205,7 +203,7 @@ pub enum Error {
 
 /// Load the passed certificates file
 fn load_certs<'x>(path: &PathBuf) -> Result<Vec<CertificateDer<'x>>, Error> {
-    let certfile = File::open(path)?;
+    let certfile = tremor_common::file::open(&path)?;
     let mut reader = BufReader::new(certfile);
 
     let certs = rustls_pemfile::certs(&mut reader)
