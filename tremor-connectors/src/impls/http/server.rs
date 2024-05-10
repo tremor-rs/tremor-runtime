@@ -411,6 +411,15 @@ impl Sink for HttpServerSink {
         // - store: request_id -> (SinkResponse, Sender)
         // - update SinkResponse for each element of the batch
         // - send response immediately in case of chunked encoding
+
+        // NOTE: Prior to hyper-1.2 we could remove completed requests inflight here which
+        // is no longer possible given the structure of the connector and changes to hyper
+        // itself. Instead, we append responses to a map and drain it at the end of the function.
+        // which makes this a 2-phase rather than 1-phase operation.
+        //
+        // Addition of support for SSE or other active streaming responses would be a good time
+        // to revisit and refactor the code accordingly.
+
         let mut response_map = HashMap::new();
         for (value, meta) in event.value_meta_iter() {
             let http_meta = ctx.extract_meta(meta);
