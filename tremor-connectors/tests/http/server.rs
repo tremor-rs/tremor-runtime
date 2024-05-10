@@ -118,7 +118,7 @@ async fn http_server_test_basic() -> Result<()> {
         let req = Request::builder()
             .method("GET")
             .uri(url.as_str())
-            .body(empty_body())?;
+            .body(Full::new(Bytes::new()))?;
         result = handle_req(
             req,
             |req_data| {
