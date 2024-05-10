@@ -39,6 +39,11 @@ impl Stateless for TextualLengthPrefixed {
 mod test {
     use super::*;
     #[test]
+    fn name() {
+        let post = TextualLengthPrefixed {};
+        assert_eq!(post.name(), "textual-length-prefixed");
+    }
+    #[test]
     fn textual_length_prefix_postp() -> anyhow::Result<()> {
         let post = TextualLengthPrefixed {};
         let data = vec![1_u8, 2, 3];

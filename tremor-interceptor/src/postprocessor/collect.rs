@@ -94,7 +94,11 @@ impl Trait for Postprocessor {
 mod tests {
     use super::*;
     use tremor_value::literal;
-
+    #[test]
+    fn name() {
+        let post = Postprocessor::default();
+        assert_eq!(post.name(), "collect");
+    }
     #[test]
     fn collect_all() -> anyhow::Result<()> {
         let config = Some(literal!({}));

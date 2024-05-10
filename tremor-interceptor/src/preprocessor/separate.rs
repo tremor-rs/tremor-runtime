@@ -322,6 +322,11 @@ mod test {
     use super::*;
 
     #[test]
+    fn name() {
+        let separate = Separate::default();
+        assert_eq!(separate.name(), "separate");
+    }
+    #[test]
     fn from_config() -> anyhow::Result<()> {
         let config = Some(literal!({
             "separator": "\n",

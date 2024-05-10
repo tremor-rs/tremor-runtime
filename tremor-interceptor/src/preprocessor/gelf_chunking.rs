@@ -274,6 +274,12 @@ mod test {
     use super::*;
 
     #[test]
+    fn name() {
+        let g = GelfChunking::default();
+        assert_eq!(g.name(), "gelf");
+    }
+
+    #[test]
     fn gelf_chunking_default() -> anyhow::Result<()> {
         let g = GelfChunking::default();
         assert!(g.buffer.is_empty());

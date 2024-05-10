@@ -94,6 +94,12 @@ mod tests {
     use tremor_value::literal;
 
     #[test]
+    fn name() {
+        let separate = Separate::default();
+        assert_eq!(separate.name(), "join");
+    }
+
+    #[test]
     fn separate_postprocessor() -> anyhow::Result<()> {
         let config = Some(literal!({
             "separator": "|"

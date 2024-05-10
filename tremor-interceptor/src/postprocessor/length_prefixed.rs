@@ -34,3 +34,13 @@ impl Stateless for LengthPrefixed {
         Ok(vec![res])
     }
 }
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn name() {
+        let post = LengthPrefixed {};
+        assert_eq!(post.name(), "length-prefix");
+    }
+}

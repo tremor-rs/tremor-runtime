@@ -179,6 +179,11 @@ mod tests {
     use tremor_value::literal;
 
     #[test]
+    fn name() {
+        let pp = Chunk::new(100);
+        assert_eq!("chunk", pp.name());
+    }
+    #[test]
     fn from_config() {
         let res = Chunk::from_config(Some(&literal!({
             "max_bytes": 0

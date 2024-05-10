@@ -38,6 +38,12 @@ impl Preprocessor for Base64 {
 mod test {
     use crate::postprocessor::{self, Postprocessor};
 
+    #[test]
+    fn name() {
+        let post = postprocessor::base64::Base64 {};
+        assert_eq!(post.name(), "base64");
+    }
+
     use super::*;
     #[test]
     fn test_base64() -> anyhow::Result<()> {

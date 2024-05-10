@@ -48,3 +48,39 @@ impl Preprocessor for ExtractIngestTs {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn name() {
+        let pre = ExtractIngestTs {};
+        assert_eq!(pre.name(), "ingest-ts");
+    }
+
+    #[test]
+    fn test_extract_ingest_ts() -> anyhow::Result<()> {
+        let mut ingest_ns = 0_u64;
+        let mut pre = ExtractIngestTs {};
+        let data = &[0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 42u8, b'8', b'9'][..];
+        let meta = Value::null();
+        let res = pre.process(&mut ingest_ns, data, meta)?;
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].0, b"89");
+        assert_eq!(ingest_ns, 42);
+        Ok(())
+    }
+
+    #[test]
+    fn test_extract_ingest_ts_too_small() -> anyhow::Result<()> {
+        let mut ingest_ns = 0_u64;
+        let mut pre = ExtractIngestTs {};
+        let data = &[0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8][..];
+
+        let meta = Value::null();
+        let res = pre.process(&mut ingest_ns, data, meta);
+        assert!(res.is_err());
+        Ok(())
+    }
+}

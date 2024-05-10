@@ -368,6 +368,43 @@ impl Stateless for Compress {
 mod tests {
     use super::*;
     #[test]
+    fn name() {
+        let post = Compress {
+            codec: Box::new(Gzip::default()),
+        };
+        assert_eq!(post.name(), "compress");
+
+        let post = Compress {
+            codec: Box::new(Brotli::default()),
+        };
+        assert_eq!(post.name(), "compress");
+
+        let post = Compress {
+            codec: Box::new(Zlib::default()),
+        };
+        assert_eq!(post.name(), "compress");
+
+        let post = Compress {
+            codec: Box::new(Xz2::default()),
+        };
+        assert_eq!(post.name(), "compress");
+
+        let post = Compress {
+            codec: Box::new(Snappy::default()),
+        };
+        assert_eq!(post.name(), "compress");
+
+        let post = Compress {
+            codec: Box::new(Lz4::default()),
+        };
+        assert_eq!(post.name(), "compress");
+
+        let post = Compress {
+            codec: Box::new(Zstd::default()),
+        };
+        assert_eq!(post.name(), "compress");
+    }
+    #[test]
     fn test_str_to_algorithm() -> anyhow::Result<()> {
         let algorithm = Algorithm::from_str("gzip")?;
         assert_eq!(algorithm, Algorithm::Gzip);
