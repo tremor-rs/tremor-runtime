@@ -29,7 +29,7 @@ pub(crate) fn empty_body() -> Body {
 
 /// Create a new body from bytes
 #[must_use]
-pub fn body_from_bytes(bytes: Vec<u8>) -> Body {
+pub(crate) fn body_from_bytes(bytes: Vec<u8>) -> Body {
     Full::new(Bytes::from(bytes))
 }
 
