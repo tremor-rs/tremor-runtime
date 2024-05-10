@@ -344,6 +344,10 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
         self.last_rebalance_ts.store(nanotime(), Ordering::Release);
         match rebalance {
             Rebalance::Assign(tpl) => {
+                // TODO  workaround for https://github.com/fede1024/rust-rdkafka/issues/681
+                if tpl.capacity() == 0 {
+                    return;
+                }
                 let partitions: Vec<String> = tpl
                     .elements()
                     .iter()
@@ -366,6 +370,10 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
                 );
             }
             Rebalance::Revoke(tpl) => {
+                // TODO  workaround for https://github.com/fede1024/rust-rdkafka/issues/681
+                if tpl.capacity() == 0 {
+                    return;
+                }
                 let partitions: Vec<String> = tpl
                     .elements()
                     .iter()
@@ -391,6 +399,10 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
                 if offsets.count() > 0 {
                     debug!("{} Offsets committed successfully", &self.ctx);
                     if log_enabled!(Debug) {
+                        // TODO  workaround for https://github.com/fede1024/rust-rdkafka/issues/681
+                        if offsets.capacity() == 0 {
+                            return;
+                        }
                         let offset_strings: Vec<String> = offsets
                             .elements()
                             .iter()
