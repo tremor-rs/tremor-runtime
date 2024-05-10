@@ -407,7 +407,7 @@ async fn https_server_test() -> Result<()> {
     let req = hyper::Request::builder()
         .method("DELETE")
         .uri(&url)
-        .body(empty_body())?;
+        .body(Full::new(Bytes::new()))?;
     let one_sec = Duration::from_secs(1);
     let mut response = timeout(one_sec, client.request(req)).await;
 
