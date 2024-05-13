@@ -86,7 +86,6 @@ hyper-rustls = { version = "0.27", optional = true, default-features = false, fe
     "http2",
     "ring",
 ] }
-http-body = { version = "1", optional = true, default-features = false }
 http-body-util = { version = "0.1", optional = true, default-features = false }
 mime = { version = "0.3", optional = true, default-features = false }
 reqwest = { version = "0.11", optional = true, default-features = false, features = [
@@ -225,7 +224,6 @@ http = [
     "dep:dashmap",
     "dep:gouth",
     "dep:http",
-    "dep:http-body",
     "dep:http-body-util",
     "dep:hyper-rustls",
     "dep:hyper-util",
