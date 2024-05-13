@@ -709,7 +709,7 @@ impl std::fmt::Debug for RawRequestData {
             .field("data", &self.data)
             .field("request_meta", &self.request_meta)
             .field("content_type", &self.content_type)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
