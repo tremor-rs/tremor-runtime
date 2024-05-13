@@ -6,7 +6,7 @@ edition = "2021"
 license = "Apache-2.0"
 name = "tremor-common"
 readme = "README.md"
-version = "0.13.0-rc.24"
+version = "0.13.0-rc.25"
 
 [dependencies]
 tokio = { version = "1", default-features = false, features = ["fs"] }
