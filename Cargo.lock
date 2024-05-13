@@ -6616,6 +6616,7 @@ version = "0.13.0-rc.24"
 dependencies = [
  "anyhow",
  "async-compression",
+ "async-stream",
  "async-trait",
  "base64 0.22.1",
  "beef",

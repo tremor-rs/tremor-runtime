@@ -717,7 +717,7 @@ async fn missing_config() -> Result<()> {
         .map(|e| e.to_string())
         .unwrap_or_default();
 
-    assert!(dbg!(res).contains("Missing Configuration"));
+    assert!(res.contains("Missing Configuration"));
 
     Ok(())
 }

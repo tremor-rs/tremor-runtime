@@ -16,23 +16,34 @@ use crate::{
     errors::error_connector_def,
     impls::http::{
         auth::Auth,
-        meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder},
-        utils::{Body, Header, RequestId},
+        client,
+        meta::{extract_request_meta, extract_response_meta},
+        utils::{Header, RequestId},
+        Error,
     },
-    sink::{concurrency_cap::ConcurrencyCap, prelude::*},
+    sink::{concurrency_cap::ConcurrencyCap, prelude::*, EventSerializer},
     source::prelude::*,
     utils::{mime::MimeCodecMap, tls::TLSClientConfig},
 };
 use either::Either;
+use futures::Stream;
 use halfbrown::HashMap;
-use http_body_util::{BodyExt, BodyStream};
-use hyper::Method;
+use http::{
+    header::{self, HeaderName},
+    Uri,
+};
+use http_body_util::{BodyExt, StreamBody};
+use hyper::body::{Bytes, Frame};
+use hyper::{Method, Request};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use hyper_util::client::legacy::connect::HttpConnector;
-use hyper_util::client::legacy::Client as HyperClient;
-use hyper_util::rt::TokioExecutor;
+use hyper_util::{
+    client::legacy::{connect::HttpConnector, Client as HyperClient},
+    rt::TokioExecutor,
+};
 use serde::{Deserialize, Deserializer};
 use std::{
+    convert::Infallible,
+    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -44,7 +55,16 @@ use tokio::{
     time::timeout,
 };
 use tremor_common::{time::nanotime, url::Url};
+use tremor_config::NameWithConfig;
+use tremor_system::qsize;
 use tremor_value::prelude::*;
+
+use super::meta::{consolidate_mime, content_type, HeaderValueValue};
+
+pub(crate) type StreamingBody = StreamBody<
+    Pin<Box<dyn Stream<Item = Result<Frame<Bytes>, Infallible>> + Send + Sync + 'static>>,
+>;
+type StreamingRequest = Request<StreamingBody>;
 
 //  pipeline -> Sink -> http client
 //                          |
@@ -252,7 +272,7 @@ impl Source for HttpRequestSource {
 
 struct HttpRequestSink {
     request_counter: u64,
-    client: Option<Arc<HyperClient<HttpsConnector<HttpConnector>, BodyStream<Body>>>>,
+    client: Option<Arc<HyperClient<HttpsConnector<HttpConnector>, StreamingBody>>>,
     response_tx: Sender<SourceReply>,
     reply_tx: ReplySender,
     config: Config,
@@ -368,13 +388,6 @@ impl Sink for HttpRequestSink {
                 HttpRequestBuilder::new(request_id, http_meta, &self.codec_map, &self.config),
                 "Error turning event into an HTTP Request",
             )?;
-
-            for (value, meta) in event.value_meta_iter() {
-                ctx.bail_err(
-                    builder.append(value, meta, ingest_ns, serializer).await,
-                    "Error serializing event into request body",
-                )?;
-            }
 
             let codec_map = self.codec_map.clone();
             let request = builder.take_request()?;
@@ -506,5 +519,179 @@ impl Sink for HttpRequestSink {
     // we do ack when the response is sent
     fn auto_ack(&self) -> bool {
         false
+    }
+}
+
+/// Utility for building an HTTP request from a possibly batched event
+/// and some configuration values
+pub(crate) struct HttpRequestBuilder {
+    request_id: RequestId,
+    request: Option<StreamingRequest>,
+    chunk_tx: Sender<Vec<u8>>,
+    codec_overwrite: Option<NameWithConfig>,
+}
+
+// TODO: do some deduplication with SinkResponse
+impl HttpRequestBuilder {
+    pub(super) fn new(
+        request_id: RequestId,
+        meta: Option<&Value>,
+        codec_map: &MimeCodecMap,
+        config: &client::Config,
+    ) -> anyhow::Result<Self> {
+        let request_meta = meta.get("request");
+        let method = if let Some(method_v) = request_meta.get("method") {
+            Method::from_bytes(method_v.as_bytes().ok_or(Error::InvalidMethod)?)?
+        } else {
+            config.method.0.clone()
+        };
+        let uri: Uri = if let Some(url_v) = request_meta.get("url") {
+            url_v.as_str().ok_or(Error::InvalidUrl)?.parse()?
+        } else {
+            config.url.to_string().parse()?
+        };
+        let mut builder = Request::builder().method(method).uri(uri);
+
+        // first insert config headers
+        for (config_header_name, config_header_values) in &config.headers {
+            match &config_header_values.0 {
+                Either::Left(config_header_values) => {
+                    for header_value in config_header_values {
+                        builder =
+                            builder.header(config_header_name.as_str(), header_value.as_str());
+                    }
+                }
+                Either::Right(header_value) => {
+                    builder = builder.header(config_header_name.as_str(), header_value.as_str());
+                }
+            }
+        }
+        let headers = request_meta.get("headers");
+
+        // build headers
+        if let Some(headers) = headers.as_object() {
+            for (name, values) in headers {
+                let name = HeaderName::from_bytes(name.as_bytes())?;
+                for value in HeaderValueValue::new(values) {
+                    builder = builder.header(&name, value);
+                }
+            }
+        }
+
+        let header_content_type = content_type(builder.headers_ref())?;
+
+        let (codec_overwrite, content_type) =
+            consolidate_mime(header_content_type.clone(), codec_map);
+
+        // set the content type if it is not set yet
+        if header_content_type.is_none() {
+            if let Some(ct) = content_type {
+                builder = builder.header(header::CONTENT_TYPE, ct.to_string());
+            }
+        }
+        // handle AUTH
+        if let Some(auth_header) = config.auth.as_header_value()? {
+            builder = builder.header(hyper::header::AUTHORIZATION, auth_header);
+        }
+
+        let (chunk_tx, mut chunk_rx) = channel::<Vec<u8>>(qsize());
+
+        let body: StreamingBody = StreamBody::new(Box::pin(async_stream::stream! {
+            while let Some(item) = chunk_rx.recv().await {
+                yield Ok::<_, Infallible>(hyper::body::Frame::data(hyper::body::Bytes::from(item)));
+            }
+        }));
+
+        let request = builder
+            .body(body)
+            .map_err(|_| Error::RequestAlreadyConsumed)?;
+
+        // extract headers
+        // determine content-type, override codec and chunked encoding
+        Ok(Self {
+            request_id,
+            request: Some(request),
+            chunk_tx,
+            codec_overwrite,
+        })
+    }
+
+    pub(super) async fn append<'event>(
+        &mut self,
+        value: &'event Value<'event>,
+        meta: &'event Value<'event>,
+        ingest_ns: u64,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        let chunks = serializer
+            .serialize_for_stream_with_codec(
+                value,
+                meta,
+                ingest_ns,
+                self.request_id.get(),
+                self.codec_overwrite.as_ref(),
+            )
+            .await?;
+        self.append_data(chunks).await
+    }
+
+    async fn append_data(&mut self, chunks: Vec<Vec<u8>>) -> anyhow::Result<()> {
+        for chunk in chunks {
+            self.chunk_tx.send(chunk).await?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn take_request(&mut self) -> Result<StreamingRequest, Error> {
+        self.request.take().ok_or(Error::RequestAlreadyConsumed)
+    }
+
+    /// Finalize and send the response.
+    /// In the chunked case we have already sent it before.
+    ///
+    /// After calling this function this instance shouldn't be used anymore
+    pub(super) async fn finalize(
+        &mut self,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // finalize the stream
+        let rest = serializer.finish_stream(self.request_id.get())?;
+        self.append_data(rest).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::CodecReq;
+    use crate::ConnectorType;
+    use tremor_common::alias;
+    use tremor_config::Impl;
+
+    use super::*;
+    #[tokio::test(flavor = "multi_thread")]
+    async fn builder() -> anyhow::Result<()> {
+        let request_id = RequestId::new(42);
+        let meta = None;
+        let codec_map = MimeCodecMap::default();
+        let c = literal!({"headers": {
+            "cake": ["black forst", "cheese"],
+            "pie": "key lime"
+        }});
+        let mut s = EventSerializer::new(
+            None,
+            CodecReq::Optional("json"),
+            vec![],
+            &ConnectorType("http".into()),
+            &alias::Connector::new("flow", "http"),
+        )?;
+        let config = client::Config::new(&c)?;
+
+        let mut b = HttpRequestBuilder::new(request_id, meta, &codec_map, &config)?;
+
+        let r = b.take_request()?;
+        b.finalize(&mut s).await?;
+        assert_eq!(r.headers().get_all("pie").iter().count(), 1);
+        assert_eq!(r.headers().get_all("cake").iter().count(), 2);
+        Ok(())
     }
 }

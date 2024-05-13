@@ -206,3 +206,20 @@ pub mod meta;
 pub mod server;
 /// HTTP utils
 pub(crate) mod utils;
+
+/// HTTP Connector Errors
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Invalid HTTP Method
+    #[error("Invalid HTTP Method")]
+    InvalidMethod,
+    /// Invalid HTTP URL
+    #[error("Invalid HTTP URL")]
+    InvalidUrl,
+    /// Request already consumed
+    #[error("Request already consumed")]
+    RequestAlreadyConsumed,
+    /// Response already consumed
+    #[error("Response already consumed")]
+    ResponseAlreadyConsumed,
+}

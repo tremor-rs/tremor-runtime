@@ -673,9 +673,7 @@ impl SinkResponse {
         Ok(())
     }
 
-    pub(super) fn take_response(
-        &mut self,
-    ) -> Result<Response<BodyStream<Body>>, super::meta::Error> {
+    pub(super) fn take_response(&mut self) -> Result<Response<BodyStream<Body>>, super::Error> {
         let mut data = Vec::new();
 
         // drain the channel
@@ -686,11 +684,11 @@ impl SinkResponse {
         let builder = self
             .builder
             .take()
-            .ok_or(super::meta::Error::ResponseAlreadyConsumed)?;
+            .ok_or(super::Error::ResponseAlreadyConsumed)?;
         let body_stream = BodyStream::new(body_from_bytes(data));
         let response = builder
             .body(body_stream)
-            .map_err(|_| super::meta::Error::ResponseAlreadyConsumed)?;
+            .map_err(|_| super::Error::ResponseAlreadyConsumed)?;
         Ok(response)
     }
 
