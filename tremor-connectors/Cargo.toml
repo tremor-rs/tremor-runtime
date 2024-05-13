@@ -109,7 +109,7 @@ rdkafka-sys = { version = "4.6", optional = true, features = [
 indexmap = { version = "2", optional = true, default-features = false }
 
 # websockets
-tokio-tungstenite = { version = "0.20", optional = true, default-features = false, features = [
+tokio-tungstenite = { version = "0.21", optional = true, default-features = false, features = [
     "handshake",
 ] }
 
