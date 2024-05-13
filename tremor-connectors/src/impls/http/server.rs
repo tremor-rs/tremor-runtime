@@ -16,7 +16,7 @@ use crate::{
     errors::error_connector_def,
     impls::http::{
         meta::{consolidate_mime, content_type, extract_request_meta, HeaderValueValue},
-        utils::{body_from_bytes, empty_body, Body, RequestId},
+        utils::RequestId,
     },
     sink::prelude::*,
     source::prelude::*,
@@ -25,13 +25,15 @@ use crate::{
 };
 use dashmap::DashMap;
 use halfbrown::{Entry, HashMap};
-use http::{header, Response};
-use http::{header::HeaderName, StatusCode};
-use http_body_util::BodyStream;
+use http::{
+    header::{self, HeaderName},
+    Response, StatusCode,
+};
+use http_body_util::StreamBody;
 use hyper::body::Incoming;
 use hyper::{service::service_fn, Request};
 use hyper_util::rt::TokioIo;
-use std::{net::ToSocketAddrs, sync::Arc};
+use std::{convert::Infallible, net::ToSocketAddrs, sync::Arc};
 use tokio::{
     net::TcpListener,
     sync::{
@@ -46,6 +48,8 @@ use tremor_config::NameWithConfig;
 use tremor_script::ValueAndMeta;
 use tremor_system::event::DEFAULT_STREAM_ID;
 use tremor_value::prelude::*;
+
+use super::StreamingBody;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -119,7 +123,7 @@ pub(crate) struct HttpServer {
     config: Config,
     origin_uri: EventOriginUri,
     tls_server_config: Option<TLSServerConfig>,
-    inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<BodyStream<Body>>>>>,
+    inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<StreamingBody>>>>,
     codec_map: MimeCodecMap,
 }
 
@@ -171,7 +175,7 @@ impl Connector for HttpServer {
 struct HttpServerSource {
     url: Url,
     origin_uri: EventOriginUri,
-    inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<BodyStream<Body>>>>>,
+    inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<StreamingBody>>>>,
     request_counter: u64,
     request_rx: Receiver<RawRequestData>,
     request_tx: Sender<RawRequestData>,
@@ -367,7 +371,7 @@ impl Source for HttpServerSource {
 }
 
 struct HttpServerSink {
-    inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<BodyStream<Body>>>>>,
+    inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<StreamingBody>>>>,
     codec_map: MimeCodecMap,
 }
 
@@ -376,7 +380,7 @@ impl HttpServerSink {
     const ERROR_MSG_APPEND_RESPONSE: &'static str = "Error appending batched data to HTTP response";
 
     fn new(
-        inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<BodyStream<Body>>>>>,
+        inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<StreamingBody>>>>,
         codec_map: MimeCodecMap,
     ) -> Self {
         Self {
@@ -411,15 +415,6 @@ impl Sink for HttpServerSink {
         // - store: request_id -> (SinkResponse, Sender)
         // - update SinkResponse for each element of the batch
         // - send response immediately in case of chunked encoding
-
-        // NOTE: Prior to hyper-1.2 we could remove completed requests inflight here which
-        // is no longer possible given the structure of the connector and changes to hyper
-        // itself. Instead, we append responses to a map and drain it at the end of the function.
-        // which makes this a 2-phase rather than 1-phase operation.
-        //
-        // Addition of support for SSE or other active streaming responses would be a good time
-        // to revisit and refactor the code accordingly.
-
         let mut response_map = HashMap::new();
         for (value, meta) in event.value_meta_iter() {
             let http_meta = ctx.extract_meta(meta);
@@ -428,17 +423,18 @@ impl Sink for HttpServerSink {
             if let Some(rid) = http_meta.get_u64("request_id").map(RequestId::new) {
                 match response_map.entry(rid) {
                     Entry::Vacant(k) => {
-                        if let Some(_snot) = self.inflight.get(&rid) {
+                        if let Some((rid, sender)) = self.inflight.remove(&rid) {
                             debug!("{ctx} Building response for request_id {rid}");
-                            let srm = SinkResponse::build(rid, http_meta, &self.codec_map);
-                            let mut sr = ctx.bail_err(srm, Self::ERROR_MSG_EXTRACT_VALUE)?;
-
-                            ctx.bail_err(
-                                sr.append(value, meta, ingest_ns, serializer).await,
-                                Self::ERROR_MSG_APPEND_RESPONSE,
+                            let mut response = ctx.bail_err(
+                                SinkResponse::build(rid, sender, http_meta, &self.codec_map),
+                                Self::ERROR_MSG_EXTRACT_VALUE,
                             )?;
 
-                            k.insert(sr);
+                            ctx.bail_err(
+                                response.append(value, meta, ingest_ns, serializer).await,
+                                Self::ERROR_MSG_APPEND_RESPONSE,
+                            )?;
+                            k.insert(response);
                         } else {
                             warn!(
                                 "{ctx} No request context found for `request_id`: {rid}. Dropping response."
@@ -462,10 +458,15 @@ impl Sink for HttpServerSink {
 
                         match response_map.entry(rid) {
                             Entry::Vacant(k) => {
-                                if let Some(_badger) = self.inflight.get(&rid) {
+                                if let Some((rid, sender)) = self.inflight.remove(&rid) {
                                     debug!("{ctx} Building response for request_id {rid}");
                                     let mut response = ctx.bail_err(
-                                        SinkResponse::build(rid, http_meta, &self.codec_map),
+                                        SinkResponse::build(
+                                            rid,
+                                            sender,
+                                            http_meta,
+                                            &self.codec_map,
+                                        ),
                                         Self::ERROR_MSG_EXTRACT_VALUE,
                                     )?;
 
@@ -473,7 +474,6 @@ impl Sink for HttpServerSink {
                                         response.append(value, meta, ingest_ns, serializer).await,
                                         Self::ERROR_MSG_APPEND_RESPONSE,
                                     )?;
-
                                     k.insert(response);
                                 } else {
                                     warn!("{ctx} No request context found for Request id: {rid}. Dropping response.");
@@ -493,10 +493,15 @@ impl Sink for HttpServerSink {
                         for rid in (min..=max).map(RequestId::new) {
                             match response_map.entry(rid) {
                                 Entry::Vacant(k) => {
-                                    if let Some(_badger) = self.inflight.get(&rid) {
+                                    if let Some((rid, sender)) = self.inflight.remove(&rid) {
                                         debug!("{ctx} Building response for request_id {rid}");
                                         let mut response = ctx.bail_err(
-                                            SinkResponse::build(rid, http_meta, &self.codec_map),
+                                            SinkResponse::build(
+                                                rid,
+                                                sender,
+                                                http_meta,
+                                                &self.codec_map,
+                                            ),
                                             Self::ERROR_MSG_EXTRACT_VALUE,
                                         )?;
 
@@ -506,7 +511,6 @@ impl Sink for HttpServerSink {
                                                 .await,
                                             Self::ERROR_MSG_APPEND_RESPONSE,
                                         )?;
-
                                         k.insert(response);
                                     } else {
                                         warn!("{ctx} No request context found for Request id: {rid}. Dropping response.");
@@ -536,27 +540,15 @@ impl Sink for HttpServerSink {
             error!("{ctx} No request context found for event.");
             return Ok(SinkReply::FAIL);
         }
-
-        // drain inlflight and response_map so we can send the responses
-        for (rid, mut response) in response_map {
-            let request = self.inflight.remove(&rid);
-            if let Some((_rid, sender)) = request {
-                let wire_response = response.take_response()?;
-                sender
-                    .send(wire_response)
-                    .map_err(|_| anyhow::anyhow!("failed to send response for request_id {rid}"))?;
-                ctx.swallow_err(
-                    response.finalize(serializer).await,
-                    &format!("Error sending response for request_id {rid}"),
-                );
-            } else {
-                warn!("{ctx} No request context found for Request id: {rid}. Dropping response.");
-            }
+        for (rid, response) in response_map {
+            debug!("{ctx} Sending response for request_id {rid}");
+            ctx.swallow_err(
+                response.finalize(serializer).await,
+                &format!("Error sending response for request_id {rid}"),
+            );
         }
-
         Ok(SinkReply::NONE)
     }
-
     async fn on_signal(
         &mut self,
         _signal: Event,
@@ -576,14 +568,13 @@ impl Sink for HttpServerSink {
 struct SinkResponse {
     request_id: RequestId,
     chunk_tx: Sender<Vec<u8>>,
-    chunk_rx: Receiver<Vec<u8>>,
     codec_overwrite: Option<NameWithConfig>,
-    builder: Option<http::response::Builder>,
 }
 
 impl SinkResponse {
     fn build(
         request_id: RequestId,
+        tx: oneshot::Sender<Response<StreamingBody>>,
         http_meta: Option<&Value>,
         codec_map: &MimeCodecMap,
     ) -> anyhow::Result<Self> {
@@ -636,14 +627,20 @@ impl SinkResponse {
                 response = response.header(header::CONTENT_TYPE, ct.to_string());
             }
         }
-        let (chunk_tx, chunk_rx) = channel::<Vec<u8>>(qsize());
+        let (chunk_tx, mut chunk_rx) = channel(qsize());
 
+        // we can already send out the response and stream the rest of the chunks upon calling `append`
+        let body: StreamingBody = StreamBody::new(Box::pin(async_stream::stream! {
+            while let Some(item) = chunk_rx.recv().await {
+                yield Ok::<_, Infallible>(hyper::body::Frame::data(hyper::body::Bytes::from(item)));
+            }
+        }));
+        tx.send(response.body(body)?)
+            .map_err(|_| anyhow::anyhow!("failed to send response"))?;
         Ok(Self {
             request_id,
             chunk_tx,
-            chunk_rx,
             codec_overwrite,
-            builder: Some(response),
         })
     }
 
@@ -673,25 +670,6 @@ impl SinkResponse {
         Ok(())
     }
 
-    pub(super) fn take_response(&mut self) -> Result<Response<BodyStream<Body>>, super::Error> {
-        let mut data = Vec::new();
-
-        // drain the channel
-        while let Ok(chunk) = self.chunk_rx.try_recv() {
-            data.extend(chunk);
-        }
-
-        let builder = self
-            .builder
-            .take()
-            .ok_or(super::Error::ResponseAlreadyConsumed)?;
-        let body_stream = BodyStream::new(body_from_bytes(data));
-        let response = builder
-            .body(body_stream)
-            .map_err(|_| super::Error::ResponseAlreadyConsumed)?;
-        Ok(response)
-    }
-
     /// Consume self and finalize and send the response.
     /// In the chunked case we have already sent it before.
     async fn finalize(mut self, serializer: &mut EventSerializer) -> anyhow::Result<()> {
@@ -717,19 +695,28 @@ impl HttpServerState {
     }
 }
 
-#[derive(Debug)]
 struct RawRequestData {
     data: Vec<u8>,
     // metadata about the request, not the ready event meta, still needs to be wrapped
     request_meta: Value<'static>,
     content_type: Option<String>,
-    response_channel: oneshot::Sender<Response<BodyStream<Body>>>,
+    response_channel: oneshot::Sender<Response<StreamingBody>>,
+}
+
+impl std::fmt::Debug for RawRequestData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RawRequestData")
+            .field("data", &self.data)
+            .field("request_meta", &self.request_meta)
+            .field("content_type", &self.content_type)
+            .finish()
+    }
 }
 
 async fn handle_request(
     mut context: HttpServerState,
     req: Request<Incoming>,
-) -> http::Result<Response<BodyStream<Body>>> {
+) -> http::Result<Response<StreamingBody>> {
     // NOTE We wrap and crap as tide doesn't report donated route handler's errors
     let result = _handle_request(&mut context, req).await;
     match result {
@@ -741,7 +728,9 @@ async fn handle_request(
             );
             Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(BodyStream::new(empty_body()))
+                .body(StreamBody::new(Box::pin(async_stream::stream! {
+                        yield Ok::<_, Infallible>(hyper::body::Frame::data(hyper::body::Bytes::new()));
+                })))
         }
     }
 }
@@ -749,7 +738,7 @@ async fn handle_request(
 async fn _handle_request(
     context: &mut HttpServerState,
     req: Request<Incoming>,
-) -> anyhow::Result<Response<BodyStream<Body>>> {
+) -> anyhow::Result<Response<StreamingBody>> {
     use http_body_util::BodyExt;
     let request_meta = extract_request_meta(&req, context.scheme)?;
     let content_type =
