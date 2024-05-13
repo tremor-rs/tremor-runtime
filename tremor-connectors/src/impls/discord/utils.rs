@@ -15,8 +15,11 @@
 // #![cfg_attr(coverage, no_coverage)] // We need a life discord api for this
 use serenity::{
     model::{
-        channel::{Channel, ChannelCategory, GuildChannel, Message, Reaction, ReactionType},
-        event::{GuildMembersChunkEvent, ResumedEvent, TypingStartEvent, VoiceServerUpdateEvent},
+        channel::{GuildChannel, Message, Reaction, ReactionType},
+        event::{
+            GuildMemberUpdateEvent, GuildMembersChunkEvent, ResumedEvent, TypingStartEvent,
+            VoiceServerUpdateEvent,
+        },
         guild::{Emoji, Guild, Member, PartialGuild, Role},
         id::{ChannelId, EmojiId, GuildId, MessageId, RoleId},
         prelude::{CurrentUser, Presence, User, VoiceState},
@@ -32,8 +35,8 @@ pub(crate) enum Intents {
     Guilds,
     /// GuildMembers Grouping
     GuildMembers,
-    /// GuildBans Grouping
-    GuildBans,
+    /// GuildModeration Grouping
+    GuildModeration,
     /// GuildEmojis Grouping
     GuildEmojis,
     /// GuildIntegrations Grouping
@@ -73,7 +76,7 @@ impl From<Intents> for GatewayIntents {
         match intent {
             Intents::Guilds => GatewayIntents::GUILDS,
             Intents::GuildMembers => GatewayIntents::GUILD_MEMBERS,
-            Intents::GuildBans => GatewayIntents::GUILD_BANS,
+            Intents::GuildModeration => GatewayIntents::GUILD_MODERATION,
             Intents::GuildEmojis => GatewayIntents::GUILD_EMOJIS_AND_STICKERS,
             Intents::GuildIntegrations => GatewayIntents::GUILD_INTEGRATIONS,
             Intents::GuildWebHooks => GatewayIntents::GUILD_WEBHOOKS,
@@ -100,12 +103,10 @@ pub(crate) enum DiscordMessage {
     AddReaction(Reaction),
     RemoveReaction(Reaction),
     ChannelCreate(GuildChannel),
-    ChannelDelete(GuildChannel),
-    CategoryCreate(ChannelCategory),
-    CategoryDelete(ChannelCategory),
+    ChannelDelete(GuildChannel, Option<Vec<Message>>),
     ChannelUpdate {
-        old: Option<Channel>,
-        new: Channel,
+        old: Option<GuildChannel>,
+        new: GuildChannel,
     },
     BanAddition {
         guild_id: GuildId,
@@ -117,7 +118,7 @@ pub(crate) enum DiscordMessage {
     },
     GuildCreate {
         guild: Guild,
-        is_new: bool,
+        is_new: Option<bool>,
     },
     // GuildDelete {
     //     incomplete: GuildUnavailable,
@@ -138,7 +139,8 @@ pub(crate) enum DiscordMessage {
     },
     MemberUpdate {
         old_if_available: Option<Member>,
-        new: Member,
+        member: Option<Member>,
+        event: GuildMemberUpdateEvent,
     },
     RoleCreate {
         new: Role,
@@ -189,7 +191,7 @@ pub(crate) enum DiscordMessage {
     },
     VoiceServerUpdate(VoiceServerUpdateEvent),
     Resume(ResumedEvent),
-    GuildUnavailable(GuildId),
+    // GuildUnavailable(GuildId),
     GuildMembersChunk(GuildMembersChunkEvent),
     TypingStart(TypingStartEvent),
     PresenceReplace(Vec<Presence>),
@@ -209,7 +211,7 @@ fn to_reaction(v: &Value) -> Option<ReactionType> {
     v.as_char().map_or_else(
         || {
             get_snowflake(v, "id").map(|id| ReactionType::Custom {
-                id: EmojiId(id),
+                id: EmojiId::new(id),
                 animated: v.get_bool("animated").unwrap_or_default(),
                 name: v.get_str("name").map(ToString::to_string),
             })
@@ -300,8 +302,8 @@ mod test {
             GatewayIntents::GUILD_MEMBERS
         );
         assert_eq!(
-            GatewayIntents::from(Intents::GuildBans),
-            GatewayIntents::GUILD_BANS
+            GatewayIntents::from(Intents::GuildModeration),
+            GatewayIntents::GUILD_MODERATION
         );
         assert_eq!(
             GatewayIntents::from(Intents::GuildEmojis),
