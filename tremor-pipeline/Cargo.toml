@@ -4,7 +4,7 @@ description = "Tremor Pipeline DAG Runtime"
 edition = "2021"
 license = "Apache-2.0"
 name = "tremor-pipeline"
-version = "0.13.0-rc.23"
+version = "0.13.0-rc.24"
 
 [dependencies]
 tokio = "1"
@@ -25,11 +25,11 @@ simd-json = { version = "0.13", features = ["known-key"] }
 simd-json-derive = "0.13"
 value-trait = "0.8"
 sled = "0.34"
-tremor-common = { version = "0.13.0-rc.23", path = "../tremor-common" }
-tremor-config = { version = "0.13.0-rc.23", path = "../tremor-config" }
-tremor-script = { version = "0.13.0-rc.23", path = "../tremor-script" }
-tremor-value = { version = "0.13.0-rc.23", path = "../tremor-value" }
-tremor-system = { version = "0.13.0-rc.23", path = "../tremor-system" }
+tremor-common = { version = "0.13.0-rc.24", path = "../tremor-common" }
+tremor-config = { version = "0.13.0-rc.24", path = "../tremor-config" }
+tremor-script = { version = "0.13.0-rc.24", path = "../tremor-script" }
+tremor-value = { version = "0.13.0-rc.24", path = "../tremor-value" }
+tremor-system = { version = "0.13.0-rc.24", path = "../tremor-system" }
 
 url = "2"
 fenster = { version = "0.1.1" }
