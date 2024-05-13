@@ -13,25 +13,6 @@
 // limitations under the License.
 
 use either::Either;
-use http_body_util::Full;
-use hyper::body::Bytes;
-
-/// We re-use Full from `http_body_util` crate which is a wrapper around
-/// `hyper::body::Bytes` and implements `http_body::Body` trait. This
-/// avoids introducing our own Body type
-pub(crate) type Body = Full<Bytes>;
-
-/// An empty body
-#[must_use]
-pub(crate) fn empty_body() -> Body {
-    Full::new(Bytes::new())
-}
-
-/// Create a new body from bytes
-#[must_use]
-pub(crate) fn body_from_bytes(bytes: Vec<u8>) -> Body {
-    Full::new(Bytes::from(bytes))
-}
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(transparent)]

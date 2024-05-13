@@ -26,14 +26,12 @@ use crate::{
     utils::{mime::MimeCodecMap, tls::TLSClientConfig},
 };
 use either::Either;
-use futures::Stream;
 use halfbrown::HashMap;
 use http::{
     header::{self, HeaderName},
     Uri,
 };
 use http_body_util::{BodyExt, StreamBody};
-use hyper::body::{Bytes, Frame};
 use hyper::{Method, Request};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::{
@@ -43,7 +41,6 @@ use hyper_util::{
 use serde::{Deserialize, Deserializer};
 use std::{
     convert::Infallible,
-    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -59,11 +56,11 @@ use tremor_config::NameWithConfig;
 use tremor_system::qsize;
 use tremor_value::prelude::*;
 
-use super::meta::{consolidate_mime, content_type, HeaderValueValue};
+use super::{
+    meta::{consolidate_mime, content_type, HeaderValueValue},
+    StreamingBody,
+};
 
-pub(crate) type StreamingBody = StreamBody<
-    Pin<Box<dyn Stream<Item = Result<Frame<Bytes>, Infallible>> + Send + Sync + 'static>>,
->;
 type StreamingRequest = Request<StreamingBody>;
 
 //  pipeline -> Sink -> http client

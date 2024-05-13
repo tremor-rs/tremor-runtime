@@ -196,6 +196,12 @@
 //! Setting the `$correlation` metadata on an outbound request will result in the response
 //! being tagged with the `$correlation` value set in the corresponding request.
 
+use std::{convert::Infallible, pin::Pin};
+
+use futures::Stream;
+use http_body_util::StreamBody;
+use hyper::body::{Bytes, Frame};
+
 /// HTTP auth helper
 pub mod auth;
 /// HTTP client connector
@@ -206,6 +212,10 @@ pub mod meta;
 pub mod server;
 /// HTTP utils
 pub(crate) mod utils;
+
+pub(crate) type StreamingBody = StreamBody<
+    Pin<Box<dyn Stream<Item = Result<Frame<Bytes>, Infallible>> + Send + Sync + 'static>>,
+>;
 
 /// HTTP Connector Errors
 #[derive(Debug, thiserror::Error)]
