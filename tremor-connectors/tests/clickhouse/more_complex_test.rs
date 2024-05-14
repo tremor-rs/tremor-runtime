@@ -52,7 +52,7 @@ use std::{
 use super::utils;
 use anyhow::{bail, Ok, Result};
 use chrono::DateTime;
-use chrono_tz::Tz;
+use clickhouse_chrono_tz::Tz;
 use clickhouse_rs::Pool;
 use log::error;
 use testcontainers::runners::AsyncRunner;
