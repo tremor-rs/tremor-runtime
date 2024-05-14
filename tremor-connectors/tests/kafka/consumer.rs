@@ -27,7 +27,7 @@ use rdkafka::{
 use serial_test::serial;
 use std::collections::HashMap;
 use std::time::Duration;
-use testcontainers::clients::Cli as DockerCli;
+use testcontainers::Cli as DockerCli;
 use tokio::time::timeout;
 use tremor_connectors::{harness::Harness, impls::kafka};
 use tremor_connectors_test_helpers::free_port;
