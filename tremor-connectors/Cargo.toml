@@ -142,7 +142,8 @@ clickhouse-rs = { version = "1.1.0-alpha.1", optional = true, default-features =
     "tokio_io",
     "tls",
 ] }
-chrono-tz = { version = "0.8", optional = true, default-features = false }
+# Clickhouse chrono-tz is out of date so we ringfence it here. Hopefully a new version will be released soon...
+clickhouse-chrono-tz = { package = "chrono-tz", version = "0.8", optional = true, default-features = false }
 
 # crononome
 serde_yaml = { version = "0.9", optional = true, default-features = false }
@@ -208,12 +209,7 @@ tls = [
 ]
 
 dns = ["dep:trust-dns-resolver"]
-elasticsearch = [
-    "dep:elasticsearch",
-    "dep:serde_yaml",
-    "tls",
-    "http",
-]
+elasticsearch = ["dep:elasticsearch", "dep:serde_yaml", "tls", "http"]
 http = [
     "dep:base64",
     "dep:dashmap",
@@ -239,7 +235,7 @@ file = ["dep:file-mode", "dep:async-compression"]
 kv = ["dep:sled"]
 wal = ["dep:qwal", "dep:simd-json-derive"]
 bench = ["dep:xz2", "dep:hdrhistogram"]
-clickhouse = ["dep:clickhouse-rs", "dep:chrono-tz", "dep:uuid"]
+clickhouse = ["dep:clickhouse-rs", "dep:clickhouse-chrono-tz", "dep:uuid"]
 crononome = ["dep:serde_yaml", "dep:chrono", "dep:cron"]
 stdio = []
 metronome = []

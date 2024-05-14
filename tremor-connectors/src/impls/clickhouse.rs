@@ -283,6 +283,7 @@
 mod conversion;
 
 use crate::sink::prelude::*;
+use clickhouse_chrono_tz::Tz;
 use clickhouse_rs::{
     errors::Error as CError,
     types::{DateTimeType, SqlType},
@@ -598,17 +599,15 @@ impl From<&DummySqlType> for &'static SqlType {
             DummySqlType::Ipv6 => SqlType::Ipv6,
             DummySqlType::Uuid => SqlType::Uuid,
             DummySqlType::DateTime => SqlType::DateTime(DateTimeType::DateTime32),
-            DummySqlType::DateTime64Secs => {
-                SqlType::DateTime(DateTimeType::DateTime64(0, chrono_tz::Tz::UTC))
-            }
+            DummySqlType::DateTime64Secs => SqlType::DateTime(DateTimeType::DateTime64(0, Tz::UTC)),
             DummySqlType::DateTime64Millis => {
-                SqlType::DateTime(DateTimeType::DateTime64(3, chrono_tz::Tz::UTC))
+                SqlType::DateTime(DateTimeType::DateTime64(3, Tz::UTC))
             }
             DummySqlType::DateTime64Micros => {
-                SqlType::DateTime(DateTimeType::DateTime64(6, chrono_tz::Tz::UTC))
+                SqlType::DateTime(DateTimeType::DateTime64(6, Tz::UTC))
             }
             DummySqlType::DateTime64Nanos => {
-                SqlType::DateTime(DateTimeType::DateTime64(9, chrono_tz::Tz::UTC))
+                SqlType::DateTime(DateTimeType::DateTime64(9, Tz::UTC))
             }
         };
 
@@ -697,7 +696,7 @@ mod tests {
     }
 
     mod dummy_sql_type_into_sql_type {
-        use chrono_tz::Tz::UTC;
+        use Tz::UTC;
 
         use super::*;
 
