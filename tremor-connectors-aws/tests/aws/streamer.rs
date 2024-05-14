@@ -22,7 +22,6 @@ use rand::{distributions::Alphanumeric, Rng};
 use serial_test::serial;
 use std::io::Read;
 use std::time::Duration;
-use testcontainers::clients;
 use tokio::time::timeout;
 use tremor_common::ports::IN;
 use tremor_connectors::harness::Harness;

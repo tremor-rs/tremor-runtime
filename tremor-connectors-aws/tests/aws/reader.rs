@@ -18,7 +18,6 @@ use crate::{
 };
 use aws_sdk_s3::{primitives::ByteStream, Client};
 use serial_test::serial;
-use testcontainers::clients;
 use tremor_connectors::harness::Harness;
 use tremor_connectors_aws::s3;
 use tremor_value::{literal, Value};
