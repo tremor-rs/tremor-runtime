@@ -26,7 +26,9 @@ use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
-use testcontainers::{Cli, Container, GenericImage, RunnableImage};
+use testcontainers::runners::AsyncRunner;
+use testcontainers::ContainerAsync;
+use testcontainers::{GenericImage, RunnableImage};
 use tremor_connectors_test_helpers::free_port::find_free_tcp_port;
 
 const IMAGE: &str = "minio/minio";
@@ -73,7 +75,7 @@ async fn create_bucket(bucket: &str, http_port: u16) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn spawn_docker(docker: &Cli) -> (Container<GenericImage>, u16) {
+async fn spawn_docker() -> (ContainerAsync<GenericImage>, u16) {
     let image = GenericImage::new(IMAGE, VERSION)
         .with_env_var("MINIO_ROOT_USER", MINIO_ROOT_USER)
         .with_env_var("MINIO_ROOT_PASSWORD", MINIO_ROOT_PASSWORD)
@@ -91,8 +93,8 @@ async fn spawn_docker(docker: &Cli) -> (Container<GenericImage>, u16) {
     ))
     .with_mapped_port((http_port, 9000_u16))
     .with_mapped_port((http_tls_port, 9001_u16));
-    let container = docker.run(image);
-    let http_port = container.get_host_port_ipv4(9000);
+    let container = image.start().await;
+    let http_port = container.get_host_port_ipv4(9000).await;
     (container, http_port)
 }
 

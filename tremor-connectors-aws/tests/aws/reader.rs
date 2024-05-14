@@ -50,8 +50,7 @@ async fn connector_s3_no_connection() -> anyhow::Result<()> {
 async fn connector_s3_no_credentials() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-credentials");
 
-    let docker = clients::Cli::default();
-    let (_container, http_port) = spawn_docker(&docker).await;
+    let (_container, http_port) = spawn_docker().await;
 
     // ensure that we can create the bucket
     let mut env = EnvHelper::new();
@@ -85,8 +84,7 @@ async fn connector_s3_no_credentials() -> anyhow::Result<()> {
 async fn connector_s3_no_region() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-region");
 
-    let docker = clients::Cli::default();
-    let (_container, http_port) = spawn_docker(&docker).await;
+    let (_container, http_port) = spawn_docker().await;
 
     wait_for_s3(http_port).await?;
     create_bucket(&bucket_name, http_port).await?;
@@ -118,8 +116,7 @@ async fn connector_s3_no_region() -> anyhow::Result<()> {
 async fn connector_s3_no_bucket() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-bucket");
 
-    let docker = clients::Cli::default();
-    let (_container, http_port) = spawn_docker(&docker).await;
+    let (_container, http_port) = spawn_docker().await;
 
     wait_for_s3(http_port).await?;
 
@@ -149,8 +146,7 @@ async fn connector_s3_reader() -> anyhow::Result<()> {
     static HUGE_FILE: [u8; 4096] = [b'Z'; 4096];
     let bucket_name = random_bucket_name("tremor");
 
-    let docker = clients::Cli::default();
-    let (_container, http_port) = spawn_docker(&docker).await;
+    let (_container, http_port) = spawn_docker().await;
 
     wait_for_s3(http_port).await?;
     create_bucket(&bucket_name, http_port).await?;

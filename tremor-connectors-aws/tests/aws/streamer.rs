@@ -62,8 +62,7 @@ async fn no_connection() -> anyhow::Result<()> {
 async fn no_credentials() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-credentials");
 
-    let docker = clients::Cli::default();
-    let (_container, http_port) = spawn_docker(&docker).await;
+    let (_container, http_port) = spawn_docker().await;
 
     wait_for_s3(http_port).await?;
     create_bucket(&bucket_name, http_port).await?;
@@ -95,8 +94,7 @@ async fn no_credentials() -> anyhow::Result<()> {
 async fn no_region() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-region");
 
-    let docker = clients::Cli::default();
-    let (_container, http_port) = spawn_docker(&docker).await;
+    let (_container, http_port) = spawn_docker().await;
 
     wait_for_s3(http_port).await?;
     create_bucket(&bucket_name, http_port).await?;
@@ -129,8 +127,7 @@ async fn no_region() -> anyhow::Result<()> {
 async fn no_bucket() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("no-bucket");
 
-    let docker = clients::Cli::default();
-    let (_container, http_port) = spawn_docker(&docker).await;
+    let (_container, http_port) = spawn_docker().await;
 
     wait_for_s3(http_port).await?;
 
@@ -159,8 +156,7 @@ async fn no_bucket() -> anyhow::Result<()> {
 async fn connector_s3_consistent() -> anyhow::Result<()> {
     let bucket_name = random_bucket_name("tremor");
 
-    let docker = clients::Cli::default();
-    let (_container, http_port) = spawn_docker(&docker).await;
+    let (_container, http_port) = spawn_docker().await;
 
     wait_for_s3(http_port).await?;
     create_bucket(&bucket_name, http_port).await?;
