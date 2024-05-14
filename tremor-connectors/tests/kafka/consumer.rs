@@ -27,7 +27,6 @@ use rdkafka::{
 use serial_test::serial;
 use std::collections::HashMap;
 use std::time::Duration;
-use testcontainers::Cli as DockerCli;
 use tokio::time::timeout;
 use tremor_connectors::{harness::Harness, impls::kafka};
 use tremor_connectors_test_helpers::free_port;
@@ -40,10 +39,9 @@ use crate::{redpanda_container, PRODUCE_TIMEOUT};
 #[tokio::test(flavor = "multi_thread")]
 // #[serial(kafka)]
 async fn transactional_retry() -> anyhow::Result<()> {
-    let docker = DockerCli::default();
-    let container = redpanda_container(&docker).await?;
+    let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092);
+    let port = container.get_host_port_ipv4(9092).await;
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test";
     let group_id = "transactional_retry";
@@ -266,10 +264,9 @@ async fn transactional_retry() -> anyhow::Result<()> {
 #[serial(kafka)]
 
 async fn custom_no_retry() -> anyhow::Result<()> {
-    let docker = DockerCli::default();
-    let container = redpanda_container(&docker).await?;
+    let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092);
+    let port = container.get_host_port_ipv4(9092).await;
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_no_retry";
     let group_id = "test1";
@@ -476,10 +473,9 @@ async fn custom_no_retry() -> anyhow::Result<()> {
 #[serial(kafka)]
 
 async fn performance() -> anyhow::Result<()> {
-    let docker = DockerCli::default();
-    let container = redpanda_container(&docker).await?;
+    let container = redpanda_container().await?;
+    let port = container.get_host_port_ipv4(9092).await;
 
-    let port = container.get_host_port_ipv4(9092);
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_no_retry";
     let group_id = "group123";
@@ -767,10 +763,9 @@ async fn invalid_rdkafka_options() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_consumer_pause_resume() -> anyhow::Result<()> {
-    let docker = DockerCli::default();
-    let container = redpanda_container(&docker).await?;
+    let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092);
+    let port = container.get_host_port_ipv4(9092).await;
 
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_pause_resume";
@@ -861,10 +856,9 @@ async fn connector_kafka_consumer_pause_resume() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn transactional_store_offset_handling() -> anyhow::Result<()> {
-    let docker = DockerCli::default();
-    let container = redpanda_container(&docker).await?;
+    let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092);
+    let port = container.get_host_port_ipv4(9092).await;
 
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_store_offsets";
@@ -1062,10 +1056,9 @@ async fn transactional_store_offset_handling() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn transactional_commit_offset_handling() -> anyhow::Result<()> {
-    let docker = DockerCli::default();
-    let container = redpanda_container(&docker).await?;
+    let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092);
+    let port = container.get_host_port_ipv4(9092).await;
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_commit_offset";
     let group_id = "group_commit_offset";

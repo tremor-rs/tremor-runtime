@@ -19,6 +19,7 @@ use super::utils;
 use clickhouse_rs::Pool;
 use log::error;
 use std::time::{Duration, Instant};
+use testcontainers::runners::AsyncRunner;
 use testcontainers::{GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_connectors::{harness::Harness, impls::clickhouse};
@@ -35,8 +36,6 @@ use tremor_value::literal;
 // ensure that all the data was actually written.
 #[tokio::test(flavor = "multi_thread")]
 async fn simple_insertion() -> anyhow::Result<()> {
-    let docker = clients::Cli::default();
-
     // The following lines spin up a regular ClickHouse container and wait for
     // the database to be up and running.
 
@@ -44,13 +43,10 @@ async fn simple_insertion() -> anyhow::Result<()> {
     // We want to access the container from the host, so we need to make the
     // corresponding port available.
     let local = free_port::find_free_tcp_port().await?;
-    let port_to_expose = Port {
-        internal: utils::SERVER_PORT,
-        local,
-    };
+    let port_to_expose = (local, utils::SERVER_PORT);
     let image = RunnableImage::from(image).with_mapped_port(port_to_expose);
-    let container = docker.run(image);
-    let port = container.get_host_port_ipv4(9000);
+    let container = image.start().await;
+    let port = container.get_host_port_ipv4(9000).await;
     utils::wait_for_ok(port).await?;
 
     // Once the database is available, we use the regular client to create the
@@ -174,7 +170,7 @@ async fn simple_insertion() -> anyhow::Result<()> {
 
     assert_eq!(ages, [42, 101]);
 
-    container.stop();
+    container.stop().await;
 
     Ok(())
 }

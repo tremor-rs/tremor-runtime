@@ -25,7 +25,6 @@ use rdkafka::{
 };
 use serial_test::serial;
 use std::time::Duration;
-use testcontainers::Cli as DockerCli;
 use tokio::time::timeout;
 use tremor_common::ports::IN;
 use tremor_connectors::{harness::Harness, impls::kafka};
@@ -37,10 +36,9 @@ use tremor_value::literal;
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_producer() -> anyhow::Result<()> {
-    let docker = DockerCli::default();
-    let container = redpanda_container(&docker).await?;
+    let container = redpanda_container().await?;
+    let port = container.get_host_port_ipv4(9092).await;
 
-    let port = container.get_host_port_ipv4(9092);
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test";
