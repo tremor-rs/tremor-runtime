@@ -6735,7 +6735,6 @@ dependencies = [
  "rand 0.8.5",
  "rdkafka",
  "rdkafka-sys",
- "reqwest 0.12.4",
  "rustls 0.23.5",
  "rustls-native-certs 0.7.0",
  "rustls-pemfile 2.1.2",

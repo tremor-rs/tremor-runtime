@@ -88,10 +88,6 @@ hyper-rustls = { version = "0.27", optional = true, default-features = false, fe
 ] }
 http-body-util = { version = "0.1", optional = true, default-features = false }
 mime = { version = "0.3", optional = true, default-features = false }
-reqwest = { version = "0.12", optional = true, default-features = false, features = [
-    "rustls-tls",
-    "rustls-tls-native-roots",
-] }
 base64 = { version = "0.22", optional = true, default-features = false }
 dashmap = { version = "5.5", optional = true, default-features = false }
 async-stream = { version = "0.3", optional = true, default-features = false }
@@ -214,7 +210,6 @@ tls = [
 dns = ["dep:trust-dns-resolver"]
 elasticsearch = [
     "dep:elasticsearch",
-    "dep:reqwest",
     "dep:serde_yaml",
     "tls",
     "http",
@@ -229,7 +224,6 @@ http = [
     "dep:hyper-util",
     "dep:hyper",
     "dep:mime",
-    "dep:reqwest",
     "dep:async-stream",
     "hyper/http1",
     "hyper/http2",
