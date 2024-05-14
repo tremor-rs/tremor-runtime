@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::DummySqlType;
-use chrono_tz::Tz;
+use clickhouse_chrono_tz::Tz;
 pub(super) use clickhouse_rs::types::Value as CValue;
 use either::Either;
 use std::{
