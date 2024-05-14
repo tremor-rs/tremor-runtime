@@ -156,7 +156,7 @@ socket2 = { version = "0.5", optional = true, default-features = false }
 serde_yaml = { version = "0.9", default-features = false }
 test-case = "3.3"
 proptest = "1.4"
-testcontainers = "0.15"
+testcontainers = "0.16"
 serial_test = "3.0"
 http-types = "2.0"
 bytes = "1.0"
