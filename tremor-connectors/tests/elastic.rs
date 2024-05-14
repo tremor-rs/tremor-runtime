@@ -29,7 +29,7 @@ use log::error;
 use serial_test::serial;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use testcontainers::{clients, core::WaitFor, GenericImage, RunnableImage};
+use testcontainers::{core::WaitFor, GenericImage, RunnableImage};
 use tokio::process;
 use tremor_common::ports::IN;
 use tremor_connectors::{

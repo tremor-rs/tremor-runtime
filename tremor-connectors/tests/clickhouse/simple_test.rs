@@ -19,7 +19,7 @@ use super::utils;
 use clickhouse_rs::Pool;
 use log::error;
 use std::time::{Duration, Instant};
-use testcontainers::{clients, core::Port, GenericImage, RunnableImage};
+use testcontainers::{GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_connectors::{harness::Harness, impls::clickhouse};
 use tremor_connectors_test_helpers::free_port;

@@ -55,7 +55,7 @@ use chrono::DateTime;
 use chrono_tz::Tz;
 use clickhouse_rs::Pool;
 use log::error;
-use testcontainers::{clients, core::Port, GenericImage, RunnableImage};
+use testcontainers::{GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_connectors::{harness::Harness, impls::clickhouse};
 use tremor_connectors_test_helpers::free_port;
