@@ -29,6 +29,8 @@ use log::error;
 use serial_test::serial;
 use std::path::Path;
 use std::time::{Duration, Instant};
+use testcontainers::core::Mount;
+use testcontainers::runners::AsyncRunner;
 use testcontainers::{core::WaitFor, GenericImage, RunnableImage};
 use tokio::process;
 use tremor_common::ports::IN;
@@ -62,7 +64,6 @@ fn default_image() -> GenericImage {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn connector_elastic() -> anyhow::Result<()> {
-    let docker = clients::Cli::default();
     let port = find_free_tcp_port().await?;
     let image = RunnableImage::from(
         default_image()
@@ -71,8 +72,8 @@ async fn connector_elastic() -> anyhow::Result<()> {
     )
     .with_mapped_port((port, 9200_u16));
 
-    let container = docker.run(image);
-    let port = container.get_host_port_ipv4(9200);
+    let container = image.start().await;
+    let port = container.get_host_port_ipv4(9200).await;
 
     // wait for the image to be reachable
     let elastic = Elasticsearch::new(Transport::single_node(
@@ -423,7 +424,7 @@ async fn connector_elastic() -> anyhow::Result<()> {
     );
 
     // check what happens when ES isnt reachable
-    container.stop();
+    container.stop().await;
 
     let event = Event {
         id: EventId::new(0, 0, 2, 2),
@@ -477,7 +478,6 @@ async fn connector_elastic() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn elastic_routing() -> anyhow::Result<()> {
-    let docker = clients::Cli::default();
     let port = find_free_tcp_port().await?;
     let image = RunnableImage::from(
         default_image()
@@ -486,8 +486,8 @@ async fn elastic_routing() -> anyhow::Result<()> {
     )
     .with_mapped_port((port, 9200_u16));
 
-    let container = docker.run(image);
-    let port = container.get_host_port_ipv4(9200);
+    let container = image.start().await;
+    let port = container.get_host_port_ipv4(9200).await;
 
     // wait for the image to be reachable
     let elastic = Elasticsearch::new(Transport::single_node(
@@ -793,7 +793,6 @@ async fn elastic_routing() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn auth_basic() -> anyhow::Result<()> {
-    let docker = clients::Cli::default();
     let port = find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
@@ -803,8 +802,8 @@ async fn auth_basic() -> anyhow::Result<()> {
     )
     .with_mapped_port((port, 9200_u16));
 
-    let container = docker.run(image);
-    let port = container.get_host_port_ipv4(9200);
+    let container = image.start().await;
+    let port = container.get_host_port_ipv4(9200).await;
     let conn_pool = SingleNodeConnectionPool::new(format!("http://127.0.0.1:{port}").parse()?);
     let transport = TransportBuilder::new(conn_pool).auth(Credentials::Basic(
         "elastic".to_string(),
@@ -849,7 +848,6 @@ async fn auth_basic() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(elastic)]
 async fn auth_api_key() -> anyhow::Result<()> {
-    let docker = clients::Cli::default();
     let port = find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
@@ -860,8 +858,8 @@ async fn auth_api_key() -> anyhow::Result<()> {
     )
     .with_mapped_port((port, 9200_u16));
 
-    let container = docker.run(image);
-    let port = container.get_host_port_ipv4(9200);
+    let container = image.start().await;
+    let port = container.get_host_port_ipv4(9200).await;
     let conn_pool = SingleNodeConnectionPool::new(format!("http://127.0.0.1:{port}").parse()?);
     let transport = TransportBuilder::new(conn_pool).auth(Credentials::Basic(
         "elastic".to_string(),
@@ -933,7 +931,6 @@ async fn auth_client_cert() -> anyhow::Result<()> {
         tmp.canonicalize()?
     };
 
-    let docker = clients::Cli::default();
     let port = find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
@@ -955,9 +952,9 @@ async fn auth_client_cert() -> anyhow::Result<()> {
                 "/usr/share/elasticsearch/config/certificates/localhost.cert",
             ),
     )
-    .with_volume((
+    .with_mount(Mount::bind_mount(
         tests_dir.display().to_string(),
-        "/usr/share/elasticsearch/config/certificates",
+        "/usr/share/elasticsearch/config/certificates".to_string(),
     ))
     .with_mapped_port((port, 9200_u16));
     let mut cafile = tests_dir.clone();
@@ -965,8 +962,8 @@ async fn auth_client_cert() -> anyhow::Result<()> {
     let mut keyfile = tests_dir.clone();
     keyfile.push("localhost.key");
 
-    let container = docker.run(image);
-    let port = container.get_host_port_ipv4(9200);
+    let container = image.start().await;
+    let port = container.get_host_port_ipv4(9200).await;
     let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
     let ca = tokio::fs::read_to_string(&cafile).await?;
     let mut cert = tokio::fs::read(&cafile).await?;
@@ -1065,7 +1062,6 @@ async fn elastic_https() -> anyhow::Result<()> {
         tmp.canonicalize()?
     };
 
-    let docker = clients::Cli::default();
     let port = find_free_tcp_port().await?;
     let password = "snot";
     let image = RunnableImage::from(
@@ -1089,7 +1085,7 @@ async fn elastic_https() -> anyhow::Result<()> {
             // .with_wait_for(WaitFor::message_on_stdout("[YELLOW] to [GREEN]")),
             .with_wait_for(WaitFor::message_on_stdout("license mode is")),
     )
-    .with_volume((
+    .with_mount(Mount::bind_mount(
         tests_dir.display().to_string(),
         "/usr/share/elasticsearch/config/certificates",
     ))
@@ -1097,8 +1093,8 @@ async fn elastic_https() -> anyhow::Result<()> {
     let mut cafile = tests_dir.clone();
     cafile.push("localhost.cert");
 
-    let container = docker.run(image);
-    let port = container.get_host_port_ipv4(9200);
+    let container = image.start().await;
+    let port = container.get_host_port_ipv4(9200).await;
     let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
     let ca = tokio::fs::read_to_string(&cafile).await?;
     let transport = TransportBuilder::new(conn_pool).cert_validation(CertificateValidation::Full(
