@@ -243,6 +243,7 @@ use elasticsearch::{
     cert::{Certificate, CertificateValidation},
     cluster::ClusterHealthParts,
     http::{
+        headers::{HeaderMap, HeaderName, HeaderValue},
         response::Response,
         transport::{SingleNodeConnectionPool, TransportBuilder},
     },
@@ -588,21 +589,21 @@ impl Sink for ElasticSink {
                 transport_builder = transport_builder.timeout(duration);
             }
             if !self.config.headers.is_empty() {
-                let mut headermap = reqwest::header::HeaderMap::new();
+                let mut headermap = HeaderMap::new();
                 for (k, v) in &self.config.headers {
                     match v {
                         Header(Either::Left(values)) => {
                             for value in values {
                                 headermap.append(
-                                    reqwest::header::HeaderName::from_bytes(k.as_bytes())?,
-                                    reqwest::header::HeaderValue::from_str(value.as_str())?,
+                                    HeaderName::from_bytes(k.as_bytes())?,
+                                    HeaderValue::from_str(value.as_str())?,
                                 );
                             }
                         }
                         Header(Either::Right(value)) => {
                             headermap.append(
-                                reqwest::header::HeaderName::from_bytes(k.as_bytes())?,
-                                reqwest::header::HeaderValue::from_str(value.as_str())?,
+                                HeaderName::from_bytes(k.as_bytes())?,
+                                HeaderValue::from_str(value.as_str())?,
                             );
                         }
                     }
