@@ -29,7 +29,7 @@ rand = { version = "0.8", optional = true, default-features = false, features = 
 ] }
 
 # Compression
-brotli = { version = "5", optional = true, default-features = false, features = [
+brotli = { version = "6", optional = true, default-features = false, features = [
     "std",
 ] }
 xz2 = { version = "0.1", optional = true, default-features = false, features = [
