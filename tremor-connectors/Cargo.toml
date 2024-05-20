@@ -63,7 +63,7 @@ gouth = { version = "0.2", optional = true, default-features = true }
 
 # tls
 tokio-rustls = { version = "0.26", optional = true, default-features = false }
-rustls = { version = "0.23.6", optional = true, default-features = false }
+rustls = { version = "0.23.7", optional = true, default-features = false }
 rustls-pemfile = { version = "2.1.2", optional = true, default-features = false }
 rustls-native-certs = { version = "0.7", optional = true, default-features = false }
 
