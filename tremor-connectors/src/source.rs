@@ -1254,9 +1254,9 @@ async fn build_events(
                 )
                 .await;
                 let (port, payload) = match line_value {
-                    Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
-                    Err(None) => continue,
-                    Err(Some(e)) => (
+                    Ok(Some(decoded)) => (port.unwrap_or(&OUT).clone(), decoded),
+                    Ok(None) => continue,
+                    Err(e) => (
                         ERR,
                         make_error(alias, &e.into(), stream_state.stream_id, pull_id, meta),
                     ),
@@ -1315,9 +1315,9 @@ async fn build_last_events(
                 )
                 .await;
                 let (port, payload) = match line_value {
-                    Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
-                    Err(None) => continue,
-                    Err(Some(e)) => (
+                    Ok(Some(decoded)) => (port.unwrap_or(&OUT).clone(), decoded),
+                    Ok(None) => continue,
+                    Err(e) => (
                         ERR,
                         make_error(alias, &e.into(), stream_state.stream_id, pull_id, meta),
                     ),
