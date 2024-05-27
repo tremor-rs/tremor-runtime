@@ -139,22 +139,18 @@ impl EventPayload {
         meta: Value<'static>,
         ingest_ns: &mut u64,
         codec: &mut Box<dyn Codec>,
-    ) -> std::result::Result<Self, Option<crate::errors::Error>> {
+    ) -> std::result::Result<Option<Self>, crate::errors::Error> {
         let mut raw = Pin::new(raw);
         // We are keeping the Vector pinnd and as part of the same struct, and the decoded data
         // can't leak this function aside of inside this struct.
         // ALLOW: See above explenation
         let r = unsafe { mem::transmute::<&mut [u8], &'static mut [u8]>(raw.as_mut().get_mut()) };
-        let res = codec.decode(r, *ingest_ns, meta).await;
-        match res {
-            Ok(None) => Err(None),
-            Err(e) => Err(Some(e.into())),
-            Ok(Some((decoded, meta))) => {
-                let data = ValueAndMeta::from_parts(decoded, meta);
-                let raw = vec![Arc::new(raw)];
-                Ok(Self { raw, data })
-            }
-        }
+        let res = codec.decode(r, *ingest_ns, meta).await?;
+        Ok(res.map(|(decoded, meta)| {
+            let data = ValueAndMeta::from_parts(decoded, meta);
+            let raw = vec![Arc::new(raw)];
+            Self { raw, data }
+        }))
     }
 
     /// Named after the original rental struct for easy rewriting.
