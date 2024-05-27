@@ -424,3 +424,35 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_event_payload() {
+        let vec = br#"{"key": "value"}"#.to_vec();
+        let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
+        let v: String = e.rent(|s| s.value()["key"].as_str().unwrap().to_string());
+        assert_eq!(v, "value");
+    }
+
+    #[test]
+    fn test_event_payload_try_from_multiple() -> Result<(), crate::errors::Error> {
+        let vec1 = br#"{"key": "value1"}"#.to_vec();
+        let vec2 = br#"{"key": "value2"}"#.to_vec();
+        let e = EventPayload::try_from_multiple(vec![vec1, vec2], |d| {
+            let mut value = Value::array_with_capacity(2);
+            for v in d.iter_mut() {
+                value.try_push(tremor_value::parse_to_value(v)?);
+            }
+            Ok((value, Value::null()).into())
+        })?;
+        let v: String = e.rent(|s| s.value()[0]["key"].as_str().expect("no string").to_string());
+        assert_eq!(v, "value1");
+        let v: String = e.rent(|s| s.value()[1]["key"].as_str().expect("no string").to_string());
+        assert_eq!(v, "value2");
+
+        Ok(())
+    }
+}
