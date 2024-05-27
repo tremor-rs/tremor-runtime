@@ -103,7 +103,6 @@ impl EventPayload {
     ///
     /// # Errors
     /// errors if the conversion function fails
-    #[must_use]
     pub fn try_from_multiple<F>(mut raw: Vec<Vec<u8>>, f: F) -> Result<Self, crate::errors::Error>
     where
         F: for<'head> FnOnce(
