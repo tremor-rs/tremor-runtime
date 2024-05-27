@@ -1,6 +1,6 @@
 [package]
 name = "tremor-connectors-gcp"
-version = "0.13.0-rc.25"
+version = "0.13.0-rc.26"
 edition = "2021"
 license = "Apache-2.0"
 homepage = "https://www.tremor.rs"
@@ -9,13 +9,13 @@ authors = ["The Tremor Team"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.25", default-features = false }
-tremor-connectors-object-storage = { path = "../tremor-connectors-object-storage", version = "0.13.0-rc.25" }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.25" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.25" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.25" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.25" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.25" }
+tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.26", default-features = false }
+tremor-connectors-object-storage = { path = "../tremor-connectors-object-storage", version = "0.13.0-rc.26" }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.26" }
+tremor-system = { path = "../tremor-system", version = "0.13.0-rc.26" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.26" }
+tremor-config = { path = "../tremor-config", version = "0.13.0-rc.26" }
+tremor-script = { path = "../tremor-script", version = "0.13.0-rc.26" }
 
 anyhow = { version = "1", default-features = true }
 async-trait = { version = "0.1", default-features = true }
@@ -70,10 +70,10 @@ tokio = { version = "1.34", default-features = true }
 value-trait = { version = "0.8" }
 test-case = { version = "3", default-features = true }
 anyhow = { version = "1" }
-tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.25" }
+tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.26" }
 tempfile = { version = "3", default-features = true }
 env_logger = { version = "0.11", default-features = true }
-tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.25" }
+tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.26" }
 
 [features]
 integration-harness = []

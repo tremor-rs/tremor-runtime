@@ -1,6 +1,6 @@
 [package]
 name = "tremor-connectors-object-storage"
-version = "0.13.0-rc.25"
+version = "0.13.0-rc.26"
 edition = "2021"
 license = "Apache-2.0"
 homepage = "https://www.tremor.rs"
@@ -9,8 +9,8 @@ authors = ["The Tremor Team"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.25", default-features = false }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.25" }
+tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.26", default-features = false }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.26" }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = { version = "1", default-features = true }
 anyhow = { version = "1", default-features = true }
