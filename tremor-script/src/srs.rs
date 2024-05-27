@@ -93,6 +93,37 @@ impl EventPayload {
         }
     }
 
+    /// The function tries to turn an array of raw data into a value and metadata set.
+    ///
+    /// The return can reference the the data it gets passed
+    /// in the function.
+    ///
+    /// Internally the lifetime will be bound to the raw part
+    /// of the struct.
+    ///
+    /// # Errors
+    /// errors if the conversion function fails
+    #[must_use]
+    pub fn try_from_multiple<F>(mut raw: Vec<Vec<u8>>, f: F) -> Result<Self, crate::errors::Error>
+    where
+        F: for<'head> FnOnce(
+            &'head mut [Vec<u8>],
+        ) -> Result<ValueAndMeta<'head>, crate::errors::Error>,
+    {
+        let data = f(&mut raw)?;
+        // This is where the magic happens
+        // ALLOW: this is sound since we implement a self referential struct
+        let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
+        let raw = raw
+            .into_iter()
+            .map(|r| Arc::new(Pin::new(r)))
+            .collect::<Vec<_>>();
+        Ok(Self {
+            raw,
+            data: structured,
+        })
+    }
+
     /// Creates a new Payload with a given byte vector and
     /// a codec to decode it.
     ///
