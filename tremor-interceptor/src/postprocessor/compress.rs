@@ -370,37 +370,37 @@ mod tests {
     #[test]
     fn name() {
         let post = Compress {
-            codec: Box::new(Gzip::default()),
+            codec: Box::<Gzip>::default(),
         };
         assert_eq!(post.name(), "compress");
 
         let post = Compress {
-            codec: Box::new(Brotli::default()),
+            codec: Box::<Brotli>::default(),
         };
         assert_eq!(post.name(), "compress");
 
         let post = Compress {
-            codec: Box::new(Zlib::default()),
+            codec: Box::<Zlib>::default(),
         };
         assert_eq!(post.name(), "compress");
 
         let post = Compress {
-            codec: Box::new(Xz2::default()),
+            codec: Box::<Xz2>::default(),
         };
         assert_eq!(post.name(), "compress");
 
         let post = Compress {
-            codec: Box::new(Snappy::default()),
+            codec: Box::<Snappy>::default(),
         };
         assert_eq!(post.name(), "compress");
 
         let post = Compress {
-            codec: Box::new(Lz4::default()),
+            codec: Box::<Lz4>::default(),
         };
         assert_eq!(post.name(), "compress");
 
         let post = Compress {
-            codec: Box::new(Zstd::default()),
+            codec: Box::<Zstd>::default(),
         };
         assert_eq!(post.name(), "compress");
     }

@@ -54,7 +54,7 @@ impl NodeId {
         Self {
             id: id.into(),
             module,
-            mid: mid,
+            mid,
         }
     }
     ///Checks if the id and module are the same

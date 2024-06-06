@@ -155,10 +155,10 @@ pub async fn load_archive(
     let mut with_exprs = Vec::new();
 
     if let Some(config) = config.as_object() {
-        for (key, value) in config.iter() {
+        for (key, value) in config {
             let value = ImutExpr::literal(NodeMeta::dummy(), value.clone());
             let ident = Ident::new(key.clone(), NodeMeta::dummy());
-            with_exprs.push((ident, value.into()));
+            with_exprs.push((ident, value));
         }
     }
     let with = WithExprs(with_exprs);
