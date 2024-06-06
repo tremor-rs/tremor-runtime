@@ -130,9 +130,11 @@ impl ServerRun {
         }
 
         // We process archives  thereafter
-        for config_file in archives {
-            if let Err(e) = tremor_runtime::load_archive(&world, config_file, "main", None).await {
-                return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
+        for archive_file in archives {
+            let mut archive = tremor_common::asy::file::open(&archive_file).await?;
+
+            if let Err(e) = tremor_runtime::load_archive(&world, &mut archive, "main", None).await {
+                return Err(ErrorKind::FileLoadError(archive_file.to_string(), e).into());
             }
         }
         let api_handle = if self.no_api {

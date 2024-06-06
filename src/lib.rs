@@ -51,8 +51,12 @@ pub mod version;
 use crate::errors::{Error, Result};
 
 use system::World;
+use tokio::io::AsyncRead;
 use tremor_script::{
-    ast::{CreationalWith, DeployFlow, Ident, ImutExpr, NodeId, WithExprs},
+    ast::{
+        optimizer::Optimizer, visitors::ArgsRewriter, walkers::DeployWalker as _, BaseExpr,
+        CreationalWith, DeployFlow, Helper, Ident, ImutExpr, NodeId, WithExprs,
+    },
     deploy::Deploy,
     highlighter::{Dumb as ToStringHighlighter, Highlighter, Term as TermHighlighter},
     prelude::ValueAsContainer,
@@ -137,14 +141,11 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
 /// Fails if the file can not be loaded
 pub async fn load_archive(
     world: &World,
-    file_name: &str,
+    archive: impl AsyncRead + Send + Unpin,
     flow_name: &str,
     config: Option<tremor_value::Value<'static>>,
 ) -> Result<usize> {
-    info!("Loading tremor archive from {file_name}");
-
-    let archive = tremor_common::asy::file::read(&file_name).await?;
-    let (app, deployable, _indexes) = tremor_archive::extract(&archive)?;
+    let (app, deployable, _indexes) = tremor_archive::extract(archive).await?;
     info!("App laoded {}", app.name());
 
     // ensure we print the warnings
@@ -175,10 +176,24 @@ pub async fn load_archive(
         .content
         .flows
         .get(flow_name)
-        .ok_or_else(|| format!("failed to load archive {file_name} flow {flow_name}"))?
+        .ok_or_else(|| format!("failed to load archive flow {flow_name}"))?
         .clone();
     // ensure we applu the configuration
     defn.params.ingest_creational_with(&with)?;
+
+    let reg = tremor_script::registry();
+    let aggr_reg = tremor_script::aggr_registry();
+    let mut helper = Helper::new(&reg, &aggr_reg);
+
+    Optimizer::new(&helper).walk_flow_definition(&mut defn)?;
+
+    let inner_args = defn.params.render()?;
+
+    ArgsRewriter::new(inner_args, &mut helper, defn.params.meta())
+        .walk_flow_definition(&mut defn)?;
+
+    Optimizer::new(&helper).walk_flow_definition(&mut defn)?;
+
     let flow = DeployFlow {
         mid: NodeMeta::dummy(),
         from_target: NodeId::new(flow_name, vec![], NodeMeta::dummy()),

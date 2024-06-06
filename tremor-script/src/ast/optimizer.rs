@@ -33,7 +33,9 @@ use crate::errors::Result;
 use crate::module::Content;
 use beef::Cow;
 
-use super::query::raw::WindowName;
+use super::{
+    query::raw::WindowName, visitors::DeployVisitor, walkers::DeployWalker, FlowDefinition,
+};
 
 struct CombinedVisitor<First, Second> {
     first: First,
@@ -1195,6 +1197,93 @@ where
     Second: ExprVisitor<'script> + ImutExprVisitor<'script> + QueryVisitor<'script>,
 {
 }
+impl<'script, First, Second> DeployVisitor<'script> for CombinedVisitor<First, Second>
+where
+    First: QueryWalker<'script> + DeployVisitor<'script>,
+    Second: QueryWalker<'script> + DeployVisitor<'script>,
+{
+    fn visit_flow_definition(
+        &mut self,
+        with: &mut super::FlowDefinition<'script>,
+    ) -> Result<VisitRes> {
+        self.first.visit_flow_definition(with)?;
+        self.second.visit_flow_definition(with)
+    }
+
+    fn leave_flow_definition(&mut self, with: &mut super::FlowDefinition<'script>) -> Result<()> {
+        self.first.leave_flow_definition(with)?;
+        self.second.leave_flow_definition(with)
+    }
+
+    fn visit_connector_definition(
+        &mut self,
+        with: &mut super::ConnectorDefinition<'script>,
+    ) -> Result<VisitRes> {
+        self.first.visit_connector_definition(with)?;
+        self.second.visit_connector_definition(with)
+    }
+
+    fn leave_connector_definition(
+        &mut self,
+        with: &mut super::ConnectorDefinition<'script>,
+    ) -> Result<()> {
+        self.first.leave_connector_definition(with)?;
+        self.second.leave_connector_definition(with)
+    }
+
+    fn visit_create_target_definition(
+        &mut self,
+        with: &mut super::CreateTargetDefinition<'script>,
+    ) -> Result<VisitRes> {
+        self.first.visit_create_target_definition(with)?;
+        self.second.visit_create_target_definition(with)
+    }
+
+    fn leave_create_target_definition(
+        &mut self,
+        with: &mut super::CreateTargetDefinition<'script>,
+    ) -> Result<()> {
+        self.first.leave_create_target_definition(with)?;
+        self.second.leave_create_target_definition(with)
+    }
+
+    fn visit_deploy_endpoint(&mut self, with: &mut super::DeployEndpoint) -> Result<VisitRes> {
+        self.first.visit_deploy_endpoint(with)?;
+        self.second.visit_deploy_endpoint(with)
+    }
+
+    fn leave_deploy_endpoint(&mut self, with: &mut super::DeployEndpoint) -> Result<()> {
+        self.first.leave_deploy_endpoint(with)?;
+        self.second.leave_deploy_endpoint(with)
+    }
+
+    fn visit_connect_stmt(&mut self, with: &mut super::ConnectStmt) -> Result<VisitRes> {
+        self.first.visit_connect_stmt(with)?;
+        self.second.visit_connect_stmt(with)
+    }
+
+    fn leave_connect_stmt(&mut self, with: &mut super::ConnectStmt) -> Result<()> {
+        self.first.leave_connect_stmt(with)?;
+        self.second.leave_connect_stmt(with)
+    }
+
+    fn visit_create_stmt(&mut self, with: &mut super::CreateStmt<'script>) -> Result<VisitRes> {
+        self.first.visit_create_stmt(with)?;
+        self.second.visit_create_stmt(with)
+    }
+
+    fn leave_create_stmt(&mut self, with: &mut super::CreateStmt<'script>) -> Result<()> {
+        self.first.leave_create_stmt(with)?;
+        self.second.leave_create_stmt(with)
+    }
+}
+
+impl<'script, First, Second> DeployWalker<'script> for CombinedVisitor<First, Second>
+where
+    First: QueryWalker<'script> + DeployVisitor<'script>,
+    Second: QueryWalker<'script> + DeployVisitor<'script>,
+{
+}
 
 /// Runs optimisers on a given AST element
 pub struct Optimizer<'run, 'script>
@@ -1306,6 +1395,14 @@ where
     pub fn walk_script_defn(&mut self, e: &mut ScriptDefinition<'script>) -> Result<()> {
         self.visitor.walk_script_defn(e)?;
 
+        Ok(())
+    }
+
+    /// Walk `FlowDefinition`
+    /// # Errors
+    /// When the walker fails
+    pub fn walk_flow_definition(&mut self, e: &mut FlowDefinition<'script>) -> Result<()> {
+        self.visitor.walk_flow_definition(e)?;
         Ok(())
     }
 }

@@ -12,20 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use serial_test::serial;
-use std::io::prelude::*;
 use std::time::Duration;
-use tremor_common::file;
+use tremor_common::asy::file;
 use tremor_runtime::{
     errors::*,
     system::{World, WorldConfig},
 };
-use tremor_script::{deploy::Deploy, module::Manager};
-
-fn parse(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
-    let aggr_reg = tremor_script::aggr_registry();
-    let reg = tremor_script::registry::registry();
-    Deploy::parse(&deploy, &reg, &aggr_reg)
-}
+use tremor_script::module::Manager;
+use tremor_value::Value;
 
 macro_rules! test_cases {
 
@@ -39,31 +33,34 @@ macro_rules! test_cases {
 
                     let deploy_dir = concat!("tests/flows/", stringify!($file), "/").to_string();
                     let deploy_file = concat!("tests/flows/", stringify!($file), "/flow.troy");
+                    let config_file = concat!("tests/flows/", stringify!($file), "/config.json");
+
                     Manager::clear_path()?;
                     Manager::add_path(&"tremor-script/lib")?;
                     Manager::add_path(&deploy_dir)?;
 
-                    println!("Loading deployment file: {}", deploy_file);
-                    let mut file = file::open(deploy_file)?;
-                    let mut contents = String::new();
-                    file.read_to_string(&mut contents)?;
-                    match parse(&contents) {
-                        Ok(deployable) => {
-                            let config = WorldConfig{
-                                debug_connectors: true,
-                            };
-                            let (world, h) = World::start(config).await?;
-                            for flow in deployable.iter_flows() {
-                                world.start_flow(flow).await?;
-                            }
-                            // this isn't good
-                            tokio::time::timeout(Duration::from_secs(10), h).await???;
-                        },
-                        otherwise => {
-                            println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
-                            assert!(false);
-                        }
-                    }
+                    println!("Loading deployment file: {deploy_file}");
+
+                    let mut archive = Vec::new();
+                    tremor_archive::package(
+                        &mut archive,
+                        deploy_file,
+                        Some(stringify!($file).to_string()),
+                    ).await?;
+
+                    let app = tremor_archive::get_app(archive.as_slice()).await?;
+
+
+                    assert_eq!(stringify!($file), app.name.0);
+
+                    println!("Loading config file: {config_file}");
+                    let flow_config = file::read(config_file).await.ok().and_then(|mut c| simd_json::from_slice::<Value>(&mut c).ok().map(Value::into_static));
+
+                    let (world, h) = World::start(WorldConfig{debug_connectors:true}).await?;
+
+                    tremor_runtime::load_archive(&world, archive.as_slice(), "main", flow_config).await?;
+
+                    tokio::time::timeout(Duration::from_secs(10), h).await???;
 
                     Ok(())
                 }

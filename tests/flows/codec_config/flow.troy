@@ -1,4 +1,4 @@
-define flow test
+define flow main
 flow
   use std::time::nanos;
   define connector metronome from metronome
@@ -24,5 +24,3 @@ flow
   connect /pipeline/identity to /connector/exit;
   connect /pipeline/identity to /connector/sorted;
 end;
-
-deploy flow test
