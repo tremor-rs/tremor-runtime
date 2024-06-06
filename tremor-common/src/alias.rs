@@ -183,3 +183,55 @@ impl std::fmt::Display for Pipeline {
         write!(f, "{}::{}", self.flow_alias, self.pipeline_alias)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn app() {
+        let app = App::new("test");
+        assert_eq!(app.to_string(), "test");
+
+        let app = App::from("test2".to_string());
+        assert_eq!(app.to_string(), "test2");
+
+        let app = App::from("test3");
+        assert_eq!(app.to_string(), "test3");
+    }
+
+    #[test]
+    fn instance() {
+        let instance = Instance::from("test");
+        assert_eq!(instance.to_string(), "test");
+
+        let instance = Instance::from("test2".to_string());
+        assert_eq!(instance.to_string(), "test2");
+
+        let instance = Instance::from("test3");
+        assert_eq!(instance.to_string(), "test3");
+
+        let instance = Instance::from(instance);
+        assert_eq!(instance.to_string(), "test3");
+    }
+
+    #[test]
+    fn flow() {
+        let flow = Flow::new("test");
+        assert_eq!(flow.to_string(), "test");
+    }
+
+    #[test]
+    fn connector() {
+        let flow = Flow::new("test");
+        let connector = Connector::new(flow, "test");
+        assert_eq!(connector.to_string(), "test::test");
+    }
+
+    #[test]
+    fn pipeline() {
+        let flow = Flow::new("test");
+        let pipeline = Pipeline::new(flow, "test");
+        assert_eq!(pipeline.to_string(), "test::test");
+    }
+}
