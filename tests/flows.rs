@@ -24,7 +24,7 @@ use tremor_script::{deploy::Deploy, module::Manager};
 fn parse(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::registry::registry();
-    Deploy::parse(deploy, &reg, &aggr_reg)
+    Deploy::parse(&deploy, &reg, &aggr_reg)
 }
 
 macro_rules! test_cases {

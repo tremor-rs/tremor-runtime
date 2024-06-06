@@ -16,6 +16,8 @@ use std::{fmt::Display, str::Utf8Error};
 /// A shared error for common functions
 #[derive(Debug)]
 pub enum Error {
+    /// Failed to read a File
+    FileRead(std::io::Error, String),
     /// Failed to open a File
     FileOpen(std::io::Error, String),
     /// Failed to create a File
@@ -61,6 +63,7 @@ impl From<Utf8Error> for Error {
 impl Display for Error {
     fn fmt(&self, w: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::FileRead(e, f) => write!(w, "Failed to read file `{f}`: {e}"),
             Error::FileOpen(e, f) => write!(w, "Failed to open file `{f}`: {e}"),
             Error::FileCreate(e, f) => write!(w, "Failed to create file `{f}`: {e}"),
             Error::FileCanonicalize(e, f) => {

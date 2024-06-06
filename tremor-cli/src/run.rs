@@ -432,7 +432,7 @@ impl Run {
             SourceKind::Troy => self.run_troy_source().await,
             SourceKind::Trickle => self.run_trickle_source().await,
             SourceKind::Tremor => self.run_tremor_source().await,
-            SourceKind::Json | SourceKind::Unsupported(_) => {
+            SourceKind::Archive | SourceKind::Json | SourceKind::Unsupported(_) => {
                 Err(format!("Error: Unable to execute source: {}", &self.script).into())
             }
         }

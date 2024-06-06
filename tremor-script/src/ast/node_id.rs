@@ -48,6 +48,20 @@ impl<'script> From<&IdentRaw<'script>> for NodeId {
 }
 
 impl NodeId {
+    /// Create a new node id
+    #[must_use]
+    pub fn new(id: impl Into<String>, module: Vec<String>, mid: Box<NodeMeta>) -> Self {
+        Self {
+            id: id.into(),
+            module,
+            mid: mid,
+        }
+    }
+    ///Checks if the id and module are the same
+    #[must_use]
+    pub fn same(&self, other: &Self) -> bool {
+        self.id == other.id && self.module == other.module
+    }
     /// The node's id.
     #[must_use]
     pub fn id(&self) -> &str {

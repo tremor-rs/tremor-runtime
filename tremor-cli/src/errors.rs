@@ -46,6 +46,7 @@ error_chain! {
         Codec(tremor_codec::errors::Error, tremor_codec::errors::ErrorKind);
     }
     foreign_links {
+        Archive(tremor_archive::Error);
         Value(tremor_value::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JsonError(simd_json::Error) #[doc = "Error during json parsing"];

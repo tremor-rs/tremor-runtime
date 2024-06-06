@@ -130,8 +130,8 @@ impl NodeMeta {
     }
     // ALLOW: this is the expected type
     #[allow(clippy::unnecessary_box_returns)]
-    #[cfg(test)]
-    pub(crate) fn dummy() -> Box<Self> {
+    /// Creates a dummy metadata node
+    pub fn dummy() -> Box<Self> {
         Box::new(NodeMeta::new(
             Location::start_of_file(arena::Index::INVALID),
             Location::start_of_file(arena::Index::INVALID),
@@ -724,7 +724,8 @@ impl<'script> ImutExpr<'script> {
             _ => None,
         }
     }
-    pub(crate) fn literal(mid: Box<NodeMeta>, value: Value<'script>) -> Self {
+    /// creates a new literal
+    pub fn literal(mid: Box<NodeMeta>, value: Value<'script>) -> Self {
         ImutExpr::Literal(Literal { mid, value })
     }
     /// Tries to borrow the `ImutExpr` as a `Record`
@@ -737,7 +738,7 @@ impl<'script> ImutExpr<'script> {
         }
     }
     /// Tries to turn the `ImutExpr` into a `Value`
-    pub(crate) fn try_into_value(mut self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
+    pub fn try_into_value(mut self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut self)?;
         if let ImutExpr::Literal(Literal { value: v, .. }) = self {
             Ok(v)

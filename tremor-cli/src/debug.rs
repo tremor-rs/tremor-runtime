@@ -100,6 +100,7 @@ impl DbgSrc {
             SourceKind::Troy | SourceKind::Trickle | SourceKind::Tremor | SourceKind::Json => {
                 h.highlight_str(&data.raw, "", !&data.opts.raw)?;
             }
+            SourceKind::Archive => error!("Unsupported: tar"),
             SourceKind::Unsupported(Some(t)) => error!("Unsupported: {}", t),
             SourceKind::Unsupported(None) => error!("Unsupported: no file type"),
         }
@@ -241,7 +242,7 @@ impl DbgAst {
                     }
                 };
             }
-            SourceKind::Unsupported(_) => {
+            SourceKind::Archive | SourceKind::Unsupported(_) => {
                 eprintln!("Unsupported");
             }
         };

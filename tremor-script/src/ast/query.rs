@@ -430,7 +430,8 @@ impl BaseExpr for StreamCreate {
 pub struct CreationalWith<'script> {
     /// `with` seection
     pub with: WithExprs<'script>,
-    pub(crate) mid: Box<NodeMeta>,
+    /// metadata id
+    pub mid: Box<NodeMeta>,
 }
 impl_expr!(CreationalWith);
 
@@ -537,7 +538,7 @@ impl<'script> DefinitionalArgsWith<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DefinitionalArgs<'script> {
     /// `args` seection
-    pub(crate) args: ArgsExprs<'script>,
+    pub args: ArgsExprs<'script>,
     pub(crate) mid: Box<NodeMeta>,
 }
 impl_expr!(DefinitionalArgs);

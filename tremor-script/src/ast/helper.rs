@@ -20,7 +20,10 @@ use super::{
     warning::{self, Warning, Warnings},
     ConnectorDefinition, Const, DeployFlow, FlowDefinition, FnDefn, InvokeAggrFn, NodeId,
 };
-use crate::{errors::Result, pos::Span, prelude::*, registry::Aggr as AggrRegistry, NodeMeta};
+use crate::{
+    errors::Result, module::PreCachedNodes, pos::Span, prelude::*, registry::Aggr as AggrRegistry,
+    NodeMeta,
+};
 use beef::Cow;
 use halfbrown::HashMap;
 use std::{collections::BTreeSet, mem};
@@ -100,6 +103,8 @@ where
     pub(crate) possible_leaf: bool,
     pub(crate) fn_argc: usize,
     pub(crate) is_open: bool,
+    /// precached modules
+    pub precached: PreCachedNodes,
     /// Current scope
     pub scope: Scope<'script>,
 }
@@ -229,6 +234,7 @@ where
             fn_argc: 0,
             is_open: false,
             scope: Scope::default(),
+            precached: PreCachedNodes::new(),
         }
     }
 
@@ -294,6 +300,14 @@ where
     }
     pub(crate) fn warn_with_scope<S: ToString>(&mut self, r: Span, msg: &S, class: warning::Class) {
         self.warnings.insert(Warning::new_with_scope(r, msg, class));
+    }
+    pub(crate) fn load_modules(&mut self, modules: &[(NodeId, Option<String>)]) -> Result<()> {
+        for (module, alias) in modules {
+            let mid = Manager::load(module, &self.precached)?;
+            let alias = alias.clone().unwrap_or_else(|| module.id.clone());
+            self.scope().add_module_alias(alias, mid);
+        }
+        Ok(())
     }
 }
 

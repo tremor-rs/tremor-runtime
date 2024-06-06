@@ -107,11 +107,14 @@ impl ServerRun {
         let signal_handler_task = tokio::task::spawn(handle_signals(signals, world.clone()));
 
         let mut troy_files = Vec::with_capacity(16);
+        let mut archives = Vec::with_capacity(16);
         // We process trickle files first
         for config_file in &self.artefacts {
             let kind = get_source_kind(config_file);
             if kind == SourceKind::Troy {
                 troy_files.push(config_file);
+            } else if kind == SourceKind::Archive {
+                archives.push(config_file);
             } else {
                 return Err(
                     ErrorKind::UnsupportedFileType(config_file.to_string(), kind, "troy").into(),
@@ -126,6 +129,12 @@ impl ServerRun {
             }
         }
 
+        // We process archives  thereafter
+        for config_file in archives {
+            if let Err(e) = tremor_runtime::load_archive(&world, config_file, "main", None).await {
+                return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
+            }
+        }
         let api_handle = if self.no_api {
             // dummy task never finishing
             tokio::task::spawn(async move {

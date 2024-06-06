@@ -39,13 +39,13 @@ use tremor_common::file;
 // use tremor_runtime::errors;
 
 mod alloc;
+mod archive;
+pub(crate) mod cli;
 mod completions;
 mod debug;
 mod doc;
 mod env;
 mod errors;
-// mod explain;
-pub(crate) mod cli;
 mod report;
 mod run;
 mod server;
@@ -128,6 +128,7 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Dbg(d) => d.run(),
         Command::Run(r) => r.run().await,
         Command::Doc(d) => d.run(),
+        Command::Archive { command } => command.run().await,
         Command::New { name } => create_template(std::env::current_dir()?, &name),
     }
 }

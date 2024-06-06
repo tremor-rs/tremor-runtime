@@ -31,6 +31,7 @@ members = [
   "tremor-connectors-otel",
   "tremor-connectors-object-storage",
   "tremor-connectors-test-helpers",
+  "tremor-archive",
 ]
 
 default-members = ["tremor-cli"]
@@ -56,6 +57,7 @@ tremor-pipeline = { path = "tremor-pipeline", version = "0.13.0-rc.26" }
 tremor-script = { path = "tremor-script", version = "0.13.0-rc.26" }
 tremor-system = { path = "tremor-system", version = "0.13.0-rc.26" }
 tremor-value = { path = "tremor-value", version = "0.13.0-rc.26" }
+tremor-archive = { path = "tremor-archive", version = "0.13.0-rc.26" }
 
 tokio = { version = "1.38", features = ["full"] }
 tokio-stream = "0.1"

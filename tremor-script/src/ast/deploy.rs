@@ -39,6 +39,14 @@ pub struct Deploy<'script> {
     #[serde(skip)]
     /// Documentation comments
     pub docs: Docs,
+    #[serde(skip)]
+    mid: Box<NodeMeta>,
+}
+
+impl<'script> BaseExpr for Deploy<'script> {
+    fn meta(&self) -> &crate::NodeMeta {
+        self.mid.meta()
+    }
 }
 
 impl<'script> Deploy<'script> {
@@ -285,7 +293,8 @@ impl crate::ast::node_id::BaseRef for CreateStmt<'_> {
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeployFlow<'script> {
-    pub(crate) mid: Box<NodeMeta>,
+    /// Metadata ID
+    pub mid: Box<NodeMeta>,
     /// Target of the artefact definition being deployed
     pub from_target: NodeId,
     /// Target for creation

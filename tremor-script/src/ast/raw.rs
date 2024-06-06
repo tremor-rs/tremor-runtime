@@ -45,7 +45,6 @@ use simd_json::ObjectHasher;
 
 use super::{
     docs::{FnDoc, ModDoc},
-    module::Manager,
     warning, ComprehensionFoldOp, Const, NodeId, NodeMeta,
 };
 
@@ -84,11 +83,7 @@ impl<'script> ScriptRaw<'script> {
         for e in self.exprs {
             match e {
                 TopLevelExprRaw::Use(UseRaw { modules, .. }) => {
-                    for (module, alias) in modules {
-                        let mid = Manager::load(&module)?;
-                        let alias = alias.unwrap_or_else(|| module.id.clone());
-                        helper.scope().add_module_alias(alias, mid);
-                    }
+                    helper.load_modules(&modules)?;
                 }
                 TopLevelExprRaw::Const(const_raw) => {
                     let c = const_raw.up(helper)?;

@@ -55,6 +55,7 @@ tremor-runtime = { version = "0.13.0-rc.26", path = "../" }
 tremor-script = { version = "0.13.0-rc.26", path = "../tremor-script" }
 tremor-value = { version = "0.13.0-rc.26", path = "../tremor-value" }
 tremor-system = { version = "0.13.0-rc.26", path = "../tremor-system" }
+tremor-archive = { version = "0.13.0-rc.26", path = "../tremor-archive" }
 url = "2"
 error-chain = "0.12"
 globwalk = "0.9"
