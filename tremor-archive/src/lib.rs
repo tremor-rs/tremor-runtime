@@ -12,6 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Tremor arcive module for packaging and unpacking tremor apps
+
+#![deny(warnings)]
+#![deny(missing_docs)]
+#![deny(
+    clippy::all,
+    clippy::unwrap_used,
+    clippy::unnecessary_unwrap,
+    clippy::pedantic,
+    clippy::mod_module_files
+)]
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use simd_json::OwnedValue;
@@ -38,32 +50,46 @@ use tremor_script::{
 
 use log::{debug, error, info};
 
+/// archive result
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Archive errors
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    /// Failed to get parent dir
     #[error("Failed to get parent dir")]
     NoParentDir,
+    /// Failed to get name
     #[error("Failed to get name")]
     NoName,
+    /// `app.json` missing
     #[error("`app.json` missing")]
     SpecMissing,
+    /// `main.troy` missing
     #[error("`main.troy` missing")]
     NoEntrypoint,
+    /// Archive is empty
     #[error("Archive is empty")]
     Empty,
+    /// No module name Specified
     #[error("No module name Specified")]
     NoModuleName,
+    /// Failed to aquire read lock
     #[error("Failed to aquire read lock")]
     ReadLock,
+    /// Tremor Common Error
     #[error("Tremor Common Error")]
     Common(#[from] tremor_common::Error),
+    /// Tremor Script Error
     #[error("Tremor Script Error")]
     Script(#[from] tremor_script::errors::Error),
+    /// IO Error
     #[error("IO Error")]
     Io(#[from] std::io::Error),
+    /// Serde Error
     #[error("Serde Error")]
     Serde(#[from] serde_json::Error),
+    /// Simd JSON Error
     #[error("Simd JSON Error")]
     SimdJson(#[from] simd_json::Error),
 }
@@ -285,7 +311,7 @@ pub fn get_app(src: &[u8]) -> Result<TremorAppDef> {
     let mut app = entries.next().ok_or(Error::Empty)??;
 
     if app.path()?.to_string_lossy() != "app.json" {
-        return Err(Error::SpecMissing.into());
+        return Err(Error::SpecMissing);
     }
     let mut content = String::new();
     app.read_to_string(&mut content)?;
@@ -304,7 +330,7 @@ pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> 
     let mut app = entries.next().ok_or(Error::Empty)??;
 
     if app.path()?.to_string_lossy() != "app.json" {
-        return Err(Error::SpecMissing.into());
+        return Err(Error::SpecMissing);
     }
     let mut content = String::new();
     app.read_to_string(&mut content)?;

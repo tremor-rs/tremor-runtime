@@ -73,7 +73,7 @@ mod test {
     }
 
     #[test]
-    fn test_extract_ingest_ts_too_small() -> anyhow::Result<()> {
+    fn test_extract_ingest_ts_too_small() {
         let mut ingest_ns = 0_u64;
         let mut pre = ExtractIngestTs {};
         let data = &[0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8][..];
@@ -81,6 +81,5 @@ mod test {
         let meta = Value::null();
         let res = pre.process(&mut ingest_ns, data, meta);
         assert!(res.is_err());
-        Ok(())
     }
 }
