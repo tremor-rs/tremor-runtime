@@ -40,11 +40,13 @@ impl ArchiveCommand {
                 };
                 let (world, handle) = World::start(world_config).await?;
 
-                let config = config
-                    .map(|f| tremor_common::file::read(&f))
-                    .transpose()?
-                    .map(|mut c| simd_json::from_slice::<Value>(&mut c).map(Value::into_static))
-                    .transpose()?;
+                let config = if let Some(f) = config {
+                    let mut c = tremor_common::asy::file::read(&f).await?;
+                    let v = simd_json::from_slice::<Value>(&mut c)?;
+                    Some(v.into_static())
+                } else {
+                    None
+                };
                 let flow = flow.unwrap_or_else(|| "main".to_string());
                 let mut archive = tremor_common::asy::file::open(&archive).await?;
 
