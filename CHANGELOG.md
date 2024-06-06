@@ -1,7 +1,7 @@
 # Changelog
 
 
-## Unreleased
+## [0.13.0-rc.27]
 
 ### New features
 * add support for tremor archives
