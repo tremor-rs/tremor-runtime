@@ -48,10 +48,43 @@ pub(crate) enum Command {
     Run(Run),
     /// Generates documention from tremor script files
     Doc(Doc),
+    /// Tremor Archive commands
+    Archive {
+        #[clap(subcommand)]
+        command: ArchiveCommand,
+    },
     /// Creates a template tremor project
     New {
         #[clap( value_parser = clap::value_parser!(String))]
         name: String,
+    },
+}
+
+#[derive(Parser, Debug)]
+pub(crate) enum ArchiveCommand {
+    /// Packages a tremor application
+    Package {
+        /// Optional name for the package (defaults to the name of the entrypoint)
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        name: Option<String>,
+        /// The destination file
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        out: String,
+        /// the file to load
+        #[clap(value_parser = clap::value_parser!(String))]
+        entrypoint: String,
+    },
+    /// Runs a tremor application
+    Run {
+        /// the file to load
+        #[clap(value_parser = clap::value_parser!(String))]
+        archive: String,
+        /// the flow to start, defaults to `main`
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        flow: Option<String>,
+        /// the config file to use
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        config: Option<String>,
     },
 }
 

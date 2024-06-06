@@ -1,7 +1,12 @@
 # Changelog
 
 
-## [Unreleased]
+## Unreleased
+
+### New features
+* add support for tremor archives
+
+## [0.13.0-rc.26]
 
 ### New features
 * add collect postprocessor

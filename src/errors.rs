@@ -95,6 +95,7 @@ error_chain! {
         Codec(tremor_codec::errors::Error, tremor_codec::errors::ErrorKind);
     }
     foreign_links {
+        Archive(tremor_archive::Error);
         AddrParseError(std::net::AddrParseError);
         AnyhowError(anyhow::Error);
         Base64Error(tremor_common::base64::DecodeError);

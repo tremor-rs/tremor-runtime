@@ -95,6 +95,8 @@ pub enum SourceKind {
     Troy,
     /// A json file
     Json,
+    /// A tremor archive
+    Archive,
     /// An unsuported file
     Unsupported(Option<String>),
 }
@@ -105,6 +107,7 @@ impl fmt::Display for SourceKind {
             SourceKind::Trickle => write!(f, "trickle"),
             SourceKind::Troy => write!(f, "troy"),
             SourceKind::Json => write!(f, "json"),
+            SourceKind::Archive => write!(f, "tar"),
             SourceKind::Unsupported(None) => write!(f, "<NONE>"),
             SourceKind::Unsupported(Some(ext)) => write!(f, "{ext}"),
         }
@@ -117,6 +120,7 @@ pub(crate) fn get_source_kind(path: &str) -> SourceKind {
         Some("tremor") => SourceKind::Tremor,
         Some("trickle") => SourceKind::Trickle,
         Some("troy") => SourceKind::Troy,
+        Some("tar") => SourceKind::Archive,
         otherwise => SourceKind::Unsupported(otherwise.map(ToString::to_string)),
     }
 }

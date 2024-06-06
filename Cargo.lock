@@ -6862,6 +6862,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tremor-archive"
+version = "0.13.0-rc.26"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "simd-json",
+ "tar",
+ "thiserror",
+ "tokio",
+ "tremor-common",
+ "tremor-script",
+]
+
+[[package]]
 name = "tremor-cli"
 version = "0.13.0-rc.26"
 dependencies = [
@@ -6896,6 +6912,7 @@ dependencies = [
  "termcolor",
  "tokio",
  "tremor-api",
+ "tremor-archive",
  "tremor-codec",
  "tremor-common",
  "tremor-interceptor",
@@ -7287,6 +7304,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-stream",
+ "tremor-archive",
  "tremor-codec",
  "tremor-common",
  "tremor-config",

@@ -52,9 +52,12 @@ use crate::errors::{Error, Result};
 
 use system::World;
 use tremor_script::{
-    deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
+    ast::{CreationalWith, DeployFlow, Ident, ImutExpr, NodeId, WithExprs},
+    deploy::Deploy,
+    highlighter::{Dumb as ToStringHighlighter, Highlighter, Term as TermHighlighter},
+    prelude::ValueAsContainer,
+    NodeMeta, FN_REGISTRY,
 };
-use tremor_script::{highlighter::Highlighter, FN_REGISTRY};
 
 /// Operator Config
 pub type OpConfig = tremor_value::Value<'static>;
@@ -126,6 +129,66 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
         count += 1;
     }
     Ok(count)
+}
+
+/// Loads a tremor archive
+///
+/// # Errors
+/// Fails if the file can not be loaded
+pub async fn load_archive(
+    world: &World,
+    file_name: &str,
+    flow_name: &str,
+    config: Option<tremor_value::Value<'static>>,
+) -> Result<usize> {
+    info!("Loading tremor archive from {file_name}");
+
+    let archive = tremor_common::asy::file::read(&file_name).await?;
+    let (app, deployable, _indexes) = tremor_archive::extract(&archive)?;
+    info!("App laoded {}", app.name());
+
+    // ensure we print the warnings
+    let mut h = TermHighlighter::stderr();
+    deployable.format_warnings_with(&mut h)?;
+
+    // create the config if any is needed
+    let mut with_exprs = Vec::new();
+
+    if let Some(config) = config.as_object() {
+        for (key, value) in config.iter() {
+            let value = ImutExpr::literal(NodeMeta::dummy(), value.clone());
+            let ident = Ident::new(key.clone(), NodeMeta::dummy());
+            with_exprs.push((ident, value.into()));
+        }
+    }
+    let with = WithExprs(with_exprs);
+    let with = CreationalWith {
+        with,
+        mid: NodeMeta::dummy(),
+    };
+
+    // since archives are modules they don't have a deoploy statement so we need to find the
+    // flow in the archive create the corresponding deploy statement and start it
+    let mut defn = deployable
+        .deploy
+        .scope
+        .content
+        .flows
+        .get(flow_name)
+        .ok_or_else(|| format!("failed to load archive {file_name} flow {flow_name}"))?
+        .clone();
+    // ensure we applu the configuration
+    defn.params.ingest_creational_with(&with)?;
+    let flow = DeployFlow {
+        mid: NodeMeta::dummy(),
+        from_target: NodeId::new(flow_name, vec![], NodeMeta::dummy()),
+        instance_alias: flow_name.into(),
+        defn,
+        docs: None,
+    };
+
+    world.start_flow(&flow).await?;
+    Ok(1)
 }
 
 /// Logs but ignores an error

@@ -77,6 +77,34 @@ where
     })
 }
 
+/// A wrapper around `fs::read_to_string` that will give a better error (including the filename)
+///
+/// # Errors
+///   * if the path does not exist
+pub async fn read_to_string<S>(path: &S) -> Result<String, Error>
+where
+    S: AsRef<Path> + ?Sized,
+{
+    tokio::fs::read_to_string(path).await.map_err(|e| {
+        let p: &Path = path.as_ref();
+        Error::FileRead(e, p.to_string_lossy().to_string())
+    })
+}
+
+/// A wrapper around `fs::read` that will give a better error (including the filename)
+///
+/// # Errors
+///   * if the path does not exist
+pub async fn read<S>(path: &S) -> Result<Vec<u8>, Error>
+where
+    S: AsRef<Path> + ?Sized,
+{
+    tokio::fs::read(path).await.map_err(|e| {
+        let p: &Path = path.as_ref();
+        Error::FileRead(e, p.to_string_lossy().to_string())
+    })
+}
+
 pub use crate::file::extension;
 
 #[cfg(test)]

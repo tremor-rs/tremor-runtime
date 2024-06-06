@@ -14,6 +14,77 @@
 
 use serde::{Deserialize, Serialize};
 
+/// An `App` is an isolated container that is defined by
+/// a troy file with possibly multiple flow definitions.
+/// An `App` needs to have a unique name inside a tremor cluster.
+/// Flow instances (and thus connector and pipeline instances) are spawned in the context
+/// of an app and thus can have similar aliases/ids
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq, PartialOrd)]
+pub struct App(pub String);
+impl App {
+    /// construct a new `ConnectorId` from the id of the containing flow and the connector instance id
+    pub fn new(alias: impl Into<String>) -> Self {
+        Self(alias.into())
+    }
+}
+impl std::fmt::Display for App {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for App {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for App {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+/// An instance
+#[derive(Serialize, Deserialize, Debug, Clone, Hash, Eq, PartialEq, PartialOrd, Default)]
+pub struct Instance(pub String);
+
+impl std::fmt::Display for Instance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for Instance {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for Instance {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl From<&String> for Instance {
+    fn from(value: &String) -> Self {
+        Self(value.to_string())
+    }
+}
+impl From<&Instance> for Instance {
+    fn from(value: &Instance) -> Self {
+        value.clone()
+    }
+}
+
+/// This default implementation should not be used in the clustered context
+impl Default for App {
+    fn default() -> Self {
+        Self("default".to_string())
+    }
+}
+
 /// unique identifier of a flow instance within a tremor instance
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Flow(String);

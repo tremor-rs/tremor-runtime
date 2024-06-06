@@ -41,7 +41,6 @@ use crate::{ast::NodeMeta, impl_expr};
 use crate::{
     ast::{raw::UseRaw, Consts},
     impl_expr_no_lt,
-    module::Manager,
 };
 use beef::Cow;
 use tremor_common::ports::Port;
@@ -184,11 +183,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             }
             StmtRaw::PipelineCreate(stmt) => Ok(Some(Stmt::PipelineCreate(stmt.up(helper)?))),
             StmtRaw::Use(UseRaw { modules, .. }) => {
-                for (module, alias) in modules {
-                    let module_id = Manager::load(&module)?;
-                    let alias = alias.unwrap_or_else(|| module.id.clone());
-                    helper.scope().add_module_alias(alias, module_id);
-                }
+                helper.load_modules(&modules)?;
                 Ok(None)
             }
         }

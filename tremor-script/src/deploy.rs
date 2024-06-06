@@ -18,7 +18,9 @@ use crate::{
     errors::Result,
     highlighter::Highlighter,
     lexer::{self, Lexer},
+    module::PreCachedNodes,
     prelude::*,
+    NodeMeta,
 };
 use std::collections::BTreeSet;
 
@@ -33,6 +35,12 @@ pub struct Deploy {
     pub warnings: BTreeSet<Warning>,
     /// Number of local variables (should be 0)
     pub locals: usize,
+}
+
+impl BaseExpr for Deploy {
+    fn meta(&self) -> &NodeMeta {
+        self.deploy.meta()
+    }
 }
 
 impl<'run, 'event, 'script> Deploy
@@ -86,8 +94,10 @@ where
         src: &'static str,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
+        precached: &PreCachedNodes,
     ) -> Result<Self> {
         let mut helper = ast::Helper::new(reg, aggr_reg);
+        helper.precached = precached.clone();
         //let cu = include_stack.push(&file_name)?;
         let tokens = Lexer::new(src, aid).collect::<Result<Vec<_>>>()?;
         let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
@@ -132,10 +142,26 @@ where
     /// if the deployment can not be parsed
     pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
-        S: ToString + ?Sized,
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
+    {
+        Self::parse_with_cache(src, reg, aggr_reg, &PreCachedNodes::new())
+    }
+
+    /// Parses a string into a deployment
+    ///
+    /// # Errors
+    /// if the deployment can not be parsed
+    pub fn parse_with_cache<S>(
+        src: &S,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+        precached: &PreCachedNodes,
+    ) -> Result<Self>
+    where
+        S: ToString + ?Sized + std::ops::Deref<Target = str>,
     {
         let (aid, src) = Arena::insert(src)?;
-        Self::parse_(aid, src, reg, aggr_reg)
+        Self::parse_(aid, src, reg, aggr_reg, precached)
     }
 
     /// Format an error given a script source.
@@ -159,7 +185,7 @@ mod test {
     fn parse(query: &str) {
         let reg = crate::registry();
         let aggr_reg = crate::aggr_registry();
-        if let Err(e) = Deploy::parse(query, &reg, &aggr_reg) {
+        if let Err(e) = Deploy::parse(&query, &reg, &aggr_reg) {
             eprintln!("{e}");
             panic!("error during parsing");
         }
