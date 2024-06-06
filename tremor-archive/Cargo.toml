@@ -15,8 +15,9 @@ tremor-common = { path = "../tremor-common", version = "0.13.0-rc.26" }
 tremor-script = { path = "../tremor-script", version = "0.13.0-rc.26" }
 
 tokio = { version = "1", default-features = false, features = [] }
+tokio-tar = "0.3"
+tokio-stream = "0.1"
 thiserror = "1"
-tar = "0.4"
 sha2 = "0.10"
 simd-json = "0.13"
 serde = { version = "1.0", features = ["derive"] }

@@ -51,6 +51,7 @@ impl<'script, 'registry, 'meta> ImutExprWalker<'script>
 
 impl<'script, 'registry, 'meta> ExprWalker<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
 impl<'script, 'registry, 'meta> QueryWalker<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
+impl<'script, 'registry, 'meta> DeployWalker<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
 
 impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
     for ArgsRewriter<'script, 'registry, 'meta>
@@ -73,3 +74,4 @@ impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
 
 impl<'script, 'registry, 'meta> ExprVisitor<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
 impl<'script, 'registry, 'meta> QueryVisitor<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
+impl<'script, 'registry, 'meta> DeployVisitor<'script> for ArgsRewriter<'script, 'registry, 'meta> {}

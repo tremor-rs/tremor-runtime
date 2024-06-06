@@ -1,4 +1,4 @@
-define flow test
+define flow main
 args
   ival,
 flow
@@ -23,7 +23,3 @@ flow
   connect /pipeline/identity to /connector/exit;
 end;
 use std::time::nanos;
-deploy flow test
-with
-  ival = nanos::from_millis(1),
-end;

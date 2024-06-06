@@ -29,11 +29,11 @@ use sha2::{Digest, Sha256};
 use simd_json::OwnedValue;
 use std::{
     collections::{BTreeSet, HashMap},
-    io::Read,
     path::PathBuf,
 };
-use tar::{Archive, Header};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
+use tokio_stream::StreamExt;
+use tokio_tar::{Archive, Builder, Header};
 use tremor_common::{alias, asy::file, base64};
 use tremor_script::{
     arena::{self, Arena},
@@ -133,8 +133,11 @@ impl TremorAppDef {
 /// Packages a tremor application into a tarball, entry point is the `main.troy` file, target the tar.gz file
 /// # Errors
 /// if the tarball cannot be created
-pub async fn package(target: &str, entrypoint: &str, name: Option<String>) -> Result<()> {
-    let mut output = file::create(target).await?;
+pub async fn package<W: AsyncWrite + Unpin + Send>(
+    target: &mut W,
+    entrypoint: &str,
+    name: Option<String>,
+) -> Result<()> {
     let file = PathBuf::from(entrypoint);
     let dir = file.parent().ok_or(Error::NoParentDir)?;
     let path = dir.to_string_lossy();
@@ -148,20 +151,25 @@ pub async fn package(target: &str, entrypoint: &str, name: Option<String>) -> Re
         })
         .ok_or(Error::NoName)?;
     info!("Building archive for {name}");
-    output
-        .write_all(&build_archive(&name, entrypoint).await?)
-        .await?;
+    build_archive(&name, entrypoint, target).await
+}
+
+pub(crate) async fn build_archive<W: AsyncWrite + Unpin + Send>(
+    name: &str,
+    entrypoint: &str,
+    w: &mut W,
+) -> Result<()> {
+    let src = file::read_to_string(entrypoint).await?;
+    build_archive_from_source(name, src.as_str(), w).await?;
     Ok(())
 }
 
-pub(crate) async fn build_archive(name: &str, entrypoint: &str) -> Result<Vec<u8>> {
-    let src = file::read_to_string(entrypoint).await?;
-    build_archive_from_source(name, src.as_str())
-}
-
 #[allow(clippy::too_many_lines)]
-pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>> {
-    use tar::Builder;
+pub(crate) async fn build_archive_from_source<W: AsyncWrite + Unpin + Send>(
+    name: &str,
+    src: &str,
+    w: W,
+) -> Result<()> {
     let mut hasher = Sha256::new();
 
     let aggr_reg = tremor_script::registry::aggr();
@@ -265,17 +273,19 @@ pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>
         flows,
     };
 
-    let mut ar = Builder::new(Vec::new());
+    let mut ar = Builder::new_non_terminated(w);
     let app = simd_json::to_vec(&app)?;
     let mut header = Header::new_gnu();
     header.set_size(app.len() as u64);
     header.set_cksum();
-    ar.append_data(&mut header, "app.json", app.as_slice())?;
+    ar.append_data(&mut header, "app.json", app.as_slice())
+        .await?;
 
     let mut header = Header::new_gnu();
     header.set_size(src.as_bytes().len() as u64);
     header.set_cksum();
-    ar.append_data(&mut header, "main.troy", src.as_bytes())?;
+    ar.append_data(&mut header, "main.troy", src.as_bytes())
+        .await?;
 
     for (id, paths) in MODULES
         .read()
@@ -292,29 +302,30 @@ pub(crate) fn build_archive_from_source(name: &str, src: &str) -> Result<Vec<u8>
                 header.set_size(src.as_bytes().len() as u64);
                 header.set_cksum();
                 debug!("Adding module {paths:?} with id {id} as file {file:?} to archive");
-                ar.append_data(&mut header, file, src.as_bytes())?;
+                ar.append_data(&mut header, file, src.as_bytes()).await?;
             }
         } else {
             error!("Module {paths:?} not found");
         }
     }
-    Ok(ar.into_inner()?)
+    ar.into_inner().await?;
+    Ok(())
 }
 
 /// gets the app name from an archive
 /// # Errors
 /// if the archive is invalid
-pub fn get_app(src: &[u8]) -> Result<TremorAppDef> {
+pub async fn get_app(src: impl AsyncRead + Unpin + Send) -> Result<TremorAppDef> {
     let mut ar = Archive::new(src);
 
     let mut entries = ar.entries()?;
-    let mut app = entries.next().ok_or(Error::Empty)??;
+    let mut app = entries.next().await.ok_or(Error::Empty)??;
 
     if app.path()?.to_string_lossy() != "app.json" {
         return Err(Error::SpecMissing);
     }
     let mut content = String::new();
-    app.read_to_string(&mut content)?;
+    app.read_to_string(&mut content).await?;
 
     let app: TremorAppDef = serde_json::from_str(&content)?;
     Ok(app)
@@ -323,29 +334,30 @@ pub fn get_app(src: &[u8]) -> Result<TremorAppDef> {
 /// Extract app deploy an all used arena indices
 /// # Errors
 /// if the archive is invalid
-pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> {
+pub async fn extract(
+    src: impl AsyncRead + Unpin + Send,
+) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> {
     let mut ar = Archive::new(src);
 
     let mut entries = ar.entries()?;
-    let mut app = entries.next().ok_or(Error::Empty)??;
+    let mut app = entries.next().await.ok_or(Error::Empty)??;
 
     if app.path()?.to_string_lossy() != "app.json" {
         return Err(Error::SpecMissing);
     }
     let mut content = String::new();
-    app.read_to_string(&mut content)?;
+    app.read_to_string(&mut content).await?;
 
     let app: TremorAppDef = serde_json::from_str(&content)?;
-
-    let mut main = entries.next().ok_or(Error::NoEntrypoint)??;
+    let mut main = entries.next().await.ok_or(Error::NoEntrypoint)??;
 
     content.clear();
-    main.read_to_string(&mut content)?;
+    main.read_to_string(&mut content).await?;
     let main = content;
 
     let mut modules = PreCachedNodes::new();
 
-    for e in entries {
+    while let Some(e) = entries.next().await {
         let mut entry = e?;
         let path = entry.path()?;
         let mut module: Vec<_> = path
@@ -357,7 +369,7 @@ pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> 
 
         info!("included library: {}", entry.path()?.to_string_lossy());
         let mut contents = String::new();
-        entry.read_to_string(&mut contents)?;
+        entry.read_to_string(&mut contents).await?;
         let (aid, _) = Arena::insert(&contents)?;
         modules.insert(module, aid);
     }

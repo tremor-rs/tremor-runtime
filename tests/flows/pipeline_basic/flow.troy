@@ -1,4 +1,4 @@
-define flow test
+define flow main
 flow
   define pipeline passthrough
   config
