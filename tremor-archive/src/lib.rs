@@ -187,8 +187,6 @@ pub(crate) async fn build_archive_from_source<W: AsyncWrite + Unpin + Send>(
         }
     };
     let mut other_warnings = BTreeSet::new();
-    let reg = &*FN_REGISTRY.read().map_err(|_| Error::ReadLock)?;
-    let helper = Helper::new(reg, &aggr_reg);
 
     for stmt in &deploy.deploy.stmts {
         match stmt {
@@ -224,6 +222,9 @@ pub(crate) async fn build_archive_from_source<W: AsyncWrite + Unpin + Send>(
                         .0
                         .iter()
                         .map(|(k, v)| {
+                            let reg = &*FN_REGISTRY.read().map_err(|_| Error::ReadLock)?;
+                            let helper = Helper::new(reg, &aggr_reg);
+
                             Ok((
                                 k.to_string(),
                                 v.clone()
@@ -286,16 +287,16 @@ pub(crate) async fn build_archive_from_source<W: AsyncWrite + Unpin + Send>(
     header.set_cksum();
     ar.append_data(&mut header, "main.troy", src.as_bytes())
         .await?;
-
-    for (id, paths) in MODULES
+    let modules = MODULES
         .read()
         .map_err(|_| Error::ReadLock)?
         .modules()
         .iter()
-        .map(|m| (m.arena_idx, m.paths()))
-    {
+        .map(|m| (m.arena_idx, m.paths().to_vec()))
+        .collect::<Vec<_>>();
+    for (id, paths) in modules {
         if let Some(src) = Arena::get(id)? {
-            for p in paths {
+            for p in &paths {
                 let mut file: PathBuf = p.module().iter().collect();
                 file.push(p.id());
                 let mut header = Header::new_gnu();
