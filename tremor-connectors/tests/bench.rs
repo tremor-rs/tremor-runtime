@@ -36,7 +36,7 @@ async fn stop_after_events() -> anyhow::Result<()> {
         "iters": 2
       }
     });
-    // let (world, world_handle) = World::start(mWorldConfig::default()).await?;
+    // let (world, world_handle) = Runtime::start(mRuntimeConfig::default()).await?;
     let (kill_tx, mut kill_rx) = channel(1);
     let kill_switch = KillSwitch::new(kill_tx);
     let mut harness =

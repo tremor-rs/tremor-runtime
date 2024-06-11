@@ -22,7 +22,7 @@ use http_types::{
 use serde::{Deserialize, Serialize};
 use tide::Response;
 use tokio::task::JoinHandle;
-use tremor_runtime::system::World;
+use tremor_runtime::system::Runtime;
 
 pub mod flow;
 pub mod model;
@@ -38,7 +38,7 @@ pub const DEFAULT_API_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 pub struct State {
-    pub world: World,
+    pub world: Runtime,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -164,7 +164,7 @@ async fn handle_api_request<
 
 /// server the tremor API in a separately spawned task
 #[must_use]
-pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
+pub fn serve(host: String, world: &Runtime) -> JoinHandle<Result<()>> {
     let mut v1_app = tide::Server::with_state(State {
         world: world.clone(),
     });
@@ -210,7 +210,6 @@ mod tests {
     use http_types::Url;
     use std::time::Instant;
     use tokio::net::TcpListener;
-    use tremor_runtime::system::WorldConfig;
     use tremor_script::{aggr_registry, ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
     use tremor_system::{instance::State as InstanceState, killswitch::ShutdownMode};
     use tremor_value::{prelude::*, value::StaticValue};
@@ -223,10 +222,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_api() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let _: std::result::Result<_, _> = env_logger::try_init();
-        let config = WorldConfig {
-            debug_connectors: true,
-        };
-        let (world, world_handle) = World::start(config).await?;
+        let (world, world_handle) = Runtime::builder()
+            .default_include_connectors()
+            .build()
+            .await?;
 
         let free_port = {
             let listener = TcpListener::bind("127.0.0.1:0").await?;

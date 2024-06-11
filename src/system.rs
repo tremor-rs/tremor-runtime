@@ -22,25 +22,110 @@ use crate::errors::{Error, Kind as ErrorKind, Result};
 use tokio::{sync::oneshot, task::JoinHandle};
 use tremor_connectors::ConnectorBuilder;
 use tremor_script::{ast, highlighter::Highlighter};
-use tremor_system::killswitch::{KillSwitch, ShutdownMode};
+use tremor_system::{
+    killswitch::{KillSwitch, ShutdownMode},
+    selector::{PluginType, RuleSelector, RuleSelectorBuilder},
+};
 
+/// Runtime builder for configuring the runtime
+/// note that includees and excludes are handled in order!
+/// In other wordds using with_connector("foo").without_connector("foo") will result in foo being included
+/// this is especially important when using the type based inclusions and exclusions
+pub struct RuntimeBuilder {
+    connectors: RuleSelectorBuilder,
+}
+
+impl RuntimeBuilder {
+    /// Marks a given connector as includec by name
+    pub fn with_connector(mut self, connector: &str) -> Self {
+        self.connectors = self.connectors.include(connector);
+        self
+    }
+    /// Marks multiple connectors as includec by name
+    pub fn with_connectors(mut self, connectors: &[&str]) -> Self {
+        for connector in connectors {
+            self.connectors = self.connectors.include(*connector);
+        }
+        self
+    }
+    /// Marks a given connector as excludec by name
+    pub fn without_connector(mut self, connector: &str) -> Self {
+        self.connectors = self.connectors.exclude(connector);
+        self
+    }
+    /// Marks multiple connectors as excludec by name
+    pub fn without_connectors(mut self, connectors: &[&str]) -> Self {
+        for connector in connectors {
+            self.connectors = self.connectors.exclude(*connector);
+        }
+        self
+    }
+
+    /// includes debug connectors
+    pub fn with_debug_connectors(mut self) -> Self {
+        self.connectors = self.connectors.include(PluginType::Debug);
+        self
+    }
+    /// excludes debug connectors
+    pub fn without_debug_connectors(mut self) -> Self {
+        self.connectors = self.connectors.exclude(PluginType::Debug);
+        self
+    }
+
+    /// includes all normal (non debug) connectors
+    pub fn with_normal_connectors(mut self) -> Self {
+        self.connectors = self.connectors.include(PluginType::Normal);
+        self
+    }
+    /// excludes all normal (non debug) connectors
+    pub fn without_normal_connectors(mut self) -> Self {
+        self.connectors = self.connectors.exclude(PluginType::Normal);
+        self
+    }
+    /// If no rule matches, include the connector
+    pub fn default_include_connectors(self) -> RuntimeConfig {
+        let connectors = self.connectors.default_include();
+        RuntimeConfig { connectors }
+    }
+
+    /// If no rule matches, exclude the connector
+    pub fn default_exclude_connectors(self) -> RuntimeConfig {
+        let connectors = self.connectors.default_exclude();
+        RuntimeConfig { connectors }
+    }
+}
+
+#[derive(Debug, Clone)]
 /// Configuration for the runtime
-#[derive(Default)]
-pub struct WorldConfig {
+pub struct RuntimeConfig {
     /// if debug connectors should be loaded
-    pub debug_connectors: bool,
+    connectors: RuleSelector,
+}
+
+impl RuntimeConfig {
+    /// Builds the runtime
+    pub async fn build(self) -> Result<(Runtime, JoinHandle<Result<()>>)> {
+        Runtime::start(self).await
+    }
 }
 
 /// default timeout for interrogating operations, like listing deployments
 
 /// Tremor runtime
 #[derive(Clone, Debug)]
-pub struct World {
+pub struct Runtime {
     pub(crate) system: flow_supervisor::Channel,
     pub(crate) kill_switch: KillSwitch,
+    config: RuntimeConfig,
 }
 
-impl World {
+impl Runtime {
+    /// creates a runtime builder
+    pub fn builder() -> RuntimeBuilder {
+        RuntimeBuilder {
+            connectors: RuleSelector::builder(),
+        }
+    }
     /// Instantiate a flow from
     /// # Errors
     /// If the flow can't be started
@@ -80,16 +165,19 @@ impl World {
     ///
     /// # Errors
     ///  * If the system is unavailable
-    pub(crate) async fn register_builtin_connector_type(
-        &self,
-        builder: Box<dyn ConnectorBuilder>,
-    ) -> Result<()> {
-        self.system
-            .send(flow_supervisor::Msg::RegisterConnectorType {
-                connector_type: builder.connector_type(),
-                builder,
-            })
-            .await?;
+    pub async fn register_connector(&self, builder: Box<dyn ConnectorBuilder>) -> Result<()> {
+        if self
+            .config
+            .connectors
+            .test(&builder.connector_type(), builder.plugin_type())
+        {
+            self.system
+                .send(flow_supervisor::Msg::RegisterConnectorType {
+                    connector_type: builder.connector_type(),
+                    builder,
+                })
+                .await?;
+        }
         Ok(())
     }
 
@@ -124,16 +212,17 @@ impl World {
     ///
     /// # Errors
     ///  * if the world manager can't be started
-    pub async fn start(config: WorldConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
+    async fn start(config: RuntimeConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
         let (system_h, system, kill_switch) = flow_supervisor::FlowSupervisor::new().start();
 
-        let world = Self {
+        let runtime = Self {
             system,
             kill_switch,
+            config,
         };
 
-        crate::register_builtin_connector_types(&world, config.debug_connectors).await?;
-        Ok((world, system_h))
+        crate::register_builtin_connector_types(&runtime).await?;
+        Ok((runtime, system_h))
     }
 
     /// Stop the runtime

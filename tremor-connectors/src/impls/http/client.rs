@@ -678,7 +678,7 @@ mod tests {
             None,
             CodecReq::Optional("json"),
             vec![],
-            &ConnectorType("http".into()),
+            &ConnectorType::from("http"),
             &alias::Connector::new("flow", "http"),
         )?;
         let config = client::Config::new(&c)?;

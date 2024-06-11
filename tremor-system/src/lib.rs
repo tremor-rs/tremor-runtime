@@ -47,6 +47,9 @@ pub mod connector;
 /// pipelines
 pub mod pipeline;
 
+/// Configuration selectors
+pub mod selector;
+
 /// default graceful shutdown timeout
 pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 

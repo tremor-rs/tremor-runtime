@@ -14,10 +14,7 @@
 use serial_test::serial;
 use std::time::Duration;
 use tremor_common::asy::file;
-use tremor_runtime::{
-    errors::*,
-    system::{World, WorldConfig},
-};
+use tremor_runtime::{errors::*, system::Runtime};
 use tremor_script::module::Manager;
 use tremor_value::Value;
 
@@ -56,7 +53,7 @@ macro_rules! test_cases {
                     println!("Loading config file: {config_file}");
                     let flow_config = file::read(config_file).await.ok().and_then(|mut c| simd_json::from_slice::<Value>(&mut c).ok().map(Value::into_static));
 
-                    let (world, h) = World::start(WorldConfig{debug_connectors:true}).await?;
+                    let (world, h) = Runtime::builder().default_include_connectors().build().await?;
 
                     tremor_runtime::load_archive(&world, archive.as_slice(), "main", flow_config).await?;
 

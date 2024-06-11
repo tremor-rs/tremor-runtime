@@ -118,7 +118,7 @@ use tokio::{
     io::{AsyncBufReadExt, BufReader, Lines},
 };
 use tremor_common::asy::file::open;
-use tremor_system::killswitch::ShutdownMode;
+use tremor_system::{killswitch::ShutdownMode, selector::PluginType};
 use tremor_value::prelude::*;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -150,6 +150,9 @@ pub struct Builder {}
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "cb".into()
+    }
+    fn plugin_type(&self) -> PluginType {
+        PluginType::Debug
     }
 
     async fn build_cfg(

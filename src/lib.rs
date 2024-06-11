@@ -50,7 +50,7 @@ pub mod version;
 
 use crate::errors::{Error, Result};
 
-use system::World;
+use system::Runtime;
 use tokio::io::AsyncRead;
 use tremor_script::{
     ast::{
@@ -73,26 +73,14 @@ pub(crate) mod channel;
 /// # Errors
 ///  * If a builtin connector couldn't be registered
 
-pub(crate) async fn register_builtin_connector_types(
-    world: &World,
-    debug: bool,
-) -> anyhow::Result<()> {
-    for builder in tremor_connectors::builtin_connector_types() {
-        world.register_builtin_connector_type(builder).await?;
-    }
-    for builder in tremor_connectors_gcp::builtin_connector_types() {
-        world.register_builtin_connector_type(builder).await?;
-    }
-    for builder in tremor_connectors_aws::builtin_connector_types() {
-        world.register_builtin_connector_type(builder).await?;
-    }
-    for builder in tremor_connectors_otel::builtin_connector_types() {
-        world.register_builtin_connector_type(builder).await?;
-    }
-    if debug {
-        for builder in tremor_connectors::debug_connector_types() {
-            world.register_builtin_connector_type(builder).await?;
-        }
+pub(crate) async fn register_builtin_connector_types(runtime: &Runtime) -> anyhow::Result<()> {
+    for builder in tremor_connectors::builtin_connector_types()
+        .into_iter()
+        .chain(tremor_connectors_gcp::builtin_connector_types())
+        .chain(tremor_connectors_aws::builtin_connector_types())
+        .chain(tremor_connectors_otel::builtin_connector_types())
+    {
+        runtime.register_connector(builder).await?;
     }
 
     Ok(())
@@ -102,7 +90,7 @@ pub(crate) async fn register_builtin_connector_types(
 ///
 /// # Errors
 /// Fails if the file can not be loaded
-pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
+pub async fn load_troy_file(world: &Runtime, file_name: &str) -> Result<usize> {
     use std::io::Read;
     info!("Loading troy from {file_name}");
 
@@ -140,7 +128,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
 /// # Errors
 /// Fails if the file can not be loaded
 pub async fn load_archive(
-    world: &World,
+    world: &Runtime,
     archive: impl AsyncRead + Send + Unpin,
     flow_name: &str,
     config: Option<tremor_value::Value<'static>>,
@@ -225,12 +213,14 @@ mod tests {
     use tremor_system::killswitch::ShutdownMode;
 
     use super::*;
-    use crate::system::WorldConfig;
     use std::io::Write;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_load_troy_file() -> Result<()> {
-        let (world, handle) = World::start(WorldConfig::default()).await?;
+        let (world, handle) = Runtime::builder()
+            .default_include_connectors()
+            .build()
+            .await?;
         let troy_file = tempfile::NamedTempFile::new()?;
         troy_file.as_file().write_all(
             r"
