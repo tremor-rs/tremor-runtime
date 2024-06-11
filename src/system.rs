@@ -24,24 +24,26 @@ use tremor_connectors::ConnectorBuilder;
 use tremor_script::{ast, highlighter::Highlighter};
 use tremor_system::{
     killswitch::{KillSwitch, ShutdownMode},
-    selector::{PluginType, RuleSelector, RuleSelectorBuilder},
+    selector::{PluginType, Rules, RulesBuilder},
 };
 
 /// Runtime builder for configuring the runtime
 /// note that includees and excludes are handled in order!
-/// In other wordds using with_connector("foo").without_connector("foo") will result in foo being included
+/// In other wordds using `with_connector("foo").without_connector("foo`") will result in foo being included
 /// this is especially important when using the type based inclusions and exclusions
 pub struct RuntimeBuilder {
-    connectors: RuleSelectorBuilder,
+    connectors: RulesBuilder,
 }
 
 impl RuntimeBuilder {
     /// Marks a given connector as includec by name
+    #[must_use]
     pub fn with_connector(mut self, connector: &str) -> Self {
         self.connectors = self.connectors.include(connector);
         self
     }
     /// Marks multiple connectors as includec by name
+    #[must_use]
     pub fn with_connectors(mut self, connectors: &[&str]) -> Self {
         for connector in connectors {
             self.connectors = self.connectors.include(*connector);
@@ -49,11 +51,13 @@ impl RuntimeBuilder {
         self
     }
     /// Marks a given connector as excludec by name
+    #[must_use]
     pub fn without_connector(mut self, connector: &str) -> Self {
         self.connectors = self.connectors.exclude(connector);
         self
     }
     /// Marks multiple connectors as excludec by name
+    #[must_use]
     pub fn without_connectors(mut self, connectors: &[&str]) -> Self {
         for connector in connectors {
             self.connectors = self.connectors.exclude(*connector);
@@ -62,33 +66,39 @@ impl RuntimeBuilder {
     }
 
     /// includes debug connectors
+    #[must_use]
     pub fn with_debug_connectors(mut self) -> Self {
         self.connectors = self.connectors.include(PluginType::Debug);
         self
     }
     /// excludes debug connectors
+    #[must_use]
     pub fn without_debug_connectors(mut self) -> Self {
         self.connectors = self.connectors.exclude(PluginType::Debug);
         self
     }
 
     /// includes all normal (non debug) connectors
+    #[must_use]
     pub fn with_normal_connectors(mut self) -> Self {
         self.connectors = self.connectors.include(PluginType::Normal);
         self
     }
     /// excludes all normal (non debug) connectors
+    #[must_use]
     pub fn without_normal_connectors(mut self) -> Self {
         self.connectors = self.connectors.exclude(PluginType::Normal);
         self
     }
     /// If no rule matches, include the connector
+    #[must_use]
     pub fn default_include_connectors(self) -> RuntimeConfig {
         let connectors = self.connectors.default_include();
         RuntimeConfig { connectors }
     }
 
     /// If no rule matches, exclude the connector
+    #[must_use]
     pub fn default_exclude_connectors(self) -> RuntimeConfig {
         let connectors = self.connectors.default_exclude();
         RuntimeConfig { connectors }
@@ -99,11 +109,13 @@ impl RuntimeBuilder {
 /// Configuration for the runtime
 pub struct RuntimeConfig {
     /// if debug connectors should be loaded
-    connectors: RuleSelector,
+    connectors: Rules,
 }
 
 impl RuntimeConfig {
     /// Builds the runtime
+    /// # Errors
+    /// if the runtime can't be started
     pub async fn build(self) -> Result<(Runtime, JoinHandle<Result<()>>)> {
         Runtime::start(self).await
     }
@@ -121,9 +133,10 @@ pub struct Runtime {
 
 impl Runtime {
     /// creates a runtime builder
+    #[must_use]
     pub fn builder() -> RuntimeBuilder {
         RuntimeBuilder {
-            connectors: RuleSelector::builder(),
+            connectors: Rules::builder(),
         }
     }
     /// Instantiate a flow from

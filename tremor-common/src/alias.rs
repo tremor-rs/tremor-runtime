@@ -211,7 +211,7 @@ mod test {
         let instance = Instance::from("test3");
         assert_eq!(instance.to_string(), "test3");
 
-        let instance = Instance::from(instance);
+        let instance = instance;
         assert_eq!(instance.to_string(), "test3");
     }
 

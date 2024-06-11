@@ -936,7 +936,7 @@ pub struct ConnectorType(String);
 
 impl ConnectorType {
     /// name of the connector
-    pub fn name(&self) -> &str {
+    #[must_use] pub fn name(&self) -> &str {
         self.0.as_str()
     }
 }

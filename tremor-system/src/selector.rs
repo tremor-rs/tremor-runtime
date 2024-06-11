@@ -26,8 +26,10 @@ pub enum PluginType {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Hash, Eq)]
 
 /// Single selector rule
+#[derive(Default)]
 pub enum Selector {
     /// Select all plugins
+    #[default]
     All,
     /// Select plugins by name
     Name(String),
@@ -35,11 +37,6 @@ pub enum Selector {
     Type(PluginType),
 }
 
-impl Default for Selector {
-    fn default() -> Self {
-        Selector::All
-    }
-}
 impl Selector {
     /// Test if a plugin should be selected
     pub fn test(&self, name: &(impl AsRef<str> + ?Sized), t: PluginType) -> bool {
@@ -75,18 +72,18 @@ pub enum Deposition {
     Exclude,
 }
 
-impl Into<Deposition> for bool {
-    fn into(self) -> Deposition {
-        if self {
+impl From<bool> for Deposition {
+    fn from(val: bool) -> Self {
+        if val {
             Deposition::Include
         } else {
             Deposition::Exclude
         }
     }
 }
-impl Into<bool> for Deposition {
-    fn into(self) -> bool {
-        match self {
+impl From<Deposition> for bool {
+    fn from(val: Deposition) -> Self {
+        match val {
             Deposition::Include => true,
             Deposition::Exclude => false,
         }
@@ -95,48 +92,52 @@ impl Into<bool> for Deposition {
 #[derive(Debug, Clone)]
 
 /// Selector combiner for includes and excludes. Excludes take precedence over incluedes.
-pub struct RuleSelector {
+pub struct Rules {
     rules: Vec<(Selector, Deposition)>,
     default: Deposition,
 }
 /// Rule selector builder
-pub struct RuleSelectorBuilder {
+pub struct RulesBuilder {
     rules: Vec<(Selector, Deposition)>,
 }
 
-impl RuleSelectorBuilder {
+impl RulesBuilder {
     /// adds an include rule
-
+    #[must_use]
     pub fn include(mut self, s: impl Into<Selector>) -> Self {
         self.rules.push((s.into(), Deposition::Include));
         self
     }
     /// adds an exclude rule
+    #[must_use]
     pub fn exclude(mut self, s: impl Into<Selector>) -> Self {
         self.rules.push((s.into(), Deposition::Exclude));
         self
     }
 
     /// default disposition include
-    pub fn default_include(self) -> RuleSelector {
-        RuleSelector {
+    #[must_use]
+    pub fn default_include(self) -> Rules {
+        Rules {
             rules: self.rules,
             default: Deposition::Include,
         }
     }
     /// default disposition exclude
-    pub fn default_exclude(self) -> RuleSelector {
-        RuleSelector {
+    #[must_use]
+    pub fn default_exclude(self) -> Rules {
+        Rules {
             rules: self.rules,
             default: Deposition::Exclude,
         }
     }
 }
 
-impl RuleSelector {
+impl Rules {
     /// Create a new rule selector builder
-    pub fn builder() -> RuleSelectorBuilder {
-        RuleSelectorBuilder { rules: vec![] }
+    #[must_use]
+    pub fn builder() -> RulesBuilder {
+        RulesBuilder { rules: vec![] }
     }
     /// Test if a plugin should be selected
     pub fn test(&self, name: &(impl AsRef<str> + ?Sized), t: PluginType) -> bool {
@@ -161,25 +162,25 @@ mod test {
     }
     #[test]
     fn test_rule_selector() {
-        let rs = RuleSelector::builder()
+        let rs = Rules::builder()
             .include("foo")
             .exclude(PluginType::Debug)
             .default_include();
-        assert_eq!(rs.test("foo", PluginType::Normal), true);
-        assert_eq!(rs.test("foo", PluginType::Debug), true);
-        assert_eq!(rs.test("bar", PluginType::Normal), true);
-        assert_eq!(rs.test("bar", PluginType::Debug), false);
+        assert!(rs.test("foo", PluginType::Normal));
+        assert!(rs.test("foo", PluginType::Debug));
+        assert!(rs.test("bar", PluginType::Normal));
+        assert!(!rs.test("bar", PluginType::Debug));
     }
 
     #[test]
     fn test_rule_selector_builder() {
-        let rs = RuleSelector::builder()
+        let rs = Rules::builder()
             .include("foo")
             .exclude(PluginType::Debug)
             .default_exclude();
-        assert_eq!(rs.test("foo", PluginType::Normal), true);
-        assert_eq!(rs.test("foo", PluginType::Debug), true);
-        assert_eq!(rs.test("bar", PluginType::Normal), false);
-        assert_eq!(rs.test("bar", PluginType::Debug), false);
+        assert!(rs.test("foo", PluginType::Normal));
+        assert!(rs.test("foo", PluginType::Debug));
+        assert!(!rs.test("bar", PluginType::Normal));
+        assert!(!rs.test("bar", PluginType::Debug));
     }
 }
