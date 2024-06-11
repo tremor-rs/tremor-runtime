@@ -1,6 +1,6 @@
 [package]
 name = "tremor-connectors"
-version = "0.13.0-rc.27"
+version = "0.13.0-rc.28"
 edition = "2021"
 license = "Apache-2.0"
 homepage = "https://www.tremor.rs"
@@ -9,14 +9,14 @@ authors = ["The Tremor Team"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.27" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.27" }
-tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.27" }
-tremor-pipeline = { path = "../tremor-pipeline", version = "0.13.0-rc.27" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.27" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.27" }
-tremor-interceptor = { path = "../tremor-interceptor", version = "0.13.0-rc.27" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.27" }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.28" }
+tremor-config = { path = "../tremor-config", version = "0.13.0-rc.28" }
+tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.28" }
+tremor-pipeline = { path = "../tremor-pipeline", version = "0.13.0-rc.28" }
+tremor-script = { path = "../tremor-script", version = "0.13.0-rc.28" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.28" }
+tremor-interceptor = { path = "../tremor-interceptor", version = "0.13.0-rc.28" }
+tremor-system = { path = "../tremor-system", version = "0.13.0-rc.28" }
 tokio = { version = "1.38", default-features = false }
 beef = { version = "0.5", default-features = false }
 value-trait = { version = "0.8", default-features = false }
@@ -163,7 +163,7 @@ http-types = "2.0"
 bytes = "1.0"
 tempfile = { version = "3.8", default-features = false }
 env_logger = "0.11"
-tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.27" }
+tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.28" }
 tide = { version = "0.16", default-features = false } # TODO remove tide from TestHttpServer
 tokio = { version = "1.38", default-features = false, features = [
     "full",
