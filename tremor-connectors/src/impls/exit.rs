@@ -93,7 +93,7 @@
 
 use crate::sink::prelude::*;
 use std::time::Duration;
-use tremor_system::killswitch::ShutdownMode;
+use tremor_system::{killswitch::ShutdownMode, selector::PluginType};
 use tremor_value::prelude::*;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -125,6 +125,10 @@ pub struct Builder {}
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "exit".into()
+    }
+
+    fn plugin_type(&self) -> PluginType {
+        PluginType::Debug
     }
 
     async fn build(

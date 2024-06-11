@@ -212,7 +212,9 @@ use tremor_common::{
     file,
     time::nanotime,
 };
-use tremor_system::{connector::source, event::DEFAULT_STREAM_ID, killswitch::ShutdownMode};
+use tremor_system::{
+    connector::source, event::DEFAULT_STREAM_ID, killswitch::ShutdownMode, selector::PluginType,
+};
 use tremor_value::prelude::*;
 use xz2::read::XzDecoder;
 
@@ -332,6 +334,9 @@ impl ConnectorBuilder for Builder {
 
     fn connector_type(&self) -> ConnectorType {
         "bench".into()
+    }
+    fn plugin_type(&self) -> PluginType {
+        PluginType::Debug
     }
 }
 

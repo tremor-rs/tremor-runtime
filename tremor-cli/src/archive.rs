@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use tremor_common::asy::file;
-use tremor_runtime::system::{World, WorldConfig};
+use tremor_runtime::system::Runtime;
 use tremor_value::Value;
 
 use crate::{cli::ArchiveCommand, errors::Result};
@@ -35,10 +35,10 @@ impl ArchiveCommand {
                 flow,
                 config,
             } => {
-                let world_config = WorldConfig {
-                    debug_connectors: true,
-                };
-                let (world, handle) = World::start(world_config).await?;
+                let (world, handle) = Runtime::builder()
+                    .default_include_connectors()
+                    .build()
+                    .await?;
 
                 let config = if let Some(f) = config {
                     let mut c = tremor_common::asy::file::read(&f).await?;

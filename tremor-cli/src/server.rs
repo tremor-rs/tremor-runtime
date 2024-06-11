@@ -25,7 +25,7 @@ use std::io::Write;
 use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_runtime::system::World;
+use tremor_runtime::system::Runtime;
 use tremor_runtime::version;
 use tremor_system::killswitch::ShutdownMode;
 
@@ -36,7 +36,7 @@ macro_rules! log_and_print_error {
     };
 }
 
-async fn handle_signals(mut signals: Signals, world: World) {
+async fn handle_signals(mut signals: Signals, world: Runtime) {
     while let Some(signal) = signals.next().await {
         info!(
             "Received SIGNAL: {}",
@@ -68,8 +68,6 @@ async fn handle_signals(mut signals: Signals, world: World) {
 impl ServerRun {
     #[allow(clippy::too_many_lines)]
     async fn run_dun(&self) -> Result<i32> {
-        use tremor_runtime::system::WorldConfig;
-
         let mut result = 0;
 
         version::log();
@@ -94,12 +92,18 @@ impl ServerRun {
 
         tremor_script::RECURSION_LIMIT.store(self.recursion_limit, Ordering::Relaxed);
 
-        // TODO: Allow configuring this for offramps and pipelines
-        let config = WorldConfig {
-            debug_connectors: self.debug_connectors,
+        let (world, handle) = if self.debug_connectors {
+            Runtime::builder()
+                .default_include_connectors()
+                .build()
+                .await?
+        } else {
+            Runtime::builder()
+                .without_debug_connectors()
+                .default_include_connectors()
+                .build()
+                .await?
         };
-
-        let (world, handle) = World::start(config).await?;
 
         // signal handling
         let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;

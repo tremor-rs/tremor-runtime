@@ -74,6 +74,7 @@ use tremor_system::{
     instance::State,
     killswitch::KillSwitch,
     pipeline, qsize,
+    selector::PluginType,
 };
 use tremor_value::Value;
 use utils::reconnect::{ConnectionLostNotifier, ReconnectRuntime};
@@ -933,6 +934,13 @@ pub enum CodecReq {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub struct ConnectorType(String);
 
+impl ConnectorType {
+    /// name of the connector
+    pub fn name(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 impl From<ConnectorType> for String {
     fn from(ct: ConnectorType) -> Self {
         ct.0
@@ -948,6 +956,12 @@ impl<'t> From<&'t ConnectorType> for &'t str {
 impl Display for ConnectorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.0.as_str())
+    }
+}
+
+impl AsRef<str> for ConnectorType {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
     }
 }
 
@@ -971,6 +985,11 @@ where
 pub trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
     /// the type of the connector
     fn connector_type(&self) -> ConnectorType;
+
+    /// the type of the connector
+    fn plugin_type(&self) -> PluginType {
+        PluginType::Normal
+    }
 
     /// create a connector from the given `id` and `config`, if a connector config is mandatory
     /// implement `build_cfg` instead
@@ -1057,14 +1076,6 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::<impls::clickhouse::Builder>::default(),
         #[cfg(feature = "null")]
         Box::<impls::null::Builder>::default(),
-    ]
-}
-
-/// debug connector types
-
-#[must_use]
-pub fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
-    vec![
         #[cfg(feature = "circut-breaker")]
         Box::<impls::cb::Builder>::default(),
         #[cfg(feature = "bench")]

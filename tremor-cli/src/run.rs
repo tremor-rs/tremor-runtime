@@ -27,7 +27,7 @@ use tremor_common::{
     time::nanotime,
 };
 use tremor_interceptor::{postprocessor, preprocessor};
-use tremor_runtime::system::{World, WorldConfig};
+use tremor_runtime::system::Runtime;
 use tremor_script::{
     arena::Arena,
     highlighter::{Error as HighlighterError, Highlighter, Term as TermHighlighter},
@@ -418,10 +418,10 @@ impl Run {
     }
 
     async fn run_troy_source(&self) -> Result<()> {
-        let config = WorldConfig {
-            debug_connectors: true,
-        };
-        let (world, handle) = World::start(config).await?;
+        let (world, handle) = Runtime::builder()
+            .default_include_connectors()
+            .build()
+            .await?;
         tremor_runtime::load_troy_file(&world, &self.script).await?;
         handle.await??;
         Ok(())
