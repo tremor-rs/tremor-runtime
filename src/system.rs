@@ -246,3 +246,106 @@ impl Runtime {
         Ok(self.kill_switch.stop(mode).await?)
     }
 }
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn test_runtime_builder_default_exclude_with() {
+        let builder = Runtime::builder();
+        let builder = builder.with_connector("foo");
+        let builder = builder.with_debug_connectors();
+        let builder = builder.with_connectors(&["bar", "baz"]);
+        let cfg = builder.default_exclude_connectors();
+
+        assert!(cfg.connectors.test("foo", PluginType::Normal));
+        assert!(cfg.connectors.test("foo", PluginType::Debug));
+
+        assert!(cfg.connectors.test("bar", PluginType::Normal));
+        assert!(cfg.connectors.test("bar", PluginType::Debug));
+
+        assert!(cfg.connectors.test("baz", PluginType::Normal));
+
+        assert!(cfg.connectors.test("boo", PluginType::Debug));
+        assert!(!cfg.connectors.test("boo", PluginType::Normal));
+    }
+
+    #[test]
+    fn test_runtime_builder_default_include_with() {
+        let builder = Runtime::builder();
+        let builder = builder.with_connector("foo");
+        let builder = builder.without_debug_connectors();
+        let builder = builder.with_connectors(&["bar", "baz"]);
+        let cfg = builder.default_include_connectors();
+
+        assert!(cfg.connectors.test("foo", PluginType::Normal));
+        assert!(cfg.connectors.test("foo", PluginType::Debug));
+
+        assert!(cfg.connectors.test("bar", PluginType::Normal));
+        assert!(!cfg.connectors.test("bar", PluginType::Debug));
+
+        assert!(cfg.connectors.test("baz", PluginType::Normal));
+
+        assert!(!cfg.connectors.test("boo", PluginType::Debug));
+        assert!(cfg.connectors.test("boo", PluginType::Normal));
+    }
+
+    #[test]
+    fn test_runtime_builder_default_exclude_without() {
+        let builder = Runtime::builder();
+        let builder = builder.without_connector("foo");
+        let builder = builder.with_normal_connectors();
+        let builder = builder.without_connectors(&["bar", "baz"]);
+        let cfg = builder.default_exclude_connectors();
+
+        assert!(!cfg.connectors.test("foo", PluginType::Normal));
+        assert!(!cfg.connectors.test("foo", PluginType::Debug));
+
+        assert!(cfg.connectors.test("bar", PluginType::Normal));
+        assert!(!cfg.connectors.test("bar", PluginType::Debug));
+
+        assert!(cfg.connectors.test("baz", PluginType::Normal));
+
+        assert!(!cfg.connectors.test("boo", PluginType::Debug));
+        assert!(cfg.connectors.test("boo", PluginType::Normal));
+    }
+
+    #[test]
+    fn test_runtime_builder_default_include_without() {
+        let builder = Runtime::builder();
+        let builder = builder.without_connector("foo");
+        let builder = builder.without_normal_connectors();
+        let builder = builder.without_connectors(&["bar", "baz"]);
+        let cfg = builder.default_include_connectors();
+
+        assert!(!cfg.connectors.test("foo", PluginType::Normal));
+        assert!(!cfg.connectors.test("foo", PluginType::Debug));
+
+        assert!(!cfg.connectors.test("bar", PluginType::Normal));
+        assert!(!cfg.connectors.test("bar", PluginType::Debug));
+
+        assert!(!cfg.connectors.test("baz", PluginType::Normal));
+
+        assert!(cfg.connectors.test("boo", PluginType::Debug));
+        assert!(!cfg.connectors.test("boo", PluginType::Normal));
+    }
+
+    #[test]
+    fn test_runtime_config() {
+        let config = RuntimeConfig {
+            connectors: Rules::builder().default_include(),
+        };
+        let _ = config.build();
+    }
+
+    #[tokio::test]
+    async fn test_runtime() -> Result<()> {
+        let builder = Runtime::builder();
+        let config = builder.default_include_connectors();
+        let (runtime, _system_h) = Runtime::start(config).await?;
+        runtime.stop(ShutdownMode::Graceful).await?;
+        Ok(())
+    }
+}

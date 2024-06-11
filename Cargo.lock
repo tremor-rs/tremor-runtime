@@ -7386,7 +7386,6 @@ dependencies = [
  "tempfile",
  "termcolor",
  "test-case",
- "tokio",
  "tremor-codec",
  "tremor-common",
  "tremor-influx",
