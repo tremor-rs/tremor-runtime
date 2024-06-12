@@ -618,9 +618,9 @@ checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
 [[package]]
 name = "aws-config"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1234b742ac4a40a7d3459c6e3c99818271976a5a6ae3732cb415f4a9a94da7b6"
+checksum = "2ac9889352d632214df943e26740c46a0f3da6e329fbd28164fe7ae1b061da7b"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -715,9 +715,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-sts"
-version = "1.26.0"
+version = "1.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b892a18371e2628a5e7bfab6a03718de9501c439886dce6111a1363fa74c89b"
+checksum = "300ce43d1f7f4eb023e57d38b0921d964e8e62bed7f82f6b7849e7eab7a14575"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -850,9 +850,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime"
-version = "1.5.4"
+version = "1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "607e8b53aeb2bc23fb332159d72a69650cd9643c161d76cd3b7f88ac00b5a1bb"
+checksum = "8508de54f34b8feca6638466c2bd2de9d1df5bf79c578de9a649b72d644006b3"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-http",
@@ -864,6 +864,7 @@ dependencies = [
  "http 0.2.12",
  "http-body 0.4.6",
  "http-body 1.0.0",
+ "httparse",
  "hyper 0.14.28",
  "hyper-rustls 0.24.2",
  "once_cell",
@@ -876,9 +877,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime-api"
-version = "1.6.2"
+version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4179bd8a1c943e1aceb46c5b9fc014a561bd6c35a2153e816ba29076ee49d245"
+checksum = "aa6dbabc7629fab4e4467f95f119c2e1a9b00b44c893affa98e23b040a0e2567"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-types",
@@ -893,9 +894,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-types"
-version = "1.1.10"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b6764ba7e1c5ede1c9f9e4046645534f06c2581402461c559b481a420330a83"
+checksum = "cfe321a6b21f5d8eabd0ade9c55d3d0335f3c3157fc2b3e87f05f34b539e4df5"
 dependencies = [
  "base64-simd",
  "bytes",
