@@ -5,7 +5,7 @@ test = []
 [package]
 name = "tremor-connectors-azure"
 edition = "2021"
-version = "0.0.1"
+version = "0.13.0-rc.28"
 authors = ["The Tremor Team"]
 homepage = "https://www.tremor.rs"
 license = "Apache-2.0"

@@ -17,7 +17,7 @@ use crate::{
     impls::http::{
         auth::Auth,
         client,
-        meta::{extract_request_meta, extract_response_meta},
+        meta::{extract_from_request, extract_from_response},
         utils::{Header, RequestId},
         Error,
     },
@@ -389,7 +389,7 @@ impl Sink for HttpRequestSink {
             let codec_map = self.codec_map.clone();
             let request = builder.take_request()?;
 
-            let req_meta = extract_request_meta(&request, self.scheme)?;
+            let req_meta = extract_from_request(&request, self.scheme)?;
             let t = self
                 .config
                 .timeout
@@ -411,7 +411,7 @@ impl Sink for HttpRequestSink {
                 let response = client.request(request);
                 match timeout(t, response).await {
                     Ok(Ok(response)) => {
-                        let response_meta = extract_response_meta(&response)?;
+                        let response_meta = extract_from_response(&response)?;
 
                         let headers = response.headers();
 

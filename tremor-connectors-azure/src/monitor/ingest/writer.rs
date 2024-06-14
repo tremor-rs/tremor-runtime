@@ -101,8 +101,9 @@ impl RequestBuilder {
     async fn new(
         id: RequestId,
         _meta: Option<&Value<'_>>,
-        config: &Config,
+        config: &mut Config,
     ) -> anyhow::Result<Self> {
+        let token = config.auth.get_token().await?;
         let rest_endpoint = format!(
             "{dce_base_url}/dataCollectionRules/{dcr}/streams/{stream}?api-version={api_version}",
             dce_base_url = config.dce_base_url,
@@ -115,7 +116,7 @@ impl RequestBuilder {
         Ok(Self {
             id,
             rest_endpoint: azure_core_url,
-            auth_token: Some(config.auth.get_token().await?),
+            auth_token: Some(token),
             data: vec![],
         })
     }
@@ -135,6 +136,7 @@ impl RequestBuilder {
     }
 
     fn append_data(&mut self, chunks: Vec<Vec<u8>>) {
+        // TODO See if streaming in the style of the HTTP client is possible here instead
         for chunk in chunks {
             self.data.push(chunk);
         }
@@ -205,7 +207,7 @@ impl Connector for Ami {
             builder.reply_tx(),
             self.config.clone(),
             self.source_is_connected.clone(),
-        );
+        )?;
 
         Ok(Some(builder.spawn(sink, ctx)))
     }
@@ -244,7 +246,7 @@ impl ConnectorBuilder for Builder {
 
 #[cfg(test)]
 mod tests {
-    use crate::auth::mock_auth_server;
+    use crate::auth::test::mock_auth_server;
     use tremor_common::ids::Id;
     use tremor_common::ids::SinkId;
     use tremor_config::NameWithConfig;
@@ -331,7 +333,7 @@ mod tests {
         let auth_server = mock_auth_server().await;
         let ingest_server = mock_monitor_ingest_api_server().await;
 
-        let config = Config {
+        let mut config = Config {
             auth: AuthConfig::new_mock(&auth_server),
             dce_base_url: ingest_server.url(),
             dcr: "dcr-uuidv4".to_string(),
@@ -344,7 +346,7 @@ mod tests {
         let request_id = RequestId::new(123);
 
         let meta_none: Option<&Value> = None;
-        let mut rb = RequestBuilder::new(request_id, meta_none, &config).await?;
+        let mut rb = RequestBuilder::new(request_id, meta_none, &mut config).await?;
 
         let serializer = &mut basic_json_serializer()?;
         rb.append(
