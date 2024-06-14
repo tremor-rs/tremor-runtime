@@ -20,3 +20,4 @@ connector-docs:
 	scripts/gen.sh tremor-connectors-gcp/src connectors
 	scripts/gen.sh tremor-connectors-aws/src connectors
 	scripts/gen.sh tremor-connectors-otel/src connectors
+	scripts/gen.sh tremor-connectors-azure/src connectors
