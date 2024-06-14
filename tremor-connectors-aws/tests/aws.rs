@@ -94,8 +94,8 @@ async fn spawn_docker() -> (ContainerAsync<GenericImage>, u16) {
     .with_mapped_port((http_port, 9000_u16))
     .with_mapped_port((http_tls_port, 9001_u16));
     let container = image.start().await;
-    let http_port = container.get_host_port_ipv4(9000).await;
-    (container, http_port)
+
+    (container.unwrap(), http_port)
 }
 
 fn random_bucket_name(prefix: &str) -> String {
