@@ -63,10 +63,10 @@ impl AmiSink {
         reply_tx: ReplySender,
         config: Config,
         source_is_connected: Arc<AtomicBool>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
 
-        Self {
+        Ok(Self {
             request_counter: 1, // always start by 1, 0 is DEFAULT_STREAM_ID and this might interfere with custom codecs
             response_tx,
             reply_tx,
@@ -80,13 +80,12 @@ impl AmiSink {
             },
             concurrency_cap,
             source_is_connected,
-            serializer: json_serializer(),
-        }
+            serializer: json_serializer()?,
+        })
     }
 }
 
-#[allow(clippy::unwrap_used)] // NOTE we know that the codec is always present/correct
-fn json_serializer() -> EventSerializer {
+fn json_serializer() -> anyhow::Result<EventSerializer> {
     EventSerializer::new(
         Some(NameWithConfig {
             name: "json".to_string(),
@@ -100,8 +99,6 @@ fn json_serializer() -> EventSerializer {
             "azure_monitor_ingest_writer",
         ),
     )
-    // ALLOW: We know at compile time that codecs and processors will resolve ok
-    .unwrap()
 }
 
 #[async_trait::async_trait]
@@ -155,7 +152,7 @@ impl Sink for AmiSink {
                         correlation_meta = meta.get("correlation").map(Value::clone_static);
                         let http_meta = ctx.extract_meta(meta);
                         let mut once_per_request =
-                            RequestBuilder::new(request_id, http_meta, &self.config).await?;
+                            RequestBuilder::new(request_id, http_meta, &mut self.config).await?;
                         once_per_request
                             .append(value, meta, start, &mut self.serializer)
                             .await?;
@@ -168,8 +165,6 @@ impl Sink for AmiSink {
                     }
                 }
             }
-
-            assert!(builder.is_some(), "No builder");
 
             let t = self
                 .config
@@ -202,17 +197,23 @@ impl Sink for AmiSink {
                 match timeout(t, response).await {
                     Ok(Ok(response)) => {
                         let response_meta = extract_response_meta(response).await?;
-                        // let headers = response.headers();
 
                         if let Some(response_tx) = response_tx {
                             let mut meta = task_ctx.meta(literal!({
                                 "request": std::convert::Into::<Value>::into(req_meta),
                                 "request_id": request_id.get(),
+                                // NOTE Azure always returns 204 here, even for malformed requests
+                                // so we don't inspect or track the response at this time. Hopefully
+                                // a future ingest API for data collection endpoints will be a little
+                                // less cromulent in the future...
+                                //
                                 // "response": std::convert::Into::<Value>::into(response_meta),
                                 "content-length": response_meta.content_length,
                             }));
 
                             if let Some(corr_meta) = correlation_meta {
+                                // NOTE correlation as yet untested - this may change before release
+                                // pending experimentation
                                 meta.try_insert("correlation", corr_meta);
                             }
 
@@ -286,7 +287,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_json_serializer() -> anyhow::Result<()> {
-        let mut serializer = json_serializer();
+        let mut serializer = json_serializer()?;
         let got = serializer
             .serialize(&literal!({ "foo": "bar" }), &literal!(null), 0)
             .await?;

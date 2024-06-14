@@ -196,8 +196,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::unwrap_used)] // NOTE - unwrap is used in tests for simplicity
-    async fn test_response_meta() {
+    async fn test_response_meta() -> anyhow::Result<()> {
         let mut headers = azure_core::headers::Headers::new();
         headers.insert("content-type", "application/json");
         headers.insert("content-length", "10");
@@ -206,7 +205,7 @@ mod tests {
         let inner = stream.inner;
         let response = Response::new(StatusCode::Ok, headers, inner);
 
-        let meta = extract_response_meta(response).await.unwrap();
+        let meta = extract_response_meta(response).await?;
         let expected = literal!({
             "status": 200,
             "headers": {
@@ -218,5 +217,7 @@ mod tests {
         });
 
         assert_eq!(Value::from(meta), expected);
+
+        Ok(())
     }
 }

@@ -15,7 +15,7 @@
 use crate::{
     errors::error_connector_def,
     impls::http::{
-        meta::{consolidate_mime, content_type, extract_request_meta, HeaderValueValue},
+        meta::{consolidate_mime, content_type, extract_from_request, HeaderValueValue},
         utils::RequestId,
     },
     sink::prelude::*,
@@ -740,7 +740,7 @@ async fn _handle_request(
     req: Request<Incoming>,
 ) -> anyhow::Result<Response<StreamingBody>> {
     use http_body_util::BodyExt;
-    let request_meta = extract_request_meta(&req, context.scheme)?;
+    let request_meta = extract_from_request(&req, context.scheme)?;
     let content_type =
         content_type(Some(req.headers()))?.map(|mime| mime.essence_str().to_string());
 

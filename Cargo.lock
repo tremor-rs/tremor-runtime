@@ -7460,7 +7460,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-connectors-azure"
-version = "0.0.1"
+version = "0.13.0-rc.28"
 dependencies = [
  "anyhow",
  "async-trait",

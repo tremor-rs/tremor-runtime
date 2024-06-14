@@ -18,7 +18,6 @@ use std::{
     fmt::Debug,
     time::{Duration, Instant},
 };
-use tokio::sync::Mutex;
 
 // Azure client credentials token response. Provided for any successful token request.
 #[derive(Deserialize, Serialize)]
@@ -45,7 +44,7 @@ pub struct Config {
     #[serde(default = "default_scope")]
     pub(crate) scope: String, // NOTE Injected by specific sources/sinks on construction
     #[serde(skip)]
-    token: Mutex<Option<Token>>,
+    token: Option<Token>,
 }
 
 // Default scope for authentication - we default this so that deserialization
@@ -83,7 +82,7 @@ impl Clone for Config {
             client_secret: self.client_secret.clone(),
             tenant_id: self.tenant_id.clone(),
             scope: self.scope.clone(),
-            token: Mutex::new(None),
+            token: None,
         }
     }
 }
@@ -94,24 +93,23 @@ impl Config {
     pub fn new_mock(mock_server: &mockito::ServerGuard) -> Self {
         Self {
             base_url: mock_server.url(),
-            client_id: MOCK_CLIENT_ID.to_string(),
-            client_secret: MOCK_CLIENT_SECRET.to_string(),
-            tenant_id: MOCK_TENANT_ID.to_string(),
-            scope: MOCK_SCOPE.to_string(),
-            token: Mutex::new(None),
+            client_id: crate::auth::test::MOCK_CLIENT_ID.to_string(),
+            client_secret: crate::auth::test::MOCK_CLIENT_SECRET.to_string(),
+            tenant_id: crate::auth::test::MOCK_TENANT_ID.to_string(),
+            scope: crate::auth::test::MOCK_SCOPE.to_string(),
+            token: None,
         }
     }
 
     // Resolves or refreshes a token from the Azure auth service.
-    pub(crate) async fn get_token(&self) -> anyhow::Result<String> {
-        let mut guard = self.token.lock().await;
-        if guard.is_none() || self.is_token_expired().await {
+    pub(crate) async fn get_token(&mut self) -> anyhow::Result<String> {
+        if self.token.is_none() || self.is_token_expired() {
             let token = self.refresh_token().await?;
-            *guard = Some(token);
+            self.token = Some(token);
         }
 
-        match guard.as_ref() {
-            Some(token) => Ok(token.access_token.clone()),
+        match self.token {
+            Some(ref token) => Ok(token.access_token.clone()),
             None => Err(anyhow::anyhow!("Failed to get token")),
         }
     }
@@ -145,8 +143,8 @@ impl Config {
     }
 
     // Checks if the token is expired. Used by get_token.
-    async fn is_token_expired(&self) -> bool {
-        if let Some(token) = &*self.token.lock().await {
+    fn is_token_expired(&mut self) -> bool {
+        if let Some(token) = &mut self.token {
             token.expires_in <= Instant::now()
         } else {
             true
@@ -155,54 +153,48 @@ impl Config {
 }
 
 #[cfg(test)]
-pub(crate) const MOCK_CLIENT_ID: &str = "client_id";
-
-#[cfg(test)]
-pub(crate) const MOCK_CLIENT_SECRET: &str = "client_secret";
-
-#[cfg(test)]
-pub(crate) const MOCK_TENANT_ID: &str = "test_tenant_id";
-
-#[cfg(test)]
-pub(crate) const MOCK_SCOPE: &str = "https://graph.microsoft.com/.default";
-
-#[cfg(test)]
-pub(crate) async fn mock_auth_server() -> mockito::ServerGuard {
-    let mut server = mockito::Server::new_async().await;
-
-    server
-        .mock(
-            "POST",
-            format!("/{MOCK_TENANT_ID}/oauth2/v2.0/token").as_str(),
-        )
-        .with_status(200)
-        .with_header("content-type", "application/json")
-        .with_body(r#"{"access_token": "test_access_token", "expires_in": 3600 }"#)
-        .create();
-
-    server
-}
-
-#[cfg(test)]
-pub(crate) async fn mock_bad_auth_server() -> mockito::ServerGuard {
-    let mut server = mockito::Server::new_async().await;
-
-    server
-        .mock(
-            "POST",
-            format!("/{MOCK_TENANT_ID}/oauth2/v2.0/token").as_str(),
-        )
-        .with_status(503)
-        .with_header("content-type", "application/text")
-        .with_body("I hate you, pesky human!")
-        .create();
-
-    server
-}
-
-#[cfg(test)]
-mod test {
+pub(crate) mod test {
     use super::*;
+
+    pub(crate) const MOCK_CLIENT_ID: &str = "client_id";
+
+    pub(crate) const MOCK_CLIENT_SECRET: &str = "client_secret";
+
+    pub(crate) const MOCK_TENANT_ID: &str = "test_tenant_id";
+
+    pub(crate) const MOCK_SCOPE: &str = "https://graph.microsoft.com/.default";
+
+    pub(crate) async fn mock_auth_server() -> mockito::ServerGuard {
+        let mut server = mockito::Server::new_async().await;
+
+        server
+            .mock(
+                "POST",
+                format!("/{MOCK_TENANT_ID}/oauth2/v2.0/token").as_str(),
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"access_token": "test_access_token", "expires_in": 3600 }"#)
+            .create();
+
+        server
+    }
+
+    pub(crate) async fn mock_bad_auth_server() -> mockito::ServerGuard {
+        let mut server = mockito::Server::new_async().await;
+
+        server
+            .mock(
+                "POST",
+                format!("/{MOCK_TENANT_ID}/oauth2/v2.0/token").as_str(),
+            )
+            .with_status(503)
+            .with_header("content-type", "application/text")
+            .with_body("I hate you, pesky human!")
+            .create();
+
+        server
+    }
 
     #[test]
     fn clone_debug_for_coverage() {
@@ -212,7 +204,7 @@ mod test {
             client_secret: "client_secret".to_string(),
             tenant_id: "tenant_id".to_string(),
             scope: "scope".to_string(),
-            token: Mutex::new(None),
+            token: None,
         };
 
         let clone = config.clone();
@@ -238,7 +230,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn partial_failure_of_auth_endpoint() -> anyhow::Result<()> {
         let server = mock_bad_auth_server().await;
-        let azure_oauth = Config::new_mock(&server);
+        let mut azure_oauth = Config::new_mock(&server);
         let token = azure_oauth.get_token().await;
         assert!(token.is_err());
 
@@ -248,27 +240,31 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_get_token_success() -> anyhow::Result<()> {
         let server = mock_auth_server().await;
-        let azure_oauth = Config::new_mock(&server);
+        let mut azure_oauth = Config::new_mock(&server);
         let token = azure_oauth.get_token().await?;
         assert_eq!(token, "test_access_token");
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    #[allow(clippy::unwrap_used)] // NOTE - unwrap is used in tests for simplicity
     async fn test_get_token_expired_refresh() -> anyhow::Result<()> {
         let server = mock_auth_server().await;
-        let azure_oauth = Config::new_mock(&server);
+        let mut azure_oauth = Config::new_mock(&server);
 
-        {
-            let mut guard = azure_oauth.token.lock().await;
-            guard.replace(Token {
-                access_token: "expired_token".to_string(),
-                expires_in: Instant::now().checked_sub(Duration::from_secs(1)).unwrap(),
-            });
-            drop(guard);
-            assert!(azure_oauth.is_token_expired().await);
-        }
+        let ten_hours = Duration::from_secs(36_000);
+        match Instant::now().checked_sub(ten_hours) {
+            Some(ten_hours_ago) => {
+                azure_oauth.token = Some(Token {
+                    access_token: "expired_token".to_string(),
+                    expires_in: ten_hours_ago,
+                });
+            }
+            None => {
+                return Err(anyhow::anyhow!("Rust hates you, pesky human"));
+            }
+        };
+
+        assert!(azure_oauth.is_token_expired());
 
         Ok(())
     }
