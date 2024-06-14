@@ -173,7 +173,6 @@ pub struct Builder {}
 
 struct Ami {
     response_tx: Sender<SourceReply>,
-    #[allow(dead_code)] // FIXME - Azure returns no content so not implemented for now
     response_rx: Option<Receiver<SourceReply>>,
     config: Config,
     source_is_connected: Arc<AtomicBool>,
