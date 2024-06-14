@@ -20,7 +20,7 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 byteorder = "1"
 value-trait = "0.8"
-memchr = "2.6"
+memchr = "2.7"
 anyhow = { version = "1.0", default-features = true }
 thiserror = { version = "1.0", default-features = false }
 
