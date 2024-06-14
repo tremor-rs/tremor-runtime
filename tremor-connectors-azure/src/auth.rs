@@ -110,11 +110,10 @@ impl Config {
             *guard = Some(token);
         }
 
-        Ok(guard
-            .as_ref()
-            .expect("unable to read token error")
-            .access_token
-            .clone())
+        match guard.as_ref() {
+            Some(token) => Ok(token.access_token.clone()),
+            None => Err(anyhow::anyhow!("Failed to get token")),
+        }
     }
 
     // Refreshes a token from the Azure auth service. Used by get_token.
@@ -128,26 +127,21 @@ impl Config {
         ];
 
         let client = Client::new();
-        let res = client
-            .post(&url)
-            .form(&params)
-            .send()
-            .await
-            .expect("Failed to refresh token");
+        let res = client.post(&url).form(&params).send().await;
 
-        if !res.status().is_success() {
-            return Err(anyhow::anyhow!("Failed to refresh token"));
+        match res {
+            Ok(res) => {
+                let body_str = res.text().await?;
+
+                let res = serde_json::from_str::<TokenResponse>(&body_str)?;
+
+                Ok(Token {
+                    access_token: res.access_token,
+                    expires_in: Instant::now() + Duration::from_secs(res.expires_in),
+                })
+            }
+            Err(e) => Err(anyhow::anyhow!("Failed to read response body: {}", e)),
         }
-
-        let body_str = res.text().await.expect("Failed to read response body");
-
-        let res = serde_json::from_str::<TokenResponse>(&body_str)
-            .expect("Failed to parse token response");
-
-        Ok(Token {
-            access_token: res.access_token,
-            expires_in: Instant::now() + Duration::from_secs(res.expires_in),
-        })
     }
 
     // Checks if the token is expired. Used by get_token.
@@ -176,7 +170,7 @@ pub(crate) const MOCK_SCOPE: &str = "https://graph.microsoft.com/.default";
 pub(crate) async fn mock_auth_server() -> mockito::ServerGuard {
     let mut server = mockito::Server::new_async().await;
 
-    let _mock = server
+    server
         .mock(
             "POST",
             format!("/{MOCK_TENANT_ID}/oauth2/v2.0/token").as_str(),
@@ -193,7 +187,7 @@ pub(crate) async fn mock_auth_server() -> mockito::ServerGuard {
 pub(crate) async fn mock_bad_auth_server() -> mockito::ServerGuard {
     let mut server = mockito::Server::new_async().await;
 
-    let _mock = server
+    server
         .mock(
             "POST",
             format!("/{MOCK_TENANT_ID}/oauth2/v2.0/token").as_str(),

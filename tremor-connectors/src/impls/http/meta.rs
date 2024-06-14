@@ -133,7 +133,7 @@ fn extract_headers(headers: &HeaderMap) -> Result<Value<'static>, ToStrError> {
 /// Extract request metadata
 /// # Errors
 /// - if the request metadata can not be extracted
-#[allow(clippy::module_name_repetitions)] // TODO FIXME refactor rename
+#[allow(clippy::module_name_repetitions)] // TODO refactor rename
 pub fn extract_request_meta<T>(
     request: &Request<T>,
     scheme: &'static str,
