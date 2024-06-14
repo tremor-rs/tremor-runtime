@@ -69,6 +69,7 @@ jobs:
           [
             "tremor-connectors",
             "tremor-connectors-aws",
+            "tremor-connectors-azure",
             "tremor-connectors-gcp",
             "tremor-connectors-otel",
           ]
