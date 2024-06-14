@@ -2,14 +2,6 @@ bin = []
 bench = []
 test = []
 
-[[example]]
-path = "examples/test.rs"
-name = "test"
-plugin = false
-proc-macro = false
-edition = "2021"
-required-features = []
-
 [package]
 name = "tremor-connectors-azure"
 edition = "2021"
