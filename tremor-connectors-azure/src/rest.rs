@@ -126,20 +126,18 @@ pub(crate) fn extract_request_meta(request: &Request) -> Result<RequestMeta, Err
     Ok(meta)
 }
 
-pub(crate) async fn extract_response_meta(response: Response) -> Result<ResponseMeta, Error> {
+pub(crate) async fn extract_response_meta(response: Response) -> Result<(ResponseMeta, Vec<u8>), Error> {
     let (status, headers, body) = response.deconstruct();
     let data: Bytes = body.collect().await?;
     let mut data = data.to_vec();
     let len = data.len();
-    let data = tremor_value::parse_to_value(&mut data)?.into_static();
 
     let mut meta = ResponseMeta::default();
     meta.status = status as u16;
     meta.headers = headers.clone();
     meta.content_length = len;
-    meta.data = data;
 
-    Ok(meta)
+    Ok((meta, data))
 }
 
 #[cfg(test)]
