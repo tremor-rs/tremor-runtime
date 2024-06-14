@@ -79,6 +79,7 @@ pub(crate) async fn register_builtin_connector_types(runtime: &Runtime) -> anyho
         .chain(tremor_connectors_gcp::builtin_connector_types())
         .chain(tremor_connectors_aws::builtin_connector_types())
         .chain(tremor_connectors_otel::builtin_connector_types())
+        .chain(tremor_connectors_azure::builtin_connector_types())
     {
         runtime.register_connector(builder).await?;
     }

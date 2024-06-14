@@ -9,6 +9,7 @@
 ## [0.13.0-rc.26]
 
 ### New features
+* add experimental microsoft azure monitor log ingest api connector
 * add collect postprocessor
 * add support for access tokens for aws connectors
 * add support for brotli compression

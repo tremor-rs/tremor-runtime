@@ -180,6 +180,28 @@ impl<D: Defaults> Url<D> {
     }
 }
 
+impl TryFrom<String> for Url {
+    type Error = crate::errors::Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match Url::parse(&value) {
+            Ok(url) => Ok(url),
+            Err(e) => Err(crate::Error::UrlParseError(e)),
+        }
+    }
+}
+
+impl TryFrom<&str> for Url {
+    type Error = crate::errors::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match Url::parse(value) {
+            Ok(url) => Ok(url),
+            Err(e) => Err(crate::Error::UrlParseError(e)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -217,5 +239,28 @@ mod test {
     #[test]
     fn invalid_host() {
         assert!(Url::<HttpDefaults>::parse("[").is_err());
+    }
+
+    #[test]
+    fn try_from_string() {
+        let url: Url = "http://localhost:42"
+            .to_string()
+            .try_into()
+            .expect("valid url");
+        assert_eq!(url.to_string(), "http://localhost:42/");
+
+        let bad = "://";
+        let url: Result<Url, _> = bad.to_string().try_into();
+        assert!(url.is_err());
+    }
+
+    #[test]
+    fn try_from_str() {
+        let url: Url = "http://localhost:42".try_into().expect("valid url");
+        assert_eq!(url.to_string(), "http://localhost:42/");
+
+        let bad = ":\\";
+        let url: Result<Url, _> = bad.to_string().try_into();
+        assert!(url.is_err());
     }
 }

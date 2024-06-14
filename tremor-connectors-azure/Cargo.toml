@@ -1,0 +1,78 @@
+bin = []
+bench = []
+test = []
+
+[[example]]
+path = "examples/test.rs"
+name = "test"
+plugin = false
+proc-macro = false
+edition = "2021"
+required-features = []
+
+[package]
+name = "tremor-connectors-azure"
+edition = "2021"
+version = "0.0.1"
+authors = ["The Tremor Team"]
+homepage = "https://www.tremor.rs"
+license = "Apache-2.0"
+
+[dependencies]
+azure_core = { version = "0.20.0", default-features = false, features = [
+    "enable_reqwest",
+    "enable_reqwest_gzip",
+    "enable_reqwest_rustls",
+] }
+serde = "1.0.202"
+anyhow = "1.0.83"
+async-trait = "0.1.80"
+url = "2.5.0"
+reqwest = { version = "0.12.4", default-features = false, features = ["json"] }
+tokio = "1.37.0"
+azure_identity = "0.20.0"
+log = "0.4.21"
+tremor-script = { version = "0.13.0-rc.25", path = "../tremor-script" }
+bytes = "1.6.0"
+futures = { version = "0.3.30", default-features = false, features = [
+    "alloc",
+    "std",
+    "async-await",
+    "futures-executor",
+] }
+serde_json = "1.0.117"
+beef = "0.5.2"
+simd-json = "0.13.10"
+mockito = "1.4.0"
+
+[dependencies.tremor-config]
+# version = "0.0.1"
+path = "../tremor-config"
+
+[dependencies.tremor-connectors]
+# version = "0.0.1"
+path = "../tremor-connectors"
+
+[dependencies.tremor-common]
+# version = "0.0.1"
+path = "../tremor-common"
+
+[dependencies.tremor-value]
+# version = "0.0.1"
+path = "../tremor-value"
+
+[dependencies.tremor-system]
+# version = "0.0.1"
+path = "../tremor-system"
+
+[features]
+integration-harness = []
+
+[lib]
+path = "src/lib.rs"
+name = "tremor_connectors_azure"
+plugin = false
+proc-macro = false
+edition = "2021"
+required-features = []
+crate-type = ["rlib"]
