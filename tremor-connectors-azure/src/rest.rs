@@ -117,13 +117,12 @@ impl ResponseMeta {
     }
 }
 
-#[allow(clippy::unnecessary_wraps)]
-pub(crate) fn extract_request_meta(request: &Request) -> Result<RequestMeta, Error> {
+pub(crate) fn extract_request_meta(request: &Request) -> RequestMeta {
     let mut meta = RequestMeta::default();
     meta.method = request.method().to_string();
     meta.url = request.url().to_string();
     meta.headers = request.headers().clone();
-    Ok(meta)
+    meta
 }
 
 pub(crate) async fn extract_response_meta(response: Response) -> Result<(ResponseMeta, Vec<u8>), Error> {
@@ -173,14 +172,13 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::unwrap_used)]
-    fn test_request_meta() {
-        let url = Url::parse("http://example.com").unwrap();
+    fn test_request_meta() -> anyhow::Result<()> {
+        let url = Url::parse("http://example.com")?;
         let mut request = Request::new(url, Method::Get);
         request.insert_header("content-type", "application/json");
         request.insert_header("authorization", "Bearer token");
 
-        let meta = extract_request_meta(&request).unwrap();
+        let meta = extract_request_meta(&request);
         let expected = literal!({
             "method": "GET",
             "url": "http://example.com/",
@@ -191,6 +189,8 @@ mod tests {
         });
 
         assert_eq!(Value::from(meta), expected);
+
+        Ok(())
     }
 
     #[tokio::test]
