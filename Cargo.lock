@@ -6694,6 +6694,32 @@ dependencies = [
 
 [[package]]
 name = "testcontainers"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "025e0ac563d543e0354d984540e749859a83dbe5c0afb8d458dc48d91cef2d6a"
+dependencies = [
+ "async-trait",
+ "bollard",
+ "bollard-stubs",
+ "bytes",
+ "dirs 5.0.1",
+ "docker_credential",
+ "futures",
+ "log",
+ "memchr",
+ "parse-display",
+ "serde",
+ "serde_json",
+ "serde_with 3.8.1",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util 0.7.11",
+ "url",
+]
+
+[[package]]
+name = "testcontainers"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c9b71635ab25d4f789a86678d114a4f390467c8b93fd7feeaf7c443732a511"
@@ -7405,7 +7431,7 @@ dependencies = [
  "socket2 0.5.7",
  "tempfile",
  "test-case",
- "testcontainers",
+ "testcontainers 0.18.0",
  "thiserror",
  "tide",
  "tokio",
@@ -7445,7 +7471,7 @@ dependencies = [
  "serde",
  "serial_test",
  "simd-json",
- "testcontainers",
+ "testcontainers 0.17.0",
  "thiserror",
  "tokio",
  "tremor-common",
@@ -7508,7 +7534,7 @@ dependencies = [
  "simd-json-derive",
  "tempfile",
  "test-case",
- "testcontainers",
+ "testcontainers 0.18.0",
  "thiserror",
  "tokio",
  "tonic",
