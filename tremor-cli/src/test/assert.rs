@@ -104,6 +104,8 @@ pub(crate) struct FileBasedAssert {
     pub(crate) contains: Option<Vec<String>>,
     pub(crate) doesnt_contain: Option<Vec<String>>,
     pub(crate) equals_file: Option<String>,
+    pub(crate) is_empty: Option<bool>,
+    pub(crate) is_not_empty: Option<bool>,
 }
 
 pub(crate) type Asserts = Vec<FileBasedAssert>;
@@ -329,6 +331,7 @@ fn process_equals_file(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn process_filebased_asserts(
     prefix: &str,
     stdout_path: &Path,
@@ -345,6 +348,8 @@ pub(crate) fn process_filebased_asserts(
                 contains: None,
                 doesnt_contain: None,
                 equals_file: None,
+                is_empty: None,
+                is_not_empty: None,
                 ..
             } => {
                 stats.skip();
@@ -355,6 +360,8 @@ pub(crate) fn process_filebased_asserts(
                 contains,
                 doesnt_contain,
                 equals_file,
+                is_empty,
+                is_not_empty,
                 ..
             } => {
                 let file = match source {
@@ -394,9 +401,79 @@ pub(crate) fn process_filebased_asserts(
                         &mut counter,
                     )?);
                 }
+
+                if let Some(is_empty) = is_empty {
+                    stats.assert();
+                    counter += 1;
+                    let condition = (std::fs::metadata(&file)?.len() == 0) == *is_empty;
+                    stats.report(condition, &file);
+                    status::assert_has(
+                        prefix,
+                        &format!("Assert {counter}"),
+                        &format!("  File `{}` is empty", &file),
+                        None,
+                        condition,
+                    )?;
+                    elements.push(report::TestElement {
+                        description: format!("File `{file}` is empty"),
+                        info: None,
+                        hidden: false,
+                        keyword: report::KeywordKind::Predicate,
+                        result: report::ResultKind {
+                            status: if condition {
+                                report::StatusKind::Passed
+                            } else {
+                                report::StatusKind::Failed
+                            },
+                            duration: 0,
+                        },
+                    });
+                }
+
+                if let Some(is_not_empty) = is_not_empty {
+                    stats.assert();
+                    counter += 1;
+                    let condition = (std::fs::metadata(&file)?.len() != 0) == *is_not_empty;
+                    stats.report(condition, &file);
+                    status::assert_has(
+                        prefix,
+                        &format!("Assert {counter}"),
+                        &format!("  File `{}` is not empty", &file),
+                        None,
+                        condition,
+                    )?;
+                    elements.push(report::TestElement {
+                        description: format!("File `{file}` is not empty"),
+                        info: None,
+                        hidden: false,
+                        keyword: report::KeywordKind::Predicate,
+                        result: report::ResultKind {
+                            status: if condition {
+                                report::StatusKind::Passed
+                            } else {
+                                report::StatusKind::Failed
+                            },
+                            duration: 0,
+                        },
+                    });
+                }
             }
         }
     }
 
     Ok((stats, elements))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_contains() -> Result<()> {
+        let file = "src/test/assert/contains.txt";
+        let contains = vec!["snot".to_string(), "badger".to_string()];
+        let result = file_contains(file, &contains, None)?;
+        assert!(result);
+        Ok(())
+    }
 }

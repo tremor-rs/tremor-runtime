@@ -2,9 +2,57 @@ status: 0
 name: elastic-verify-gd
 asserts:
   - source: err.log
-    equals_file: expected_err.json
+    contains: 
+      - |
+        {"action":"index","correlation":"tons","index":"my_little_index","payload":{"action":null,"cause":"this one has a different type underneath the same key and thus will fail elastic","snot":"tons","tremor":12},"success":false}
+  - source: err.log
+    contains: 
+      - |
+        {"action":"index","correlation":"baz","index":"my_little_index","payload":{"action":null,"cause":"this one has a different type underneath the same key and thus will fail elastic","snot":"baz","tremor":12},"success":false}
   - source: ok.log
-    equals_file: expected_ok.json
+    contains:  
+      - |
+        {"action":"index","correlation":"badger","index":"my_little_index","payload":{"action":null,"snot":"badger"},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"index","correlation":"foo","index":"my_little_index","payload":{"action":null,"snot":"foo"},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"index","correlation":"racoon","index":"my_little_index","payload":{"action":null,"snot":"racoon","tremor":[true,true,true,false]},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"index","correlation":"bar","index":"my_little_index","payload":{"action":null,"snot":"bar","tremor":[true,true,true,false]},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"delete","correlation":"badger","index":"my_little_index","payload":{"action":"delete","doc_id":"badger","snot":"badger"},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"delete","correlation":"fop","index":"my_little_index","payload":{"action":"delete","doc_id":"badger","snot":"fop"},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"index","correlation":"badger","index":"my_little_index","payload":{"action":"index","doc_id":"badger","snot":"badger"},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"index","correlation":"snoop","index":"my_little_index","payload":{"action":"index","doc_id":"badger","snot":"snoop"},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"update","correlation":"badger","index":"my_little_index","payload":{"action":"update","doc_id":"badger","snot":"badger"},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"update","correlation":"dogg","index":"my_little_index","payload":{"action":"update","doc_id":"badger","snot":"dogg"},"success":true}
+  - source: ok.log
+    contains:  
+      - |
+        {"action":"index","correlation":"badger","index":"my_little_index","payload":{"action":null,"snot":"badger"},"success":true}
   - source: fg.err.log
     contains:
       - |
