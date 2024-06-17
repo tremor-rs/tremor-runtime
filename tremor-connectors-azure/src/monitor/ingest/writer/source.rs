@@ -61,3 +61,62 @@ impl Source for AmiSource {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::mpsc::channel;
+    use tremor_common::alias;
+    use tremor_common::alias::Flow;
+    use tremor_common::ids::Id;
+    use tremor_common::ids::SourceId;
+    use tremor_connectors::utils::quiescence::QuiescenceBeacon;
+    use tremor_connectors::utils::reconnect::ConnectionLostNotifier;
+    use tremor_connectors::ConnectorType;
+    use tremor_script::EventOriginUri;
+    use tremor_system::qsize;
+
+    #[tokio::test]
+    async fn test_ami_source() -> anyhow::Result<()> {
+        let (event_tx, rx) = channel(qsize());
+        let mut source = AmiSource {
+            source_is_connected: Arc::new(AtomicBool::new(false)),
+            rx,
+        };
+
+        assert!(!source.is_transactional());
+        assert!(!source.asynchronous());
+
+        let alias =
+            alias::Connector::new(Into::<Flow>::into("snot"), Into::<String>::into("badger"));
+
+        let (lost_tx, _lost_rx) = channel(qsize());
+        let lost_found = ConnectionLostNotifier::new(&alias, lost_tx);
+        let mut pull_id = 0;
+        let ctx: SourceContext = SourceContext {
+            uid: SourceId::new(1),
+            alias,
+            connector_type: ConnectorType::default(),
+            quiescence_beacon: QuiescenceBeacon::default(),
+            notifier: lost_found,
+        };
+
+        // Inject a reply so pull does not block on us
+        event_tx
+            .send(SourceReply::Data {
+                origin_uri: EventOriginUri::default(),
+                data: vec![],
+                meta: None,
+                stream: Some(1),
+                port: None,
+                codec_overwrite: None,
+            })
+            .await?;
+        let _reply = source.pull_data(&mut pull_id, &ctx).await?;
+
+        source.on_cb_restore(&ctx).await?;
+        assert!(source.source_is_connected.load(Ordering::Acquire));
+
+        Ok(())
+    }
+}
