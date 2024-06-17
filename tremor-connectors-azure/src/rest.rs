@@ -20,7 +20,7 @@ use beef::Cow;
 use bytes::Bytes;
 use simd_json::ObjectHasher;
 use tremor_value::literal;
-use tremor_value::{StaticNode, Value};
+use tremor_value::Value;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct RequestId(u64);
@@ -80,7 +80,6 @@ impl From<RequestMeta> for Value<'static> {
 pub(crate) struct ResponseMeta {
     status: u16,
     headers: Headers,
-    pub(crate) data: Value<'static>,
     pub(crate) content_length: usize,
 }
 
@@ -100,7 +99,6 @@ impl From<ResponseMeta> for Value<'static> {
                 "status": meta.status,
                 "headers": Value::Object(Box::new(headers)),
                 "content_length": meta.content_length,
-                "data": meta.data
             }
         )
     }
@@ -111,32 +109,33 @@ impl ResponseMeta {
         Self {
             status: 0,
             headers: Headers::new(),
-            data: Value::Static(StaticNode::Null),
             content_length: 0,
         }
     }
 }
 
-pub(crate) fn extract_request_meta(request: &Request) -> RequestMeta {
+#[allow(clippy::unnecessary_wraps)]
+pub(crate) fn extract_request_meta(request: &Request) -> Result<RequestMeta, Error> {
     let mut meta = RequestMeta::default();
     meta.method = request.method().to_string();
     meta.url = request.url().to_string();
     meta.headers = request.headers().clone();
-    meta
+    Ok(meta)
 }
 
-pub(crate) async fn extract_response_meta(response: Response) -> Result<(ResponseMeta, Vec<u8>), Error> {
+pub(crate) async fn extract_response_meta(
+    response: Response,
+) -> Result<(Vec<u8>, ResponseMeta), Error> {
     let (status, headers, body) = response.deconstruct();
     let data: Bytes = body.collect().await?;
-    let mut data = data.to_vec();
-    let len = data.len();
+    let data = data.to_vec();
 
     let mut meta = ResponseMeta::default();
     meta.status = status as u16;
     meta.headers = headers.clone();
-    meta.content_length = len;
+    meta.content_length = data.len();
 
-    Ok((meta, data))
+    Ok((data, meta))
 }
 
 #[cfg(test)]
@@ -172,13 +171,14 @@ mod tests {
     }
 
     #[test]
-    fn test_request_meta() -> anyhow::Result<()> {
-        let url = Url::parse("http://example.com")?;
+    #[allow(clippy::unwrap_used)]
+    fn test_request_meta() {
+        let url = Url::parse("http://example.com").unwrap();
         let mut request = Request::new(url, Method::Get);
         request.insert_header("content-type", "application/json");
         request.insert_header("authorization", "Bearer token");
 
-        let meta = extract_request_meta(&request);
+        let meta = extract_request_meta(&request).unwrap();
         let expected = literal!({
             "method": "GET",
             "url": "http://example.com/",
@@ -189,8 +189,6 @@ mod tests {
         });
 
         assert_eq!(Value::from(meta), expected);
-
-        Ok(())
     }
 
     #[tokio::test]
@@ -210,11 +208,10 @@ mod tests {
                 "content-type": "application/json",
                 "content-length": "10"
             },
-            "content_length": 6,
-            "data": "snot"
+            "content_length": 6
         });
 
-        assert_eq!(Value::from(meta), expected);
+        assert_eq!(Value::from(meta.1), expected);
 
         Ok(())
     }
