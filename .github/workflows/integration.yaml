@@ -61,8 +61,16 @@ jobs:
             verbose: true
 
   integration-tests:
+    if: ${{ always() }}
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: cli-test-harness
     steps:
-      - run: echo "All tests passed"
+      - run: exit 1
+        # see https://stackoverflow.com/a/67532120/4907315
+        if: >-
+          ${{
+               contains(needs.*.result, 'failure')
+            || contains(needs.*.result, 'cancelled')
+            || contains(needs.*.result, 'skipped')
+          }}
