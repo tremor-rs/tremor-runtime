@@ -179,7 +179,7 @@ impl Sink for AmiSink {
                 return Ok(SinkReply::FAIL);
             };
 
-            let req_meta = extract_request_meta(&request);
+            let req_meta = extract_request_meta(&request)?;
 
             // spawn
             // spawn the sending task
@@ -196,7 +196,7 @@ impl Sink for AmiSink {
 
                 match timeout(t, response).await {
                     Ok(Ok(response)) => {
-                        let response_meta = extract_response_meta(response).await?;
+                        let (data, response_meta) = extract_response_meta(response).await?;
 
                         if let Some(response_tx) = response_tx {
                             let mut meta = task_ctx.meta(literal!({
@@ -217,7 +217,6 @@ impl Sink for AmiSink {
                                 meta.try_insert("correlation", corr_meta);
                             }
 
-                            let data = simd_json::to_vec(&response_meta.data)?;
                             let reply = SourceReply::Data {
                                 origin_uri,
                                 data,
