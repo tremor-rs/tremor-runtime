@@ -59,7 +59,7 @@ simd-json-derive = { version = "0.13", default-features = true }
 simd-json = { version = "0.13", default-features = true }
 
 [dev-dependencies]
-testcontainers = { version = "0.17", default-features = true }
+testcontainers = { version = "0.18", default-features = true }
 hyper = { version = "0.14", default-features = true, features = [
     "server",
     "http1",
