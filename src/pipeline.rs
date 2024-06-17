@@ -14,6 +14,7 @@
 use crate::channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver};
 use crate::errors::Result;
 use futures::StreamExt;
+use log::{error, info};
 use std::{collections::HashMap, fmt, time::Duration};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};

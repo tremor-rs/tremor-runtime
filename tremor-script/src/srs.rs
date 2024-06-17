@@ -427,8 +427,17 @@ mod test {
     #[test]
     fn test_event_payload() {
         let vec = br#"{"key": "value"}"#.to_vec();
-        let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
-        let v: String = e.rent(|s| s.value()["key"].as_str().unwrap().to_string());
+        let e = EventPayload::new(vec, |d| {
+            tremor_value::parse_to_value(d)
+                .expect("failed to parse")
+                .into()
+        });
+        let v: String = e.rent(|s| {
+            s.value()["key"]
+                .as_str()
+                .expect("failed to parse")
+                .to_string()
+        });
         assert_eq!(v, "value");
     }
 

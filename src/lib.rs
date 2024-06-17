@@ -26,11 +26,6 @@
 )]
 
 #[macro_use]
-extern crate serde;
-#[macro_use]
-extern crate log;
-
-#[macro_use]
 pub(crate) mod macros;
 /// Tremor runtime configuration
 pub mod config;
@@ -50,6 +45,8 @@ pub mod version;
 
 use crate::errors::{Error, Result};
 
+use log::{error, info};
+use std::io::Read;
 use system::Runtime;
 use tokio::io::AsyncRead;
 use tremor_script::{
@@ -101,7 +98,6 @@ pub(crate) async fn register_builtin_connector_types(runtime: &Runtime) -> anyho
 /// # Errors
 /// Fails if the file can not be loaded
 pub async fn load_troy_file(world: &Runtime, file_name: &str) -> Result<usize> {
-    use std::io::Read;
     info!("Loading troy from {file_name}");
 
     let mut file = tremor_common::file::open(&file_name)?;

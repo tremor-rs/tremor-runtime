@@ -19,6 +19,7 @@ use crate::errors::{Kind as ErrorKind, Result};
 use crate::log_error;
 use futures::StreamExt;
 use hashbrown::{hash_map::Entry, HashMap};
+use log::{error, info};
 use tokio::{
     sync::oneshot,
     task::{self, JoinHandle},
