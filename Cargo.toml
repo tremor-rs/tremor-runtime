@@ -48,11 +48,11 @@ opt-level = 3
 tremor-codec = { path = "tremor-codec", version = "0.13.0-rc.28" }
 tremor-common = { path = "tremor-common", version = "0.13.0-rc.28" }
 tremor-config = { path = "tremor-config", version = "0.13.0-rc.28" }
-tremor-connectors = { path = "tremor-connectors", version = "0.13.0-rc.28" }
-tremor-connectors-aws = { path = "tremor-connectors-aws", version = "0.13.0-rc.28" }
-tremor-connectors-azure = { path = "tremor-connectors-azure", version = "0.13.0-rc.28" }
-tremor-connectors-gcp = { path = "tremor-connectors-gcp", version = "0.13.0-rc.28" }
-tremor-connectors-otel = { path = "tremor-connectors-otel", version = "0.13.0-rc.28" }
+tremor-connectors = { path = "tremor-connectors", version = "0.13.0-rc.28", default-features = false }
+tremor-connectors-aws = { path = "tremor-connectors-aws", version = "0.13.0-rc.28", optional = true }
+tremor-connectors-azure = { path = "tremor-connectors-azure", version = "0.13.0-rc.28", optional = true }
+tremor-connectors-gcp = { path = "tremor-connectors-gcp", version = "0.13.0-rc.28", optional = true }
+tremor-connectors-otel = { path = "tremor-connectors-otel", version = "0.13.0-rc.28", optional = true }
 tremor-influx = { path = "tremor-influx", version = "0.13.0-rc.28" }
 tremor-interceptor = { path = "tremor-interceptor", version = "0.13.0-rc.28" }
 tremor-pipeline = { path = "tremor-pipeline", version = "0.13.0-rc.28" }
@@ -90,11 +90,64 @@ serial_test = "3"
 pretty_assertions = "1"
 
 [features]
-default = []
+default = ["all-connectors"]
 
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
+
+all-connectors = [
+  "connector-dns",
+  "connector-elasticsearch",
+  "connector-http",
+  "connector-kafka",
+  "connector-websocket",
+  "connector-discord",
+  "connector-file",
+  "connector-kv",
+  "connector-wal",
+  "connector-clickhouse",
+  "connector-crononome",
+  "connector-stdio",
+  "connector-metronome",
+  "connector-null",
+  "connector-metrics",
+  "connector-tcp",
+  "connector-udp",
+  "connector-unix-socket",
+  "connector-dev",
+
+  "connector-aws",
+  "connector-azure",
+  "connector-gcp",
+  "connector-otel",
+]
+
+connector-dns = ["tremor-connectors/dns"]
+connector-elasticsearch = ["tremor-connectors/elasticsearch"]
+connector-http = ["tremor-connectors/http"]
+connector-kafka = ["tremor-connectors/kafka"]
+connector-websocket = ["tremor-connectors/websocket"]
+connector-discord = ["tremor-connectors/discord"]
+connector-file = ["tremor-connectors/file"]
+connector-kv = ["tremor-connectors/kv"]
+connector-wal = ["tremor-connectors/wal"]
+connector-clickhouse = ["tremor-connectors/clickhouse"]
+connector-crononome = ["tremor-connectors/crononome"]
+connector-stdio = ["tremor-connectors/stdio"]
+connector-metronome = ["tremor-connectors/metronome"]
+connector-null = ["tremor-connectors/null"]
+connector-metrics = ["tremor-connectors/metrics"]
+connector-tcp = ["tremor-connectors/tcp"]
+connector-udp = ["tremor-connectors/udp"]
+connector-unix-socket = ["tremor-connectors/unix-socket"]
+connector-dev = ["tremor-connectors/dev"]
+
+connector-aws = ["tremor-connectors-aws"]
+connector-azure = ["tremor-connectors-azure"]
+connector-gcp = ["tremor-connectors-gcp"]
+connector-otel = ["tremor-connectors-otel"]
+
 
 # those are falky tests
 flaky-test = []
