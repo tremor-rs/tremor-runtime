@@ -19,6 +19,7 @@ pub mod flow_supervisor;
 
 use self::flow::Flow;
 use crate::errors::{Error, Kind as ErrorKind, Result};
+use log::error;
 use tokio::{sync::oneshot, task::JoinHandle};
 use tremor_connectors::ConnectorBuilder;
 use tremor_script::{ast, highlighter::Highlighter};
@@ -332,12 +333,13 @@ mod test {
         assert!(!cfg.connectors.test("boo", PluginType::Normal));
     }
 
-    #[test]
-    fn test_runtime_config() {
+    #[tokio::test]
+
+    async fn test_runtime_config() {
         let config = RuntimeConfig {
             connectors: Rules::builder().default_include(),
         };
-        let _ = config.build();
+        assert!(config.build().await.is_ok());
     }
 
     #[tokio::test]
