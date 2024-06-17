@@ -179,7 +179,7 @@ impl Sink for AmiSink {
                 return Ok(SinkReply::FAIL);
             };
 
-            let req_meta = extract_request_meta(&request)?;
+            let req_meta = extract_request_meta(&request);
 
             // spawn
             // spawn the sending task
