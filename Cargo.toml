@@ -50,7 +50,7 @@ tremor-common = { path = "tremor-common", version = "0.13.0-rc.28" }
 tremor-config = { path = "tremor-config", version = "0.13.0-rc.28" }
 tremor-connectors = { path = "tremor-connectors", version = "0.13.0-rc.28" }
 tremor-connectors-aws = { path = "tremor-connectors-aws", version = "0.13.0-rc.28" }
-tremor-connectors-azure = { path = "tremor-connectors-azure" }
+tremor-connectors-azure = { path = "tremor-connectors-azure", version = "0.13.0-rc.28" }
 tremor-connectors-gcp = { path = "tremor-connectors-gcp", version = "0.13.0-rc.28" }
 tremor-connectors-otel = { path = "tremor-connectors-otel", version = "0.13.0-rc.28" }
 tremor-influx = { path = "tremor-influx", version = "0.13.0-rc.28" }
