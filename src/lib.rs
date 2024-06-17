@@ -72,15 +72,24 @@ pub(crate) mod channel;
 ///
 /// # Errors
 ///  * If a builtin connector couldn't be registered
-
 pub(crate) async fn register_builtin_connector_types(runtime: &Runtime) -> anyhow::Result<()> {
-    for builder in tremor_connectors::builtin_connector_types()
-        .into_iter()
-        .chain(tremor_connectors_gcp::builtin_connector_types())
-        .chain(tremor_connectors_aws::builtin_connector_types())
-        .chain(tremor_connectors_otel::builtin_connector_types())
-        .chain(tremor_connectors_azure::builtin_connector_types())
-    {
+    for builder in tremor_connectors::builtin_connector_types() {
+        runtime.register_connector(builder).await?;
+    }
+    #[cfg(feature = "connector-gcp")]
+    for builder in tremor_connectors_gcp::builtin_connector_types() {
+        runtime.register_connector(builder).await?;
+    }
+    #[cfg(feature = "connector-aws")]
+    for builder in tremor_connectors_aws::builtin_connector_types() {
+        runtime.register_connector(builder).await?;
+    }
+    #[cfg(feature = "connector-azure")]
+    for builder in azure::builtin_connector_types() {
+        runtime.register_connector(builder).await?;
+    }
+    #[cfg(feature = "connector-otel")]
+    for builder in tremor_connectors_otel::builtin_connector_types() {
         runtime.register_connector(builder).await?;
     }
 

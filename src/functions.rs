@@ -30,7 +30,9 @@ pub fn load() -> Result<()> {
 /// # Errors
 ///  * if we can't install extensions
 pub fn install(reg: &mut Registry) -> Result<()> {
+    #[cfg(feature = "connector-otel")]
     tremor_connectors_otel::load(reg);
+    #[cfg(feature = "connector-gcp")]
     tremor_connectors_gcp::gcl::load(reg);
     reg.insert(tremor_fn!(system|instance(_context) {
         Ok(Value::from(instance!()))
