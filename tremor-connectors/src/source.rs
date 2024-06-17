@@ -259,15 +259,15 @@ pub struct SourceContext {
     /// connector uid
     pub uid: SourceId,
     /// connector alias
-    pub(crate) alias: alias::Connector,
+    pub alias: alias::Connector,
 
     /// connector type
-    pub(crate) connector_type: ConnectorType,
+    pub connector_type: ConnectorType,
     /// The Quiescence Beacon
-    pub(crate) quiescence_beacon: QuiescenceBeacon,
+    pub quiescence_beacon: QuiescenceBeacon,
 
     /// tool to notify the connector when the connection is lost
-    pub(crate) notifier: ConnectionLostNotifier,
+    pub notifier: ConnectionLostNotifier,
 }
 
 impl Display for SourceContext {
