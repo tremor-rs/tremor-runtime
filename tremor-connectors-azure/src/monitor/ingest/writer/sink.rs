@@ -283,6 +283,12 @@ impl Sink for AmiSink {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use simd_json::StaticNode;
+    use tremor_common::ids::Id;
+    use tremor_common::ids::SinkId;
+    use tremor_connectors::utils::{
+        quiescence::QuiescenceBeacon, reconnect::ConnectionLostNotifier,
+    };
 
     #[tokio::test]
     async fn test_json_serializer() -> anyhow::Result<()> {
@@ -291,6 +297,103 @@ mod tests {
             .serialize(&literal!({ "foo": "bar" }), &literal!(null), 0)
             .await?;
         assert_eq!(r#"{"foo":"bar"}"#, std::str::from_utf8(&got[0])?);
+        Ok(())
+    }
+
+    pub(crate) async fn mock_dce_endpoint() -> mockito::ServerGuard {
+        let mut server = mockito::Server::new_async().await;
+
+        server
+            .mock("POST", "/FAKE_TENANT_ID/oauth2/v2.0/token")
+            .with_status(204)
+            .with_header("content-type", "application/json")
+            // .with_body(r#"{"access_token": "test_access_token", "expires_in": 3600 }"#)
+            .create();
+
+        server
+    }
+
+    #[tokio::test]
+    async fn test_sink_on_event() -> anyhow::Result<()> {
+        let mock_auth_server = crate::auth::test::mock_auth_server().await;
+        let mock_dce_endpoint = mock_dce_endpoint().await;
+
+        let builder = crate::monitor::ingest::writer::Builder::default();
+
+        assert_eq!(
+            builder.connector_type(),
+            "azure_monitor_ingest_writer".into()
+        );
+
+        let config = literal!({
+            "auth": {
+                "base_url": mock_auth_server.url(),
+                "client_id": "client_id",
+                "client_secret": "client_secret",
+                "tenant_id": "tenant_id",
+                "scope": "scope"
+            },
+            "dce_base_url": mock_dce_endpoint.url(),
+            "dcr": "dcr-uuidv4",
+            "stream": "stream_name",
+        });
+
+        let id = alias::Connector::new("test", "test");
+
+        let sink_id = SinkId::new(1);
+        let (lost_tx, _lost_rx) = tokio::sync::mpsc::channel(1);
+        let notifier = ConnectionLostNotifier::new(&id, lost_tx);
+        let beacon = QuiescenceBeacon::default();
+        let ctx = SinkContext::new(
+            sink_id,
+            id.clone(),
+            builder.connector_type(),
+            beacon,
+            notifier,
+        );
+
+        let (response_tx, _response_rx) = tokio::sync::mpsc::channel(1);
+        let (reply_tx, _reply_rx) = tokio::sync::mpsc::unbounded_channel();
+
+        let mut sink = AmiSink::new(
+            response_tx,
+            reply_tx,
+            Config::new(&config)?,
+            Arc::new(AtomicBool::new(true)),
+        )?;
+
+        let mut serializer = crate::monitor::ingest::writer::sink::json_serializer()?;
+
+        let data = r#"{"foo":"bar"}"#.as_bytes().to_vec();
+
+        let event = Event {
+            id: EventId::new(1, 2, 3, 4),
+            ingest_ns: nanotime(),
+            data: EventPayload::new(data, |x| {
+                tremor_value::parse_to_value(x)
+                    .unwrap_or(Value::Static(StaticNode::Null)) // hack to avoid naked unwrap
+                    .into()
+            }),
+            kind: None, // A regular user data event
+            is_batch: false,
+            transactional: false,
+            ..Event::default()
+        };
+
+        sink.on_event("test", event.clone(), &ctx, &mut serializer, nanotime())
+            .await?;
+
+        assert!(sink.asynchronous());
+        assert!(!sink.auto_ack());
+        let connected = sink.connect(&ctx, &Attempt::default()).await?;
+        assert!(connected);
+
+        // sink.on_event("test", event, &ctx, &mut serializer, nanotime())
+        //     .await?;
+
+        // NOTE We don't assert the interactions here - we're doing a very basic happy path
+        // smoke test to ensure the sink doesn't panic or error out and get a little coverage
+
         Ok(())
     }
 }

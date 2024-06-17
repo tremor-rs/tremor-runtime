@@ -269,7 +269,7 @@ mod tests {
         }
     }
 
-    fn basic_json_serializer() -> anyhow::Result<EventSerializer> {
+    pub(crate) fn basic_json_serializer() -> anyhow::Result<EventSerializer> {
         let serializer = EventSerializer::new(
             Some(NameWithConfig {
                 name: "json".to_string(),
