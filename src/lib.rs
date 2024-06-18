@@ -82,7 +82,7 @@ pub(crate) async fn register_builtin_connector_types(runtime: &Runtime) -> anyho
         runtime.register_connector(builder).await?;
     }
     #[cfg(feature = "connector-azure")]
-    for builder in azure::builtin_connector_types() {
+    for builder in tremor_connectors_azure::builtin_connector_types() {
         runtime.register_connector(builder).await?;
     }
     #[cfg(feature = "connector-otel")]
