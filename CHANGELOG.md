@@ -13,6 +13,7 @@
 
 ### New features
 * add support for tremor archives
+* Add support for stream compressor (xz2 and zstd)
 
 ## [0.13.0-rc.26]
 

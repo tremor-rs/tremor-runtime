@@ -5215,6 +5215,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ringbuf"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c65e4c865bc3d2e3294493dff0acf7e6c259d066e34e22059fa9c39645c3636"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "ringbuf-blocking"
+version = "0.1.0-rc.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fe4eecca6791c2906b6b22f4a6faf8bf3e6563007c21156d3f73f7a2fe25ce6"
+dependencies = [
+ "ringbuf",
+]
+
+[[package]]
 name = "rle-decode-fast"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7520,6 +7538,8 @@ dependencies = [
  "memchr",
  "proptest",
  "rand 0.8.5",
+ "ringbuf",
+ "ringbuf-blocking",
  "serde",
  "snap",
  "thiserror",

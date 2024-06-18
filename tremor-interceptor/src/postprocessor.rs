@@ -16,6 +16,9 @@
 pub(crate) mod base64;
 #[cfg(feature = "compression")]
 pub(crate) mod compress;
+#[cfg(feature = "compression")]
+pub(crate) mod stream_compress;
+
 #[cfg(feature = "gelf")]
 pub(crate) mod gelf_chunking;
 #[cfg(feature = "length-prefix")]
@@ -53,7 +56,7 @@ pub enum Error {
 pub type Config = tremor_config::NameWithConfig;
 
 /// Postprocessor trait
-pub trait Postprocessor: Send + Sync {
+pub trait Postprocessor: Send {
     /// Canonical name of the postprocessor
     fn name(&self) -> &str;
     /// process data
@@ -134,6 +137,11 @@ pub fn lookup_with_config(config: &Config) -> anyhow::Result<Box<dyn Postprocess
         "compress" => Ok(Box::new(compress::Compress::from_config(
             config.config.as_ref(),
         )?)),
+        #[cfg(feature = "compression")]
+        "streaming-compress" => Ok(Box::new(stream_compress::Compress::from_config(
+            config.config.as_ref(),
+        )?)),
+
         #[cfg(feature = "base64")]
         "base64" => Ok(Box::<base64::Base64>::default()),
         #[cfg(feature = "length-prefix")]
