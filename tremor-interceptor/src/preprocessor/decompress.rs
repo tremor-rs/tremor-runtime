@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!Decompresses a data stream. It is assumed that each message reaching the decompressor is a complete compressed entity.
+//!Decompresses a data batch. It is assumed that each message reaching the decompressor is a complete compressed entity.
 //!
 //!The compression algorithm is detected automatically from the supported formats. If it can't be detected, the assumption is that the data was decompressed and will be sent on. Errors then can be transparently handled in the codec.
 //!

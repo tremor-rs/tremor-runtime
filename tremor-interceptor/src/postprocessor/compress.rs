@@ -364,7 +364,6 @@ impl Stateless for Compress {
     }
 }
 
-#[cfg(test)]
 mod tests {
     use super::*;
     #[test]
