@@ -430,6 +430,7 @@ impl Postprocessor for Zstd {
     }
 }
 
+#[cfg(test)]
 mod tests {
 
     use super::*;
