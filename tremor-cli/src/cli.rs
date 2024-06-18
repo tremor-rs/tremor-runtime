@@ -72,7 +72,10 @@ pub(crate) enum ArchiveCommand {
         out: String,
         /// the file to load
         #[clap(value_parser = clap::value_parser!(String))]
-        entrypoint: String,
+        input: String,
+        /// The entrypoint flowe to start, defaults to `main`
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        entrypoint: Option<String>,
     },
     /// Runs a tremor application
     Run {

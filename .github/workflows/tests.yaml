@@ -53,6 +53,7 @@ jobs:
         uses: Wandalen/wretry.action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          flags: ${{ env.flags }}
         with:
           action: codecov/codecov-action@v4
           attempt_limit: 6
@@ -101,6 +102,7 @@ jobs:
         uses: Wandalen/wretry.action@v3
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          flags: ${{ env.flags }}
         with:
           action: codecov/codecov-action@v4
           attempt_limit: 6
@@ -123,6 +125,7 @@ jobs:
           ${{
                contains(needs.*.result, 'failure')
             || contains(needs.*.result, 'cancelled')
+            || contains(needs.*.result, 'skipped')
           }}
 
   connector-tests:
