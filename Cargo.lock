@@ -5671,15 +5671,15 @@ dependencies = [
 
 [[package]]
 name = "schema_registry_converter"
-version = "4.0.0"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3e5a442d604e325eddde3c8108212a4c48463e73daaafa2861a2bc8977414b9"
+checksum = "f432569d012f914dff62c52f2d69859bd0e592d83a40fd337c0111ab27bae765"
 dependencies = [
  "apache-avro",
  "byteorder",
  "dashmap",
  "futures",
- "reqwest 0.11.27",
+ "reqwest 0.12.5",
  "serde",
  "serde_json",
  "tokio",
