@@ -53,7 +53,7 @@ hyper-rustls = { version = "0.24", default-features = true, features = [
     "tokio-runtime",
 ] }
 url = { version = "2.5", default-features = true }
-async-channel = { version = "1.9", default-features = true }
+async-channel = { version = "2.3", default-features = true }
 async-stream = { version = "0.3", default-features = true }
 simd-json-derive = { version = "0.13", default-features = true }
 simd-json = { version = "0.13", default-features = true }
