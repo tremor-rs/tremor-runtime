@@ -136,11 +136,13 @@ pub async fn load_troy_file(world: &Runtime, file_name: &str) -> Result<usize> {
 pub async fn load_archive(
     world: &Runtime,
     archive: impl AsyncRead + Send + Unpin,
-    flow_name: &str,
+    flow_name: Option<&str>,
     config: Option<tremor_value::Value<'static>>,
 ) -> Result<usize> {
     let (app, deployable, _indexes) = tremor_archive::extract(archive).await?;
     info!("App laoded {}", app.name());
+
+    let flow_name = flow_name.unwrap_or(app.entrypoint.as_str());
 
     // ensure we print the warnings
     let mut h = TermHighlighter::stderr();

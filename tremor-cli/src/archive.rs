@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use tremor_common::asy::file;
+use tokio::fs::OpenOptions;
 use tremor_runtime::system::Runtime;
 use tremor_value::Value;
 
@@ -25,10 +25,17 @@ impl ArchiveCommand {
             ArchiveCommand::Package {
                 name,
                 out,
+                input,
                 entrypoint,
             } => {
-                let mut out = file::open(&out).await?;
-                tremor_archive::package(&mut out, &entrypoint, name.clone()).await?;
+                let mut out = OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(&out)
+                    .await?;
+
+                tremor_archive::package(&mut out, &input, name, entrypoint).await?;
             }
             ArchiveCommand::Run {
                 archive,
@@ -47,10 +54,10 @@ impl ArchiveCommand {
                 } else {
                     None
                 };
-                let flow = flow.unwrap_or_else(|| "main".to_string());
+                // let flow = flow.map(|f| f.as_str());
                 let mut archive = tremor_common::asy::file::open(&archive).await?;
 
-                tremor_runtime::load_archive(&world, &mut archive, &flow, config).await?;
+                tremor_runtime::load_archive(&world, &mut archive, flow.as_deref(), config).await?;
                 handle.await??;
             }
         }

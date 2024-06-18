@@ -107,6 +107,8 @@ pub struct AppFlow {
 pub struct TremorAppDef {
     /// name of the app
     pub name: alias::App,
+    /// entrypoint of the app, this flow must exist
+    pub entrypoint: String,
     /// hash of all the included files
     /// starting with the main.troy and then all `use`d files in order
     pub sha256: String,
@@ -135,38 +137,42 @@ impl TremorAppDef {
 /// if the tarball cannot be created
 pub async fn package<W: AsyncWrite + Unpin + Send>(
     target: &mut W,
-    entrypoint: &str,
+    file: &str,
     name: Option<String>,
+    entrypoint: Option<String>,
 ) -> Result<()> {
-    let file = PathBuf::from(entrypoint);
-    let dir = file.parent().ok_or(Error::NoParentDir)?;
+    let f = PathBuf::from(file);
+    let dir = f.parent().ok_or(Error::NoParentDir)?;
     let path = dir.to_string_lossy();
     info!("Adding {path} to path");
     Manager::add_path(&path)?;
     let name = name
         .or_else(|| {
-            file.file_stem()
+            f.file_stem()
                 .and_then(std::ffi::OsStr::to_str)
                 .map(ToString::to_string)
         })
         .ok_or(Error::NoName)?;
-    info!("Building archive for {name}");
-    build_archive(&name, entrypoint, target).await
+    let entrypoint = entrypoint.unwrap_or_else(|| "main".to_string());
+    info!("Building archive for {name} with entrypoint {entrypoint}");
+    build_archive(&name, entrypoint, file, target).await
 }
 
 pub(crate) async fn build_archive<W: AsyncWrite + Unpin + Send>(
     name: &str,
-    entrypoint: &str,
+    entrypoint: String,
+    file: &str,
     w: &mut W,
 ) -> Result<()> {
-    let src = file::read_to_string(entrypoint).await?;
-    build_archive_from_source(name, src.as_str(), w).await?;
+    let src = file::read_to_string(file).await?;
+    build_archive_from_source(name, entrypoint, src.as_str(), w).await?;
     Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn build_archive_from_source<W: AsyncWrite + Unpin + Send>(
     name: &str,
+    entrypoint: String,
     src: &str,
     w: W,
 ) -> Result<()> {
@@ -238,12 +244,12 @@ pub(crate) async fn build_archive_from_source<W: AsyncWrite + Unpin + Send>(
             ))
         })
         .collect::<Result<_>>()?;
-    if !flows.contains_key(&alias::Instance("main".to_string())) {
+    if !flows.contains_key(&alias::Instance(entrypoint.clone())) {
         let w = Warning {
             class: Class::Behaviour,
             outer: deploy.extent(),
             inner: deploy.extent(),
-            msg: "No main flow found".to_string(),
+            msg: format!("Entrypoint flow `{entrypoint}` not defined"),
         };
         other_warnings.insert(w);
     }
@@ -270,6 +276,7 @@ pub(crate) async fn build_archive_from_source<W: AsyncWrite + Unpin + Send>(
 
     let app = TremorAppDef {
         name: alias::App(name.to_string()),
+        entrypoint,
         sha256: hash,
         flows,
     };

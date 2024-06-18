@@ -43,6 +43,7 @@ macro_rules! test_cases {
                         &mut archive,
                         deploy_file,
                         Some(stringify!($file).to_string()),
+                        Some("main".to_string()),
                     ).await?;
 
                     let app = tremor_archive::get_app(archive.as_slice()).await?;
@@ -55,7 +56,7 @@ macro_rules! test_cases {
 
                     let (world, h) = Runtime::builder().default_include_connectors().build().await?;
 
-                    tremor_runtime::load_archive(&world, archive.as_slice(), "main", flow_config).await?;
+                    tremor_runtime::load_archive(&world, archive.as_slice(), None, flow_config).await?;
 
                     tokio::time::timeout(Duration::from_secs(10), h).await???;
 
