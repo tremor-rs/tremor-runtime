@@ -137,7 +137,7 @@ impl ServerRun {
         for archive_file in archives {
             let mut archive = tremor_common::asy::file::open(&archive_file).await?;
 
-            if let Err(e) = tremor_runtime::load_archive(&world, &mut archive, "main", None).await {
+            if let Err(e) = tremor_runtime::load_archive(&world, &mut archive, None, None).await {
                 return Err(ErrorKind::FileLoadError(archive_file.to_string(), e).into());
             }
         }
