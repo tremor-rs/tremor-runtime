@@ -5695,15 +5695,15 @@ dependencies = [
 
 [[package]]
 name = "schema_registry_converter"
-version = "4.1.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f432569d012f914dff62c52f2d69859bd0e592d83a40fd337c0111ab27bae765"
+checksum = "d3e5a442d604e325eddde3c8108212a4c48463e73daaafa2861a2bc8977414b9"
 dependencies = [
  "apache-avro",
  "byteorder",
  "dashmap",
  "futures",
- "reqwest 0.12.5",
+ "reqwest 0.11.27",
  "serde",
  "serde_json",
  "tokio",
@@ -7102,9 +7102,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.23.1"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6989540ced10490aaf14e6bad2e3d33728a2813310a0c71d1574304c49631cd"
+checksum = "becd34a233e7e31a3dbf7c7241b38320f57393dcae8e7324b0167d21b8e320b0"
 dependencies = [
  "futures-util",
  "log",
