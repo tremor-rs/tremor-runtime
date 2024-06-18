@@ -211,6 +211,14 @@ pub enum Xz2Error {
     /// Try From Error
     #[error(transparent)]
     TryFromInt(#[from] std::num::TryFromIntError),
+
+    /// Invalid Range
+    #[error("Invalid Range")]
+    InvalidRange,
+
+    /// Invalid State
+    #[error("Invalid State")]
+    InvalidState,
 }
 
 impl Xz2 {
@@ -227,6 +235,7 @@ impl Xz2 {
             if let Some(encoder) = self.encoder.as_mut() {
                 return encoder;
             }
+            // ALLOW: We just inserted this
             unreachable!("encoder is some but encoder is none")
         }
         let rb = BlockingHeapRb::<u8>::new(Self::CAPACITY);
@@ -242,7 +251,8 @@ impl Xz2 {
             if let Some(encoder) = self.reader.as_mut() {
                 return encoder;
             }
-            unreachable!("encoder is some but encoder is none")
+            // ALLOW: We just inserted this
+            unreachable!("reader is some but reader is none")
         }
         let rb = BlockingHeapRb::<u8>::new(Self::CAPACITY);
         let (writer, reader) = rb.split();
@@ -290,7 +300,12 @@ impl Postprocessor for Xz2 {
                 compressed.truncate(read);
                 break;
             }
-            res.push(compressed[..read].to_vec());
+            res.push(
+                compressed
+                    .get(..read)
+                    .ok_or(Xz2Error::InvalidRange)?
+                    .to_vec(),
+            );
         }
         res.push(compressed);
         Ok(res)
@@ -339,6 +354,10 @@ pub enum ZstdError {
     /// Zstd error
     #[error(transparent)]
     Zstd(#[from] std::io::Error),
+
+    /// Invalid Range
+    #[error("Invalid Range")]
+    InvalidRange,
 }
 
 impl Drop for Zstd {
@@ -402,8 +421,12 @@ impl Postprocessor for Zstd {
                 compressed.truncate(read);
                 break;
             }
-
-            res.push(compressed[..read].to_vec());
+            res.push(
+                compressed
+                    .get(..read)
+                    .ok_or(ZstdError::InvalidRange)?
+                    .to_vec(),
+            );
         }
         res.push(compressed);
         Ok(res)
@@ -574,7 +597,7 @@ mod tests {
 
         let mut out = Vec::new();
         reader.read_to_end(&mut out)?;
-        assert_eq!(&out[..], data);
+        assert_eq!(out, data);
         Ok(())
     }
 }
