@@ -215,10 +215,6 @@ pub enum Xz2Error {
     /// Invalid Range
     #[error("Invalid Range")]
     InvalidRange,
-
-    /// Invalid State
-    #[error("Invalid State")]
-    InvalidState,
 }
 
 impl Xz2 {
