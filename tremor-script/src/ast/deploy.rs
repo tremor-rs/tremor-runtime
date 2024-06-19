@@ -23,7 +23,7 @@ use super::{
 };
 use super::{node_id::NodeId, PipelineDefinition};
 use super::{HashMap, Value};
-use crate::{impl_expr, impl_expr_no_lt};
+use crate::{errors::Result, impl_expr, impl_expr_no_lt};
 pub(crate) mod raw;
 
 /// A Tremor deployment
@@ -270,6 +270,24 @@ pub enum CreateTargetDefinition<'script> {
     /// A Pipeline
     Pipeline(Box<PipelineDefinition<'script>>),
 }
+
+impl<'script> CreateTargetDefinition<'script> {
+    /// Ingests the creational with
+    ///
+    /// # Errors
+    /// if the with statement can't be internalized
+    pub fn ingest_creational_with(&mut self, with: &CreationalWith<'script>) -> Result<()> {
+        match self {
+            CreateTargetDefinition::Connector(connector) => {
+                connector.params.ingest_creational_with(with)
+            }
+            CreateTargetDefinition::Pipeline(pipeline) => {
+                pipeline.params.ingest_creational_with(with)
+            }
+        }
+    }
+}
+
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreateStmt<'script> {
@@ -283,6 +301,7 @@ pub struct CreateStmt<'script> {
     /// Atomic unit of deployment
     pub defn: CreateTargetDefinition<'script>,
 }
+
 impl_expr!(CreateStmt);
 impl crate::ast::node_id::BaseRef for CreateStmt<'_> {
     fn fqn(&self) -> String {
