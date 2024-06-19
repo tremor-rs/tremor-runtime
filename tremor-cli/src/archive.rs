@@ -54,7 +54,6 @@ impl ArchiveCommand {
                 } else {
                     None
                 };
-                // let flow = flow.map(|f| f.as_str());
                 let mut archive = tremor_common::asy::file::open(&archive).await?;
 
                 runtime
