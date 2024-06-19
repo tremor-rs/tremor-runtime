@@ -30,8 +30,8 @@ use tokio::{io::AsyncRead, sync::oneshot, task::JoinHandle};
 use tremor_connectors::ConnectorBuilder;
 use tremor_script::{
     ast::{
-        self, optimizer::Optimizer, visitors::ArgsRewriter, walkers::DeployWalker as _,
-        BaseExpr as _, CreationalWith, DeployFlow, Helper, Ident, ImutExpr, NodeId, WithExprs,
+        self, optimizer::Optimizer, CreationalWith, DeployFlow, Helper, Ident, ImutExpr, NodeId,
+        WithExprs,
     },
     deploy::Deploy,
     highlighter::{Highlighter, Term},
@@ -229,18 +229,19 @@ impl Runtime {
             .ok_or_else(|| format!("failed to load archive flow {flow_name}"))?
             .clone();
         // ensure we applu the configuration
-        defn.params.ingest_creational_with(&with)?;
 
         let reg = tremor_script::registry();
         let aggr_reg = tremor_script::aggr_registry();
         let mut helper = Helper::new(&reg, &aggr_reg);
 
-        Optimizer::new(&helper).walk_flow_definition(&mut defn)?;
+        defn.params.ingest_creational_with(&with)?;
+        Optimizer::new(&helper).walk_definitional_args(&mut defn.params)?;
+        let defn_args = defn.params.render()?;
 
-        let inner_args = defn.params.render()?;
-
-        ArgsRewriter::new(inner_args, &mut helper, defn.params.meta())
-            .walk_flow_definition(&mut defn)?;
+        for c in &mut defn.creates {
+            c.with.substitute_args(&defn_args, &mut helper)?;
+            c.defn.ingest_creational_with(&c.with)?;
+        }
 
         Optimizer::new(&helper).walk_flow_definition(&mut defn)?;
 

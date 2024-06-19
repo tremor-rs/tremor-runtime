@@ -1,0 +1,20 @@
+define flow main
+flow
+  use process;
+  use tremor::pipelines;
+
+  define connector exit from exit;
+
+  create connector source from process::source
+  with
+    metrics_interval_s = 3,
+    interval = 1
+  end;
+  create connector exit;
+  create pipeline passthrough from pipelines::passthrough;
+
+  connect /connector/source to /pipeline/passthrough;
+  connect /pipeline/passthrough to /connector/exit;
+
+
+end;

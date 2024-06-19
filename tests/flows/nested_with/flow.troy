@@ -1,0 +1,45 @@
+define flow main
+args
+  ival
+flow
+  define connector source from metronome
+  args
+      metrics_interval_s = 1,
+      interval = 10000000000000,
+  with
+    metrics_interval_s = args.metrics_interval_s,
+    config = {
+      "interval": args.interval
+    }
+  end;
+  define connector exit from exit;
+
+  define pipeline passthrough
+  args
+    snot
+  pipeline
+    define script passthrough args
+      badger = "badger"
+    script
+      let event.blarg = 1 + args.badger;
+      event
+    end;
+
+    create script passthrough with badger = args.snot end;
+    
+    select event from in into out;
+  end;
+
+  create connector source with 
+    interval = args.ival,
+  end;
+  create connector exit;
+  create pipeline passthrough from passthrough
+  with
+    snot = 7
+  end;
+
+  connect /connector/source to /pipeline/passthrough;
+  connect /pipeline/passthrough to /connector/exit;
+
+end;

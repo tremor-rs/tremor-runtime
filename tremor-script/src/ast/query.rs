@@ -436,7 +436,10 @@ pub struct CreationalWith<'script> {
 impl_expr!(CreationalWith);
 
 impl<'script> CreationalWith<'script> {
-    pub(crate) fn substitute_args<'registry>(
+    /// Substitutes the arguments in the with block
+    /// # Errors
+    /// when a value can't be evaluated into a literal
+    pub fn substitute_args<'registry>(
         &mut self,
         args: &Value<'script>,
         helper: &mut Helper<'script, 'registry>,

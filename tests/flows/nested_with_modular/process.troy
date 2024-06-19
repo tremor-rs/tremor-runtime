@@ -1,0 +1,10 @@
+define connector source from metronome
+args
+    metrics_interval_s = 1,
+    interval ,
+with
+  metrics_interval_s = args.metrics_interval_s,
+  config = {
+    "interval": args.interval
+  }
+end;

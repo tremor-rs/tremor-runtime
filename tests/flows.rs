@@ -54,9 +54,9 @@ macro_rules! test_cases {
                     println!("Loading config file: {config_file}");
                     let flow_config = file::read(config_file).await.ok().and_then(|mut c| simd_json::from_slice::<Value>(&mut c).ok().map(Value::into_static));
 
-                    let (world, h) = Runtime::builder().default_include_connectors().build().await?;
+                    let (runtime, h) = Runtime::builder().default_include_connectors().build().await?;
 
-                    tremor_runtime::load_archive(&world, archive.as_slice(), None, flow_config).await?;
+                    runtime.load_archive( archive.as_slice(), None, flow_config).await?;
 
                     tokio::time::timeout(Duration::from_secs(10), h).await???;
 
@@ -71,6 +71,8 @@ test_cases!(
     pipeline_identity,
     pipeline_args,
     pipeline_with,
+    nested_with,
+    nested_with_modular,
     // INSERT
     codec_config,
     consts_as_default_args,
