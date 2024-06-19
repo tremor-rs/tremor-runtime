@@ -795,7 +795,7 @@ const IN_PORTS_REF: &[Port<'static>; 1] = &IN_PORTS;
 const OUT_PORTS: [Port<'static>; 2] = [OUT, ERR];
 const OUT_PORTS_REF: &[Port<'static>; 2] = &OUT_PORTS;
 
-/// A Connector connects the tremor runtime to the outside world.
+/// A Connector connects the tremor runtime to the outside runtime.
 ///
 /// It can be a source of events, as such it is polled for new data.
 /// It can also be a sink for events, as such events are sent to it from pipelines.
@@ -865,7 +865,7 @@ pub trait Connector: Send {
         Ok(None)
     }
 
-    /// Attempt to connect to the outside world.
+    /// Attempt to connect to the outside runtime.
     /// Return `Ok(true)` if a connection could be established.
     /// This method will be retried if it fails or returns `Ok(false)`.
     ///

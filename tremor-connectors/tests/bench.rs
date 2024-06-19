@@ -36,7 +36,7 @@ async fn stop_after_events() -> anyhow::Result<()> {
         "iters": 2
       }
     });
-    // let (world, world_handle) = Runtime::start(mRuntimeConfig::default()).await?;
+    // let (runtime, runtime_handle) = Runtime::start(mRuntimeConfig::default()).await?;
     let (kill_tx, mut kill_rx) = channel(1);
     let kill_switch = KillSwitch::new(kill_tx);
     let mut harness =
@@ -55,7 +55,7 @@ async fn stop_after_events() -> anyhow::Result<()> {
         anyhow::Ok(())
     });
 
-    // the bench connector should shut the world down
+    // the bench connector should shut the runtime down
     kill_rx.recv().await.expect("failed to recv");
     handle.abort();
     Ok(())

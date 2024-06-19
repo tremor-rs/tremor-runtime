@@ -600,7 +600,7 @@ impl Blackhole {
             info!("{stop_ctx} Exiting...");
             stop_ctx.swallow_err(
                 kill_switch.stop(ShutdownMode::Forceful).await,
-                "Error stopping the world",
+                "Error stopping the runtime",
             );
         });
         Ok(())

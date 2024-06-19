@@ -20,8 +20,8 @@ use crate::{
 };
 
 pub(crate) async fn list_flows(req: Request) -> Result<Response> {
-    let world = &req.state().world;
-    let flows = world.get_flows().await?;
+    let runtime = &req.state().runtime;
+    let flows = runtime.get_flows().await?;
     let mut result: Vec<ApiFlowStatusReport> = Vec::with_capacity(flows.len());
     for flow in flows {
         let status = flow.report_status().await?;
@@ -31,18 +31,18 @@ pub(crate) async fn list_flows(req: Request) -> Result<Response> {
 }
 
 pub(crate) async fn get_flow(req: Request) -> Result<Response> {
-    let world = &req.state().world;
+    let runtime = &req.state().runtime;
     let flow_id = req.param("id")?.to_string();
-    let flow = world.get_flow(flow_id).await?;
+    let flow = runtime.get_flow(flow_id).await?;
     let report = flow.report_status().await?;
     reply(&req, ApiFlowStatusReport::from(report), StatusCode::Ok)
 }
 
 pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
     let patch_status_payload: PatchStatus = req.body_json().await?;
-    let world = &req.state().world;
+    let runtime = &req.state().runtime;
     let flow_id = req.param("id")?.to_string();
-    let flow = world.get_flow(flow_id.clone()).await?;
+    let flow = runtime.get_flow(flow_id.clone()).await?;
     let current_status = flow.report_status().await?;
     let report = match (current_status.status, patch_status_payload.status) {
         (state1, state2) if state1 == state2 => {
@@ -70,9 +70,9 @@ pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
 }
 
 pub(crate) async fn get_flow_connectors(req: Request) -> Result<Response> {
-    let world = &req.state().world;
+    let runtime = &req.state().runtime;
     let flow_id = req.param("id")?.to_string();
-    let flow = world.get_flow(flow_id).await?;
+    let flow = runtime.get_flow(flow_id).await?;
     let connectors = flow.get_connectors().await?;
     let mut result: Vec<ApiConnectorStatusReport> = Vec::with_capacity(connectors.len());
     for connector in connectors {
@@ -83,10 +83,10 @@ pub(crate) async fn get_flow_connectors(req: Request) -> Result<Response> {
 }
 
 pub(crate) async fn get_flow_connector_status(req: Request) -> Result<Response> {
-    let world = &req.state().world;
+    let runtime = &req.state().runtime;
     let flow_id = req.param("id")?.to_string();
     let connector_id = req.param("connector")?.to_string();
-    let flow = world.get_flow(flow_id).await?;
+    let flow = runtime.get_flow(flow_id).await?;
 
     let connector = flow.get_connector(connector_id).await?;
     let report = connector.report_status().await?;
@@ -98,8 +98,8 @@ pub(crate) async fn patch_flow_connector_status(mut req: Request) -> Result<Resp
     let flow_id = req.param("id")?.to_string();
     let connector_id = req.param("connector")?.to_string();
 
-    let world = &req.state().world;
-    let flow = world.get_flow(flow_id.clone()).await?;
+    let runtime = &req.state().runtime;
+    let flow = runtime.get_flow(flow_id.clone()).await?;
     let connector = flow.get_connector(connector_id.clone()).await?;
     let current_status = connector.report_status().await?;
     let report = match (current_status.status(), patch_status_payload.status) {

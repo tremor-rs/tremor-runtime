@@ -36,7 +36,7 @@ macro_rules! log_and_print_error {
     };
 }
 
-async fn handle_signals(mut signals: Signals, world: Runtime) {
+async fn handle_signals(mut signals: Signals, runtime: Runtime) {
     while let Some(signal) = signals.next().await {
         info!(
             "Received SIGNAL: {}",
@@ -44,14 +44,14 @@ async fn handle_signals(mut signals: Signals, world: Runtime) {
         );
         match signal {
             SIGINT | SIGTERM => {
-                if let Err(_e) = world.stop(ShutdownMode::Graceful).await {
+                if let Err(_e) = runtime.stop(ShutdownMode::Graceful).await {
                     if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
                         error!("Error handling signal {}: {}", signal, e);
                     }
                 }
             }
             SIGQUIT => {
-                if let Err(_e) = world.stop(ShutdownMode::Forceful).await {
+                if let Err(_e) = runtime.stop(ShutdownMode::Forceful).await {
                     if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
                         error!("Error handling signal {}: {}", signal, e);
                     }
@@ -92,7 +92,7 @@ impl ServerRun {
 
         tremor_script::RECURSION_LIMIT.store(self.recursion_limit, Ordering::Relaxed);
 
-        let (world, handle) = if self.debug_connectors {
+        let (runtime, handle) = if self.debug_connectors {
             Runtime::builder()
                 .default_include_connectors()
                 .build()
@@ -108,7 +108,7 @@ impl ServerRun {
         // signal handling
         let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;
         let signal_handle = signals.handle();
-        let signal_handler_task = tokio::task::spawn(handle_signals(signals, world.clone()));
+        let signal_handler_task = tokio::task::spawn(handle_signals(signals, runtime.clone()));
 
         let mut troy_files = Vec::with_capacity(16);
         let mut archives = Vec::with_capacity(16);
@@ -128,7 +128,7 @@ impl ServerRun {
 
         // We process config files thereafter
         for config_file in troy_files {
-            if let Err(e) = tremor_runtime::load_troy_file(&world, config_file).await {
+            if let Err(e) = runtime.load_troy_file(config_file).await {
                 return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
             }
         }
@@ -137,7 +137,7 @@ impl ServerRun {
         for archive_file in archives {
             let mut archive = tremor_common::asy::file::open(&archive_file).await?;
 
-            if let Err(e) = tremor_runtime::load_archive(&world, &mut archive, None, None).await {
+            if let Err(e) = runtime.load_archive(&mut archive, None, None).await {
                 return Err(ErrorKind::FileLoadError(archive_file.to_string(), e).into());
             }
         }
@@ -150,7 +150,7 @@ impl ServerRun {
         } else {
             eprintln!("Listening at: http://{}", &self.api_host);
             info!("Listening at: http://{}", &self.api_host);
-            api::serve(self.api_host.clone(), &world)
+            api::serve(self.api_host.clone(), &runtime)
         };
         // waiting for either
         match future::select(handle, api_handle).await {
@@ -164,7 +164,7 @@ impl ServerRun {
             }
             future::Either::Right((_api_res, manager_handle)) => {
                 // api stopped
-                if let Err(e) = world.stop(ShutdownMode::Graceful).await {
+                if let Err(e) = runtime.stop(ShutdownMode::Graceful).await {
                     error!("Error shutting down gracefully: {}", e);
                     result = 2;
                 }

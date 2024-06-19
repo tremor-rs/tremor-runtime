@@ -418,11 +418,11 @@ impl Run {
     }
 
     async fn run_troy_source(&self) -> Result<()> {
-        let (world, handle) = Runtime::builder()
+        let (runtime, handle) = Runtime::builder()
             .default_include_connectors()
             .build()
             .await?;
-        tremor_runtime::load_troy_file(&world, &self.script).await?;
+        runtime.load_troy_file(&self.script).await?;
         handle.await??;
         Ok(())
     }
