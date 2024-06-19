@@ -213,7 +213,7 @@ impl Sink for Exit {
             // we spawn this out into another task, so we don't block the sink loop handling control plane messages
             tokio::task::spawn(async move {
                 info!("{stop_ctx} Exiting...");
-                stop_ctx.swallow_err(kill_switch.stop(mode).await, "Error stopping the world");
+                stop_ctx.swallow_err(kill_switch.stop(mode).await, "Error stopping the runtime");
             });
 
             self.done = true;

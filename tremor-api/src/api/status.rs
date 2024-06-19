@@ -50,9 +50,9 @@ impl Default for RuntimeStatus {
 }
 
 pub(crate) async fn get_runtime_status(req: Request) -> Result<Response> {
-    let world = &req.state().world;
+    let runtime = &req.state().runtime;
 
-    let flows = world.get_flows().await?;
+    let flows = runtime.get_flows().await?;
     let mut runtime_status = RuntimeStatus::new(flows.len());
     let mut all_in_good_state: bool = true;
 

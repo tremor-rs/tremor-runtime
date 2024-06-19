@@ -38,7 +38,7 @@ pub const DEFAULT_API_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 pub struct State {
-    pub world: Runtime,
+    pub runtime: Runtime,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -164,9 +164,9 @@ async fn handle_api_request<
 
 /// server the tremor API in a separately spawned task
 #[must_use]
-pub fn serve(host: String, world: &Runtime) -> JoinHandle<Result<()>> {
+pub fn serve(host: String, runtime: &Runtime) -> JoinHandle<Result<()>> {
     let mut v1_app = tide::Server::with_state(State {
-        world: world.clone(),
+        runtime: runtime.clone(),
     });
     v1_app
         .at("/version")
@@ -222,7 +222,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_api() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let _: std::result::Result<_, _> = env_logger::try_init();
-        let (world, world_handle) = Runtime::builder()
+        let (runtime, runtime_handle) = Runtime::builder()
             .default_include_connectors()
             .build()
             .await?;
@@ -234,7 +234,7 @@ mod tests {
             port
         };
         let host = format!("127.0.0.1:{free_port}");
-        let api_handle = serve(host.clone(), &world);
+        let api_handle = serve(host.clone(), &runtime);
         info!("Listening on: {}", host);
 
         let src = r"
@@ -265,7 +265,7 @@ mod tests {
                 _other => None,
             })
             .expect("No deploy in the given troy file");
-        world.start_flow(&deploy).await?;
+        runtime.start_flow(&deploy).await?;
 
         // check the status endpoint
         let start = Instant::now();
@@ -526,8 +526,8 @@ mod tests {
         );
 
         // cleanup
-        world.stop(ShutdownMode::Graceful).await?;
-        world_handle.abort();
+        runtime.stop(ShutdownMode::Graceful).await?;
+        runtime_handle.abort();
         api_handle.abort();
         Ok(())
     }

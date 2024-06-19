@@ -42,7 +42,7 @@ impl ArchiveCommand {
                 flow,
                 config,
             } => {
-                let (world, handle) = Runtime::builder()
+                let (runtime, handle) = Runtime::builder()
                     .default_include_connectors()
                     .build()
                     .await?;
@@ -57,7 +57,9 @@ impl ArchiveCommand {
                 // let flow = flow.map(|f| f.as_str());
                 let mut archive = tremor_common::asy::file::open(&archive).await?;
 
-                tremor_runtime::load_archive(&world, &mut archive, flow.as_deref(), config).await?;
+                runtime
+                    .load_archive(&mut archive, flow.as_deref(), config)
+                    .await?;
                 handle.await??;
             }
         }
