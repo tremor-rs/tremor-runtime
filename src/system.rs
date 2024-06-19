@@ -218,7 +218,7 @@ impl Runtime {
             mid: NodeMeta::dummy(),
         };
 
-        // since archives are modules they don't have a deoploy statement so we need to find the
+        // since archives are modules they don't have a deploy statement so we need to find the
         // flow in the archive create the corresponding deploy statement and start it
         let mut defn = deployable
             .deploy
@@ -228,7 +228,7 @@ impl Runtime {
             .get(flow_name)
             .ok_or_else(|| format!("failed to load archive flow {flow_name}"))?
             .clone();
-        // ensure we applu the configuration
+        // ensure we apply the configuration
 
         let reg = tremor_script::registry();
         let aggr_reg = tremor_script::aggr_registry();
