@@ -106,6 +106,12 @@ mod test {
     use crate::preprocessor::{self as pre, prelude::*};
 
     #[test]
+    fn is_streaming() {
+        let gelf = super::Gelf::default();
+        assert!(!gelf.is_streaming());
+    }
+
+    #[test]
     fn name() {
         let gelf = super::Gelf::default();
         assert_eq!(gelf.name(), "gelf");

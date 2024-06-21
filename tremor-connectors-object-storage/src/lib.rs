@@ -308,12 +308,6 @@ where
         }
     }
 
-    /// Returns the current sink
-    #[must_use]
-    pub fn sink_impl(&self) -> &Impl {
-        &self.sink_impl
-    }
-
     /// Returns a mutable reference to the current sink
     #[must_use]
     pub fn sink_impl_mut(&mut self) -> &mut Impl {
@@ -341,10 +335,8 @@ where
 
         // fail the current upload, if any - we killed the buffer above so no way to upload that old shit anymore
         if let Some(current_upload) = self.current_upload.take() {
-            ctx.swallow_err(
-                self.sink_impl.fail_upload(current_upload, ctx).await,
-                "Error failing previous upload",
-            );
+            let r = self.sink_impl.fail_upload(current_upload, ctx).await;
+            ctx.swallow_err(r, "Error failing previous upload");
         }
 
         Ok(bucket_exists)
@@ -551,12 +543,6 @@ where
         }
     }
 
-    /// Returns the current sink
-    #[must_use]
-    pub fn sink_impl(&self) -> &Impl {
-        &self.sink_impl
-    }
-
     /// Returns a mutable reference to the current sink
     #[must_use]
     pub fn sink_impl_mut(&mut self) -> &mut Impl {
@@ -567,33 +553,43 @@ where
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
     ) -> anyhow::Result<()> {
+        if let Some(u) = self.current_upload.as_mut() {
+            for data in serializer.finish_stream(u.stream_id())? {
+                self.buffer.write(data);
+            }
+        }
+
+        self.upload_buffer_parts(ctx).await?;
+
         if let Some(upload) = self.current_upload.take() {
             if upload.is_failed() {
-                self.sink_impl.fail_upload(upload, ctx).await?;
-            } else {
-                // make sure we send the data left in the serializer
-                for data in serializer.finish_stream(upload.stream_id())? {
-                    self.buffer.write(data);
-                }
-                while let Some(data) = self.buffer.read_current_block() {
-                    let done_until = self
-                        .sink_impl
-                        .upload_data(
-                            data,
-                            self.current_upload.as_mut().ok_or(Error::NoUpload)?,
-                            ctx,
-                        )
-                        .await?;
-                    self.buffer.mark_done_until(done_until)?;
-                }
-
-                let final_part = self.buffer.reset();
-
-                // clean out the buffer
-                self.sink_impl
-                    .finish_upload(upload, final_part, ctx)
-                    .await?;
+                return self.sink_impl.fail_upload(upload, ctx).await;
             }
+
+            // make sure we send the data left in the serializer
+            let final_part = self.buffer.reset();
+
+            // clean out the buffer
+            self.sink_impl
+                .finish_upload(upload, final_part, ctx)
+                .await?;
+        }
+        Ok(())
+    }
+    async fn upload_buffer_parts(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
+        let upload = self.current_upload.as_mut().ok_or(Error::NoUpload)?;
+        while let Some(data) = self.buffer.read_current_block() {
+            let start = data.start;
+            let end = data.start + data.len();
+            let done_until = ctx.bail_err(
+                self.sink_impl.upload_data(data, upload, ctx).await,
+                &format!(
+                    "Error uploading data for bytes {start}-{end} for {}",
+                    upload.object_id()
+                ),
+            )?;
+            // if this fails, we corrupted our internal state somehow
+            self.buffer.mark_done_until(done_until)?;
         }
         Ok(())
     }
@@ -635,10 +631,8 @@ where
             if let Some(current_upload) = self.current_upload.as_mut() {
                 if object_id != *current_upload.object_id() {
                     // if finishing the previous one failed, we continue anyways
-                    ctx.swallow_err(
-                        self.fail_or_finish_upload(ctx, serializer).await,
-                        "Error finishing previous upload",
-                    );
+                    let r = self.fail_or_finish_upload(ctx, serializer).await;
+                    ctx.swallow_err(r, "Error finishing previous upload");
                 }
             }
             if self.current_upload.is_none() {
@@ -655,26 +649,8 @@ where
             let serialized_data = serializer.serialize(value, meta, event.ingest_ns).await?;
             for item in serialized_data {
                 self.buffer.write(item);
-                while let Some(data) = self.buffer.read_current_block() {
-                    let start = data.start;
-                    let end = data.start + data.len();
-                    if let Ok(done_until) = ctx.bail_err(
-                        self.sink_impl
-                            .upload_data(
-                                data,
-                                self.current_upload.as_mut().ok_or(Error::NoUpload)?,
-                                ctx,
-                            )
-                            .await,
-                        &format!("Error uploading data for bytes {start}-{end} for {object_id}",),
-                    ) {
-                        // if this fails, we corrupted our internal state somehow
-                        self.buffer.mark_done_until(done_until)?;
-                    } else {
-                        // stop attempting more writes on error
-                        break;
-                    }
-                }
+                let r = self.upload_buffer_parts(ctx).await;
+                ctx.swallow_err(r, &format!("Error uploading chunk for {object_id}"));
             }
         }
         Ok(SinkReply::ack_or_none(event.transactional))
@@ -692,17 +668,27 @@ where
     async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         if let Some(current_upload) = self.current_upload.take() {
             let final_part = self.buffer.reset();
-            ctx.swallow_err(
-                self.sink_impl
-                    .finish_upload(current_upload, final_part, ctx)
-                    .await,
-                "Error finishing upload on stop",
-            );
+            let r = self
+                .sink_impl
+                .finish_upload(current_upload, final_part, ctx)
+                .await;
+            ctx.swallow_err(r, "Error finishing upload on stop");
         }
         Ok(())
     }
 
     fn auto_ack(&self) -> bool {
         false // we always ack
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn mode_display() {
+        assert_eq!(Mode::Yolo.to_string(), "yolo");
+        assert_eq!(Mode::Consistent.to_string(), "consistent");
     }
 }
