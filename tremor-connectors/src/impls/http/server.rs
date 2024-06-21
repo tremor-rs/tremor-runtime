@@ -560,7 +560,7 @@ impl Sink for HttpServerSink {
         Ok(SinkReply::NONE)
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,

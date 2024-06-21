@@ -237,7 +237,7 @@ impl Sink for StdStreamSink {
         Ok(SinkReply::ACK)
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         _ctx: &SinkContext,
         serializer: &mut EventSerializer,

@@ -222,7 +222,7 @@ impl Sink for GpubSink {
         }
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,

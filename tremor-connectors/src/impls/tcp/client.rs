@@ -333,7 +333,7 @@ impl Sink for TcpClientSink {
         Ok(())
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,

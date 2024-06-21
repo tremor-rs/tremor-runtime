@@ -462,7 +462,7 @@ where
         Ok(reply) // empty vec in case of success
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
