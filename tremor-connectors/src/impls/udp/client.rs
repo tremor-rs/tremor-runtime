@@ -145,7 +145,9 @@ impl Sink for UdpClientSink {
     ) -> anyhow::Result<SinkReply> {
         let socket = self.socket.as_ref().ok_or(socket::Error::NoSocket)?;
         for (value, meta) in event.value_meta_iter() {
-            let data = serializer.serialize(value, meta, event.ingest_ns).await?;
+            let data = serializer
+                .serialize_non_streaming(value, meta, event.ingest_ns)
+                .await?;
             if let Err(e) = Self::send_event(socket, data).await {
                 error!("{} UDP Error: {}. Initiating Reconnect...", &ctx, &e);
                 // TODO: upon which errors to actually trigger a reconnect?
@@ -155,6 +157,15 @@ impl Sink for UdpClientSink {
             }
         }
         Ok(SinkReply::NONE)
+    }
+
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // we use serialize_and_finalize in on_event, so we don't need to do anything here
+        Ok(())
     }
 
     fn auto_ack(&self) -> bool {

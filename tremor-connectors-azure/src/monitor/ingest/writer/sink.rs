@@ -271,6 +271,15 @@ impl Sink for AmiSink {
         Ok(SinkReply::NONE)
     }
 
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // we use take care of finalizing in finalize of the request builder
+        Ok(())
+    }
+
     fn asynchronous(&self) -> bool {
         true
     }

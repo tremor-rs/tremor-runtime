@@ -1,0 +1,5 @@
+status: 0
+name: file connector
+asserts:
+  - source: out.log.xz
+    equals_file_binary: expected.json.xz

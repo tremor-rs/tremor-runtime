@@ -185,6 +185,11 @@ pub(crate) struct StdStreamSink {
     stdout: Stdout,
 }
 
+impl StdStreamSink {
+    const STDOUT_STREAM: u64 = 1;
+    const STDERR_STREAM: u64 = 2;
+}
+
 impl StdStreamConnector {
     const IN_PORTS: [Port<'static>; 3] = [IN, Port::const_str("stdout"), Port::const_str("stderr")];
     const REF_IN_PORTS: &'static [Port<'static>; 3] = &Self::IN_PORTS;
@@ -201,24 +206,57 @@ impl Sink for StdStreamSink {
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {
-            let data = serializer.serialize(value, meta, event.ingest_ns).await?;
-            for chunk in data {
-                match input {
-                    "in" | "stdout" => self.stdout.write_all(&chunk).await?,
-                    "stderr" => self.stderr.write_all(&chunk).await?,
-                    _ => {
-                        return Err(crate::Error::InvalidPort(
-                            ctx.alias().clone(),
-                            input.to_string().into(),
-                        )
-                        .into())
+            match input {
+                "in" | "stdout" => {
+                    let data = serializer
+                        .serialize_for_stream(value, meta, event.ingest_ns, Self::STDOUT_STREAM)
+                        .await?;
+                    for chunk in data {
+                        self.stdout.write_all(&chunk).await?;
                     }
+                }
+                "stderr" => {
+                    let data = serializer
+                        .serialize_for_stream(value, meta, event.ingest_ns, Self::STDOUT_STREAM)
+                        .await?;
+                    for chunk in data {
+                        self.stderr.write_all(&chunk).await?;
+                    }
+                }
+                _ => {
+                    return Err(crate::Error::InvalidPort(
+                        ctx.alias().clone(),
+                        input.to_string().into(),
+                    )
+                    .into())
                 }
             }
         }
         self.stdout.flush().await?;
         self.stderr.flush().await?;
         Ok(SinkReply::ACK)
+    }
+
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        let data = serializer.finish_stream(Self::STDOUT_STREAM)?;
+        for chunk in data {
+            self.stdout.write_all(&chunk).await?;
+        }
+        let data = serializer.finish_stream(Self::STDERR_STREAM)?;
+        for chunk in data {
+            self.stderr.write_all(&chunk).await?;
+        }
+        Ok(())
+    }
+
+    async fn on_stop(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
+        self.stdout.flush().await?;
+        self.stderr.flush().await?;
+        Ok(())
     }
 
     fn auto_ack(&self) -> bool {

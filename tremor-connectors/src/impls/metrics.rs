@@ -336,7 +336,7 @@ pub(crate) fn verify_metrics_value(value: &Value<'_>) -> anyhow::Result<()> {
 
 /// passing events through to the source channel
 #[async_trait::async_trait()]
-impl Sink for MetricsSink {
+impl StructuredSink for MetricsSink {
     fn auto_ack(&self) -> bool {
         true
     }
@@ -347,7 +347,6 @@ impl Sink for MetricsSink {
         _input: &str,
         event: tremor_system::event::Event,
         _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         // verify event format

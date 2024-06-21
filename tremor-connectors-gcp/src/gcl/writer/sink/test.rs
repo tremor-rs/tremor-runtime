@@ -141,7 +141,7 @@ async fn on_event_can_send_an_event() -> anyhow::Result<()> {
         ConnectionLostNotifier::new(&alias, connection_lost_tx),
     );
 
-    sink.connect(&ctx, &Attempt::default()).await?;
+    StructuredSink::connect(&mut sink, &ctx, &Attempt::default()).await?;
 
     let event = Event {
         id: EventId::new(1, 2, 3, 4),
@@ -155,20 +155,7 @@ async fn on_event_can_send_an_event() -> anyhow::Result<()> {
         }))),
         ..Default::default()
     };
-    sink.on_event(
-        "",
-        event.clone(),
-        &ctx,
-        &mut EventSerializer::new(
-            None,
-            CodecReq::Structured,
-            vec![],
-            &"a".into(),
-            &alias::Connector::new("a", "b"),
-        )?,
-        0,
-    )
-    .await?;
+    StructuredSink::on_event(&mut sink, "", event.clone(), &ctx, 0).await?;
 
     matches!(
         rx.recv().await.expect("no msg"),
@@ -232,27 +219,20 @@ async fn on_event_fails_if_client_is_not_connected() -> anyhow::Result<()> {
     let mut sink = GclSink::<_>::new(config, reply_tx, MockChannelFactory);
     let alias = alias::Connector::new("", "");
     let notifier = ConnectionLostNotifier::new(&alias, rx);
-    let result = sink
-        .on_event(
-            "",
-            Event::signal_tick(),
-            &SinkContext::new(
-                SinkId::default(),
-                alias.clone(),
-                ConnectorType::default(),
-                QuiescenceBeacon::default(),
-                notifier,
-            ),
-            &mut EventSerializer::new(
-                None,
-                CodecReq::Structured,
-                vec![],
-                &ConnectorType::from(""),
-                &alias,
-            )?,
-            0,
-        )
-        .await;
+    let result = StructuredSink::on_event(
+        &mut sink,
+        "",
+        Event::signal_tick(),
+        &SinkContext::new(
+            SinkId::default(),
+            alias.clone(),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            notifier,
+        ),
+        0,
+    )
+    .await;
 
     assert!(result.is_err());
     Ok(())

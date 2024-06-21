@@ -169,7 +169,7 @@ struct WalSink {
 }
 
 #[async_trait::async_trait]
-impl Sink for WalSink {
+impl StructuredSink for WalSink {
     fn auto_ack(&self) -> bool {
         true
     }
@@ -179,7 +179,6 @@ impl Sink for WalSink {
         _input: &str,
         event: Event,
         _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         self.wal.lock().await.push(Payload(event)).await?;

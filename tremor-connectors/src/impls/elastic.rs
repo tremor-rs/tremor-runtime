@@ -578,7 +578,7 @@ impl ElasticSink {
 }
 
 #[async_trait::async_trait()]
-impl Sink for ElasticSink {
+impl StructuredSink for ElasticSink {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let mut clients = Vec::with_capacity(self.config.nodes.len());
         for node in &self.config.nodes {
@@ -651,7 +651,6 @@ impl Sink for ElasticSink {
         _input: &str,
         event: Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         start: u64,
     ) -> anyhow::Result<SinkReply> {
         if event.is_empty() {

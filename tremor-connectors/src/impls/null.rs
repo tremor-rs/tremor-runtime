@@ -155,13 +155,12 @@ impl Source for NullSource {
 
 struct NullSink {}
 #[async_trait::async_trait]
-impl Sink for NullSink {
+impl StructuredSink for NullSink {
     async fn on_event(
         &mut self,
         _input: &str,
         _event: Event,
         _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         Ok(SinkReply::NONE)

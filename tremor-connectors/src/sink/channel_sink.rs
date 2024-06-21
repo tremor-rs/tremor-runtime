@@ -462,6 +462,34 @@ where
         Ok(reply) // empty vec in case of success
     }
 
+    async fn on_finalize(
+        &mut self,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        for (stream_id, sender) in self.streams.drain() {
+            let data = serializer.finish_stream(stream_id)?;
+            let meta = if B::NEEDS_META {
+                Some(literal!({
+                    "stream_id": stream_id
+                }))
+            } else {
+                None
+            };
+            let sink_data = SinkData {
+                meta,
+                data,
+                contraflow: None,
+                start: tremor_common::time::nanotime(),
+            };
+            if sender.send(sink_data).await.is_err() {
+                error!("{ctx} Error sending to closed stream {stream_id}.",);
+            }
+        }
+        self.streams_meta.clear();
+        Ok(())
+    }
+
     async fn on_signal(
         &mut self,
         signal: Event,

@@ -161,7 +161,10 @@ impl Sink for GpubSink {
         let mut messages = Vec::with_capacity(event.len());
 
         for (value, meta) in event.value_meta_iter() {
-            for payload in serializer.serialize(value, meta, event.ingest_ns).await? {
+            for payload in serializer
+                .serialize_non_streaming(value, meta, event.ingest_ns)
+                .await?
+            {
                 let ordering_key = ctx
                     .extract_meta(meta)
                     .get("ordering_key")
@@ -217,6 +220,15 @@ impl Sink for GpubSink {
         } else {
             Ok(SinkReply::fail_or_none(event.transactional))
         }
+    }
+
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // we use serialize_and_finalize in on_event, so we don't need to do anything here
+        Ok(())
     }
 
     fn auto_ack(&self) -> bool {

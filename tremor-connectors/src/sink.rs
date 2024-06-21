@@ -31,7 +31,10 @@ use crate::{
 use futures::StreamExt;
 use std::{
     borrow::Borrow,
-    collections::{btree_map::Entry, BTreeMap, HashSet},
+    collections::{
+        btree_map::{self, Entry},
+        BTreeMap, HashSet,
+    },
     fmt::Display,
     sync::Arc,
 };
@@ -171,6 +174,15 @@ pub trait Sink: Send {
         serializer: &mut EventSerializer,
         start: u64,
     ) -> anyhow::Result<SinkReply>;
+
+    /// Called before stopt, this needs to ensure the event serializer is emptied correctly
+    /// and no data is left inside
+    async fn on_finalize(
+        &mut self,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()>;
+
     /// called when receiving a signal
     async fn on_signal(
         &mut self,
@@ -254,6 +266,169 @@ pub trait Sink: Send {
     /// if false events can be considered delivered once `on_event` returns.
     fn asynchronous(&self) -> bool {
         false
+    }
+}
+
+/// Sinc that returns structured data not processed one
+#[async_trait::async_trait]
+pub trait StructuredSink: Send {
+    /// called when receiving an event
+    async fn on_event(
+        &mut self,
+        input: &str,
+        event: Event,
+        ctx: &SinkContext,
+        start: u64,
+    ) -> anyhow::Result<SinkReply>;
+
+    /// called when receiving a signal
+    async fn on_signal(&mut self, _signal: Event, _ctx: &SinkContext) -> anyhow::Result<SinkReply> {
+        Ok(SinkReply::default())
+    }
+
+    /// Pull metrics from the sink
+    ///
+    /// The expected format is:
+    ///
+    /// ```js
+    /// {
+    ///     "measurement": <name>,
+    ///     "tags": {
+    ///         "connector": <connector-url>,
+    ///         ...
+    ///     },
+    ///     "fields": {
+    ///         "name": <measurement-value>,
+    ///         ...
+    ///     },
+    ///     "timestamp": <timestamp in ns>
+    /// }
+    /// ```
+    ///
+    async fn metrics(&mut self, _timestamp: u64, _ctx: &SinkContext) -> Vec<EventPayload> {
+        vec![]
+    }
+
+    // lifecycle stuff
+    /// called when started
+    async fn on_start(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    /// Connect to the external thingy.
+    /// This function is called definitely after `on_start` has been called.
+    ///
+    /// This function might be called multiple times, check the `attempt` where you are at.
+    /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
+    ///
+    /// Return `Ok(true)` if the connection could be successfully established.
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
+        Ok(true)
+    }
+
+    /// called when paused
+    async fn on_pause(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
+        Ok(())
+    }
+    /// called when resumed
+    async fn on_resume(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
+        Ok(())
+    }
+    /// called when stopped
+    async fn on_stop(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    // connectivity stuff
+    /// called when sink lost connectivity
+    async fn on_connection_lost(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
+        Ok(())
+    }
+    /// called when sink re-established connectivity
+    async fn on_connection_established(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    /// if `true` events are acknowledged/failed automatically by the sink manager.
+    /// Such sinks should return SinkReply::None from on_event or SinkReply::Fail if they fail immediately.
+    ///
+    /// if `false` events need to be acked/failed manually by the sink impl
+    fn auto_ack(&self) -> bool;
+
+    /// if true events are sent asynchronously, not necessarily when `on_event` returns.
+    /// if false events can be considered delivered once `on_event` returns.
+    fn asynchronous(&self) -> bool {
+        false
+    }
+}
+
+#[async_trait::async_trait]
+impl<S: StructuredSink + Send> Sink for S {
+    async fn on_event(
+        &mut self,
+        input: &str,
+        event: Event,
+        ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+        start: u64,
+    ) -> anyhow::Result<SinkReply> {
+        self.on_event(input, event, ctx, start).await
+    }
+
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // structured connector, serializer isn't used
+        Ok(())
+    }
+
+    async fn on_signal(
+        &mut self,
+        signal: Event,
+        ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<SinkReply> {
+        self.on_signal(signal, ctx).await
+    }
+
+    async fn metrics(&mut self, timestamp: u64, ctx: &SinkContext) -> Vec<EventPayload> {
+        self.metrics(timestamp, ctx).await
+    }
+
+    async fn on_start(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
+        self.on_start(ctx).await
+    }
+
+    async fn connect(&mut self, ctx: &SinkContext, attempt: &Attempt) -> anyhow::Result<bool> {
+        self.connect(ctx, attempt).await
+    }
+
+    async fn on_pause(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
+        self.on_pause(ctx).await
+    }
+    async fn on_resume(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
+        self.on_resume(ctx).await
+    }
+    async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
+        self.on_stop(ctx).await
+    }
+
+    // connectivity stuff
+    async fn on_connection_lost(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
+        self.on_connection_lost(ctx).await
+    }
+    async fn on_connection_established(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
+        self.on_connection_established(ctx).await
+    }
+
+    fn auto_ack(&self) -> bool {
+        self.auto_ack()
+    }
+
+    fn asynchronous(&self) -> bool {
+        self.asynchronous()
     }
 }
 
@@ -432,18 +607,21 @@ pub fn builder(
 /// Attention: Take care to clear out data for streams that are not used
 pub struct EventSerializer {
     alias: String,
-    // default stream handling
-    pub(crate) codec: Box<dyn Codec>,
-    postprocessors: Postprocessors,
     // creation templates for stream handling
     codec_config: tremor_codec::Config,
     postprocessor_configs: Vec<postprocessor::Config>,
     // stream data
     // TODO: clear out state from codec, postprocessors and enable reuse
     streams: BTreeMap<u64, (Box<dyn Codec>, Postprocessors)>,
+    streaming: bool,
 }
 
 impl EventSerializer {
+    /// tests if the serializer requires streaming
+    #[must_use]
+    pub fn is_streaming(&self) -> bool {
+        self.streaming
+    }
     /// create a new event serializer with the given codec and postprocessors
     /// # Errors
     ///  * if codec resolution fails
@@ -470,13 +648,15 @@ impl EventSerializer {
 
         let codec = codec::resolve(&codec_config)?;
         let postprocessors = make_postprocessors(postprocessor_configs.as_slice())?;
+        let streaming = postprocessors.iter().any(|pp| pp.is_streaming());
+        let mut streams = BTreeMap::new();
+        streams.insert(DEFAULT_STREAM_ID, (codec, postprocessors));
         Ok(Self {
             alias: alias.to_string(),
-            codec,
-            postprocessors,
             codec_config,
             postprocessor_configs,
             streams: BTreeMap::new(),
+            streaming,
         })
     }
 
@@ -503,6 +683,27 @@ impl EventSerializer {
     ) -> anyhow::Result<Vec<Vec<u8>>> {
         self.serialize_for_stream(value, meta, ingest_ns, DEFAULT_STREAM_ID)
             .await
+    }
+
+    /// serialize event for the default stream in a non-streaming fashion
+    ///
+    /// # Errors
+    ///   * if serialization failed (codec or postprocessors)
+    ///   * if any postprocessor is streaming
+    pub async fn serialize_non_streaming<'v>(
+        &mut self,
+        value: &Value<'v>,
+        meta: &Value<'v>,
+        ingest_ns: u64,
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
+        if self.streaming {
+            return Err(anyhow::anyhow!("Postprocessors are streaming"));
+        }
+        let mut res = self
+            .serialize_for_stream(value, meta, ingest_ns, DEFAULT_STREAM_ID)
+            .await?;
+        res.append(&mut self.finish_stream(DEFAULT_STREAM_ID)?);
+        Ok(res)
     }
 
     /// serialize event for a certain stream
@@ -535,41 +736,31 @@ impl EventSerializer {
         stream_id: u64,
         codec_overwrite: Option<&NameWithConfig>,
     ) -> anyhow::Result<Vec<Vec<u8>>> {
-        if stream_id == DEFAULT_STREAM_ID {
-            // no codec_overwrite for the default stream
-            Ok(postprocess(
-                &mut self.postprocessors,
-                ingest_ns,
-                self.codec.encode(value, meta).await?,
-                &self.alias,
-            )?)
-        } else {
-            match self.streams.entry(stream_id) {
-                Entry::Occupied(mut entry) => {
-                    let (codec, pps) = entry.get_mut();
-                    Ok(postprocess(
-                        pps,
-                        ingest_ns,
-                        codec.encode(value, meta).await?,
-                        &self.alias,
-                    )?)
-                }
-                Entry::Vacant(entry) => {
-                    // codec overwrite only considered for new streams
-                    let codec = match codec_overwrite {
-                        Some(codec) => codec::resolve(codec),
-                        None => codec::resolve(&self.codec_config),
-                    }?;
-                    let pps = make_postprocessors(self.postprocessor_configs.as_slice())?;
-                    // insert data for a new stream
-                    let (c, pps2) = entry.insert((codec, pps));
-                    Ok(postprocess(
-                        pps2,
-                        ingest_ns,
-                        c.encode(value, meta).await?,
-                        &self.alias,
-                    )?)
-                }
+        match self.streams.entry(stream_id) {
+            Entry::Occupied(mut entry) => {
+                let (codec, pps) = entry.get_mut();
+                Ok(postprocess(
+                    pps,
+                    ingest_ns,
+                    codec.encode(value, meta).await?,
+                    &self.alias,
+                )?)
+            }
+            Entry::Vacant(entry) => {
+                // codec overwrite only considered for new streams
+                let codec = match codec_overwrite {
+                    Some(codec) => codec::resolve(codec),
+                    None => codec::resolve(&self.codec_config),
+                }?;
+                let pps = make_postprocessors(self.postprocessor_configs.as_slice())?;
+                // insert data for a new stream
+                let (c, pps2) = entry.insert((codec, pps));
+                Ok(postprocess(
+                    pps2,
+                    ingest_ns,
+                    c.encode(value, meta).await?,
+                    &self.alias,
+                )?)
             }
         }
     }
@@ -583,6 +774,10 @@ impl EventSerializer {
         } else {
             Ok(vec![])
         }
+    }
+    /// the streams currently in the serializer
+    pub fn streams(&self) -> btree_map::Keys<'_, u64, (Box<dyn Codec>, Postprocessors)> {
+        self.streams.keys()
     }
 }
 
@@ -709,6 +904,11 @@ where
                         }
                         sink::Msg::Stop(sender) => {
                             info!("{} Stopping...", &self.ctx);
+                            if let Err(e) =
+                                self.sink.on_finalize(&self.ctx, &mut self.serializer).await
+                            {
+                                error!("{} Error during on_finalize: {e}", &self.ctx);
+                            }
                             self.state = Stopped;
                             self.ctx.swallow_err(
                                 sender.send(self.sink.on_stop(&self.ctx).await).await,

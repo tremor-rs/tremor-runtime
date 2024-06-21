@@ -499,13 +499,12 @@ impl KvSink {
 }
 
 #[async_trait::async_trait]
-impl Sink for KvSink {
+impl StructuredSink for KvSink {
     async fn on_event(
         &mut self,
         _input: &str,
         event: Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         let ingest_ns = tremor_common::time::nanotime();

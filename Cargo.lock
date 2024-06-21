@@ -7473,6 +7473,7 @@ dependencies = [
  "serde",
  "thiserror",
  "tremor-connectors",
+ "tremor-system",
  "tremor-value",
 ]
 

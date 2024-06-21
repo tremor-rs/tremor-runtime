@@ -85,6 +85,10 @@ pub enum Error {
     /// Connection lost notification failed
     #[error("{0} Connection lost notification failed")]
     ConnectionLostNotifier(alias::Connector),
+
+    /// Streaming postprocessor used in a non stream capable connector
+    #[error("Streaming postprocessor used in a non stream capable connector")]
+    StreamingPostProcessor(alias::Connector),
 }
 
 impl Error {
@@ -111,6 +115,7 @@ impl Error {
             | Self::CreateSink(alias, _)
             | Self::CreateSource(alias, _)
             | Self::ControlplaneReply(alias)
+            | Self::StreamingPostProcessor(alias)
             | Self::ReconnectJoin(alias, _) => alias,
             Self::ConnectorBackplaneError(e) => e.alias(),
         }

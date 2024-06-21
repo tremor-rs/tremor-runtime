@@ -17,7 +17,7 @@ pub use crate::{
     errors::GenericImplementationError,
     sink::{
         AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkAck, SinkContext,
-        SinkManagerBuilder, SinkReply,
+        SinkManagerBuilder, SinkReply, StructuredSink,
     },
     CodecReq, Connector, ConnectorBuilder, ConnectorType, Context,
 };

@@ -8,6 +8,7 @@
 
 ### Fixes
 * fix packaging archives
+* fix handling of sink finalization
 
 ## [0.13.0-rc.27]
 

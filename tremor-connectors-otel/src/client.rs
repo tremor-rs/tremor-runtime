@@ -124,7 +124,7 @@ struct OtelSink {
 }
 
 #[async_trait::async_trait()]
-impl Sink for OtelSink {
+impl StructuredSink for OtelSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let endpoint = self.config.url.to_string();
         let channel = TonicEndpoint::from_shared(endpoint)?.connect().await?;
@@ -142,7 +142,6 @@ impl Sink for OtelSink {
         _input: &str,
         event: Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         if let Some(remote) = &mut self.remote {
@@ -191,15 +190,6 @@ impl Sink for OtelSink {
             ctx.notifier().connection_lost().await?;
             Ok(SinkReply::fail_or_none(event.transactional))
         }
-    }
-
-    async fn on_signal(
-        &mut self,
-        _signal: Event,
-        _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-    ) -> anyhow::Result<SinkReply> {
-        Ok(SinkReply::default())
     }
 
     fn auto_ack(&self) -> bool {

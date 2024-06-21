@@ -373,7 +373,7 @@ impl Sink for HttpRequestSink {
             let ingest_ns = event.ingest_ns;
 
             // take the metadata from the first element of the batch
-            let event_meta = event.value_meta_iter().next().map(|t| t.1);
+            let event_meta = event.value_meta_iter().next().map(|(_, m)| m);
             let correlation_meta = event_meta.get("correlation").map(Value::clone_static); // :sob:
 
             // assign a unique request id to this event
@@ -509,6 +509,14 @@ impl Sink for HttpRequestSink {
         Ok(SinkReply::NONE)
     }
 
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // we finalize for every batch, this happens in the event builder
+        Ok(())
+    }
     fn asynchronous(&self) -> bool {
         true
     }
