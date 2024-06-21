@@ -724,6 +724,7 @@ pub(crate) mod tests {
 
         assert!(upload_client(&mut sink).deleted_uploads().is_empty());
 
+        sink.on_finalize(&context, &mut serializer).await?;
         sink.on_stop(&context).await?;
 
         // we finish outstanding upload upon stop
@@ -908,6 +909,8 @@ pub(crate) mod tests {
 
         // everything works on stop
         upload_client(&mut sink).inject_failure(false);
+
+        sink.on_finalize(&context, &mut serializer).await?;
         sink.on_stop(&context).await?;
 
         // nothing changed, because we have no running upload
@@ -1293,6 +1296,7 @@ pub(crate) mod tests {
         }
 
         // finishes upload on stop
+        sink.on_finalize(&context, &mut serializer).await?;
         sink.on_stop(&context).await?;
         assert_eq!(test_client(&mut sink).finished_uploads().len(), 3);
 
@@ -1449,6 +1453,7 @@ pub(crate) mod tests {
             panic!("Expected a fail, got {reply:?}");
         }
 
+        sink.on_finalize(&context, &mut serializer).await?;
         sink.on_stop(&context).await?;
 
         assert_eq!(0, test_client(&mut sink).running_uploads().len());
