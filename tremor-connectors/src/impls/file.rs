@@ -445,7 +445,7 @@ impl Sink for FileSink {
         }
         Ok(SinkReply::NONE)
     }
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,

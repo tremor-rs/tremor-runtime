@@ -376,7 +376,7 @@ where
         Ok(SinkReply::NONE)
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
@@ -680,7 +680,7 @@ where
         Ok(SinkReply::ack_or_none(event.transactional))
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,

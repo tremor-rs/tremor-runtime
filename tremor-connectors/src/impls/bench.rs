@@ -569,7 +569,7 @@ impl Sink for Blackhole {
         Ok(SinkReply::default())
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,

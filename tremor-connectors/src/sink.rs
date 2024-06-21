@@ -177,7 +177,7 @@ pub trait Sink: Send {
 
     /// Called before stopt, this needs to ensure the event serializer is emptied correctly
     /// and no data is left inside
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
@@ -375,7 +375,7 @@ impl<S: StructuredSink + Send> Sink for S {
         self.on_event(input, event, ctx, start).await
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
@@ -905,9 +905,9 @@ where
                         sink::Msg::Stop(sender) => {
                             info!("{} Stopping...", &self.ctx);
                             if let Err(e) =
-                                self.sink.on_finalize(&self.ctx, &mut self.serializer).await
+                                self.sink.finalize(&self.ctx, &mut self.serializer).await
                             {
-                                error!("{} Error during on_finalize: {e}", &self.ctx);
+                                error!("{} Error during finalize: {e}", &self.ctx);
                             }
                             self.state = Stopped;
                             self.ctx.swallow_err(

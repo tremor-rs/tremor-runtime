@@ -145,7 +145,7 @@ impl Sink for UdpClientSink {
     ) -> anyhow::Result<SinkReply> {
         let socket = self.socket.as_ref().ok_or(socket::Error::NoSocket)?;
         for (value, meta) in event.value_meta_iter() {
-            let data = serializer
+            let data: Vec<Vec<u8>> = serializer
                 .serialize_non_streaming(value, meta, event.ingest_ns)
                 .await?;
             if let Err(e) = Self::send_event(socket, data).await {
@@ -159,7 +159,7 @@ impl Sink for UdpClientSink {
         Ok(SinkReply::NONE)
     }
 
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,

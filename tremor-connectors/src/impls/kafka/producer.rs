@@ -266,7 +266,7 @@ impl Sink for KafkaProducerSink {
         }
         Ok(SinkReply::NONE)
     }
-    async fn on_finalize(
+    async fn finalize(
         &mut self,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
