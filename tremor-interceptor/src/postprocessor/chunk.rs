@@ -63,6 +63,10 @@ pub(crate) struct Chunk {
 }
 
 impl Postprocessor for Chunk {
+    fn is_streaming(&self) -> bool {
+        true
+    }
+
     fn name(&self) -> &str {
         "chunk"
     }

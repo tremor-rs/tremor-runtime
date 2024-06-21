@@ -320,7 +320,7 @@ impl<TChannel: GbqChannel<TChannelError>, TChannelError: GbqChannelError>
 }
 
 #[async_trait::async_trait]
-impl<TChannel: GbqChannel<TChannelError> + 'static, TChannelError: GbqChannelError> Sink
+impl<TChannel: GbqChannel<TChannelError> + 'static, TChannelError: GbqChannelError> StructuredSink
     for GbqSink<TChannel, TChannelError>
 where
     TChannel::Future: Send,
@@ -330,7 +330,6 @@ where
         _input: &str,
         event: Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         let request_size_limit = self.config.request_size_limit;

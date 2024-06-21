@@ -52,6 +52,10 @@ impl Postprocessor {
 }
 
 impl Trait for Postprocessor {
+    fn is_streaming(&self) -> bool {
+        true
+    }
+
     fn name(&self) -> &str {
         "collect"
     }

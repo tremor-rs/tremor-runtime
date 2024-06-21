@@ -333,6 +333,24 @@ impl Sink for TcpClientSink {
         Ok(())
     }
 
+    async fn on_finalize(
+        &mut self,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        let data = serializer.finish_stream(DEFAULT_STREAM_ID)?;
+        if let Err(e) = self.write(data).await {
+            error!("{ctx} Error sending data: {e}. Initiating Reconnect...",);
+            // TODO: figure upon which errors to actually reconnect
+            self.tcp_stream = None;
+            self.wrapped_stream = None;
+            ctx.notifier().connection_lost().await?;
+            Err(e)
+        } else {
+            Ok(())
+        }
+    }
+
     fn auto_ack(&self) -> bool {
         true
     }

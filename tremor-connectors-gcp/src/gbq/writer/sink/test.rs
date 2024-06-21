@@ -764,27 +764,20 @@ async fn on_event_fails_if_client_is_not_conected() -> anyhow::Result<()> {
 
     let mut sink = GbqSink::<_, _>::new(config, Box::new(TonicChannelFactory));
 
-    let result = sink
-        .on_event(
-            "",
-            Event::signal_tick(),
-            &SinkContext::new(
-                SinkId::default(),
-                alias.clone(),
-                ConnectorType::default(),
-                QuiescenceBeacon::default(),
-                ConnectionLostNotifier::new(&alias, rx),
-            ),
-            &mut EventSerializer::new(
-                None,
-                CodecReq::Structured,
-                vec![],
-                &ConnectorType::from(""),
-                &alias.clone(),
-            )?,
-            0,
-        )
-        .await;
+    let result = StructuredSink::on_event(
+        &mut sink,
+        "",
+        Event::signal_tick(),
+        &SinkContext::new(
+            SinkId::default(),
+            alias.clone(),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(&alias, rx),
+        ),
+        0,
+    )
+    .await;
 
     assert!(result.is_err());
     Ok(())
@@ -811,27 +804,20 @@ async fn on_event_fails_if_write_stream_is_not_conected() -> anyhow::Result<()> 
         }),
     );
 
-    let result = sink
-        .on_event(
-            "",
-            Event::signal_tick(),
-            &SinkContext::new(
-                SinkId::default(),
-                alias.clone(),
-                ConnectorType::default(),
-                QuiescenceBeacon::default(),
-                ConnectionLostNotifier::new(&alias, rx),
-            ),
-            &mut EventSerializer::new(
-                None,
-                CodecReq::Structured,
-                vec![],
-                &ConnectorType::from(""),
-                &alias.clone(),
-            )?,
-            0,
-        )
-        .await;
+    let result = StructuredSink::on_event(
+        &mut sink,
+        "",
+        Event::signal_tick(),
+        &SinkContext::new(
+            SinkId::default(),
+            alias.clone(),
+            ConnectorType::default(),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(&alias, rx),
+        ),
+        0,
+    )
+    .await;
 
     assert!(result.is_err());
     Ok(())
@@ -913,7 +899,7 @@ pub async fn fails_on_error_response() -> anyhow::Result<()> {
         ConnectionLostNotifier::new(&alias, channel(1024).0),
     );
 
-    sink.connect(&ctx, &Attempt::default()).await?;
+    StructuredSink::connect(&mut sink, &ctx, &Attempt::default()).await?;
 
     let mut event = Event {
         data: literal!({
@@ -924,21 +910,7 @@ pub async fn fails_on_error_response() -> anyhow::Result<()> {
     };
     event.transactional = true;
 
-    let result = sink
-        .on_event(
-            "",
-            event,
-            &ctx,
-            &mut EventSerializer::new(
-                None,
-                CodecReq::Structured,
-                vec![],
-                &ConnectorType::from(""),
-                &alias.clone(),
-            )?,
-            0,
-        )
-        .await?;
+    let result = StructuredSink::on_event(&mut sink, "", event, &ctx, 0).await?;
     assert_eq!(result.ack(), SinkAck::Fail);
     assert_eq!(result.cb(), CbAction::None);
     Ok(())
@@ -1007,7 +979,7 @@ pub async fn splits_large_requests() -> anyhow::Result<()> {
         ConnectionLostNotifier::new(&alias, channel(1024).0),
     );
 
-    sink.connect(&ctx, &Attempt::default()).await?;
+    StructuredSink::connect(&mut sink, &ctx, &Attempt::default()).await?;
 
     let value = literal!([
         {
@@ -1028,25 +1000,18 @@ pub async fn splits_large_requests() -> anyhow::Result<()> {
         }
     ]);
 
-    let result = sink
-        .on_event(
-            "",
-            Event {
-                data: value.into(),
-                is_batch: true,
-                ..Default::default()
-            },
-            &ctx,
-            &mut EventSerializer::new(
-                None,
-                CodecReq::Structured,
-                vec![],
-                &ConnectorType::from(""),
-                &alias.clone(),
-            )?,
-            0,
-        )
-        .await?;
+    let result = StructuredSink::on_event(
+        &mut sink,
+        "",
+        Event {
+            data: value.into(),
+            is_batch: true,
+            ..Default::default()
+        },
+        &ctx,
+        0,
+    )
+    .await?;
 
     assert_eq!(result.ack(), SinkAck::Ack);
     assert_eq!(responses.read().expect("failed to get response").len(), 0);
@@ -1070,5 +1035,5 @@ pub async fn does_not_auto_ack() {
         }),
     );
 
-    assert!(!sink.auto_ack());
+    assert!(!StructuredSink::auto_ack(&sink,));
 }

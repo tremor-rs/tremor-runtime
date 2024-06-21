@@ -152,7 +152,7 @@ impl DnsSink {
     }
 }
 #[async_trait::async_trait]
-impl Sink for DnsSink {
+impl StructuredSink for DnsSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         self.resolver = Some(TokioAsyncResolver::tokio_from_system_conf()?);
         Ok(true)
@@ -162,7 +162,6 @@ impl Sink for DnsSink {
         _input: &str,
         event: Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         let source_is_connected = self.source_is_connected.load(Ordering::Acquire);

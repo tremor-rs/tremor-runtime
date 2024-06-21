@@ -75,6 +75,9 @@ impl Gelf {
 }
 
 impl Postprocessor for Gelf {
+    fn is_streaming(&self) -> bool {
+        false
+    }
     fn name(&self) -> &str {
         "gelf"
     }

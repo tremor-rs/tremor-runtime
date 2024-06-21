@@ -526,7 +526,7 @@ impl Sink for Blackhole {
         _input: &str,
         event: tremor_system::event::Event,
         ctx: &SinkContext,
-        event_serializer: &mut EventSerializer,
+        serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         if !self.finished {
@@ -535,10 +535,7 @@ impl Sink for Blackhole {
             for (value, meta) in event.value_meta_iter() {
                 if now_ns > self.warmup {
                     let delta_ns = now_ns - event.ingest_ns;
-                    if let Ok(bufs) = event_serializer
-                        .serialize(value, meta, event.ingest_ns)
-                        .await
-                    {
+                    if let Ok(bufs) = serializer.serialize(value, meta, event.ingest_ns).await {
                         self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
                     } else {
                         error!("{ctx} failed to encode");
@@ -556,6 +553,15 @@ impl Sink for Blackhole {
                     .iter()
                     .any(|stop_after_events| self.count >= *stop_after_events)
             {
+                let delta_ns = now_ns - event.ingest_ns;
+                if let Ok(bufs) = serializer.finish_stream(DEFAULT_STREAM_ID) {
+                    self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
+                } else {
+                    error!("{ctx} failed to encode");
+                };
+                self.count += 1;
+                self.buf.clear();
+                self.delivered.record(delta_ns)?;
                 self.finish(ctx)?;
             };
         }
@@ -563,14 +569,33 @@ impl Sink for Blackhole {
         Ok(SinkReply::default())
     }
 
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // we handle finalization in on_event
+        Ok(())
+    }
+
     async fn on_signal(
         &mut self,
-        _signal: Event,
+        signal: Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
+        serializer: &mut EventSerializer,
     ) -> anyhow::Result<SinkReply> {
         let now_ns = nanotime();
         if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at) {
+            let delta_ns = now_ns - signal.ingest_ns;
+            if let Ok(bufs) = serializer.finish_stream(DEFAULT_STREAM_ID) {
+                self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
+            } else {
+                error!("{ctx} failed to encode");
+            };
+            self.count += 1;
+            self.buf.clear();
+            self.delivered.record(delta_ns)?;
+
             self.finish(ctx)?;
         }
         Ok(SinkReply::default())

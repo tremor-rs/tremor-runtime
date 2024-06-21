@@ -692,7 +692,7 @@ mod tests {
         use tokio::sync::mpsc::UnboundedSender;
         use tremor_common::alias;
         use tremor_connectors::{
-            sink::{EventSerializer, Sink, SinkContext, SinkManagerBuilder, SinkReply},
+            sink::{SinkContext, SinkManagerBuilder, SinkReply, StructuredSink},
             source::{Source, SourceContext, SourceManagerBuilder, SourceReply},
             CodecReq, Connector, ConnectorBuilder, ConnectorType,
         };
@@ -770,13 +770,12 @@ mod tests {
         }
 
         #[async_trait::async_trait]
-        impl Sink for FakeSink {
+        impl StructuredSink for FakeSink {
             async fn on_event(
                 &mut self,
                 _input: &str,
                 event: Event,
                 _ctx: &SinkContext,
-                _serializer: &mut EventSerializer,
                 _start: u64,
             ) -> anyhow::Result<SinkReply> {
                 self.tx.send(event)?;

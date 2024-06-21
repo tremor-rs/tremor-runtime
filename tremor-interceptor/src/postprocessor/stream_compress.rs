@@ -168,6 +168,9 @@ impl Compress {
     }
 }
 impl Postprocessor for Compress {
+    fn is_streaming(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         "compress"
     }
@@ -273,6 +276,9 @@ impl Xz2 {
 }
 
 impl Postprocessor for Xz2 {
+    fn is_streaming(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         "streaming-xz2"
     }
@@ -393,6 +399,9 @@ impl Zstd {
     }
 }
 impl Postprocessor for Zstd {
+    fn is_streaming(&self) -> bool {
+        true
+    }
     fn name(&self) -> &str {
         "streaming-zstd"
     }

@@ -23,6 +23,9 @@ pub(crate) struct IngestNs {
     last_ns: u64,
 }
 impl Postprocessor for IngestNs {
+    fn is_streaming(&self) -> bool {
+        false
+    }
     fn name(&self) -> &str {
         "attach-ingress-ts"
     }

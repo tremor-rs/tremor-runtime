@@ -178,7 +178,7 @@ impl Exit {
 }
 
 #[async_trait::async_trait()]
-impl Sink for Exit {
+impl StructuredSink for Exit {
     fn auto_ack(&self) -> bool {
         true
     }
@@ -187,7 +187,6 @@ impl Sink for Exit {
         _input: &str,
         event: tremor_system::event::Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         if self.done {

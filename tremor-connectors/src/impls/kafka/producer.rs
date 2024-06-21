@@ -206,7 +206,10 @@ impl Sink for KafkaProducerSink {
                 .get("key")
                 .and_then(Value::as_bytes)
                 .or_else(|| self.config.key.as_ref().map(String::as_bytes));
-            for payload in serializer.serialize(value, meta, ingest_ns).await? {
+            for payload in serializer
+                .serialize_non_streaming(value, meta, ingest_ns)
+                .await?
+            {
                 let mut record = FutureRecord::to(self.config.topic.as_str());
                 if let Some(key) = kafka_key {
                     record = record.key(key);
@@ -262,6 +265,14 @@ impl Sink for KafkaProducerSink {
             ));
         }
         Ok(SinkReply::NONE)
+    }
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // we use serialize_and_finalize in on_event, so we don't need to do anything here
+        Ok(())
     }
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {

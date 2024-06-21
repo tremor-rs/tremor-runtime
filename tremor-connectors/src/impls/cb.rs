@@ -222,13 +222,12 @@ impl Connector for Cb {
 struct CbSink {}
 
 #[async_trait::async_trait()]
-impl Sink for CbSink {
+impl StructuredSink for CbSink {
     async fn on_event(
         &mut self,
         _input: &str,
         event: Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {

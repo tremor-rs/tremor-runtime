@@ -197,7 +197,7 @@ impl<
             + Clone
             + 'static,
         TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
-    > Sink for GclSink<TChannel>
+    > StructuredSink for GclSink<TChannel>
 where
     TChannel::Future: Send,
 {
@@ -206,7 +206,6 @@ where
         _input: &str,
         event: Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         start: u64,
     ) -> anyhow::Result<SinkReply> {
         let client = self

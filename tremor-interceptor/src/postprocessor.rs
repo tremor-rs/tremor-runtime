@@ -78,7 +78,10 @@ pub trait Postprocessor: Send {
     ///
     /// # Errors
     ///   * if the postprocessor could not be finished correctly
-    fn finish(&mut self, _data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>>;
+    fn finish(&mut self, data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>>;
+
+    /// If this processor is streaming or not;
+    fn is_streaming(&self) -> bool;
 }
 
 /// A simpliefied version of `Postprocessor` that does not require any state, it ignores the `ingres_ns` and `egress_ns` parameters.
@@ -117,6 +120,9 @@ where
         } else {
             Ok(vec![])
         }
+    }
+    fn is_streaming(&self) -> bool {
+        false
     }
 }
 /// Lookup a postprocessor via its config
@@ -332,6 +338,9 @@ mod test {
     struct BadProcessor {}
 
     impl Postprocessor for BadProcessor {
+        fn is_streaming(&self) -> bool {
+            false
+        }
         fn name(&self) -> &str {
             "nah-proc"
         }
@@ -354,6 +363,10 @@ mod test {
     struct BadFinisher {}
 
     impl Postprocessor for BadFinisher {
+        fn is_streaming(&self) -> bool {
+            false
+        }
+
         fn name(&self) -> &str {
             "reverse"
         }

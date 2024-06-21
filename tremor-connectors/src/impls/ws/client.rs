@@ -236,7 +236,9 @@ impl Sink for WsClientSink {
             .as_mut()
             .ok_or_else(|| socket::Error::NoSocket)?;
         for (value, meta) in event.value_meta_iter() {
-            let data = serializer.serialize(value, meta, ingest_ns).await?;
+            let data = serializer
+                .serialize_non_streaming(value, meta, ingest_ns)
+                .await?;
             if let Err(e) = writer.write(data, Some(meta)).await {
                 error!("{ctx} Error sending data: {e}. Initiating Reconnect...",);
                 // TODO: figure upon which errors to actually reconnect
@@ -247,6 +249,15 @@ impl Sink for WsClientSink {
         }
         Ok(SinkReply::NONE)
     }
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // we use serialize_and_finalize in on_event, so we don't need to do anything here
+        Ok(())
+    }
+
     fn auto_ack(&self) -> bool {
         true
     }

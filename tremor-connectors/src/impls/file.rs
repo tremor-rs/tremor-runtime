@@ -386,6 +386,26 @@ impl FileSink {
     fn new(config: Config) -> Self {
         Self { config, file: None }
     }
+
+    async fn write_data(&mut self, ctx: &SinkContext, data: &[Vec<u8>]) -> anyhow::Result<()> {
+        let file = self.file.as_mut().ok_or(Error::NoFile)?;
+        for chunk in data {
+            if let Err(e) = file.write_all(chunk).await {
+                error!("{ctx} Error writing to file: {e}");
+                self.file = None;
+                ctx.notifier().connection_lost().await?;
+                return Err(e.into());
+            }
+        }
+        if let Err(e) = file.flush().await {
+            error!("{ctx} Error flushing file: {e}");
+            self.file = None;
+            ctx.notifier().connection_lost().await?;
+            Err(e.into())
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -418,26 +438,24 @@ impl Sink for FileSink {
         serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
-        let file = self.file.as_mut().ok_or(Error::NoFile)?;
         let ingest_ns = event.ingest_ns;
         for (value, meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, meta, ingest_ns).await?;
-            for chunk in data {
-                if let Err(e) = file.write_all(&chunk).await {
-                    error!("{ctx} Error writing to file: {e}");
-                    self.file = None;
-                    ctx.notifier().connection_lost().await?;
-                    return Err(e.into());
-                }
-            }
-            if let Err(e) = file.flush().await {
-                error!("{ctx} Error flushing file: {e}");
-                self.file = None;
-                ctx.notifier().connection_lost().await?;
-                return Err(e.into());
-            }
+            self.write_data(ctx, &data).await?;
         }
         Ok(SinkReply::NONE)
+    }
+    async fn on_finalize(
+        &mut self,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        let streams: Vec<u64> = serializer.streams().copied().collect();
+        for stream_id in streams {
+            let data = serializer.finish_stream(stream_id)?;
+            self.write_data(ctx, &data).await?;
+        }
+        Ok(())
     }
 
     fn auto_ack(&self) -> bool {

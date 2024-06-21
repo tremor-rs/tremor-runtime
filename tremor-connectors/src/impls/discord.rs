@@ -185,13 +185,12 @@ struct DiscordSink {
 }
 
 #[async_trait::async_trait()]
-impl Sink for DiscordSink {
+impl StructuredSink for DiscordSink {
     async fn on_event(
         &mut self,
         _input: &str,
         event: tremor_system::event::Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         for v in event.value_iter() {

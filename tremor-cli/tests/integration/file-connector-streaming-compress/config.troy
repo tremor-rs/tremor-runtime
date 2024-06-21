@@ -1,0 +1,38 @@
+define flow main
+flow  
+  use tremor::connectors;
+  use integration;
+
+  # we could use the connectors in integration but this is the file integration test
+  # so it makes more sense to define them here
+  define connector out_file from file
+  with 
+    codec = {"name": "json", "config": {"mode": "sorted"}},
+    postprocessors = ["separate",{ "name": "streaming-compress", "config": { "algorithm": "xz2" }}],
+    config = {
+      "path": "out.log.xz",
+      "mode": "truncate"
+    },
+  end;
+
+  define connector in_file from file
+  with 
+    codec = "json",
+    preprocessors = ["separate"],
+    config = {
+      "path": "in.json",
+      "mode": "read"
+    },
+  end;
+
+  create connector in_file;
+  create connector out_file;
+  create connector exit from connectors::exit;
+  create pipeline main from integration::out_or_exit;
+
+  connect /connector/in_file to /pipeline/main;
+  connect /pipeline/main to /connector/out_file;
+  connect /pipeline/main/exit to /connector/exit;
+  
+end;
+deploy flow main;

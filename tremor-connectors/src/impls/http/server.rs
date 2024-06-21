@@ -560,6 +560,15 @@ impl Sink for HttpServerSink {
         Ok(SinkReply::NONE)
     }
 
+    async fn on_finalize(
+        &mut self,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // we handle finalisation in `finalize` of `SinkResponse`
+        Ok(())
+    }
+
     fn auto_ack(&self) -> bool {
         true
     }

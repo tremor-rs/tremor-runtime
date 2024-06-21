@@ -26,6 +26,7 @@
 use log::{debug, error, warn};
 use serde::Deserialize;
 use tremor_connectors::sink::prelude::*;
+use tremor_system::event::DEFAULT_STREAM_ID;
 use tremor_value::prelude::*;
 
 /// mode of operation for object storage connectors
@@ -197,6 +198,10 @@ pub trait Upload {
     fn mark_as_failed(&mut self);
     /// Tracks an event for the upload
     fn track(&mut self, event: &Event);
+    /// The stream id of the upload
+    fn stream_id(&self) -> u64 {
+        DEFAULT_STREAM_ID
+    }
 }
 
 /// Trait for objects that can be used as a buffer for object storage uploads
@@ -371,9 +376,17 @@ where
         Ok(SinkReply::NONE)
     }
 
-    async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
+    async fn on_finalize(
+        &mut self,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
         // Commit the final upload.
-        self.fail_or_finish_upload(ctx).await?;
+        self.fail_or_finish_upload(ctx, serializer).await?;
+        Ok(())
+    }
+
+    async fn on_stop(&mut self, _ctx: &SinkContext) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -424,7 +437,7 @@ where
                     // new file_id, current upload is failed  ==> FAIL & DELETE UPLOAD \
                     //                                                                 |--> START NEW UPLOAD
                     // new file_id, current upload not failed ==> FINISH UPLOAD ______/
-                    self.fail_or_finish_upload(ctx).await?;
+                    self.fail_or_finish_upload(ctx, serializer).await?;
 
                     self.current_upload = Some(
                         self.sink_impl
@@ -443,7 +456,17 @@ where
 
             // At this point we defo have a healthy upload
             // accumulate event payload for the current upload
-            let serialized_data = serializer.serialize(value, meta, event.ingest_ns).await?;
+            let serialized_data = serializer
+                .serialize_for_stream(
+                    value,
+                    meta,
+                    event.ingest_ns,
+                    self.current_upload
+                        .as_ref()
+                        .ok_or(Error::NoUpload)?
+                        .stream_id(),
+                )
+                .await?;
             for item in serialized_data {
                 self.buffers.write(item);
                 // upload some data if necessary
@@ -463,12 +486,33 @@ where
         Ok(())
     }
 
-    async fn fail_or_finish_upload(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
+    async fn fail_or_finish_upload(
+        &mut self,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
         if let Some(upload) = self.current_upload.take() {
-            let final_part = self.buffers.reset();
             if upload.is_failed() {
                 self.sink_impl.fail_upload(upload, ctx).await?;
             } else {
+                // make sure we send the data left in the serializer
+                for data in serializer.finish_stream(upload.stream_id())? {
+                    self.buffers.write(data);
+                }
+                while let Some(data) = self.buffers.read_current_block() {
+                    let done_until = self
+                        .sink_impl
+                        .upload_data(
+                            data,
+                            self.current_upload.as_mut().ok_or(Error::NoUpload)?,
+                            ctx,
+                        )
+                        .await?;
+                    self.buffers.mark_done_until(done_until)?;
+                }
+
+                let final_part = self.buffers.reset();
+
                 // clean out the buffer
                 self.sink_impl
                     .finish_upload(upload, final_part, ctx)
@@ -518,6 +562,41 @@ where
     pub fn sink_impl_mut(&mut self) -> &mut Impl {
         &mut self.sink_impl
     }
+    async fn fail_or_finish_upload(
+        &mut self,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        if let Some(upload) = self.current_upload.take() {
+            if upload.is_failed() {
+                self.sink_impl.fail_upload(upload, ctx).await?;
+            } else {
+                // make sure we send the data left in the serializer
+                for data in serializer.finish_stream(upload.stream_id())? {
+                    self.buffer.write(data);
+                }
+                while let Some(data) = self.buffer.read_current_block() {
+                    let done_until = self
+                        .sink_impl
+                        .upload_data(
+                            data,
+                            self.current_upload.as_mut().ok_or(Error::NoUpload)?,
+                            ctx,
+                        )
+                        .await?;
+                    self.buffer.mark_done_until(done_until)?;
+                }
+
+                let final_part = self.buffer.reset();
+
+                // clean out the buffer
+                self.sink_impl
+                    .finish_upload(upload, final_part, ctx)
+                    .await?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -556,15 +635,10 @@ where
             if let Some(current_upload) = self.current_upload.as_mut() {
                 if object_id != *current_upload.object_id() {
                     // if finishing the previous one failed, we continue anyways
-                    if let Some(current_upload) = self.current_upload.take() {
-                        let final_part = self.buffer.reset();
-                        ctx.swallow_err(
-                            self.sink_impl
-                                .finish_upload(current_upload, final_part, ctx)
-                                .await,
-                            "Error finishing previous upload",
-                        );
-                    }
+                    ctx.swallow_err(
+                        self.fail_or_finish_upload(ctx, serializer).await,
+                        "Error finishing previous upload",
+                    );
                 }
             }
             if self.current_upload.is_none() {
@@ -606,6 +680,15 @@ where
         Ok(SinkReply::ack_or_none(event.transactional))
     }
 
+    async fn on_finalize(
+        &mut self,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> anyhow::Result<()> {
+        // Commit the final upload.
+        self.fail_or_finish_upload(ctx, serializer).await?;
+        Ok(())
+    }
     async fn on_stop(&mut self, ctx: &SinkContext) -> anyhow::Result<()> {
         if let Some(current_upload) = self.current_upload.take() {
             let final_part = self.buffer.reset();

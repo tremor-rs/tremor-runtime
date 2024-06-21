@@ -69,6 +69,18 @@ fn file_equals(path_str: &str, other: &str, base: Option<&String>) -> Result<Cha
     Ok(Changeset::new(&expected, &got, "\n"))
 }
 
+fn file_equals_binary(path_str: &str, other: &str, base: Option<&String>) -> Result<bool> {
+    let mut got_f = open_file(path_str, base)?;
+    let mut expected_f = open_file(other, base)?;
+
+    let mut got = Vec::new();
+    let mut expected = Vec::new();
+    got_f.read_to_end(&mut got)?;
+    expected_f.read_to_end(&mut expected)?;
+
+    Ok(got == expected)
+}
+
 #[derive(Debug)]
 pub(crate) enum Source {
     Stdout,
@@ -104,44 +116,49 @@ pub(crate) struct FileBasedAssert {
     pub(crate) contains: Option<Vec<String>>,
     pub(crate) doesnt_contain: Option<Vec<String>>,
     pub(crate) equals_file: Option<String>,
+    pub(crate) equals_file_binary: Option<String>,
 }
 
 pub(crate) type Asserts = Vec<FileBasedAssert>;
 
 pub(crate) fn load_assert(path: &Path) -> Result<AssertSpec> {
     let data = slurp_string(path)?;
-    match serde_yaml::from_str::<AssertSpec>(&data) {
-        Ok(mut s) => {
-            let base = path;
-            s.base = base.parent().and_then(Path::to_str).map(String::from);
-            for a in &s.asserts {
-                if let Some(f) = &a.equals_file {
-                    if !Path::new(f).is_file() {
-                        if let Some(base) = &s.base {
-                            let mut b = Path::new(base).to_path_buf();
-                            b.push(f);
-                            if !b.is_file() {
-                                return Err(Error::from(format!(
-                                    "equals_file  `{f}` not found in `assert.yaml`",
-                                )));
-                            }
-                        } else {
-                            return Err(Error::from(format!(
-                                "equals_file  `{f}` not found in `assert.yaml`",
-                            )));
-                        }
-                    }
-                }
-            }
-            Ok(s)
-        }
-
-        Err(e) => Err(Error::from(format!(
+    let mut s = serde_yaml::from_str::<AssertSpec>(&data).map_err(|e| {
+        Error::from(format!(
             "Unable to load `assert.yaml` from path `{}`: {}",
             path.to_string_lossy(),
             e
-        ))),
+        ))
+    })?;
+    s.base = path.parent().and_then(Path::to_str).map(String::from);
+    let Some(base) = &s.base else {
+        return Err(Error::from("base path not foud for `assert.yaml`"));
+    };
+    for a in &s.asserts {
+        if let Some(f) = &a.equals_file {
+            if !Path::new(f).is_file() {
+                let mut b = Path::new(base).to_path_buf();
+                b.push(f);
+                if !b.is_file() {
+                    return Err(Error::from(format!(
+                        "equals_file  `{f}` not found in `assert.yaml`",
+                    )));
+                }
+            }
+        }
+        if let Some(f) = &a.equals_file_binary {
+            if !Path::new(f).is_file() {
+                let mut b = Path::new(base).to_path_buf();
+                b.push(f);
+                if !b.is_file() {
+                    return Err(Error::from(format!(
+                        "equals_file  `{f}` not found in `assert.yaml`",
+                    )));
+                }
+            }
+        }
     }
+    Ok(s)
 }
 
 pub(crate) fn process(
@@ -329,6 +346,39 @@ fn process_equals_file(
     })
 }
 
+fn process_equals_file_binary(
+    equals_file: &str,
+    file: &str,
+    base: Option<&String>,
+    prefix: &str,
+    stats: &mut stats::Stats,
+    counter: &mut i32,
+) -> Result<report::TestElement> {
+    // By line reporting
+    *counter += 1;
+    stats.assert();
+    let condition = file_equals_binary(file, equals_file, base)?;
+
+    status::assert_has(
+        prefix,
+        &format!("Assert {counter}"),
+        &format!("Binary file `{}` equals `{equals_file}`", &file),
+        None,
+        condition,
+    )?;
+
+    Ok(report::TestElement {
+        description: format!("Binary file `{file}` equals"),
+        info: None,
+        hidden: false,
+        keyword: report::KeywordKind::Predicate,
+        result: report::ResultKind {
+            status: stats.report(condition, file),
+            duration: 0,
+        },
+    })
+}
+
 pub(crate) fn process_filebased_asserts(
     prefix: &str,
     stdout_path: &Path,
@@ -355,6 +405,7 @@ pub(crate) fn process_filebased_asserts(
                 contains,
                 doesnt_contain,
                 equals_file,
+                equals_file_binary,
                 ..
             } => {
                 let file = match source {
@@ -386,6 +437,16 @@ pub(crate) fn process_filebased_asserts(
                 }
                 if let Some(equals_file) = equals_file {
                     elements.push(process_equals_file(
+                        equals_file,
+                        &file,
+                        base.as_ref(),
+                        prefix,
+                        &mut stats,
+                        &mut counter,
+                    )?);
+                }
+                if let Some(equals_file) = equals_file_binary {
+                    elements.push(process_equals_file_binary(
                         equals_file,
                         &file,
                         base.as_ref(),

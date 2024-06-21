@@ -415,7 +415,7 @@ pub(crate) struct ClickhouseSink {
 }
 
 #[async_trait::async_trait]
-impl Sink for ClickhouseSink {
+impl StructuredSink for ClickhouseSink {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
         let pool = Pool::new(self.db_url.as_str());
         let handle = match pool.get_handle().await {
@@ -441,7 +441,6 @@ impl Sink for ClickhouseSink {
         _input: &str,
         event: Event,
         _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
         _start: u64,
     ) -> anyhow::Result<SinkReply> {
         let handle = self
