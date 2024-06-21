@@ -98,6 +98,12 @@ impl Trait for Postprocessor {
 mod tests {
     use super::*;
     use tremor_value::literal;
+
+    #[test]
+    fn is_streaming() {
+        let post = Postprocessor::default();
+        assert!(post.is_streaming());
+    }
     #[test]
     fn name() {
         let post = Postprocessor::default();

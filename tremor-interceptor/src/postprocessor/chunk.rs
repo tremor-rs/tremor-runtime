@@ -183,6 +183,14 @@ mod tests {
     use tremor_value::literal;
 
     #[test]
+    fn is_streaming() -> anyhow::Result<()> {
+        let post = Chunk::from_config(Some(&literal!({
+            "max_bytes": 42
+        })))?;
+        assert!(post.is_streaming());
+        Ok(())
+    }
+    #[test]
     fn name() {
         let pp = Chunk::new(100);
         assert_eq!("chunk", pp.name());

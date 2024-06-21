@@ -81,6 +81,7 @@ mod test {
             .0;
 
         assert!(pre_p.finish(None, None)?.is_empty());
+        assert!(post_p.finish(None)?.is_empty());
 
         assert_eq!(data, decoded);
         assert_eq!(in_ns, 42);
