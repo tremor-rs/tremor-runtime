@@ -1225,12 +1225,188 @@ fn handle_replies(
 
 #[cfg(test)]
 mod test {
+    use tremor_common::ids::Id as _;
+
     use super::*;
+
+    #[test]
+    fn sink_state_display() {
+        assert_eq!(SinkState::Initialized.to_string(), "Initialized");
+        assert_eq!(SinkState::Running.to_string(), "Running");
+        assert_eq!(SinkState::Paused.to_string(), "Paused");
+        assert_eq!(SinkState::Draining.to_string(), "Draining");
+        assert_eq!(SinkState::Drained.to_string(), "Drained");
+        assert_eq!(SinkState::Stopped.to_string(), "Stopped");
+    }
+
     #[test]
     fn sink_reply_constructors() {
         assert_eq!(SinkReply::fail_or_none(true), SinkReply::FAIL);
         assert_eq!(SinkReply::fail_or_none(false), SinkReply::NONE);
         assert_eq!(SinkReply::ack_or_none(true), SinkReply::ACK);
         assert_eq!(SinkReply::ack_or_none(false), SinkReply::NONE);
+    }
+
+    #[tokio::test]
+    async fn structured_sink_trait_defaults() {
+        struct TestSink;
+        #[async_trait::async_trait]
+        impl StructuredSink for TestSink {
+            async fn on_event(
+                &mut self,
+                _input: &str,
+                _event: Event,
+                _ctx: &SinkContext,
+                _start: u64,
+            ) -> anyhow::Result<SinkReply> {
+                Ok(SinkReply::default())
+            }
+            fn auto_ack(&self) -> bool {
+                false
+            }
+        }
+        let mut sink = TestSink;
+        let sink_id = SinkId::new(1);
+        let id = alias::Connector::new("snot", "badger");
+        let (lost_tx, _lost_rx) = tokio::sync::mpsc::channel(1);
+        let notifier = ConnectionLostNotifier::new(&id, lost_tx);
+        let beacon = QuiescenceBeacon::default();
+        let ctx = SinkContext::new(sink_id, id, ConnectorType::default(), beacon, notifier);
+        assert!(!StructuredSink::auto_ack(&sink,));
+        assert!(!StructuredSink::asynchronous(&sink));
+        assert_eq!(StructuredSink::metrics(&mut sink, 0, &ctx).await, vec![]);
+        assert!(StructuredSink::on_start(&mut sink, &ctx).await.is_ok());
+        assert!(
+            StructuredSink::connect(&mut sink, &ctx, &Attempt::default())
+                .await
+                .is_ok(),
+        );
+
+        assert!(StructuredSink::on_pause(&mut sink, &ctx).await.is_ok());
+        assert!(StructuredSink::on_resume(&mut sink, &ctx).await.is_ok());
+        assert!(StructuredSink::on_stop(&mut sink, &ctx).await.is_ok());
+        assert!(StructuredSink::on_connection_lost(&mut sink, &ctx)
+            .await
+            .is_ok());
+        assert!(StructuredSink::on_connection_established(&mut sink, &ctx)
+            .await
+            .is_ok());
+    }
+    #[tokio::test]
+    async fn sink_trait_defaults_on_structured() -> anyhow::Result<()> {
+        struct TestSink;
+        #[async_trait::async_trait]
+        impl StructuredSink for TestSink {
+            async fn on_event(
+                &mut self,
+                _input: &str,
+                _event: Event,
+                _ctx: &SinkContext,
+                _start: u64,
+            ) -> anyhow::Result<SinkReply> {
+                Ok(SinkReply::default())
+            }
+            fn auto_ack(&self) -> bool {
+                false
+            }
+        }
+        let mut sink = TestSink;
+        let sink_id = SinkId::new(1);
+        let alias = alias::Connector::new("snot", "badger");
+        let (lost_tx, _lost_rx) = tokio::sync::mpsc::channel(1);
+        let notifier = ConnectionLostNotifier::new(&alias, lost_tx);
+        let beacon = QuiescenceBeacon::default();
+        let mut serializer = EventSerializer::new(
+            Some(tremor_codec::Config::from("json")),
+            CodecReq::Required,
+            vec![],
+            &"test".into(),
+            &alias,
+        )?;
+        let ctx: SinkContext =
+            SinkContext::new(sink_id, alias, ConnectorType::default(), beacon, notifier);
+
+        assert!(!Sink::auto_ack(&sink));
+        assert!(!Sink::asynchronous(&sink));
+        assert_eq!(Sink::metrics(&mut sink, 0, &ctx).await, vec![]);
+        assert!(Sink::finalize(&mut sink, &ctx, &mut serializer)
+            .await
+            .is_ok());
+        assert!(Sink::on_start(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::connect(&mut sink, &ctx, &Attempt::default())
+            .await
+            .is_ok(),);
+
+        assert!(Sink::on_pause(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::on_resume(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::on_stop(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::on_connection_lost(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::on_connection_established(&mut sink, &ctx)
+            .await
+            .is_ok());
+        Ok(())
+    }
+    #[tokio::test]
+    async fn sink_trait_defaults() -> anyhow::Result<()> {
+        struct TestSink;
+        #[async_trait::async_trait]
+        impl Sink for TestSink {
+            async fn on_event(
+                &mut self,
+                _input: &str,
+                _event: Event,
+                _ctx: &SinkContext,
+                _serializer: &mut EventSerializer,
+
+                _start: u64,
+            ) -> anyhow::Result<SinkReply> {
+                Ok(SinkReply::default())
+            }
+            fn auto_ack(&self) -> bool {
+                false
+            }
+            async fn finalize(
+                &mut self,
+                _ctx: &SinkContext,
+                _serializer: &mut EventSerializer,
+            ) -> anyhow::Result<()> {
+                Ok(())
+            }
+        }
+        let mut sink = TestSink;
+        let sink_id = SinkId::new(1);
+        let alias = alias::Connector::new("snot", "badger");
+        let (lost_tx, _lost_rx) = tokio::sync::mpsc::channel(1);
+        let notifier = ConnectionLostNotifier::new(&alias, lost_tx);
+        let beacon = QuiescenceBeacon::default();
+        let mut serializer = EventSerializer::new(
+            Some(tremor_codec::Config::from("json")),
+            CodecReq::Required,
+            vec![],
+            &"test".into(),
+            &alias,
+        )?;
+        let ctx: SinkContext =
+            SinkContext::new(sink_id, alias, ConnectorType::default(), beacon, notifier);
+
+        assert!(!Sink::auto_ack(&sink));
+        assert!(!Sink::asynchronous(&sink));
+        assert_eq!(Sink::metrics(&mut sink, 0, &ctx).await, vec![]);
+        assert!(Sink::finalize(&mut sink, &ctx, &mut serializer)
+            .await
+            .is_ok());
+        assert!(Sink::on_start(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::connect(&mut sink, &ctx, &Attempt::default())
+            .await
+            .is_ok(),);
+
+        assert!(Sink::on_pause(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::on_resume(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::on_stop(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::on_connection_lost(&mut sink, &ctx).await.is_ok());
+        assert!(Sink::on_connection_established(&mut sink, &ctx)
+            .await
+            .is_ok());
+        Ok(())
     }
 }
