@@ -1,4 +1,4 @@
-FROM rust:1.78-bullseye as builder
+FROM rust:1.78-bookworm as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -30,8 +30,13 @@ COPY tremor-api ./tremor-api
 COPY tremor-influx ./tremor-influx
 COPY tremor-value ./tremor-value
 COPY tremor-config ./tremor-config
+COPY tremor-archive ./tremor-archive
 COPY tremor-connectors ./tremor-connectors
+COPY tremor-connectors-test-helpers ./tremor-connectors-test-helpers
+COPY tremor-connectors-object-storage ./tremor-connectors-object-storage
 COPY tremor-connectors-aws ./tremor-connectors-aws
+COPY tremor-connectors-azure ./tremor-connectors-azure
+COPY tremor-connectors-otel ./tremor-connectors-otel
 COPY tremor-connectors-gcp ./tremor-connectors-gcp
 COPY tremor-system ./tremor-system
 COPY tremor-codec ./tremor-codec
@@ -42,7 +47,7 @@ COPY tremor-common ./tremor-common
 
 RUN cargo build --release --all
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 RUN useradd -ms /bin/bash tremor
 
