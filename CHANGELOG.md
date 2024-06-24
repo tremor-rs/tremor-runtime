@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.13.0-rc.29]
 
 ### New features
 * add experimental microsoft azure monitor log ingest api connector
