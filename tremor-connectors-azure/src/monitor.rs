@@ -74,7 +74,7 @@
 //! by the data collection rule. The responsibility for ensuring the data is correctly formatted and accepted by the data collection rule
 //! lies with the user. The connector will indicate a successful write if a 204 No Content response is received.
 //!
-//! We recommend checking the data cellection endpoint metrics to ensure data is being received and checking the monitor logs
+//! We recommend checking the data collection endpoint metrics to ensure data is being received and checking the monitor logs
 //! table to ensure the data is being correctly ingested and processed through the rule and into the target monitor log table.
 //!
 //! #### Azure
