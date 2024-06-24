@@ -46,7 +46,7 @@ hex = { version = "0.4", default-features = false, features = ["alloc", "std"] }
 
 [dev-dependencies]
 tokio = { version = "1.38", default-features = true }
-proptest = "1.4"
+proptest = "1.5"
 test-case = "3"
 
 [features]
