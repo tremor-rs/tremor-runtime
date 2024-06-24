@@ -10,7 +10,7 @@ authors = ["The Tremor Team"]
 
 [dependencies]
 log = "0.4"
-lazy_static = "1.4"
+lazy_static = "1.5"
 tokio = { version = "1", features = ["sync", "net"] }
 rand = "0.8"
 
