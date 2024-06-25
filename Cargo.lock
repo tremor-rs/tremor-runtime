@@ -1964,6 +1964,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core 0.9.10",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3097,7 +3111,7 @@ dependencies = [
  "async-tls",
  "async-trait",
  "cfg-if",
- "dashmap",
+ "dashmap 5.5.3",
  "deadpool",
  "futures",
  "http-types",
@@ -5581,7 +5595,7 @@ checksum = "f432569d012f914dff62c52f2d69859bd0e592d83a40fd337c0111ab27bae765"
 dependencies = [
  "apache-avro",
  "byteorder",
- "dashmap",
+ "dashmap 5.5.3",
  "futures",
  "reqwest 0.12.5",
  "serde",
@@ -5852,7 +5866,7 @@ dependencies = [
  "bitflags 1.3.2",
  "bytes",
  "cfg-if",
- "dashmap",
+ "dashmap 5.5.3",
  "flate2",
  "futures",
  "mime",
@@ -7304,7 +7318,7 @@ dependencies = [
  "chrono-tz 0.8.6",
  "clickhouse-rs",
  "cron",
- "dashmap",
+ "dashmap 6.0.1",
  "either",
  "elasticsearch",
  "env_logger",
