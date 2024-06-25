@@ -37,7 +37,7 @@ futures = { version = "0.3.30", default-features = false, features = [
     "async-await",
     "futures-executor",
 ] }
-serde_json = "1.0.117"
+serde_json = "1.0.118"
 beef = "0.5.2"
 simd-json = "0.13.10"
 mockito = "1.4.0"
