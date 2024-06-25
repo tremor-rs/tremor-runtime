@@ -27,7 +27,7 @@ ryu = "1"
 lexical = "6"
 simdutf8 = "0.1"
 chrono = "0.4"
-uuid = { version = "1.6", features = ["v4"] }
+uuid = { version = "1.9", features = ["v4"] }
 async-recursion = "1"
 
 schema_registry_converter = { version = "4", default-features = false, features = [
