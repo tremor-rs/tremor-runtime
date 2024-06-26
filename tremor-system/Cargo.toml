@@ -19,7 +19,7 @@ serde = { version = "1.0", default-features = false }
 thiserror = { version = "1.0", default-features = false }
 simd-json-derive = { version = "0.13", default-features = false }
 simd-json = { version = "0.13", default-features = false }
-either = { version = "1.12", default-features = false }
+either = { version = "1.13", default-features = false }
 
 [dev-dependencies]
 tremor-value = { path = "../tremor-value", version = "0.13.0-rc.29" }
