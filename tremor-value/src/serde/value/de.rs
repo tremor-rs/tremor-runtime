@@ -558,6 +558,7 @@ mod test {
     pub struct SO {}
 
     #[derive(serde::Deserialize, Debug)]
+    #[allow(dead_code)]
     pub struct StructTest {
         pub o: Option<SO>,
         pub s: Option<String>,
@@ -576,6 +577,8 @@ mod test {
     }
 
     #[derive(serde::Deserialize, Debug)]
+    #[allow(dead_code)]
+
     pub struct N {
         pub o: SO,
         pub s: String,

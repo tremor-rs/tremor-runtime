@@ -180,7 +180,7 @@ pub(crate) fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     // across builtin types if/when extending for 'lt' and 'gt' variants
     //
     use Value::{Array, Bytes, Object, Static, String};
-    let error = std::f64::EPSILON;
+    let error = f64::EPSILON;
     match (lhs, rhs) {
         (Object(l), Object(r)) => {
             if l.len() == r.len() {

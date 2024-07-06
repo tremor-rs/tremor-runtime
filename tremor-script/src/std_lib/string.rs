@@ -102,7 +102,7 @@ impl TremorFn for StringFormat {
         Box::new(self.clone())
     }
     fn arity(&self) -> std::ops::RangeInclusive<usize> {
-        1_usize..=usize::max_value()
+        1_usize..=usize::MAX
     }
     fn is_const(&self) -> bool {
         true

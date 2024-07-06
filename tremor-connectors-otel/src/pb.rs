@@ -79,7 +79,6 @@ mod test {
     use super::*;
     use proptest::proptest;
     use proptest::{bits::u64, prelude::*};
-    use std::f64;
     use tremor_value::literal;
 
     // NOTE This is incomplete with respect to possible mappings of json values

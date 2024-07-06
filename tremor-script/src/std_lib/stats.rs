@@ -20,9 +20,7 @@ use crate::registry::{
 use hdrhistogram::Histogram;
 use sketches_ddsketch::{Config as DDSketchConfig, DDSketch};
 use std::cmp::max;
-use std::f64;
 use std::ops::RangeInclusive;
-use std::u64;
 
 /// Round up.
 ///
