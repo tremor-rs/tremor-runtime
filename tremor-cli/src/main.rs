@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
         // this makes it allowable to use unsafe here.
         let s = &cli.instance;
         // ALLOW: We do this on startup and forget the memory once we drop it, that's on purpose
-        let forget_s = std::mem::transmute(s as &str);
+        let forget_s = std::mem::transmute::<&str, &str>(s.as_str());
         // This means we're going to LEAK this memory, however
         // it is fine since as we do actually need it for the
         // rest of the program execution.

@@ -1,4 +1,4 @@
-FROM rust:1.78-bullseye as builder
+FROM rust:1.79-bullseye as builder
 
 RUN cargo install --features=ssl websocat
 

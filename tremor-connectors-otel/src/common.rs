@@ -270,19 +270,19 @@ mod tests {
         assert_eq!(pb, back_again);
 
         let pb = AnyValue {
-            value: Some(any_value::Value::IntValue(std::i64::MAX)),
+            value: Some(any_value::Value::IntValue(i64::MAX)),
         };
         let json = any_value_to_json(pb.clone());
         let back_again = any_value_to_pb(&json);
-        assert_eq!(json, std::i64::MAX);
+        assert_eq!(json, i64::MAX);
         assert_eq!(pb, back_again);
 
         let pb = AnyValue {
-            value: Some(any_value::Value::IntValue(std::i64::MIN)),
+            value: Some(any_value::Value::IntValue(i64::MIN)),
         };
         let json = any_value_to_json(pb.clone());
         let back_again = any_value_to_pb(&json);
-        assert_eq!(json, std::i64::MIN);
+        assert_eq!(json, i64::MIN);
         assert_eq!(pb, back_again);
     }
 
@@ -297,19 +297,19 @@ mod tests {
         assert_eq!(pb, back_again);
 
         let pb = AnyValue {
-            value: Some(any_value::Value::DoubleValue(std::f64::MAX)),
+            value: Some(any_value::Value::DoubleValue(f64::MAX)),
         };
         let json = any_value_to_json(pb.clone());
         let back_again = any_value_to_pb(&json);
-        assert_eq!(json, std::f64::MAX);
+        assert_eq!(json, f64::MAX);
         assert_eq!(pb, back_again);
 
         let pb = AnyValue {
-            value: Some(any_value::Value::DoubleValue(std::f64::MIN)),
+            value: Some(any_value::Value::DoubleValue(f64::MIN)),
         };
         let json = any_value_to_json(pb.clone());
         let back_again = any_value_to_pb(&json);
-        assert_eq!(json, std::f64::MIN);
+        assert_eq!(json, f64::MIN);
         assert_eq!(pb, back_again);
     }
 

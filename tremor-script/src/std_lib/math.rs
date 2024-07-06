@@ -29,6 +29,8 @@ macro_rules! math_fn {
                 if f < 0.0 {
                     Ok(Value::from(f as i64))
                 } else {
+                    // ALLOW: we check for sign loss above
+                    #[allow(clippy::cast_sign_loss)]
                     Ok(Value::from(f as u64))
 
                 }

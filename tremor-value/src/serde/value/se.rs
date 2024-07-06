@@ -702,53 +702,44 @@ mod tests {
     fn serialize_numbers() -> Result<()> {
         // signed
         assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i8);
-        assert_to_value!(Value::Static(StaticNode::I64(127)), i8::max_value());
-        assert_to_value!(Value::Static(StaticNode::I64(-128)), i8::min_value());
+        assert_to_value!(Value::Static(StaticNode::I64(127)), i8::MAX);
+        assert_to_value!(Value::Static(StaticNode::I64(-128)), i8::MIN);
 
         assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i16);
-        assert_to_value!(Value::Static(StaticNode::I64(32767)), i16::max_value());
-        assert_to_value!(Value::Static(StaticNode::I64(-32768)), i16::min_value());
+        assert_to_value!(Value::Static(StaticNode::I64(32767)), i16::MAX);
+        assert_to_value!(Value::Static(StaticNode::I64(-32768)), i16::MIN);
         assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i32);
-        assert_to_value!(
-            Value::Static(StaticNode::I64(2_147_483_647)),
-            i32::max_value()
-        );
-        assert_to_value!(
-            Value::Static(StaticNode::I64(-2_147_483_648)),
-            i32::min_value()
-        );
+        assert_to_value!(Value::Static(StaticNode::I64(2_147_483_647)), i32::MAX);
+        assert_to_value!(Value::Static(StaticNode::I64(-2_147_483_648)), i32::MIN);
         assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i64);
         assert_to_value!(
             Value::Static(StaticNode::I64(9_223_372_036_854_775_807)),
-            i64::max_value()
+            i64::MAX
         );
         assert_to_value!(
             Value::Static(StaticNode::I64(-9_223_372_036_854_775_808)),
-            i64::min_value()
+            i64::MIN
         );
 
         // unsigned
         assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u8);
-        assert_to_value!(Value::Static(StaticNode::U64(255)), u8::max_value());
-        assert_to_value!(Value::Static(StaticNode::U64(0)), u8::min_value());
+        assert_to_value!(Value::Static(StaticNode::U64(255)), u8::MAX);
+        assert_to_value!(Value::Static(StaticNode::U64(0)), u8::MIN);
 
         assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u16);
-        assert_to_value!(Value::Static(StaticNode::U64(65535)), u16::max_value());
-        assert_to_value!(Value::Static(StaticNode::U64(0)), u16::min_value());
+        assert_to_value!(Value::Static(StaticNode::U64(65535)), u16::MAX);
+        assert_to_value!(Value::Static(StaticNode::U64(0)), u16::MIN);
 
         assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u32);
-        assert_to_value!(
-            Value::Static(StaticNode::U64(4_294_967_295)),
-            u32::max_value()
-        );
-        assert_to_value!(Value::Static(StaticNode::U64(0)), u32::min_value());
+        assert_to_value!(Value::Static(StaticNode::U64(4_294_967_295)), u32::MAX);
+        assert_to_value!(Value::Static(StaticNode::U64(0)), u32::MIN);
 
         assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u64);
         assert_to_value!(
             Value::Static(StaticNode::U64(18_446_744_073_709_551_615)),
-            u64::max_value()
+            u64::MAX
         );
-        assert_to_value!(Value::Static(StaticNode::U64(0)), u64::min_value());
+        assert_to_value!(Value::Static(StaticNode::U64(0)), u64::MIN);
 
         assert_to_value!(Value::Static(StaticNode::Bool(true)), true);
         assert_to_value!(Value::Static(StaticNode::Bool(false)), false);
