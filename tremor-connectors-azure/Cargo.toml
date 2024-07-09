@@ -22,7 +22,7 @@ azure_core = { version = "0.20.0", default-features = false, features = [
     "enable_reqwest_gzip",
     "enable_reqwest_rustls",
 ] }
-serde = "1.0.202"
+serde = "1.0.204"
 anyhow = "1.0.83"
 async-trait = "0.1.81"
 url = "2.5.2"
