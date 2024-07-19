@@ -65,7 +65,7 @@ impl Connector for Gbq {
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        "gbq".into()
+        "gbq_writer".into()
     }
 
     async fn build_cfg(

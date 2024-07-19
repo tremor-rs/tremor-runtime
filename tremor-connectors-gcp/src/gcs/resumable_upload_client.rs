@@ -151,7 +151,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
         bucket: &str,
     ) -> anyhow::Result<bool> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
-            let url = format!("{url}b/{bucket}");
+            let url = format!("{url}/b/{bucket}");
             Ok(Request::builder()
                 .method(Method::GET)
                 .uri(url)
