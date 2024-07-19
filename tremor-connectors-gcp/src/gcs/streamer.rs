@@ -62,7 +62,7 @@ pub(super) struct Config {
 #[allow(clippy::unwrap_used)]
 fn default_endpoint() -> Url<HttpsDefaults> {
     // ALLOW: this URL is hardcoded, so the only reason for parse failing would be if it was changed
-    Url::parse("https://storage.googleapis.com/upload/storage/v1").unwrap()
+    Url::parse("https://storage.googleapis.com/upload/storage/v1/").unwrap()
 }
 
 fn default_connect_timeout() -> u64 {

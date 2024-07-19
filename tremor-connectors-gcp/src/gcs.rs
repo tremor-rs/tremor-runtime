@@ -51,7 +51,7 @@
 //!
 //! | name                | description                                                                                            | default                                               |
 //! |---------------------|--------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
-//! | `url`               | The HTTP(s) endpoint to which the requests will be made                                                | `"https://storage.googleapis.com/upload/storage/v1"`  |
+//! | `url`               | The HTTP(s) endpoint to which the requests will be made                                                | `"https://storage.googleapis.com/upload/storage/v1/"` |
 //! | `bucket`            | The optional bucket to stream events into if not overwritten by event metadata `$gcs_streamer.bucket`  |                                                       |
 //! | `mode`              | The mode of operation for this connector. See [Modes of operation](#modes-of-operation).               |                                                       |
 //! | `connect_timeout`   | The timeout for the connection (in nanoseconds)                                                        | `10_000_000_000` (10 seconds)                         |
