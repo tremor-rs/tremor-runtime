@@ -151,7 +151,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
         bucket: &str,
     ) -> anyhow::Result<bool> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
-            let url = format!("{url}/b/{bucket}");
+            let url = url.join("b/")?.join(bucket)?.to_string();
             Ok(Request::builder()
                 .method(Method::GET)
                 .uri(url)
@@ -457,7 +457,7 @@ mod tests {
     async fn can_bucket_exists() -> anyhow::Result<()> {
         let client = MockHttpClient {
             handle_request: Box::new(|req| {
-                assert_eq!(req.uri().path(), "/b/snot");
+                assert_eq!(req.uri().path(), "/upload/storage/v1/b/snot");
                 assert_eq!(req.method(), Method::GET);
 
                 let response = Response::builder()
@@ -476,7 +476,10 @@ mod tests {
             },
         };
         let bucket_exists = api_client
-            .bucket_exists(&Url::parse("http://example.com")?, "snot")
+            .bucket_exists(
+                &Url::parse("https://storage.googleapis.com/upload/storage/v1/")?,
+                "snot",
+            )
             .await?;
         assert!(bucket_exists);
         Ok(())

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+* gbq connector naming is now `gbq_writer` as it is documented
+* fix gbq connector url missing `/`
+  
 ## [0.13.0-rc.29]
 
 ### New features
