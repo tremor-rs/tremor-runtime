@@ -160,7 +160,7 @@ proptest = "1.5"
 testcontainers = "0.16.7"
 serial_test = "3.0"
 http-types = "2.0"
-bytes = "1.0"
+bytes = "1.6"
 tempfile = { version = "3.8", default-features = false }
 env_logger = "0.11"
 tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.29" }
