@@ -34,7 +34,7 @@ googapis = { version = "0.6", default-features = true, features = [
 ] }
 gouth = { version = "0.2", default-features = true }
 prost = { version = "0.9.0", default-features = true }
-prost-types = { version = "0.9.0", default-features = true }
+prost-types = { version = "0.13.1", default-features = true }
 tokio = { version = "1.38", default-features = true }
 tonic = { version = "0.6.1", default-features = true, features = [
     "transport",
