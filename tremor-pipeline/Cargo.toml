@@ -38,7 +38,7 @@ fenster = { version = "0.1.1" }
 criterion = "0.5"
 tempfile = "3.8"
 xz2 = "0.1"
-tokio = { version = "1.38", features = ["full"] }
+tokio = { version = "1.39", features = ["full"] }
 
 [features]
 bert = ["rust-bert"]
