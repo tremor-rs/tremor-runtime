@@ -12,7 +12,7 @@ authors = ["The Tremor Team"]
 tremor-common = { path = "../tremor-common", version = "0.13.0-rc.29" }
 tremor-script = { path = "../tremor-script", version = "0.13.0-rc.29" }
 
-tokio = { version = "1.38", default-features = false }
+tokio = { version = "1.39", default-features = false }
 anyhow = { version = "1.0", default-features = true }
 log = { version = "0.4", default-features = false }
 serde = { version = "1.0", default-features = false }
