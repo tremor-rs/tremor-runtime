@@ -1211,15 +1211,6 @@ pub(crate) fn error_guard_not_bool<T, O: Ranged, I: Ranged>(
     error_type_conflict(outer, inner, got.value_type(), ValueType::Bool)
 }
 
-pub(crate) fn error_invalid_unary<T, O: Ranged, I: Ranged>(
-    outer: &O,
-    inner: &I,
-    op: ast::UnaryOpKind,
-    val: &Value,
-) -> Result<T> {
-    Err(err_invalid_unary(outer, inner, op, val))
-}
-
 pub(crate) fn err_invalid_unary<O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,

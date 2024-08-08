@@ -197,7 +197,7 @@ impl<'script> BytesPart<'script> {
 /// Binary semiliteral
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Bytes<'script> {
-    mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Bytes
     pub value: Vec<BytesPart<'script>>,
 }

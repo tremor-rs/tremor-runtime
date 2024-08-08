@@ -71,7 +71,8 @@ pub mod srs;
 mod std_lib;
 /// Utility functions
 pub mod utils;
-pub use srs::{EventPayload, ValueAndMeta};
+
+mod vm;
 
 pub use crate::ast::deploy::raw::run_script;
 pub use crate::ast::module;
@@ -85,6 +86,8 @@ pub use crate::registry::{
     TremorAggrFnWrapper, TremorFn, TremorFnWrapper,
 };
 pub use crate::script::{Return, Script};
+pub use crate::srs::{EventPayload, ValueAndMeta};
+pub use crate::vm::compiler::Compiler;
 use ast::{Consts, InvokeAggrFn};
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
 use lazy_static::lazy_static;
