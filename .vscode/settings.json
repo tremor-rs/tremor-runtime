@@ -131,11 +131,5 @@
   ],
   "rust-analyzer.linkedProjects": [
     "./Cargo.toml",
-    "./tremor-connectors/Cargo.toml",
-    "./tremor-connectors/Cargo.toml",
-    "./tremor-connectors/Cargo.toml",
-    "./tremor-connectors-gcp/Cargo.toml",
-    "./tremor-connectors-gcp/Cargo.toml",
-    "./tremor-connectors-gcp/Cargo.toml"
   ]
 }
