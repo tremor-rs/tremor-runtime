@@ -165,7 +165,7 @@ fn write_bits_le(
     }
 }
 
-fn write_bits(
+pub(crate) fn write_bits(
     bytes: &mut Vec<u8>,
     bits: u8,
     endianess: Endian,

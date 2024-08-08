@@ -317,6 +317,13 @@ impl<'value> Value<'value> {
         }
     }
     /// Tries to get the bytes from a Value
+    #[inline]
+    #[must_use]
+    pub fn is_bytes(&self) -> bool {
+        self.as_bytes().is_some()
+    }
+
+    /// Tries to get the bytes from a Value
     ///
     /// # Errors
     /// if the value is not a byte array or string
