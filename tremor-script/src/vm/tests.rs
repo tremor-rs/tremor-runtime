@@ -1,6 +1,6 @@
 use tremor_value::literal;
 
-use super::*;
+use super::{Op::*, *};
 use crate::{
     arena::Arena,
     ast::{Helper, Script},
@@ -63,9 +63,8 @@ fn simple() -> Result<()> {
     let script = parse("42")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.opcodes.len(), 1);
     assert_eq!(p.consts.len(), 1);
-    assert_eq!(p.opcodes, [Op::Const { idx: 0 }]);
+    assert_eq!(p.opcodes, [Const { idx: 0 }]);
     assert_eq!(run(&p)?, 42);
     Ok(())
 }
@@ -77,14 +76,13 @@ fn simple_add() -> Result<()> {
     let script = parse("42 + 42")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.opcodes.len(), 3);
     assert_eq!(p.consts.len(), 1);
     assert_eq!(
         p.opcodes,
         [
-            Op::Const { idx: 0 },
-            Op::Const { idx: 0 },
-            Op::Binary {
+            Const { idx: 0 },
+            Const { idx: 0 },
+            Binary {
                 op: crate::ast::BinOpKind::Add
             }
         ]
@@ -101,18 +99,17 @@ fn simple_add_sub() -> Result<()> {
     let script = parse("42 + 43 - 44")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.opcodes.len(), 5);
     assert_eq!(p.consts.len(), 3);
     assert_eq!(
         p.opcodes,
         [
-            Op::Const { idx: 0 },
-            Op::Const { idx: 1 },
-            Op::Binary {
+            Const { idx: 0 },
+            Const { idx: 1 },
+            Binary {
                 op: crate::ast::BinOpKind::Add
             },
-            Op::Const { idx: 2 },
-            Op::Binary {
+            Const { idx: 2 },
+            Binary {
                 op: crate::ast::BinOpKind::Sub
             }
         ]
@@ -129,14 +126,16 @@ fn logical_and() -> Result<()> {
     let script = parse("true and false")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.opcodes.len(), 3);
     assert_eq!(p.consts.len(), 2);
     assert_eq!(
         p.opcodes,
         [
-            Op::Const { idx: 0 },
-            Op::JumpFalse { dst: 2 },
-            Op::Const { idx: 1 }
+            Const { idx: 0 },
+            LoadRB,
+            JumpFalse { dst: 5 },
+            Const { idx: 1 },
+            LoadRB,
+            StoreRB
         ]
     );
     assert_eq!(run(&p)?, false);
@@ -150,14 +149,17 @@ fn logical_or() -> Result<()> {
     let script = parse("true or false")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.opcodes.len(), 3);
+    println!("{p}");
     assert_eq!(p.consts.len(), 2);
     assert_eq!(
         p.opcodes,
         [
-            Op::Const { idx: 0 },
-            Op::JumpTrue { dst: 2 },
-            Op::Const { idx: 1 }
+            Const { idx: 0 },
+            LoadRB,
+            JumpTrue { dst: 5 },
+            Const { idx: 1 },
+            LoadRB,
+            StoreRB,
         ]
     );
     assert_eq!(run(&p)?, true);
@@ -171,13 +173,12 @@ fn logical_not() -> Result<()> {
     let script = parse("not true")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.opcodes.len(), 2);
     assert_eq!(p.consts.len(), 1);
     assert_eq!(
         p.opcodes,
         [
-            Op::Const { idx: 0 },
-            Op::Unary {
+            Const { idx: 0 },
+            Unary {
                 op: UnaryOpKind::Not
             }
         ]
@@ -193,14 +194,13 @@ fn simple_eq() -> Result<()> {
     let script = parse("42 == 42")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.opcodes.len(), 3);
     assert_eq!(p.consts.len(), 1);
     assert_eq!(
         p.opcodes,
         [
-            Op::Const { idx: 0 },
-            Op::Const { idx: 0 },
-            Op::Binary {
+            Const { idx: 0 },
+            Const { idx: 0 },
+            Binary {
                 op: crate::ast::BinOpKind::Eq
             }
         ]
@@ -220,18 +220,18 @@ fn patch_insert() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Record { size: 0 },
-            Op::Begin,
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::TestRecortPresent,
-            Op::JumpFalse { dst: 7 },
-            Op::Const { idx: 1 },
-            Op::Error,
-            Op::Pop,
-            Op::Const { idx: 2 },
-            Op::RecordSet,
-            Op::End,
+            StoreV1,
+            Record { size: 0 },
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            TestRecortPresent,
+            JumpFalse { dst: 9 },
+            Const { idx: 1 },
+            Error,
+            Const { idx: 2 },
+            RecordSet,
+            SwapV1,
         ]
     );
 
@@ -255,22 +255,22 @@ fn patch_insert_error() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::Const { idx: 1 },
-            Op::String { size: 1 },
-            Op::Record { size: 1 },
-            Op::Begin,
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::TestRecortPresent,
-            Op::JumpFalse { dst: 11 },
-            Op::Const { idx: 2 },
-            Op::Error,
-            Op::Pop,
-            Op::Const { idx: 3 },
-            Op::RecordSet,
-            Op::End,
+            StoreV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Record { size: 1 },
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            TestRecortPresent,
+            JumpFalse { dst: 13 },
+            Const { idx: 2 },
+            Error,
+            Const { idx: 3 },
+            RecordSet,
+            SwapV1,
         ]
     );
 
@@ -289,20 +289,22 @@ fn patch_update() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::Const { idx: 1 },
-            Op::String { size: 1 },
-            Op::Record { size: 1 },
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::TestRecortPresent,
-            Op::JumpTrue { dst: 10 },
-            Op::Const { idx: 2 },
-            Op::Error,
-            Op::Pop,
-            Op::Const { idx: 3 },
-            Op::RecordSet,
+            StoreV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Record { size: 1 },
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            TestRecortPresent,
+            JumpTrue { dst: 13 },
+            Const { idx: 2 },
+            Error,
+            Const { idx: 3 },
+            RecordSet,
+            SwapV1,
         ]
     );
 
@@ -326,16 +328,18 @@ fn patch_update_error() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Record { size: 0 },
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::TestRecortPresent,
-            Op::JumpTrue { dst: 6 },
-            Op::Const { idx: 1 },
-            Op::Error,
-            Op::Pop,
-            Op::Const { idx: 2 },
-            Op::RecordSet,
+            StoreV1,
+            Record { size: 0 },
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            TestRecortPresent,
+            JumpTrue { dst: 9 },
+            Const { idx: 1 },
+            Error,
+            Const { idx: 2 },
+            RecordSet,
+            SwapV1,
         ]
     );
 
@@ -354,15 +358,18 @@ fn patch_upsert_1() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::Const { idx: 1 },
-            Op::String { size: 1 },
-            Op::Record { size: 1 },
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::Const { idx: 2 },
-            Op::RecordSet,
+            StoreV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Record { size: 1 },
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 2 },
+            RecordSet,
+            SwapV1,
         ]
     );
 
@@ -386,11 +393,14 @@ fn patch_upsert_2() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Record { size: 0 },
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::Const { idx: 1 },
-            Op::RecordSet,
+            StoreV1,
+            Record { size: 0 },
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            RecordSet,
+            SwapV1,
         ]
     );
 
@@ -417,25 +427,30 @@ fn patch_patch_patch() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::Const { idx: 1 },
-            Op::String { size: 1 },
-            Op::Record { size: 1 },
-            Op::Const { idx: 1 },
-            Op::String { size: 1 },
-            Op::Const { idx: 2 },
-            Op::String { size: 1 },
-            Op::RecordSet,
-            Op::Const { idx: 2 },
-            Op::String { size: 1 },
-            Op::TestRecortPresent,
-            Op::JumpFalse { dst: 15 },
-            Op::Const { idx: 3 },
-            Op::Error,
-            Op::Pop,
-            Op::Const { idx: 4 },
-            Op::RecordSet,
+            StoreV1,
+            StoreV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Record { size: 1 },
+            LoadV1,
+            Const { idx: 1 },
+            String { size: 1 },
+            Const { idx: 2 },
+            String { size: 1 },
+            RecordSet,
+            SwapV1,
+            LoadV1,
+            Const { idx: 2 },
+            String { size: 1 },
+            TestRecortPresent,
+            JumpFalse { dst: 21 },
+            Const { idx: 3 },
+            Error,
+            Const { idx: 4 },
+            RecordSet,
+            SwapV1,
         ]
     );
 
@@ -457,15 +472,16 @@ fn array_index_fast() -> Result<()> {
     let script = parse("[1,2,3][1]")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.consts.len(), 3);
+    assert_eq!(p.consts.len(), 4);
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::Const { idx: 1 },
-            Op::Const { idx: 2 },
-            Op::Array { size: 3 },
-            Op::IndexFast { idx: 1 },
+            Const { idx: 0 },
+            Const { idx: 1 },
+            Const { idx: 2 },
+            Const { idx: 3 },
+            Array { size: 3 },
+            IndexFast { idx: 1 },
         ]
     );
 
@@ -480,18 +496,19 @@ fn array_index() -> Result<()> {
     let script = parse("[1,2,3][1+1]")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.consts.len(), 3);
+    assert_eq!(p.consts.len(), 4);
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::Const { idx: 1 },
-            Op::Const { idx: 2 },
-            Op::Array { size: 3 },
-            Op::Const { idx: 0 },
-            Op::Const { idx: 0 },
-            Op::Binary { op: BinOpKind::Add },
-            Op::Get,
+            Const { idx: 0 },
+            Const { idx: 1 },
+            Const { idx: 2 },
+            Const { idx: 3 },
+            Array { size: 3 },
+            Const { idx: 0 },
+            Const { idx: 0 },
+            Binary { op: BinOpKind::Add },
+            Get,
         ]
     );
 
@@ -510,12 +527,12 @@ fn record_key() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::Const { idx: 1 },
-            Op::String { size: 1 },
-            Op::Record { size: 1 },
-            Op::GetKey { key: 0 },
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Record { size: 1 },
+            GetKey { key: 0 },
         ]
     );
 
@@ -534,14 +551,14 @@ fn record_path() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::Const { idx: 1 },
-            Op::String { size: 1 },
-            Op::Record { size: 1 },
-            Op::Const { idx: 0 },
-            Op::String { size: 1 },
-            Op::Get,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Record { size: 1 },
+            Const { idx: 0 },
+            String { size: 1 },
+            Get,
         ]
     );
 
@@ -556,17 +573,18 @@ fn array_range() -> Result<()> {
     let script = parse("[1,2,3][0:2]")?;
     let p = compiler.compile(script)?;
 
-    assert_eq!(p.consts.len(), 4);
+    assert_eq!(p.consts.len(), 5);
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::Const { idx: 1 },
-            Op::Const { idx: 2 },
-            Op::Array { size: 3 },
-            Op::Const { idx: 3 },
-            Op::Const { idx: 1 },
-            Op::Range
+            Const { idx: 0 },
+            Const { idx: 1 },
+            Const { idx: 2 },
+            Const { idx: 3 },
+            Array { size: 3 },
+            Const { idx: 4 },
+            Const { idx: 1 },
+            Range
         ]
     );
 
@@ -584,7 +602,7 @@ fn event_key() -> Result<()> {
     let p = compiler.compile(script)?;
 
     assert_eq!(p.consts.len(), 0);
-    assert_eq!(p.opcodes, &[Op::LoadEvent, Op::GetKey { key: 0 },]);
+    assert_eq!(p.opcodes, &[LoadEvent, GetKey { key: 0 },]);
 
     assert_eq!(run(&p)?, 42);
     Ok(())
@@ -600,7 +618,7 @@ fn event_nested() -> Result<()> {
     assert_eq!(p.consts.len(), 0);
     assert_eq!(
         p.opcodes,
-        &[Op::LoadEvent, Op::GetKey { key: 0 }, Op::GetKey { key: 1 }]
+        &[LoadEvent, GetKey { key: 0 }, GetKey { key: 1 }]
     );
 
     assert_eq!(run(&p)?, 1);
@@ -617,12 +635,7 @@ fn event_nested_index() -> Result<()> {
     assert_eq!(p.consts.len(), 0);
     assert_eq!(
         p.opcodes,
-        &[
-            Op::LoadEvent,
-            Op::GetKey { key: 5 },
-            Op::Const { idx: 0 },
-            Op::Get,
-        ]
+        &[LoadEvent, GetKey { key: 0 }, IndexFast { idx: 1 },]
     );
 
     assert_eq!(run(&p)?, 2);
@@ -641,9 +654,9 @@ fn test_local() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::Const { idx: 0 },
-            Op::StoreLocal { idx: 0 },
-            Op::LoadLocal { idx: 0 },
+            Const { idx: 0 },
+            StoreLocal { idx: 0 },
+            LoadLocal { idx: 0 },
         ]
     );
 
@@ -663,13 +676,88 @@ fn test_local_event() -> Result<()> {
     assert_eq!(
         p.opcodes,
         &[
-            Op::LoadEvent,
-            Op::StoreLocal { idx: 0 },
-            Op::LoadLocal { idx: 0 },
-            Op::GetKey { key: 0 },
+            LoadEvent,
+            StoreLocal { idx: 0 },
+            LoadLocal { idx: 0 },
+            GetKey { key: 0 },
         ]
     );
 
     assert_eq!(run(&p)?, 42);
+    Ok(())
+}
+
+#[test]
+fn test_match_if_else() -> Result<()> {
+    let mut compiler: Compiler = Compiler::new();
+
+    let script = parse("match event.int of case 42 => 42 case _ => 0 end")?;
+    let p = compiler.compile(script)?;
+
+    println!("{p}");
+    assert_eq!(p.consts.len(), 2);
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            LoadEvent,
+            GetKey { key: 0 },
+            LoadV1,
+            CopyV1,
+            Const { idx: 0 },
+            Binary { op: BinOpKind::Eq },
+            LoadRB,
+            JumpFalse { dst: 11 },
+            Const { idx: 0 },
+            Jump { dst: 12 },
+            Const { idx: 1 },
+            LoadV1,
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(run(&p)?, 42);
+    Ok(())
+}
+
+#[test]
+fn test_match_record_type() -> Result<()> {
+    use BinOpKind::Eq;
+    let mut compiler: Compiler = Compiler::new();
+
+    let script =
+        parse("match event.object of case 42 => 42 case %{} => \"record\" case _ => 0 end")?;
+    let p = compiler.compile(script)?;
+
+    println!("{p}");
+    assert_eq!(p.consts.len(), 3);
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            LoadEvent,
+            GetKey { key: 0 },
+            LoadV1,
+            CopyV1,
+            Const { idx: 0 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 11 },
+            Const { idx: 0 },
+            Jump { dst: 19 },
+            CopyV1,
+            TestIsRecord,
+            JumpFalse { dst: 14 },
+            JumpFalse { dst: 18 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Jump { dst: 19 },
+            Const { idx: 2 },
+            LoadV1,
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(run(&p)?, "record");
     Ok(())
 }
