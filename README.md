@@ -110,7 +110,7 @@ We publish our images with a set of different tags as explained below
 
 ### Building the Docker Image
 
-Tremor runs in a docker image. If you wish to build a local image, clone this repository, and either run `make image` or run `docker-compose build`. Both will create an image called `tremorproject/tremor:latest`.
+Tremor runs in a docker image. If you wish to build a local image, clone this repository, and either run `make image` or run `docker compose build`. Both will create an image called `tremorproject/tremor:latest`.
 
 Note that since the image is building tremor in release mode it requires some serious resources. We recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
 

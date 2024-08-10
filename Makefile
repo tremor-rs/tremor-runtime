@@ -43,12 +43,12 @@ help:
 ###############################################################################
 
 image:
-	docker-compose build
+	docker compose build
 
 demo: image
-	-docker-compose -f demo/demo.yaml rm -fsv
-	-docker-compose -f demo/demo.yaml up
-	-docker-compose -f demo/demo.yaml rm -fsv
+	-docker compose -f demo/demo.yaml rm -fsv
+	-docker compose -f demo/demo.yaml up
+	-docker compose -f demo/demo.yaml rm -fsv
 
 it-clean:
 	-find tremor-cli/tests -name '*.log' | xargs rm
