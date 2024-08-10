@@ -34,8 +34,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Print docker-compose version
-        run: docker-compose --version
+      - name: Print docker compose version
+        run: docker compose --version
 
       - name: run ${{ matrix.kind }} tests
         run: cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test --timeout 300 ${{ matrix.kind }} tremor-cli/tests --excludes tcp-reuseport
