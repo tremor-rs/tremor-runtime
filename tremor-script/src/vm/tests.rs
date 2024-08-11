@@ -2,8 +2,11 @@ use tremor_value::literal;
 
 use super::{Op::*, *};
 use crate::{
-    arena::Arena, ast::Helper, lexer::Lexer, parser::g::ScriptParser, registry, AggrRegistry,
-    Compiler,
+    arena::Arena,
+    ast::{BinOpKind, Helper, UnaryOpKind},
+    lexer::Lexer,
+    parser::g::ScriptParser,
+    registry, AggrRegistry, Compiler,
 };
 
 fn compile(src: &str) -> Result<Program<'static>> {
@@ -214,7 +217,7 @@ fn patch_insert() -> Result<()> {
 }
 
 #[test]
-fn patch_default() -> Result<()> {
+fn patch_default_key() -> Result<()> {
     let p = compile(r#"patch {} of  default "foo" => 42 end"#)?;
 
     assert_eq!(
@@ -238,6 +241,62 @@ fn patch_default() -> Result<()> {
         run(&p)?,
         literal!({
             "foo": 42
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn patch_default() -> Result<()> {
+    let p = compile(
+        r#"patch {"snot": 42} of  default  => {"snot": 23, "badger": 23, "cake": "cookie"} end"#,
+    )?;
+
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            Const { idx: 2 },
+            Record { size: 1 },
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 3 },
+            Const { idx: 4 },
+            String { size: 1 },
+            Const { idx: 3 },
+            Const { idx: 5 },
+            String { size: 1 },
+            Const { idx: 6 },
+            String { size: 1 },
+            Const { idx: 2 },
+            Record { size: 3 },
+            SwapV1,
+            TestRecordIsEmpty,
+            SwapV1,
+            JumpTrue { dst: 32 },
+            RecordPop,
+            TestRecortPresent,
+            JumpTrue { dst: 29 },
+            Swap,
+            RecordSet,
+            Jump { dst: 19 },
+            Pop,
+            Pop,
+            Jump { dst: 19 },
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(
+        run(&p)?,
+        literal!({
+            "snot": 42,
+            "badger": 23,
+            "cake": "cookie",
         })
     );
     Ok(())

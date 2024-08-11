@@ -1,10 +1,10 @@
 mod impls;
 
 use crate::{ast::Script, errors::Result, NodeMeta};
-use std::{collections::HashMap, mem};
+use std::{collections::HashMap, fmt::Display, mem};
 use tremor_value::Value;
 
-use super::{Op, Program};
+use super::Op;
 
 #[derive(Debug)]
 /// A compiler for tremor script
@@ -149,5 +149,62 @@ impl<'script> Compiler<'script> {
 impl<'script> Default for Compiler<'script> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Default, Eq)]
+/// A compiler for tremor script
+pub struct Program<'script> {
+    pub(crate) opcodes: Vec<Op>,
+    pub(crate) meta: Vec<NodeMeta>,
+    pub(crate) jump_table: HashMap<usize, usize>,
+    pub(crate) consts: Vec<Value<'script>>,
+    pub(crate) keys: Vec<tremor_value::KnownKey<'script>>,
+    pub(crate) max_locals: usize,
+}
+
+impl Display for Program<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (idx, op) in self.opcodes.iter().enumerate() {
+            if let Some(dst) = self.jump_table.get(&idx).copied() {
+                writeln!(f, "JMP<{dst:03}>")?;
+            }
+            match op {
+                Op::JumpTrue { dst } => writeln!(
+                    f,
+                    "          {idx:04}: {:30} JMP<{:03}>",
+                    "jump_true",
+                    self.jump_table
+                        .get(&(*dst as usize))
+                        .copied()
+                        .unwrap_or_default()
+                )?,
+                Op::JumpFalse { dst } => writeln!(
+                    f,
+                    "          {idx:04}: {:30} JMP<{:03}>",
+                    "jump_false",
+                    self.jump_table
+                        .get(&(*dst as usize))
+                        .copied()
+                        .unwrap_or_default()
+                )?,
+                Op::Jump { dst } => writeln!(
+                    f,
+                    "          {idx:04}: {:30} JMP<{:03}>",
+                    "jump",
+                    self.jump_table
+                        .get(&(*dst as usize))
+                        .copied()
+                        .unwrap_or_default()
+                )?,
+                _ => writeln!(f, "          {idx:04}: {op}")?,
+            }
+        }
+        for (i, dst) in &self.jump_table {
+            if *i > self.opcodes.len() {
+                writeln!(f, "JMP<{dst:03}>")?;
+            }
+        }
+        Ok(())
     }
 }

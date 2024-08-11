@@ -1,5 +1,6 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, mem};
 
+use compiler::Program;
 use simd_json::{prelude::*, ValueBuilder};
 use tremor_value::Value;
 
@@ -7,7 +8,6 @@ use crate::{
     ast::{
         binary::write_bits,
         raw::{BytesDataType, Endian},
-        BinOpKind, UnaryOpKind,
     },
     errors::{error_generic, Result},
     interpreter::{exec_binary, exec_unary, merge_values},
@@ -16,249 +16,8 @@ use crate::{
 };
 
 pub(super) mod compiler;
-
-#[derive(Debug, PartialEq, Copy, Clone, Default, Eq)]
-pub(crate) enum Op {
-    /// do absolutely nothing
-    #[default]
-    Nop,
-    /// take the top most value from the stack and delete it
-    Pop,
-    /// swap the top two values on the stack
-    Swap,
-    /// duplicate the top of the stack
-    #[allow(dead_code)]
-    Duplicate,
-    /// Load V1, pops the stack and stores the value in V1
-    LoadV1,
-    /// Stores the value in V1 on the stack and sets it to null
-    StoreV1,
-    /// Swaps the value in V1 with the top of the stack
-    SwapV1,
-    /// Copies the content of V1 to the top of the stack
-    CopyV1,
-    /// Load boolean register from the top of the stack
-    LoadRB,
-    /// Store boolean register to the top of the stack
-    #[allow(dead_code)]
-    StoreRB,
-    /// Puts the event on the stack
-    LoadEvent,
-    /// Takes the top of the stack and stores it in the event
-    StoreEvent {
-        elements: u16,
-    },
-    /// puts a variable on the stack
-    LoadLocal {
-        idx: u32,
-    },
-    /// stores a variable from the stack
-    StoreLocal {
-        elements: u16,
-        idx: u32,
-    },
-    /// emits an error
-    Error,
-    /// emits the top of the stack
-    Emit {
-        dflt: bool,
-    },
-    /// drops the event
-    Drop,
-    /// jumps to the given offset if the top of the stack is true does not op the stack
-    JumpTrue {
-        dst: u32,
-    },
-    /// jumps to the given offset if the top of the stack is true does not op the stack
-    JumpFalse {
-        dst: u32,
-    },
-    /// jumps to the given offset if the top of the stack is true does not op the stack
-    Jump {
-        dst: u32,
-    },
-    Const {
-        idx: u32,
-    },
-
-    // Values
-    #[allow(dead_code)]
-    True,
-    #[allow(dead_code)]
-    False,
-    Null,
-    Record {
-        size: u32,
-    },
-    Array {
-        size: u32,
-    },
-    String {
-        size: u32,
-    },
-    Bytes {
-        size: u32,
-    },
-    // Logical XOP
-    Xor,
-
-    Binary {
-        op: BinOpKind,
-    },
-    Unary {
-        op: UnaryOpKind,
-    },
-
-    GetKey {
-        key: u32,
-    },
-    Get,
-    Index,
-    IndexFast {
-        idx: u32,
-    },
-    Range,
-    RangeFast {
-        start: u16,
-        end: u16,
-    },
-
-    // Tests
-    TestRecortPresent,
-    TestIsU64,
-    TestIsI64,
-    TestIsBytes,
-
-    // Patch
-    RecordSet,
-    RecordRemove,
-    RecordGet,
-    // Merge
-    RecordMerge,
-    TestIsRecord,
-    TestIsArray,
-    RecordMergeKey,
-}
-
-impl Display for Op {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Op::Nop => write!(f, "nop"),
-            Op::Pop => write!(f, "pop"),
-            Op::Swap => write!(f, "swap"),
-            Op::Duplicate => write!(f, "duplicate"),
-            Op::Error => write!(f, "error"),
-
-            Op::LoadV1 => write!(f, "{:30} V1", "load_reg"),
-            Op::StoreV1 => write!(f, "{:30} V1", "store_reg"),
-            Op::SwapV1 => write!(f, "{:30} V1", "swap_reg"),
-            Op::CopyV1 => write!(f, "{:30} V1", "copy_reg"),
-
-            Op::LoadRB => write!(f, "{:30} B1", "load_reg"),
-            Op::StoreRB => write!(f, "{:30} B1", "store_reg"),
-
-            Op::LoadEvent => write!(f, "laod_event"),
-            Op::StoreEvent { elements } => write!(f, "{:30} {elements}", "store_event"),
-            Op::LoadLocal { idx } => write!(f, "{:30} {idx:10}", "load_local",),
-            Op::StoreLocal { elements, idx } => {
-                write!(f, "{:30} {idx:10} {elements}", "store_local")
-            }
-
-            Op::Emit { dflt } => write!(f, "{:30} {dflt}", "emit"),
-            Op::Drop => write!(f, "drop"),
-            Op::JumpTrue { dst } => write!(f, "{:30} {}", "jump_true", dst),
-            Op::JumpFalse { dst } => write!(f, "{:30} {}", "jump_false", dst),
-            Op::Jump { dst } => write!(f, "{:30} {}", "jump", dst),
-            Op::True => write!(f, "true"),
-            Op::False => write!(f, "false"),
-            Op::Null => write!(f, "null"),
-            Op::Const { idx } => write!(f, "{:30} {}", "const", idx),
-            Op::Record { size } => write!(f, "{:30} {}", "record", size),
-            Op::Array { size } => write!(f, "{:30} {}", "array", size),
-            Op::String { size } => write!(f, "{:30} {}", "string", size),
-            Op::Bytes { size } => write!(f, "{:30} {}", "bytes", size),
-            Op::Xor => write!(f, "xor"),
-            Op::Binary { op } => write!(f, "{:30} {:?}", "binary", op),
-            Op::Unary { op } => write!(f, "{:30} {:?}", "unary", op),
-            Op::GetKey { key } => write!(f, "{:30} {}", "lookup_key", key),
-            Op::Get => write!(f, "lookup"),
-            Op::Index => write!(f, "idx"),
-            Op::IndexFast { idx } => write!(f, "{:30} {}", "idx_fast", idx),
-            Op::Range => write!(f, "range"),
-            Op::RangeFast { start, end } => write!(f, "{:30} {} {}", "range_fast", start, end),
-
-            Op::TestRecortPresent => write!(f, "test_record_present"),
-            Op::TestIsU64 => write!(f, "test_is_u64"),
-            Op::TestIsI64 => write!(f, "test_is_i64"),
-            Op::TestIsBytes => write!(f, "test_is_bytes"),
-            Op::TestIsRecord => write!(f, "test_is_record"),
-            Op::TestIsArray => write!(f, "test_is_array"),
-
-            Op::RecordSet => write!(f, "record_set"),
-            Op::RecordRemove => write!(f, "record_remove"),
-            Op::RecordGet => write!(f, "record_get"),
-            Op::RecordMergeKey => write!(f, "record_merge_key"),
-            Op::RecordMerge => write!(f, "record_merge"),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Default, Eq)]
-/// A compiler for tremor script
-pub struct Program<'script> {
-    opcodes: Vec<Op>,
-    meta: Vec<NodeMeta>,
-    jump_table: HashMap<usize, usize>,
-    consts: Vec<Value<'script>>,
-    keys: Vec<tremor_value::KnownKey<'script>>,
-    max_locals: usize,
-}
-
-impl Display for Program<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (idx, op) in self.opcodes.iter().enumerate() {
-            if let Some(dst) = self.jump_table.get(&idx).copied() {
-                writeln!(f, "JMP<{dst:03}>")?;
-            }
-            match op {
-                Op::JumpTrue { dst } => writeln!(
-                    f,
-                    "          {idx:04}: {:30} JMP<{:03}>",
-                    "jump_true",
-                    self.jump_table
-                        .get(&(*dst as usize))
-                        .copied()
-                        .unwrap_or_default()
-                )?,
-                Op::JumpFalse { dst } => writeln!(
-                    f,
-                    "          {idx:04}: {:30} JMP<{:03}>",
-                    "jump_false",
-                    self.jump_table
-                        .get(&(*dst as usize))
-                        .copied()
-                        .unwrap_or_default()
-                )?,
-                Op::Jump { dst } => writeln!(
-                    f,
-                    "          {idx:04}: {:30} JMP<{:03}>",
-                    "jump",
-                    self.jump_table
-                        .get(&(*dst as usize))
-                        .copied()
-                        .unwrap_or_default()
-                )?,
-                _ => writeln!(f, "          {idx:04}: {op}")?,
-            }
-        }
-        for (i, dst) in &self.jump_table {
-            if *i > self.opcodes.len() {
-                writeln!(f, "JMP<{dst:03}>")?;
-            }
-        }
-        Ok(())
-    }
-}
+mod op;
+use op::Op;
 
 #[allow(dead_code)]
 pub struct Vm {}
@@ -273,7 +32,7 @@ struct Registers<'run, 'event> {
 pub struct Scope<'run, 'event> {
     // value: &'run mut Value<'event>,
     program: &'run Program<'event>,
-    registers: &'run mut Registers<'run, 'event>,
+    reg: &'run mut Registers<'run, 'event>,
     locals: &'run mut [Option<Value<'event>>],
 }
 #[allow(dead_code)]
@@ -305,13 +64,14 @@ impl Vm {
         let mut root = Scope {
             program,
             locals: &mut locals,
-            registers: &mut registers,
+            reg: &mut registers,
         };
         let mut pc = 0;
+        let mut cc = 0;
 
         // ensure that the opcodes and meta are the same length
         assert_eq!(program.opcodes.len(), program.meta.len());
-        root.run(event, &mut pc)
+        root.run(event, &mut pc, &mut cc)
     }
 }
 
@@ -321,6 +81,7 @@ impl<'run, 'event> Scope<'run, 'event> {
         &mut self,
         event: &'run mut Value<'event>,
         pc: &mut usize,
+        cc: &mut usize,
     ) -> Result<Return<'event>>
     where
         'prog: 'event,
@@ -328,30 +89,30 @@ impl<'run, 'event> Scope<'run, 'event> {
         let mut stack: Vec<Cow<'_, Value>> = Vec::with_capacity(8);
 
         while *pc < self.program.opcodes.len() {
+            *cc += 1;
             let mid = &self.program.meta[*pc];
             // ALLOW: we test that pc is always in bounds in the while loop above
             match unsafe { *self.program.opcodes.get_unchecked(*pc) } {
                 Op::Nop => continue,
                 // Loads
-                Op::LoadV1 => self.registers.v1 = stack.pop().ok_or("Stack underflow")?,
-                Op::StoreV1 => stack.push(std::mem::take(&mut self.registers.v1)),
-                Op::CopyV1 => stack.push(self.registers.v1.clone()),
-                Op::SwapV1 => std::mem::swap(
-                    &mut self.registers.v1,
-                    stack.last_mut().ok_or("Stack underflow")?,
-                ),
-                Op::LoadRB => {
-                    self.registers.b1 = stack.pop().ok_or("Stack underflow")?.try_as_bool()?;
+                Op::LoadV1 => self.reg.v1 = pop(&mut stack, *pc, *cc)?,
+                Op::StoreV1 => stack.push(mem::take(&mut self.reg.v1)),
+                Op::CopyV1 => stack.push(self.reg.v1.clone()),
+                Op::SwapV1 => {
+                    mem::swap(&mut self.reg.v1, last_mut(&mut stack, *pc, *cc)?);
                 }
-                Op::StoreRB => stack.push(Cow::Owned(Value::from(self.registers.b1))),
+                Op::LoadRB => {
+                    self.reg.b1 = pop(&mut stack, *pc, *cc)?.try_as_bool()?;
+                }
+                Op::StoreRB => stack.push(Cow::Owned(Value::from(self.reg.b1))),
                 Op::LoadEvent => stack.push(Cow::Owned(event.clone())),
                 Op::StoreEvent { elements } => unsafe {
                     let mut tmp = event as *mut Value;
-                    nested_assign(elements, &mut stack, &mut tmp, mid)?;
+                    nested_assign(elements, &mut stack, &mut tmp, mid, *pc, *cc)?;
                     let r: &mut Value = tmp
                         .as_mut()
                         .ok_or("this is nasty, we have a null pointer")?;
-                    *r = stack.pop().ok_or("Stack underflow")?.into_owned();
+                    *r = pop(&mut stack, *pc, *cc)?.into_owned();
                 },
                 Op::LoadLocal { idx } => {
                     let idx = idx as usize;
@@ -363,14 +124,14 @@ impl<'run, 'event> Scope<'run, 'event> {
                     let idx = idx as usize;
                     if let Some(var) = self.locals[idx].as_mut() {
                         let mut tmp = var as *mut Value;
-                        nested_assign(elements, &mut stack, &mut tmp, mid)?;
+                        nested_assign(elements, &mut stack, &mut tmp, mid, *pc, *cc)?;
                         let r: &mut Value = tmp
                             .as_mut()
                             .ok_or("this is nasty, we have a null pointer")?;
 
-                        *r = stack.pop().ok_or("Stack underflow")?.into_owned();
+                        *r = pop(&mut stack, *pc, *cc)?.into_owned();
                     } else if elements == 0 {
-                        self.locals[idx] = Some(stack.pop().ok_or("Stack underflow")?.into_owned());
+                        self.locals[idx] = Some(pop(&mut stack, *pc, *cc)?.into_owned());
                     } else {
                         return Err("nested assign into unset variable".into());
                     }
@@ -381,20 +142,20 @@ impl<'run, 'event> Scope<'run, 'event> {
                 Op::Null => stack.push(Cow::Owned(Value::null())),
                 Op::Const { idx } => stack.push(Cow::Borrowed(&self.program.consts[idx as usize])),
                 Op::Pop => {
-                    stack.pop().ok_or("Stack underflow")?;
+                    pop(&mut stack, *pc, *cc)?;
                 }
                 Op::Swap => {
-                    let a = stack.pop().ok_or("Stack underflow")?;
-                    let b = stack.pop().ok_or("Stack underflow")?;
+                    let a = pop(&mut stack, *pc, *cc)?;
+                    let b = pop(&mut stack, *pc, *cc)?;
                     stack.push(a);
                     stack.push(b);
                 }
                 Op::Duplicate => {
-                    let a = stack.last().ok_or("Stack underflow")?;
+                    let a = last(&stack, *pc, *cc)?;
                     stack.push(a.clone());
                 }
                 Op::Error => {
-                    let msg = stack.pop().ok_or("Stack underflow")?;
+                    let msg = pop(&mut stack, *pc, *cc)?;
                     let mid = mid.clone();
                     return Err(error_generic(
                         &mid.extent(),
@@ -403,15 +164,15 @@ impl<'run, 'event> Scope<'run, 'event> {
                     ));
                 }
                 Op::Emit { dflt: true } => {
-                    let value = stack.pop().ok_or("Stack underflow")?;
+                    let value = pop(&mut stack, *pc, *cc)?;
                     return Ok(Return::Emit {
                         value: value.into_owned(),
                         port: None,
                     });
                 }
                 Op::Emit { dflt: false } => {
-                    let port = stack.pop().ok_or("Stack underflow")?;
-                    let value = stack.pop().ok_or("Stack underflow")?;
+                    let port = pop(&mut stack, *pc, *cc)?;
+                    let value = pop(&mut stack, *pc, *cc)?;
                     return Ok(Return::Emit {
                         value: value.into_owned(),
                         port: Some(port.try_as_str()?.to_string().into()),
@@ -421,13 +182,13 @@ impl<'run, 'event> Scope<'run, 'event> {
                     return Ok(Return::Drop);
                 }
                 Op::JumpTrue { dst } => {
-                    if self.registers.b1 {
+                    if self.reg.b1 {
                         *pc = dst as usize;
                         continue;
                     }
                 }
                 Op::JumpFalse { dst } => {
-                    if !self.registers.b1 {
+                    if !self.reg.b1 {
                         *pc = dst as usize;
                         continue;
                     }
@@ -438,11 +199,11 @@ impl<'run, 'event> Scope<'run, 'event> {
                 }
                 Op::Record { size } => {
                     let size = size as usize;
-                    let mut v = stack.pop().ok_or("Stack underflow")?;
+                    let mut v = pop(&mut stack, *pc, *cc)?;
                     let record = v.to_mut();
                     for _ in 0..size {
-                        let value = stack.pop().ok_or("Stack underflow")?;
-                        let key = stack.pop().ok_or("Stack underflow")?;
+                        let value = pop(&mut stack, *pc, *cc)?;
+                        let key = pop(&mut stack, *pc, *cc)?;
                         // FIXME: we can do better than clone here
                         let key = key.into_owned().try_into_string()?;
                         record.try_insert(key, value.into_owned());
@@ -451,7 +212,7 @@ impl<'run, 'event> Scope<'run, 'event> {
                 }
                 Op::Array { size } => {
                     let size = size as usize;
-                    let mut v = stack.pop().ok_or("Stack underflow")?;
+                    let mut v = pop(&mut stack, *pc, *cc)?;
                     let array = v.to_mut().as_array_mut().ok_or("Not an array")?;
                     array.reserve(size);
                     for value in stack.drain(stack.len() - size..) {
@@ -479,12 +240,12 @@ impl<'run, 'event> Scope<'run, 'event> {
                     let mut pending = 0;
                     let mut buf = 0;
                     for _ in 0..size {
-                        let mut format = stack.pop().ok_or("Stack underflow")?.try_as_i64()?;
+                        let mut format = pop(&mut stack, *pc, *cc)?.try_as_i64()?;
                         let endianess = Endian::from(format as u8 & 0b1);
                         format >>= 1;
                         let data_type = BytesDataType::from(format as u8 & 0b11);
                         let bits = (format >> 2) as u8;
-                        let value = stack.pop().ok_or("Stack underflow")?;
+                        let value = pop(&mut stack, *pc, *cc)?;
                         match data_type {
                             BytesDataType::UnsignedInteger => write_bits(
                                 &mut bytes,
@@ -539,78 +300,82 @@ impl<'run, 'event> Scope<'run, 'event> {
                 //         | BinOpKind::Lte
                 //         | BinOpKind::Lt),
                 // } => {
-                //     let rhs = stack.pop().ok_or("Stack underflow")?;
-                //     let lhs = stack.pop().ok_or("Stack underflow")?;
+                //     let rhs = pop(&mut stack, *pc, *cc)?;
+                //     let lhs = pop(&mut stack, *pc, *cc)?;
                 //     self.registers.b1 = exec_binary(mid, mid, op, &lhs, &rhs)?.try_as_bool()?;
                 // }
                 Op::Binary { op } => {
-                    let rhs = stack.pop().ok_or("Stack underflow")?;
-                    let lhs = stack.pop().ok_or("Stack underflow")?;
+                    let rhs = pop(&mut stack, *pc, *cc)?;
+                    let lhs = pop(&mut stack, *pc, *cc)?;
                     stack.push(exec_binary(mid, mid, op, &lhs, &rhs)?);
                 }
                 Op::Unary { op } => {
-                    let value = stack.pop().ok_or("Stack underflow")?;
+                    let value = pop(&mut stack, *pc, *cc)?;
                     stack.push(exec_unary(mid, mid, op, &value)?);
                 }
                 Op::Xor => {
-                    let rhs = stack.pop().ok_or("Stack underflow")?;
-                    stack.push(Cow::Owned(Value::from(
-                        self.registers.b1 ^ rhs.try_as_bool()?,
-                    )));
+                    let rhs = pop(&mut stack, *pc, *cc)?;
+                    stack.push(Cow::Owned(Value::from(self.reg.b1 ^ rhs.try_as_bool()?)));
                 }
                 // tests
                 Op::TestRecortPresent => {
-                    let key = stack.last().ok_or("Stack underflow")?;
-                    self.registers.b1 = self.registers.v1.contains_key(key.try_as_str()?);
+                    let key = last(&stack, *pc, *cc)?;
+                    self.reg.b1 = self.reg.v1.contains_key(key.try_as_str()?);
                 } // record operations on scope
 
                 Op::TestIsU64 => {
-                    self.registers.b1 = self.registers.v1.is_u64();
+                    self.reg.b1 = self.reg.v1.is_u64();
                 }
                 Op::TestIsI64 => {
-                    self.registers.b1 = self.registers.v1.is_i64();
+                    self.reg.b1 = self.reg.v1.is_i64();
                 }
                 Op::TestIsBytes => {
-                    self.registers.b1 = self.registers.v1.is_bytes();
+                    self.reg.b1 = self.reg.v1.is_bytes();
                 }
                 Op::TestIsRecord => {
-                    self.registers.b1 = self.registers.v1.is_object();
+                    self.reg.b1 = self.reg.v1.is_object();
                 }
                 Op::TestIsArray => {
-                    self.registers.b1 = self.registers.v1.is_array();
+                    self.reg.b1 = self.reg.v1.is_array();
                 }
+                Op::TestArrayIsEmpty => {
+                    self.reg.b1 = self.reg.v1.as_array().map_or(true, Vec::is_empty);
+                }
+                Op::TestRecordIsEmpty => {
+                    self.reg.b1 = self
+                        .reg
+                        .v1
+                        .as_object()
+                        .map_or(true, halfbrown::SizedHashMap::is_empty);
+                }
+
                 // Records
                 Op::RecordSet => {
-                    let value = stack.pop().ok_or("Stack underflow")?;
-                    let key = stack.pop().ok_or("Stack underflow")?;
+                    let value = pop(&mut stack, *pc, *cc)?;
+                    let key = pop(&mut stack, *pc, *cc)?;
                     // FIXME: we can do better than clone here
                     let key = key.into_owned().try_into_string()?;
-                    self.registers.v1.to_mut().insert(key, value.into_owned())?;
+                    self.reg.v1.to_mut().insert(key, value.into_owned())?;
                 }
                 Op::RecordRemove => {
-                    let key = stack.pop().ok_or("Stack underflow")?;
+                    let key = pop(&mut stack, *pc, *cc)?;
                     let key = key.try_as_str()?;
-                    let v = self.registers.v1.to_mut().remove(key)?.unwrap_or_default();
+                    let v = self.reg.v1.to_mut().remove(key)?.unwrap_or_default();
                     stack.push(Cow::Owned(v));
                 }
                 Op::RecordGet => {
-                    let key = stack.pop().ok_or("Stack underflow")?;
+                    let key = pop(&mut stack, *pc, *cc)?;
                     let key = key.try_as_str()?;
                     // FIXME: can we avoid this clone here
-                    let v = self.registers.v1.get(key).ok_or("not a record")?.clone();
+                    let v = self.reg.v1.get(key).ok_or("not a record")?.clone();
                     stack.push(Cow::Owned(v));
                 }
                 Op::RecordMergeKey => {
-                    let key_val = stack.pop().ok_or("Stack underflow")?;
+                    let key_val = pop(&mut stack, *pc, *cc)?;
                     let key = key_val.try_as_str()?;
-                    let arg = stack.pop().ok_or("Stack underflow")?;
+                    let arg = pop(&mut stack, *pc, *cc)?;
 
-                    let obj = self
-                        .registers
-                        .v1
-                        .to_mut()
-                        .as_object_mut()
-                        .ok_or("needs object")?;
+                    let obj = self.reg.v1.to_mut().as_object_mut().ok_or("needs object")?;
 
                     let target = obj
                         .entry(key.to_string().into())
@@ -618,20 +383,31 @@ impl<'run, 'event> Scope<'run, 'event> {
                     merge_values(target, &arg)?;
                 }
                 Op::RecordMerge => {
-                    let arg = stack.pop().ok_or("Stack underflow")?;
-                    merge_values(self.registers.v1.to_mut(), &arg)?;
+                    let arg = pop(&mut stack, *pc, *cc)?;
+                    merge_values(self.reg.v1.to_mut(), &arg)?;
+                }
+                // FIXME: this is kind akeward, we use the stack here instead of the register
+                Op::RecordPop => {
+                    let obj = last_mut(&mut stack, *pc, *cc)?
+                        .to_mut()
+                        .as_object_mut()
+                        .ok_or("needs object")?;
+                    let key = obj.keys().next().ok_or("Empty object")?.clone();
+                    let v = obj.remove(&key).unwrap_or_default();
+                    stack.push(Cow::Owned(v));
+                    stack.push(Cow::Owned(key.into()));
                 }
                 // Path
                 Op::GetKey { key } => {
                     let key = &self.program.keys[key as usize];
-                    let v = stack.pop().ok_or("Stack underflow")?;
+                    let v = pop(&mut stack, *pc, *cc)?;
                     // FIXME: can we avoid this clone here
                     let res = key.lookup(&v).ok_or("Missing Key FIXME")?.clone();
                     stack.push(Cow::Owned(res));
                 }
                 Op::Get => {
-                    let key = stack.pop().ok_or("Stack underflow")?;
-                    let v = stack.pop().ok_or("Stack underflow")?;
+                    let key = pop(&mut stack, *pc, *cc)?;
+                    let v = pop(&mut stack, *pc, *cc)?;
                     let v = if let Some(key) = key.as_str() {
                         v.get(key).ok_or("not a record")?.clone()
                     } else if let Some(idx) = key.as_usize() {
@@ -643,24 +419,24 @@ impl<'run, 'event> Scope<'run, 'event> {
                     stack.push(Cow::Owned(v));
                 }
                 Op::Index => {
-                    let idx = stack.pop().ok_or("Stack underflow")?;
+                    let idx = pop(&mut stack, *pc, *cc)?;
                     let idx = idx.try_as_usize()?;
-                    let v = stack.pop().ok_or("Stack underflow")?;
+                    let v = pop(&mut stack, *pc, *cc)?;
                     let v = v.get_idx(idx).ok_or("Index out of bounds")?.clone();
                     stack.push(Cow::Owned(v));
                 }
                 Op::IndexFast { idx } => {
                     let idx = idx as usize;
-                    let v = stack.pop().ok_or("Stack underflow")?;
+                    let v = pop(&mut stack, *pc, *cc)?;
                     let v = v.get_idx(idx).ok_or("Index out of bounds")?.clone();
                     stack.push(Cow::Owned(v));
                 }
                 Op::Range => {
-                    let end = stack.pop().ok_or("Stack underflow")?;
-                    let start = stack.pop().ok_or("Stack underflow")?;
+                    let end = pop(&mut stack, *pc, *cc)?;
+                    let start = pop(&mut stack, *pc, *cc)?;
                     let end = end.try_as_usize()?;
                     let start = start.try_as_usize()?;
-                    let v = stack.pop().ok_or("Stack underflow")?;
+                    let v = pop(&mut stack, *pc, *cc)?;
                     let v = v
                         .try_as_array()?
                         .get(start..end)
@@ -671,7 +447,7 @@ impl<'run, 'event> Scope<'run, 'event> {
                 Op::RangeFast { start, end } => {
                     let start = start as usize;
                     let end = end as usize;
-                    let v = stack.pop().ok_or("Stack underflow")?;
+                    let v = pop(&mut stack, *pc, *cc)?;
                     let v = v
                         .try_as_array()?
                         .get(start..end)
@@ -683,7 +459,7 @@ impl<'run, 'event> Scope<'run, 'event> {
             *pc += 1;
         }
 
-        let value = stack.pop().ok_or("Stack underflow")?;
+        let value = pop(&mut stack, *pc, *cc)?;
         Ok(Return::Emit {
             value: value.into_owned(),
             port: None,
@@ -699,9 +475,11 @@ unsafe fn nested_assign(
     stack: &mut Vec<Cow<Value>>,
     tmp: &mut *mut Value,
     mid: &NodeMeta,
+    pc: usize,
+    cc: usize,
 ) -> Result<()> {
     for _ in 0..elements {
-        let target = stack.pop().ok_or("Stack underflow")?;
+        let target = pop(stack, pc, cc)?;
         if let Some(idx) = target.as_usize() {
             let array = tmp
                 .as_mut()
@@ -730,6 +508,38 @@ unsafe fn nested_assign(
         }
     }
     Ok(())
+}
+
+#[inline]
+fn pop<'run, 'event>(
+    stack: &mut Vec<Cow<'run, Value<'event>>>,
+    pc: usize,
+    cc: usize,
+) -> Result<Cow<'run, Value<'event>>> {
+    Ok(stack
+        .pop()
+        .ok_or_else(|| format!("Stack underflow @{pc}:{cc}"))?)
+}
+
+#[inline]
+fn last<'call, 'run, 'event>(
+    stack: &'call [Cow<'run, Value<'event>>],
+    pc: usize,
+    cc: usize,
+) -> Result<&'call Cow<'run, Value<'event>>> {
+    Ok(stack
+        .last()
+        .ok_or_else(|| format!("Stack underflow @{pc}:{cc}"))?)
+}
+#[inline]
+fn last_mut<'call, 'run, 'event>(
+    stack: &'call mut [Cow<'run, Value<'event>>],
+    pc: usize,
+    cc: usize,
+) -> Result<&'call mut Cow<'run, Value<'event>>> {
+    Ok(stack
+        .last_mut()
+        .ok_or_else(|| format!("Stack underflow @{pc}:{cc}",))?)
 }
 
 #[cfg(test)]

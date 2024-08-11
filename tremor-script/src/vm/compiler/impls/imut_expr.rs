@@ -180,7 +180,44 @@ impl<'script> Compilable<'script> for PatchOperation<'script> {
                 compiler.emit(Op::RecordSet, &mid);
                 compiler.set_jump_target(dst);
             }
-            PatchOperation::DefaultRecord { expr, mid } => todo!(),
+            PatchOperation::DefaultRecord { expr, mid } => {
+                expr.compile(compiler)?;
+                let empty_dst = compiler.new_jump_point();
+                let start_dst = compiler.new_jump_point();
+                let skip_dst = compiler.new_jump_point();
+
+                // start of the loop
+                compiler.set_jump_target(start_dst);
+                // pull the record from the stack in v1 to test for empy
+                // FIXME: this is not great
+                compiler.emit(Op::SwapV1, &mid);
+                compiler.emit(Op::TestRecordIsEmpty, &mid);
+                // return the original v1
+                compiler.emit(Op::SwapV1, &mid);
+                // if the record is empty we are done
+                compiler.emit(Op::JumpTrue { dst: empty_dst }, &mid);
+                // take the top record
+                compiler.emit(Op::RecordPop, &mid);
+
+                // Test if the key is present
+                compiler.emit(Op::TestRecortPresent, &mid);
+                // if it is we don't need to set r
+                compiler.emit(Op::JumpTrue { dst: skip_dst }, &mid);
+                // we insert the missing key
+                // ne need to swap the elements as RecordSewt expects the value on top of the stack
+                compiler.emit(Op::Swap, &mid);
+                compiler.emit(Op::RecordSet, &mid);
+                // next itteration
+                compiler.emit(Op::Jump { dst: start_dst }, &mid);
+
+                // If we skip we need to pop the key and value
+                compiler.set_jump_target(skip_dst);
+                compiler.emit(Op::Pop, &mid);
+                compiler.emit(Op::Pop, &mid);
+                // next itteration
+                compiler.emit(Op::Jump { dst: start_dst }, &mid);
+                compiler.set_jump_target(empty_dst);
+            }
         }
         Ok(())
     }
