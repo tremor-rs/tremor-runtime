@@ -416,7 +416,15 @@ impl<'script> Compilable<'script> for PatchOperation<'script> {
             }
             PatchOperation::Merge { ident, expr, mid } => todo!(),
             PatchOperation::MergeRecord { expr, mid } => todo!(),
-            PatchOperation::Default { ident, expr, mid } => todo!(),
+            PatchOperation::Default { ident, expr, mid } => {
+                ident.compile(compiler)?;
+                compiler.emit(Op::TestRecortPresent, *mid.clone());
+                let dst = compiler.new_jump_point();
+                compiler.emit(Op::JumpTrue { dst }, *mid.clone());
+                expr.compile(compiler)?;
+                compiler.emit(Op::RecordSet, *mid);
+                compiler.set_jump_target(dst);
+            },
             PatchOperation::DefaultRecord { expr, mid } => todo!(),
         }
         Ok(())

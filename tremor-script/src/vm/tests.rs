@@ -245,6 +245,76 @@ fn patch_insert() -> Result<()> {
 }
 
 #[test]
+fn patch_default() -> Result<()> {
+    let mut compiler: Compiler = Compiler::new();
+
+    let script = parse(r#"patch {} of  default "foo" => 42 end"#)?;
+    let p = compiler.compile(script)?;
+
+    assert_eq!(p.consts.len(), 2);
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            Record { size: 0 },
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            TestRecortPresent,
+            JumpTrue { dst: 9 },
+            Const { idx: 1 },
+            RecordSet,
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(
+        run(&p)?,
+        literal!({
+            "foo": 42
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn patch_default_present() -> Result<()> {
+    let mut compiler: Compiler = Compiler::new();
+
+    let script = parse(r#"patch {"foo":"bar"} of  default "foo" => 42 end"#)?;
+    let p = compiler.compile(script)?;
+
+    assert_eq!(p.consts.len(), 3);
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Record { size: 1 },
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            TestRecortPresent,
+            JumpTrue { dst: 13 },
+            Const { idx: 2 },
+            RecordSet,
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(
+        run(&p)?,
+        literal!({
+            "foo": "bar"
+        })
+    );
+    Ok(())
+}
+
+#[test]
 fn patch_insert_error() -> Result<()> {
     let mut compiler: Compiler = Compiler::new();
 
