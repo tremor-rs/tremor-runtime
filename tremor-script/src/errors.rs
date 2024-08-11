@@ -247,11 +247,11 @@ impl ErrorKind {
             Msg, NoClauseHit, NoConstsAllowed, NoEventReferencesAllowed, NoLocalsAllowed,
             NoObjectError, NotConstant, NotFound, Oops, Overflow, ParseIntError, ParserError,
             PatchKeyExists, PipelineUnknownPort, QueryNodeDuplicateName, QueryNodeReservedName,
-            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
-            TypeError, UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode,
-            UnknownLocal, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
-            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
-            UpdateKeyMissing, Utf8Error, ValueError, WithParamNoArg,
+            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TryFromInt,
+            TypeConflict, TypeError, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnknownLocal, UnrecognizedToken, UnterminatedExtractor,
+            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
+            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError, WithParamNoArg,
         };
         match self {
             NoClauseHit(outer)
@@ -350,6 +350,7 @@ impl ErrorKind {
             | Self::__Nonexhaustive { .. }
             | Utf8Error(_)
             | FromUtf8Error(_)
+            | TryFromInt(_)
             | ValueError(_) => (Some(Span::yolo()), None),
         }
     }
@@ -567,6 +568,7 @@ error_chain! {
         AccessError(value_trait::AccessError);
         CodecError(tremor_codec::Error);
         Common(tremor_common::Error);
+        TryFromInt(std::num::TryFromIntError);
     }
     errors {
         /*

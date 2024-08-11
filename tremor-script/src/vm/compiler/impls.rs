@@ -2,7 +2,10 @@ mod imut_expr;
 mod mut_expr;
 
 use crate::{
-    ast::{ClauseGroup, DefaultCase, Expression, IfElse, Match, Path, PredicateClause, Script},
+    ast::{
+        ClauseGroup, Comprehension, DefaultCase, Expression, IfElse, Match, Path, PredicateClause,
+        Script,
+    },
     errors::Result,
     vm::{
         compiler::{Compilable, Compiler},
@@ -213,10 +216,14 @@ where
 impl<'script> Compilable<'script> for Path<'script> {
     fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
         match self {
-            #[allow(clippy::cast_possible_truncation)]
             Path::Local(p) => {
                 compiler.max_locals = compiler.max_locals.max(p.idx);
-                compiler.emit(Op::LoadLocal { idx: p.idx as u32 }, &p.mid);
+                compiler.emit(
+                    Op::LoadLocal {
+                        idx: u32::try_from(p.idx)?,
+                    },
+                    &p.mid,
+                );
                 for s in p.segments {
                     s.compile(compiler)?;
                 }
@@ -238,5 +245,13 @@ impl<'script> Compilable<'script> for Path<'script> {
             Path::State(_p) => todo!(),
         }
         Ok(())
+    }
+}
+impl<'script, Ex> Compilable<'script> for Comprehension<'script, Ex>
+where
+    Ex: Compilable<'script> + Expression,
+{
+    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
+        todo!()
     }
 }

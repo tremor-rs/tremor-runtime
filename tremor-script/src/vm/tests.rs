@@ -709,7 +709,10 @@ fn test_local() -> Result<()> {
         p.opcodes,
         &[
             Const { idx: 0 },
-            StoreLocal { idx: 0 },
+            StoreLocal {
+                idx: 0,
+                elements: 0
+            },
             LoadLocal { idx: 0 },
         ]
     );
@@ -727,7 +730,10 @@ fn test_local_event() -> Result<()> {
         p.opcodes,
         &[
             LoadEvent,
-            StoreLocal { idx: 0 },
+            StoreLocal {
+                idx: 0,
+                elements: 0
+            },
             LoadLocal { idx: 0 },
             GetKey { key: 0 },
         ]
@@ -800,5 +806,130 @@ fn test_match_record_type() -> Result<()> {
     );
 
     assert_eq!(run(&p)?, "record");
+    Ok(())
+}
+
+#[test]
+fn test_event_assign_nested() -> Result<()> {
+    let p = compile("let event.string = \"snot\"; event.string")?;
+
+    assert_eq!(p.max_locals, 0);
+    assert_eq!(
+        p.opcodes,
+        &[
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            StoreEvent { elements: 1 },
+            LoadEvent,
+            GetKey { key: 0 },
+        ]
+    );
+
+    assert_eq!(run(&p)?, "snot");
+    Ok(())
+}
+
+#[test]
+fn test_event_assign_nested_new() -> Result<()> {
+    let p = compile("let event.badger = \"snot\"; event.badger")?;
+
+    assert_eq!(p.max_locals, 0);
+    assert_eq!(
+        p.opcodes,
+        &[
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            StoreEvent { elements: 1 },
+            LoadEvent,
+            GetKey { key: 0 },
+        ]
+    );
+
+    assert_eq!(run(&p)?, "snot");
+    Ok(())
+}
+
+#[test]
+fn test_event_array_assign_nested() -> Result<()> {
+    let p = compile("let event.array[1] = 42; event.array")?;
+
+    assert_eq!(p.max_locals, 0);
+    assert_eq!(
+        p.opcodes,
+        &[
+            Const { idx: 0 },
+            Const { idx: 1 },
+            Const { idx: 2 },
+            StoreEvent { elements: 2 },
+            LoadEvent,
+            GetKey { key: 0 },
+        ]
+    );
+
+    assert_eq!(run(&p)?, literal!([1, 42, 3]));
+    Ok(())
+}
+
+#[test]
+fn test_local_assign_nested() -> Result<()> {
+    let p = compile("let a = {}; let a.b = 1; a.b")?;
+
+    assert_eq!(p.max_locals, 0);
+    assert_eq!(
+        p.opcodes,
+        &[
+            Const { idx: 0 },
+            Record { size: 0 },
+            StoreLocal {
+                elements: 0,
+                idx: 0,
+            },
+            Const { idx: 1 },
+            Const { idx: 2 },
+            StoreLocal {
+                elements: 1,
+                idx: 0,
+            },
+            LoadLocal { idx: 0 },
+            GetKey { key: 0 },
+        ]
+    );
+
+    assert_eq!(run(&p)?, 1);
+    Ok(())
+}
+
+#[test]
+fn test_local_array_assign_nested() -> Result<()> {
+    let p = compile("let a = [1,2]; let a[0]=-1; a")?;
+
+    assert_eq!(p.max_locals, 0);
+    assert_eq!(
+        p.opcodes,
+        &[
+            Const { idx: 0 },
+            Const { idx: 1 },
+            Const { idx: 2 },
+            Array { size: 2 },
+            StoreLocal {
+                elements: 0,
+                idx: 0,
+            },
+            Const { idx: 0 },
+            Unary {
+                op: UnaryOpKind::Minus,
+            },
+            Const { idx: 3 },
+            StoreLocal {
+                elements: 1,
+                idx: 0,
+            },
+            LoadLocal { idx: 0 },
+        ]
+    );
+
+    assert_eq!(run(&p)?, literal!([-1, 2]));
     Ok(())
 }

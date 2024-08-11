@@ -44,12 +44,17 @@ pub(crate) enum Op {
     StoreRB,
     /// Puts the event on the stack
     LoadEvent,
+    /// Takes the top of the stack and stores it in the event
+    StoreEvent {
+        elements: u16,
+    },
     /// puts a variable on the stack
     LoadLocal {
         idx: u32,
     },
     /// stores a variable from the stack
     StoreLocal {
+        elements: u16,
         idx: u32,
     },
     /// emits an error
@@ -152,8 +157,12 @@ impl Display for Op {
             Op::StoreRB => write!(f, "{:30} B1", "store_reg"),
 
             Op::LoadEvent => write!(f, "laod_event"),
-            Op::LoadLocal { idx } => write!(f, "{:30} {}", "load_local", idx),
-            Op::StoreLocal { idx } => write!(f, "{:30} {}", "store_local", idx),
+            Op::StoreEvent { elements } => write!(f, "{:30} {elements}", "store_event"),
+            Op::LoadLocal { idx } => write!(f, "{:30} {idx:10}", "load_local",),
+            Op::StoreLocal { elements, idx } => {
+                write!(f, "{:30} {idx:10} {elements}", "store_local")
+            }
+
             Op::Emit { dflt } => write!(f, "{:30} {dflt}", "emit"),
             Op::Drop => write!(f, "drop"),
             Op::JumpTrue { dst } => write!(f, "{:30} {}", "jump_true", dst),
@@ -331,17 +340,37 @@ impl<'run, 'event> Scope<'run, 'event> {
                     self.registers.b1 = stack.pop().ok_or("Stack underflow")?.try_as_bool()?;
                 }
                 Op::StoreRB => stack.push(Cow::Owned(Value::from(self.registers.b1))),
-                Op::LoadEvent => stack.push(Cow::Borrowed(event)),
+                Op::LoadEvent => stack.push(Cow::Owned(event.clone())),
+                Op::StoreEvent { elements } => unsafe {
+                    let mut tmp = event as *mut Value;
+                    nested_assign(elements, &mut stack, &mut tmp, mid)?;
+                    let r: &mut Value = tmp
+                        .as_mut()
+                        .ok_or("this is nasty, we have a null pointer")?;
+                    *r = stack.pop().ok_or("Stack underflow")?.into_owned();
+                },
                 Op::LoadLocal { idx } => {
                     let idx = idx as usize;
                     stack.push(Cow::Owned(
                         self.locals[idx].as_ref().ok_or("Local not set")?.clone(),
                     ));
                 }
-                Op::StoreLocal { idx } => {
+                Op::StoreLocal { elements, idx } => unsafe {
                     let idx = idx as usize;
-                    self.locals[idx] = Some(stack.pop().ok_or("Stack underflow")?.into_owned());
-                }
+                    if let Some(var) = self.locals[idx].as_mut() {
+                        let mut tmp = var as *mut Value;
+                        nested_assign(elements, &mut stack, &mut tmp, mid)?;
+                        let r: &mut Value = tmp
+                            .as_mut()
+                            .ok_or("this is nasty, we have a null pointer")?;
+
+                        *r = stack.pop().ok_or("Stack underflow")?.into_owned();
+                    } else if elements == 0 {
+                        self.locals[idx] = Some(stack.pop().ok_or("Stack underflow")?.into_owned());
+                    } else {
+                        return Err("nested assign into unset variable".into());
+                    }
+                },
 
                 Op::True => stack.push(Cow::Owned(Value::const_true())),
                 Op::False => stack.push(Cow::Owned(Value::const_false())),
@@ -387,21 +416,18 @@ impl<'run, 'event> Scope<'run, 'event> {
                 Op::Drop => {
                     return Ok(Return::Drop);
                 }
-                #[allow(clippy::cast_abs_to_unsigned)]
                 Op::JumpTrue { dst } => {
                     if self.registers.b1 {
                         *pc = dst as usize;
                         continue;
                     }
                 }
-                #[allow(clippy::cast_abs_to_unsigned)]
                 Op::JumpFalse { dst } => {
                     if !self.registers.b1 {
                         *pc = dst as usize;
                         continue;
                     }
                 }
-                #[allow(clippy::cast_abs_to_unsigned)]
                 Op::Jump { dst } => {
                     *pc = dst as usize;
                     continue;
@@ -643,6 +669,47 @@ impl<'run, 'event> Scope<'run, 'event> {
             port: None,
         })
     }
+}
+
+/// This function is unsafe since it works with pointers.
+/// It remains safe since we never leak the pointer and just
+/// traverse the nested value a pointer at a time.
+unsafe fn nested_assign(
+    elements: u16,
+    stack: &mut Vec<Cow<Value>>,
+    tmp: &mut *mut Value,
+    mid: &NodeMeta,
+) -> Result<()> {
+    for _ in 0..elements {
+        let target = stack.pop().ok_or("Stack underflow")?;
+        if let Some(idx) = target.as_usize() {
+            let array = tmp
+                .as_mut()
+                .ok_or("this is nasty, we have a null pointer")?
+                .as_array_mut()
+                .ok_or("needs object")?;
+
+            *tmp = std::ptr::from_mut::<Value>(match array.get_mut(idx) {
+                Some(v) => v,
+                None => return Err("Index out of bounds".into()),
+            });
+        } else if let Some(key) = target.as_str() {
+            let map = tmp
+                .as_mut()
+                .ok_or("this is nasty, we have a null pointer")?
+                .as_object_mut()
+                .ok_or("needs object")?;
+            *tmp = std::ptr::from_mut::<Value>(match map.get_mut(key) {
+                Some(v) => v,
+                None => map
+                    .entry(key.to_string().into())
+                    .or_insert_with(|| Value::object_with_capacity(32)),
+            });
+        } else {
+            return Err(error_generic(mid, mid, &"Invalid key type"));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

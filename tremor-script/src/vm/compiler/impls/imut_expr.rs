@@ -4,7 +4,7 @@ use crate::{
     ast::{
         raw::{BytesDataType, Endian},
         BaseExpr, BinOpKind, BooleanBinExpr, BooleanBinOpKind, BytesPart, ClausePreCondition,
-        Field, ImutExpr, List, Merge, Patch, PatchOperation, Pattern, Record, Segment,
+        Field, ImutExpr, Invoke, List, Merge, Patch, PatchOperation, Pattern, Record, Segment,
         StrLitElement, StringLit,
     },
     errors::Result,
@@ -35,14 +35,18 @@ impl<'script> Compilable<'script> for ImutExpr<'script> {
             }
             ImutExpr::Patch(p) => p.compile(compiler)?,
             ImutExpr::Match(m) => m.compile(compiler)?,
-            ImutExpr::Comprehension(_) => todo!(),
+            ImutExpr::Comprehension(c) => c.compile(compiler)?,
             ImutExpr::Merge(m) => m.compile(compiler)?,
             ImutExpr::Path(p) => p.compile(compiler)?,
             ImutExpr::String(s) => s.compile(compiler)?,
-            #[allow(clippy::cast_possible_truncation)]
             ImutExpr::Local { idx, mid } => {
                 compiler.max_locals = compiler.max_locals.max(idx);
-                compiler.emit(Op::LoadLocal { idx: idx as u32 }, &mid);
+                compiler.emit(
+                    Op::LoadLocal {
+                        idx: u32::try_from(idx)?,
+                    },
+                    &mid,
+                );
             }
             ImutExpr::Literal(l) => {
                 compiler.emit_const(l.value, &l.mid);
@@ -51,15 +55,14 @@ impl<'script> Compilable<'script> for ImutExpr<'script> {
                 path: _path,
                 mid: _mid,
             } => todo!(),
-            ImutExpr::Invoke1(_) => todo!(),
-            ImutExpr::Invoke2(_) => todo!(),
-            ImutExpr::Invoke3(_) => todo!(),
-            ImutExpr::Invoke(_) => todo!(),
+            ImutExpr::Invoke1(i) => i.compile(compiler)?,
+            ImutExpr::Invoke2(i) => i.compile(compiler)?,
+            ImutExpr::Invoke3(i) => i.compile(compiler)?,
+            ImutExpr::Invoke(i) => i.compile(compiler)?,
             ImutExpr::InvokeAggr(_) => todo!(),
             ImutExpr::Recur(_) => todo!(),
-            #[allow(clippy::cast_possible_truncation)]
             ImutExpr::Bytes(b) => {
-                let size = b.value.len() as u32;
+                let size = u32::try_from(b.value.len())?;
                 let mid = b.mid;
                 // we modify r1 in the parts so we need to store it
                 compiler.emit(Op::StoreV1, &mid);
@@ -70,9 +73,8 @@ impl<'script> Compilable<'script> for ImutExpr<'script> {
                 // once the bytes are crated we restore it
                 compiler.emit(Op::LoadV1, &mid);
             }
-            #[allow(clippy::cast_possible_truncation)]
             ImutExpr::ArrayAppend(a) => {
-                let size = a.right.len() as u32;
+                let size = u32::try_from(a.right.len())?;
                 for r in a.right {
                     r.compile(compiler)?;
                 }
@@ -93,9 +95,8 @@ impl<'script> Compilable<'script> for Field<'script> {
 }
 
 impl<'script> Compilable<'script> for StringLit<'script> {
-    #[allow(clippy::cast_possible_truncation)]
     fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
-        let size = self.elements.len() as u32;
+        let size = u32::try_from(self.elements.len())?;
         for e in self.elements {
             match e {
                 StrLitElement::Lit(s) => {
@@ -192,7 +193,6 @@ impl<'script> Compilable<'script> for Segment<'script> {
                 expr.compile(compiler)?;
                 compiler.emit(Op::Get, &mid);
             }
-            #[allow(clippy::cast_possible_truncation)]
             Segment::Idx { idx, mid } => {
                 if let Ok(idx) = u32::try_from(idx) {
                     compiler.emit(Op::IndexFast { idx }, &mid);
@@ -201,7 +201,6 @@ impl<'script> Compilable<'script> for Segment<'script> {
                     compiler.emit(Op::Index, &mid);
                 }
             }
-            #[allow(clippy::cast_possible_truncation)]
             Segment::Range { mid, start, end } => {
                 if let Some((start, end)) = u16::try_from(start).ok().zip(u16::try_from(end).ok()) {
                     compiler.emit(Op::RangeFast { start, end }, &mid);
@@ -423,10 +422,9 @@ impl<'script> Compilable<'script> for Merge<'script> {
 }
 
 impl<'script> Compilable<'script> for List<'script> {
-    #[allow(clippy::cast_possible_truncation)]
     fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
         let List { mid, exprs } = self;
-        let size = exprs.len() as u32;
+        let size = u32::try_from(exprs.len())?;
         for e in exprs {
             e.compile(compiler)?;
         }
@@ -436,10 +434,9 @@ impl<'script> Compilable<'script> for List<'script> {
     }
 }
 impl<'script> Compilable<'script> for Record<'script> {
-    #[allow(clippy::cast_possible_truncation)]
     fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
         let Record { mid, base, fields } = self;
-        let size = fields.len() as u32;
+        let size = u32::try_from(fields.len())?;
         for f in fields {
             f.compile(compiler)?;
         }
@@ -447,5 +444,11 @@ impl<'script> Compilable<'script> for Record<'script> {
         compiler.emit(Op::Record { size }, &mid);
 
         Ok(())
+    }
+}
+
+impl<'script> Compilable<'script> for Invoke<'script> {
+    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
+        todo!()
     }
 }
