@@ -129,7 +129,7 @@ pub(crate) enum Op {
     RecordRemove,
     RecordGet,
     // Merge
-    Merge,
+    RecordMerge,
     TestIsRecord,
     TestIsArray,
 }
@@ -185,7 +185,7 @@ impl Display for Op {
             Op::RecordSet => write!(f, "record_set"),
             Op::RecordRemove => write!(f, "record_remove"),
             Op::RecordGet => write!(f, "record_get"),
-            Op::Merge => write!(f, "merge"),
+            Op::RecordMerge => write!(f, "merge"),
         }
     }
 }
@@ -408,7 +408,8 @@ impl<'run, 'event> Scope<'run, 'event> {
                 }
                 Op::Record { size } => {
                     let size = size as usize;
-                    let mut record = Value::object_with_capacity(size);
+                    let mut v = stack.pop().ok_or("Stack underflow")?;
+                    let record = v.to_mut();
                     for _ in 0..size {
                         let value = stack.pop().ok_or("Stack underflow")?;
                         let key = stack.pop().ok_or("Stack underflow")?;
@@ -416,7 +417,7 @@ impl<'run, 'event> Scope<'run, 'event> {
                         let key = key.into_owned().try_into_string()?;
                         record.try_insert(key, value.into_owned());
                     }
-                    stack.push(Cow::Owned(record));
+                    stack.push(v);
                 }
                 Op::Array { size } => {
                     let size = size as usize;
@@ -570,11 +571,9 @@ impl<'run, 'event> Scope<'run, 'event> {
                     stack.push(Cow::Owned(v));
                 }
                 // merge
-                Op::Merge => {
+                Op::RecordMerge => {
                     let arg = stack.pop().ok_or("Stack underflow")?;
-                    let mut target = stack.pop().ok_or("Stack underflow")?;
-                    merge_values(target.to_mut(), &arg)?;
-                    stack.push(target);
+                    merge_values(self.registers.v1.to_mut(), &arg)?;
                 }
                 // Path
                 Op::GetKey { key } => {

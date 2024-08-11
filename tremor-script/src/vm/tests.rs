@@ -2,14 +2,12 @@ use tremor_value::literal;
 
 use super::{Op::*, *};
 use crate::{
-    arena::Arena,
-    ast::{Helper, Script},
-    lexer::Lexer,
-    parser::g::ScriptParser,
-    registry, AggrRegistry, Compiler,
+    arena::Arena, ast::Helper, lexer::Lexer, parser::g::ScriptParser, registry, AggrRegistry,
+    Compiler,
 };
 
-fn parse(src: &str) -> Result<Script<'static>> {
+fn compile(src: &str) -> Result<Program<'static>> {
+    let mut compiler: Compiler = Compiler::new();
     let reg = registry::registry();
     let fake_aggr_reg = AggrRegistry::default();
     let (aid, src) = Arena::insert(src)?;
@@ -22,7 +20,9 @@ fn parse(src: &str) -> Result<Script<'static>> {
     // helper.consts.args = args.clone_static();
     let script = script_raw.up_script(&mut helper)?;
     // Optimizer::new(&helper).walk_script(&mut script)?;
-    Ok(script)
+    let p = compiler.compile(script)?;
+    println!("{p}");
+    Ok(p)
 }
 
 fn run<'v>(p: &Program<'v>) -> Result<Value<'v>> {
@@ -58,12 +58,8 @@ fn op_size() {
 }
 #[test]
 fn simple() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("42")?;
 
-    let script = parse("42")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 1);
     assert_eq!(p.opcodes, [Const { idx: 0 }]);
     assert_eq!(run(&p)?, 42);
     Ok(())
@@ -71,12 +67,8 @@ fn simple() -> Result<()> {
 
 #[test]
 fn simple_add() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("42 + 42")?;
 
-    let script = parse("42 + 42")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 1);
     assert_eq!(
         p.opcodes,
         [
@@ -94,12 +86,8 @@ fn simple_add() -> Result<()> {
 
 #[test]
 fn simple_add_sub() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("42 + 43 - 44")?;
 
-    let script = parse("42 + 43 - 44")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 3);
     assert_eq!(
         p.opcodes,
         [
@@ -121,12 +109,8 @@ fn simple_add_sub() -> Result<()> {
 
 #[test]
 fn logical_and() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("true and false")?;
 
-    let script = parse("true and false")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 2);
     assert_eq!(
         p.opcodes,
         [
@@ -144,13 +128,9 @@ fn logical_and() -> Result<()> {
 
 #[test]
 fn logical_or() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
-
-    let script = parse("true or false")?;
-    let p = compiler.compile(script)?;
+    let p = compile("true or false")?;
 
     println!("{p}");
-    assert_eq!(p.consts.len(), 2);
     assert_eq!(
         p.opcodes,
         [
@@ -168,12 +148,8 @@ fn logical_or() -> Result<()> {
 
 #[test]
 fn logical_not() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("not true")?;
 
-    let script = parse("not true")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 1);
     assert_eq!(
         p.opcodes,
         [
@@ -189,12 +165,8 @@ fn logical_not() -> Result<()> {
 
 #[test]
 fn simple_eq() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("42 == 42")?;
 
-    let script = parse("42 == 42")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 1);
     assert_eq!(
         p.opcodes,
         [
@@ -211,25 +183,22 @@ fn simple_eq() -> Result<()> {
 
 #[test]
 fn patch_insert() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"patch {} of  insert "foo" => 42 end"#)?;
 
-    let script = parse(r#"patch {} of  insert "foo" => 42 end"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 3);
     assert_eq!(
         p.opcodes,
         &[
             StoreV1,
+            Const { idx: 0 },
             Record { size: 0 },
             LoadV1,
-            Const { idx: 0 },
+            Const { idx: 1 },
             String { size: 1 },
             TestRecortPresent,
-            JumpFalse { dst: 9 },
-            Const { idx: 1 },
-            Error,
+            JumpFalse { dst: 10 },
             Const { idx: 2 },
+            Error,
+            Const { idx: 3 },
             RecordSet,
             SwapV1,
         ]
@@ -246,23 +215,20 @@ fn patch_insert() -> Result<()> {
 
 #[test]
 fn patch_default() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"patch {} of  default "foo" => 42 end"#)?;
 
-    let script = parse(r#"patch {} of  default "foo" => 42 end"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 2);
     assert_eq!(
         p.opcodes,
         &[
             StoreV1,
+            Const { idx: 0 },
             Record { size: 0 },
             LoadV1,
-            Const { idx: 0 },
+            Const { idx: 1 },
             String { size: 1 },
             TestRecortPresent,
-            JumpTrue { dst: 9 },
-            Const { idx: 1 },
+            JumpTrue { dst: 10 },
+            Const { idx: 2 },
             RecordSet,
             SwapV1,
         ]
@@ -279,12 +245,8 @@ fn patch_default() -> Result<()> {
 
 #[test]
 fn patch_default_present() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"patch {"foo":"bar"} of  default "foo" => 42 end"#)?;
 
-    let script = parse(r#"patch {"foo":"bar"} of  default "foo" => 42 end"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 3);
     assert_eq!(
         p.opcodes,
         &[
@@ -293,13 +255,14 @@ fn patch_default_present() -> Result<()> {
             String { size: 1 },
             Const { idx: 1 },
             String { size: 1 },
+            Const { idx: 2 },
             Record { size: 1 },
             LoadV1,
             Const { idx: 0 },
             String { size: 1 },
             TestRecortPresent,
-            JumpTrue { dst: 13 },
-            Const { idx: 2 },
+            JumpTrue { dst: 14 },
+            Const { idx: 3 },
             RecordSet,
             SwapV1,
         ]
@@ -316,12 +279,8 @@ fn patch_default_present() -> Result<()> {
 
 #[test]
 fn patch_insert_error() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"patch {"foo":"bar"} of insert "foo" => 42 end"#)?;
 
-    let script = parse(r#"patch {"foo":"bar"} of insert "foo" => 42 end"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 4);
     assert_eq!(
         p.opcodes,
         &[
@@ -330,15 +289,16 @@ fn patch_insert_error() -> Result<()> {
             String { size: 1 },
             Const { idx: 1 },
             String { size: 1 },
+            Const { idx: 2 },
             Record { size: 1 },
             LoadV1,
             Const { idx: 0 },
             String { size: 1 },
             TestRecortPresent,
-            JumpFalse { dst: 13 },
-            Const { idx: 2 },
-            Error,
+            JumpFalse { dst: 14 },
             Const { idx: 3 },
+            Error,
+            Const { idx: 4 },
             RecordSet,
             SwapV1,
         ]
@@ -350,12 +310,8 @@ fn patch_insert_error() -> Result<()> {
 
 #[test]
 fn patch_update() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"patch {"foo":"bar"} of update "foo" => 42 end"#)?;
 
-    let script = parse(r#"patch {"foo":"bar"} of update "foo" => 42 end"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 4);
     assert_eq!(
         p.opcodes,
         &[
@@ -364,15 +320,16 @@ fn patch_update() -> Result<()> {
             String { size: 1 },
             Const { idx: 1 },
             String { size: 1 },
+            Const { idx: 2 },
             Record { size: 1 },
             LoadV1,
             Const { idx: 0 },
             String { size: 1 },
             TestRecortPresent,
-            JumpTrue { dst: 13 },
-            Const { idx: 2 },
-            Error,
+            JumpTrue { dst: 14 },
             Const { idx: 3 },
+            Error,
+            Const { idx: 4 },
             RecordSet,
             SwapV1,
         ]
@@ -389,25 +346,22 @@ fn patch_update() -> Result<()> {
 
 #[test]
 fn patch_update_error() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"patch {} of update "foo" => 42 end"#)?;
 
-    let script = parse(r#"patch {} of update "foo" => 42 end"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 3);
     assert_eq!(
         p.opcodes,
         &[
             StoreV1,
+            Const { idx: 0 },
             Record { size: 0 },
             LoadV1,
-            Const { idx: 0 },
+            Const { idx: 1 },
             String { size: 1 },
             TestRecortPresent,
-            JumpTrue { dst: 9 },
-            Const { idx: 1 },
-            Error,
+            JumpTrue { dst: 10 },
             Const { idx: 2 },
+            Error,
+            Const { idx: 3 },
             RecordSet,
             SwapV1,
         ]
@@ -419,12 +373,8 @@ fn patch_update_error() -> Result<()> {
 
 #[test]
 fn patch_upsert_1() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"patch {"foo":"bar"} of upsert "foo" => 42 end"#)?;
 
-    let script = parse(r#"patch {"foo":"bar"} of upsert "foo" => 42 end"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 3);
     assert_eq!(
         p.opcodes,
         &[
@@ -433,11 +383,12 @@ fn patch_upsert_1() -> Result<()> {
             String { size: 1 },
             Const { idx: 1 },
             String { size: 1 },
+            Const { idx: 2 },
             Record { size: 1 },
             LoadV1,
             Const { idx: 0 },
             String { size: 1 },
-            Const { idx: 2 },
+            Const { idx: 3 },
             RecordSet,
             SwapV1,
         ]
@@ -454,21 +405,18 @@ fn patch_upsert_1() -> Result<()> {
 
 #[test]
 fn patch_upsert_2() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"patch {} of upsert "foo" => 42 end"#)?;
 
-    let script = parse(r#"patch {} of upsert "foo" => 42 end"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 2);
     assert_eq!(
         p.opcodes,
         &[
             StoreV1,
+            Const { idx: 0 },
             Record { size: 0 },
             LoadV1,
-            Const { idx: 0 },
-            String { size: 1 },
             Const { idx: 1 },
+            String { size: 1 },
+            Const { idx: 2 },
             RecordSet,
             SwapV1,
         ]
@@ -485,15 +433,12 @@ fn patch_upsert_2() -> Result<()> {
 
 #[test]
 fn patch_patch_patch() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
-
-    let script = parse(
+    let p = compile(
         r#"patch patch {"foo":"bar"} of upsert "bar" => "baz" end of insert "baz" => 42 end"#,
     )?;
-    let p = compiler.compile(script)?;
 
     println!("{p}");
-    assert_eq!(p.consts.len(), 5);
+
     assert_eq!(
         p.opcodes,
         &[
@@ -503,22 +448,23 @@ fn patch_patch_patch() -> Result<()> {
             String { size: 1 },
             Const { idx: 1 },
             String { size: 1 },
+            Const { idx: 2 },
             Record { size: 1 },
             LoadV1,
             Const { idx: 1 },
             String { size: 1 },
-            Const { idx: 2 },
+            Const { idx: 3 },
             String { size: 1 },
             RecordSet,
             SwapV1,
             LoadV1,
-            Const { idx: 2 },
+            Const { idx: 3 },
             String { size: 1 },
             TestRecortPresent,
-            JumpFalse { dst: 21 },
-            Const { idx: 3 },
-            Error,
+            JumpFalse { dst: 22 },
             Const { idx: 4 },
+            Error,
+            Const { idx: 5 },
             RecordSet,
             SwapV1,
         ]
@@ -536,13 +482,81 @@ fn patch_patch_patch() -> Result<()> {
 }
 
 #[test]
+fn patch_merge() -> Result<()> {
+    let p = compile(r#"patch {"snot":"badger"} of  merge => {"badger":"snot"} end"#)?;
+
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Const { idx: 2 },
+            Record { size: 1 },
+            LoadV1,
+            Const { idx: 1 },
+            String { size: 1 },
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 2 },
+            Record { size: 1 },
+            RecordMerge,
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(
+        run(&p)?,
+        literal!({
+            "snot": "badger",
+            "badger": "snot"
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn merge() -> Result<()> {
+    let p = compile(r#"merge {"snot":"badger"} of {"badger":"snot"} end"#)?;
+
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Const { idx: 2 },
+            Record { size: 1 },
+            LoadV1,
+            Const { idx: 1 },
+            String { size: 1 },
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 2 },
+            Record { size: 1 },
+            RecordMerge,
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(
+        run(&p)?,
+        literal!({
+            "snot": "badger",
+            "badger": "snot"
+        })
+    );
+    Ok(())
+}
+
+#[test]
 fn array_index_fast() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("[1,2,3][1]")?;
 
-    let script = parse("[1,2,3][1]")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 4);
     assert_eq!(
         p.opcodes,
         &[
@@ -561,12 +575,8 @@ fn array_index_fast() -> Result<()> {
 
 #[test]
 fn array_index() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("[1,2,3][1+1]")?;
 
-    let script = parse("[1,2,3][1+1]")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 4);
     assert_eq!(
         p.opcodes,
         &[
@@ -588,12 +598,8 @@ fn array_index() -> Result<()> {
 
 #[test]
 fn record_key() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"{"snot":"badger"}.snot"#)?;
 
-    let script = parse(r#"{"snot":"badger"}.snot"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 2);
     assert_eq!(
         p.opcodes,
         &[
@@ -601,6 +607,7 @@ fn record_key() -> Result<()> {
             String { size: 1 },
             Const { idx: 1 },
             String { size: 1 },
+            Const { idx: 2 },
             Record { size: 1 },
             GetKey { key: 0 },
         ]
@@ -612,12 +619,8 @@ fn record_key() -> Result<()> {
 
 #[test]
 fn record_path() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile(r#"{"snot":"badger"}["snot"]"#)?;
 
-    let script = parse(r#"{"snot":"badger"}["snot"]"#)?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 2);
     assert_eq!(
         p.opcodes,
         &[
@@ -625,6 +628,7 @@ fn record_path() -> Result<()> {
             String { size: 1 },
             Const { idx: 1 },
             String { size: 1 },
+            Const { idx: 2 },
             Record { size: 1 },
             Const { idx: 0 },
             String { size: 1 },
@@ -638,12 +642,8 @@ fn record_path() -> Result<()> {
 
 #[test]
 fn array_range() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("[1,2,3][0:2]")?;
 
-    let script = parse("[1,2,3][0:2]")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 5);
     assert_eq!(
         p.opcodes,
         &[
@@ -666,12 +666,8 @@ fn array_range() -> Result<()> {
 
 #[test]
 fn event_key() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("event.int")?;
 
-    let script = parse("event.int")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 0);
     assert_eq!(p.opcodes, &[LoadEvent, GetKey { key: 0 },]);
 
     assert_eq!(run(&p)?, 42);
@@ -680,12 +676,8 @@ fn event_key() -> Result<()> {
 
 #[test]
 fn event_nested() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("event.object.a")?;
 
-    let script = parse("event.object.a")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 0);
     assert_eq!(
         p.opcodes,
         &[LoadEvent, GetKey { key: 0 }, GetKey { key: 1 }]
@@ -697,12 +689,8 @@ fn event_nested() -> Result<()> {
 
 #[test]
 fn event_nested_index() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("event.array[1]")?;
 
-    let script = parse("event.array[1]")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 0);
     assert_eq!(
         p.opcodes,
         &[LoadEvent, GetKey { key: 0 }, IndexFast { idx: 1 },]
@@ -714,12 +702,8 @@ fn event_nested_index() -> Result<()> {
 
 #[test]
 fn test_local() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("let a = 42; a")?;
 
-    let script = parse("let a = 42; a")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 1);
     assert_eq!(p.max_locals, 0);
     assert_eq!(
         p.opcodes,
@@ -736,12 +720,8 @@ fn test_local() -> Result<()> {
 
 #[test]
 fn test_local_event() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
+    let p = compile("let a = event; a.int")?;
 
-    let script = parse("let a = event; a.int")?;
-    let p = compiler.compile(script)?;
-
-    assert_eq!(p.consts.len(), 0);
     assert_eq!(p.max_locals, 0);
     assert_eq!(
         p.opcodes,
@@ -759,13 +739,9 @@ fn test_local_event() -> Result<()> {
 
 #[test]
 fn test_match_if_else() -> Result<()> {
-    let mut compiler: Compiler = Compiler::new();
-
-    let script = parse("match event.int of case 42 => 42 case _ => 0 end")?;
-    let p = compiler.compile(script)?;
+    let p = compile("match event.int of case 42 => 42 case _ => 0 end")?;
 
     println!("{p}");
-    assert_eq!(p.consts.len(), 2);
     assert_eq!(
         p.opcodes,
         &[
@@ -793,14 +769,9 @@ fn test_match_if_else() -> Result<()> {
 #[test]
 fn test_match_record_type() -> Result<()> {
     use BinOpKind::Eq;
-    let mut compiler: Compiler = Compiler::new();
 
-    let script =
-        parse("match event.object of case 42 => 42 case %{} => \"record\" case _ => 0 end")?;
-    let p = compiler.compile(script)?;
+    let p = compile("match event.object of case 42 => 42 case %{} => \"record\" case _ => 0 end")?;
 
-    println!("{p}");
-    assert_eq!(p.consts.len(), 3);
     assert_eq!(
         p.opcodes,
         &[
