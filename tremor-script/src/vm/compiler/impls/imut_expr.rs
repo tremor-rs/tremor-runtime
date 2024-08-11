@@ -162,7 +162,11 @@ impl<'script> Compilable<'script> for PatchOperation<'script> {
                 compiler.emit(Op::Swap, &mid);
                 compiler.emit(Op::RecordSet, &mid);
             }
-            PatchOperation::Merge { ident, expr, mid } => todo!(),
+            PatchOperation::Merge { ident, expr, mid } => {
+                expr.compile(compiler)?;
+                ident.compile(compiler)?;
+                compiler.emit(Op::RecordMergeKey, &mid);
+            }
             PatchOperation::MergeRecord { expr, mid } => {
                 expr.compile(compiler)?;
                 compiler.emit(Op::RecordMerge, &mid);

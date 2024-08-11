@@ -137,6 +137,7 @@ pub(crate) enum Op {
     RecordMerge,
     TestIsRecord,
     TestIsArray,
+    RecordMergeKey,
 }
 
 impl Display for Op {
@@ -185,16 +186,19 @@ impl Display for Op {
             Op::IndexFast { idx } => write!(f, "{:30} {}", "idx_fast", idx),
             Op::Range => write!(f, "range"),
             Op::RangeFast { start, end } => write!(f, "{:30} {} {}", "range_fast", start, end),
+
             Op::TestRecortPresent => write!(f, "test_record_present"),
             Op::TestIsU64 => write!(f, "test_is_u64"),
             Op::TestIsI64 => write!(f, "test_is_i64"),
             Op::TestIsBytes => write!(f, "test_is_bytes"),
             Op::TestIsRecord => write!(f, "test_is_record"),
             Op::TestIsArray => write!(f, "test_is_array"),
+
             Op::RecordSet => write!(f, "record_set"),
             Op::RecordRemove => write!(f, "record_remove"),
             Op::RecordGet => write!(f, "record_get"),
-            Op::RecordMerge => write!(f, "merge"),
+            Op::RecordMergeKey => write!(f, "record_merge_key"),
+            Op::RecordMerge => write!(f, "record_merge"),
         }
     }
 }
@@ -596,7 +600,23 @@ impl<'run, 'event> Scope<'run, 'event> {
                     let v = self.registers.v1.get(key).ok_or("not a record")?.clone();
                     stack.push(Cow::Owned(v));
                 }
-                // merge
+                Op::RecordMergeKey => {
+                    let key_val = stack.pop().ok_or("Stack underflow")?;
+                    let key = key_val.try_as_str()?;
+                    let arg = stack.pop().ok_or("Stack underflow")?;
+
+                    let obj = self
+                        .registers
+                        .v1
+                        .to_mut()
+                        .as_object_mut()
+                        .ok_or("needs object")?;
+
+                    let target = obj
+                        .entry(key.to_string().into())
+                        .or_insert_with(|| Value::object_with_capacity(32));
+                    merge_values(target, &arg)?;
+                }
                 Op::RecordMerge => {
                     let arg = stack.pop().ok_or("Stack underflow")?;
                     merge_values(self.registers.v1.to_mut(), &arg)?;

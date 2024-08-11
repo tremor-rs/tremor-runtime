@@ -483,7 +483,7 @@ fn patch_patch_patch() -> Result<()> {
 
 #[test]
 fn patch_merge() -> Result<()> {
-    let p = compile(r#"patch {"snot":"badger"} of  merge => {"badger":"snot"} end"#)?;
+    let p = compile(r#"patch {"snot":"badger"} of merge => {"badger":"snot"} end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -512,6 +512,42 @@ fn patch_merge() -> Result<()> {
         literal!({
             "snot": "badger",
             "badger": "snot"
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn patch_merge_key() -> Result<()> {
+    let p = compile(r#"(patch event of merge "object" => {"badger":"snot"} end).object"#)?;
+
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            LoadEvent,
+            LoadV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Const { idx: 2 },
+            Record { size: 1 },
+            Const { idx: 3 },
+            String { size: 1 },
+            RecordMergeKey,
+            SwapV1,
+            GetKey { key: 0 },
+        ]
+    );
+
+    assert_eq!(
+        run(&p)?,
+        literal!({
+            "a": 1,
+            "b": 2,
+            "c": 3,
+            "badger": "snot",
         })
     );
     Ok(())
