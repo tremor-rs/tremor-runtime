@@ -108,7 +108,7 @@ pub(crate) enum Op {
         end: u16,
     },
 
-    // Tests
+    // Tests - does not pop the stack result is stored in the b register
     TestRecortPresent,
     TestIsU64,
     TestIsI64,
@@ -116,6 +116,10 @@ pub(crate) enum Op {
     #[allow(dead_code)]
     TestArrayIsEmpty,
     TestRecordIsEmpty,
+
+    // Inspect - does not pop the stack result is stored on the stack
+    //// returns the lenght of an array, object or 1 for scalar values
+    InspectLen,
 
     // Patch
     RecordSet,
@@ -127,6 +131,8 @@ pub(crate) enum Op {
     TestIsArray,
     RecordMergeKey,
     RecordPop,
+    ArrayPop,
+    ArrayReverse,
 }
 
 impl Display for Op {
@@ -185,12 +191,17 @@ impl Display for Op {
             Op::TestArrayIsEmpty => write!(f, "test_array_is_empty"),
             Op::TestRecordIsEmpty => write!(f, "test_record_is_empty"),
 
+            Op::InspectLen => write!(f, "inspect_len"),
+
             Op::RecordSet => write!(f, "record_set"),
             Op::RecordRemove => write!(f, "record_remove"),
             Op::RecordGet => write!(f, "record_get"),
             Op::RecordMergeKey => write!(f, "record_merge_key"),
             Op::RecordMerge => write!(f, "record_merge"),
+
             Op::RecordPop => write!(f, "record_pop"),
+            Op::ArrayPop => write!(f, "array_pop"),
+            Op::ArrayReverse => write!(f, "array_reverse"),
         }
     }
 }

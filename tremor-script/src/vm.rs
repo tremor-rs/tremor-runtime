@@ -348,6 +348,18 @@ impl<'run, 'event> Scope<'run, 'event> {
                         .as_object()
                         .map_or(true, halfbrown::SizedHashMap::is_empty);
                 }
+                // Inspect
+                Op::InspectLen => {
+                    let v = last(&mut stack, *pc, *cc)?;
+                    let len = if let Some(v) = v.as_array() {
+                        v.len()
+                    } else if let Some(v) = v.as_object() {
+                        v.len()
+                    } else {
+                        return Err("Not an array or object".into());
+                    };
+                    stack.push(Cow::Owned(Value::from(len)));
+                }
 
                 // Records
                 Op::RecordSet => {
@@ -454,6 +466,24 @@ impl<'run, 'event> Scope<'run, 'event> {
                         .ok_or("Index out of bounds")?
                         .to_vec();
                     stack.push(Cow::Owned(v.into()));
+                }
+
+                // Array
+                // FIXME: this is kind akeward, we use the stack here instead of the register
+                Op::ArrayPop => {
+                    let arr = last_mut(&mut stack, *pc, *cc)?
+                        .to_mut()
+                        .as_array_mut()
+                        .ok_or("needs array")?;
+                    let v = arr
+                        .pop()
+                        .ok_or_else(|| error_generic(mid, mid, &"Empty array"))?;
+                    stack.push(Cow::Owned(v));
+                }
+                Op::ArrayReverse => {
+                    let v = last_mut(&mut stack, *pc, *cc)?;
+                    let arr = v.to_mut().as_array_mut().ok_or("needs array")?;
+                    arr.reverse();
                 }
             }
             *pc += 1;

@@ -3,9 +3,9 @@ use tremor_value::Value;
 use crate::{
     ast::{
         raw::{BytesDataType, Endian},
-        BaseExpr, BinOpKind, BooleanBinExpr, BooleanBinOpKind, BytesPart, ClausePreCondition,
-        Field, ImutExpr, Invoke, List, Merge, Patch, PatchOperation, Pattern, Record, Segment,
-        StrLitElement, StringLit,
+        ArrayPredicatePattern, BaseExpr, BinOpKind, BooleanBinExpr, BooleanBinOpKind, BytesPart,
+        ClausePreCondition, Field, ImutExpr, Invoke, List, Merge, Patch, PatchOperation, Pattern,
+        PredicatePattern, Record, Segment, StrLitElement, StringLit,
     },
     errors::Result,
     vm::{
@@ -367,6 +367,17 @@ impl<'script> Compilable<'script> for BytesPart<'script> {
     }
 }
 
+impl<'script> Compilable<'script> for PredicatePattern<'script> {
+    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
+        todo!()
+    }
+}
+impl<'script> Compilable<'script> for ArrayPredicatePattern<'script> {
+    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
+        todo!()
+    }
+}
+
 impl<'script> Compilable<'script> for Pattern<'script> {
     fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
         self.compile_to_b(compiler)
@@ -378,10 +389,11 @@ impl<'script> Compilable<'script> for Pattern<'script> {
                 compiler.emit(Op::TestIsRecord, &r.mid);
                 let dst = compiler.new_jump_point();
                 compiler.emit(Op::JumpFalse { dst }, &r.mid);
-                if r.fields.is_empty() {
-                } else {
-                    todo!()
+
+                for f in r.fields {
+                    f.compile(compiler)?;
                 }
+
                 compiler.set_jump_target(dst);
             }
             Pattern::Array(a) => {
@@ -389,9 +401,9 @@ impl<'script> Compilable<'script> for Pattern<'script> {
                 compiler.emit(Op::TestIsArray, &mid);
                 let dst = compiler.new_jump_point();
                 compiler.emit(Op::JumpFalse { dst }, &mid);
-                if a.exprs.is_empty() {
-                } else {
-                    todo!()
+                for e in a.exprs {
+                    e.compile(compiler)?;
+                    todo!("we need to look at all the array elements :sob:")
                 }
                 compiler.set_jump_target(dst);
             }
@@ -403,7 +415,39 @@ impl<'script> Compilable<'script> for Pattern<'script> {
             }
 
             Pattern::Assign(_) => todo!(),
-            Pattern::Tuple(_) => todo!(),
+            Pattern::Tuple(t) => {
+                let mid = *t.mid;
+                compiler.emit(Op::TestIsArray, &mid);
+                let dst = compiler.new_jump_point();
+                compiler.emit(Op::JumpFalse { dst }, &mid);
+                // copy the item to the stack so we can itterate
+                compiler.emit(Op::CopyV1, &mid);
+                compiler.emit(Op::InspectLen, &mid);
+                compiler.emit_const(t.exprs.len(), &mid);
+
+                if t.open {
+                    compiler.emit(Op::Binary { op: BinOpKind::Gte }, &mid);
+                } else {
+                    compiler.emit(Op::Binary { op: BinOpKind::Eq }, &mid);
+                }
+                let end_and_pop = compiler.new_jump_point();
+
+                compiler.emit(Op::JumpFalse { dst: end_and_pop }, &mid);
+
+                // reverse the array so we can pop in the right order
+                compiler.emit(Op::ArrayReverse, &mid);
+                for e in t.exprs {
+                    compiler.emit(Op::ArrayPop, &mid);
+                    e.compile(compiler)?;
+                    compiler.emit(Op::JumpFalse { dst: end_and_pop }, &mid);
+                    todo!("we need to look at all the array elements :sob:")
+                }
+                compiler.emit(Op::LoadRB, &mid);
+                compiler.set_jump_target(end_and_pop);
+                // remove the array from the stack
+                compiler.emit(Op::Pop, &mid);
+                compiler.set_jump_target(dst);
+            }
             Pattern::Extract(_) => todo!(),
             Pattern::DoNotCare => {
                 compiler.emit(Op::True, &NodeMeta::dummy());
