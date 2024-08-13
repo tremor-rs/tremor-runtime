@@ -28,7 +28,7 @@ async-trait = "0.1.81"
 url = "2.5.2"
 reqwest = { version = "0.12.4", default-features = false, features = ["json"] }
 tokio = "1.39.2"
-log = "0.4.21"
+log = "0.4.22"
 tremor-script = { version = "0.13.0-rc.29", path = "../tremor-script" }
 bytes = "1.6.1"
 futures = { version = "0.3.30", default-features = false, features = [
