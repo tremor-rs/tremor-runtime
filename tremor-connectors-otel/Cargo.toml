@@ -29,7 +29,7 @@ tokio = { version = "1.39", default-features = false }
 simd-json = { version = "0.13", default-features = true }
 
 # opentelemetry
-tonic = { version = "0.6.1", default-features = false, features = [
+tonic = { version = "0.12.1", default-features = false, features = [
     "transport",
     "tls",
 ] }
