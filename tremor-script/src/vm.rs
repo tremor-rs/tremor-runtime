@@ -350,7 +350,7 @@ impl<'run, 'event> Scope<'run, 'event> {
                 }
                 // Inspect
                 Op::InspectLen => {
-                    let v = last(&mut stack, *pc, *cc)?;
+                    let v = last(&stack, *pc, *cc)?;
                     let len = if let Some(v) = v.as_array() {
                         v.len()
                     } else if let Some(v) = v.as_object() {

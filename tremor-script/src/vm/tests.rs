@@ -3,7 +3,7 @@ use tremor_value::literal;
 use super::{Op::*, *};
 use crate::{
     arena::Arena,
-    ast::{BinOpKind, Helper, UnaryOpKind},
+    ast::{BinOpKind::*, Helper, UnaryOpKind},
     lexer::Lexer,
     parser::g::ScriptParser,
     registry, AggrRegistry, Compiler,
@@ -682,7 +682,7 @@ fn array_index() -> Result<()> {
             Array { size: 3 },
             Const { idx: 0 },
             Const { idx: 0 },
-            Binary { op: BinOpKind::Add },
+            Binary { op: Add },
             Get,
         ]
     );
@@ -852,7 +852,7 @@ fn test_match_if_else() -> Result<()> {
             LoadV1,
             CopyV1,
             Const { idx: 0 },
-            Binary { op: BinOpKind::Eq },
+            Binary { op: Eq },
             LoadRB,
             JumpFalse { dst: 11 },
             Const { idx: 0 },
@@ -869,8 +869,6 @@ fn test_match_if_else() -> Result<()> {
 
 #[test]
 fn test_match_record_type() -> Result<()> {
-    use BinOpKind::Eq;
-
     let p = compile("match event.object of case 42 => 42 case %{} => \"record\" case _ => 0 end")?;
 
     assert_eq!(
@@ -1026,5 +1024,105 @@ fn test_local_array_assign_nested() -> Result<()> {
     );
 
     assert_eq!(run(&p)?, literal!([-1, 2]));
+    Ok(())
+}
+
+#[test]
+fn test_match_touple() -> Result<()> {
+    let p = compile("match [42, 23] of case %(42, 24) => 24 case %(42, 23, 7) => 7 case %(42, 23) => 42 case _ => 0 end")?;
+
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            Const { idx: 0 },
+            Const { idx: 1 },
+            Const { idx: 2 },
+            Array { size: 2 },
+            LoadV1,
+            CopyV1,
+            TestIsArray,
+            JumpFalse { dst: 27 },
+            InspectLen,
+            Const { idx: 3 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 26 },
+            CopyV1,
+            ArrayReverse,
+            ArrayPop,
+            Const { idx: 0 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 26 },
+            ArrayPop,
+            Const { idx: 4 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 26 },
+            Pop,
+            JumpFalse { dst: 30 },
+            Const { idx: 4 },
+            Jump { dst: 84 },
+            CopyV1,
+            TestIsArray,
+            JumpFalse { dst: 56 },
+            InspectLen,
+            Const { idx: 5 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 55 },
+            CopyV1,
+            ArrayReverse,
+            ArrayPop,
+            Const { idx: 0 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 55 },
+            ArrayPop,
+            Const { idx: 1 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 55 },
+            ArrayPop,
+            Const { idx: 6 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 55 },
+            Pop,
+            JumpFalse { dst: 59 },
+            Const { idx: 6 },
+            Jump { dst: 84 },
+            CopyV1,
+            TestIsArray,
+            JumpFalse { dst: 80 },
+            InspectLen,
+            Const { idx: 3 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 79 },
+            CopyV1,
+            ArrayReverse,
+            ArrayPop,
+            Const { idx: 0 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 79 },
+            ArrayPop,
+            Const { idx: 1 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 79 },
+            Pop,
+            JumpFalse { dst: 83 },
+            Const { idx: 0 },
+            Jump { dst: 84 },
+            Const { idx: 7 },
+            LoadV1,
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(run(&p)?, 42);
     Ok(())
 }

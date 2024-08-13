@@ -36,19 +36,23 @@ where
         } = self;
         let end_dst = compiler.end_dst()?;
         let dst = compiler.new_jump_point();
-
+        compiler.comment("Predicate Clause");
         compiler.emit(Op::CopyV1, &mid);
         pattern.compile_to_b(compiler)?;
+        compiler.comment("Jump to the next pattern");
         compiler.emit(Op::JumpFalse { dst }, &mid);
         if let Some(guard) = guard {
+            compiler.comment("Predicate Clause Guard");
             guard.compile_to_b(compiler)?;
             compiler.emit(Op::JumpFalse { dst }, &mid);
         }
+        compiler.comment("Predicate Clause Body");
         for e in exprs {
             e.compile(compiler)?;
         }
         last_expr.compile(compiler)?;
         // we were successful so we jump to the end
+        compiler.comment("Jump to the end of the matching statement since we were successful");
         compiler.emit(Op::Jump { dst: end_dst }, &mid);
         compiler.set_jump_target(dst);
         Ok(())
@@ -90,7 +94,9 @@ where
                 patterns,
             } => {
                 if let Some(precondition) = precondition {
+                    compiler.comment("Match Group Preconditions");
                     precondition.compile_to_b(compiler)?;
+                    compiler.comment("Jump to next case if precondition is false");
                     compiler.emit(Op::JumpFalse { dst: next }, &NodeMeta::dummy());
                     // FIXME
                 }
@@ -104,7 +110,9 @@ where
                 rest,
             } => {
                 if let Some(precondition) = precondition {
+                    compiler.comment("Match Tree Preconditions");
                     precondition.compile_to_b(compiler)?;
+                    compiler.comment("Jump to next case if precondition is false");
                     compiler.emit(Op::JumpFalse { dst: next }, &NodeMeta::dummy());
                     // FIXME
                 }
@@ -118,7 +126,9 @@ where
                 groups,
             } => {
                 if let Some(precondition) = precondition {
+                    compiler.comment("Match Combined Preconditions");
                     precondition.compile_to_b(compiler)?;
+                    compiler.comment("Jump to next case if precondition is false");
                     compiler.emit(Op::JumpFalse { dst: next }, &NodeMeta::dummy());
                     // FIXME
                 }
@@ -131,7 +141,9 @@ where
                 pattern,
             } => {
                 if let Some(precondition) = precondition {
+                    compiler.comment("Match Single Preconditions");
                     precondition.compile_to_b(compiler)?;
+                    compiler.comment("Jump to next case if precondition is false");
                     compiler.emit(Op::JumpFalse { dst: next }, &NodeMeta::dummy());
                 }
                 pattern.compile(compiler)?;
@@ -153,6 +165,7 @@ where
             patterns,
             default,
         } = self;
+        compiler.comment("Match statement");
         compiler.new_end_target();
         // Save r1 to ensure we can restore it after the patch operation
         compiler.emit(Op::StoreV1, &mid);

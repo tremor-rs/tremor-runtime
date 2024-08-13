@@ -373,8 +373,19 @@ impl<'script> Compilable<'script> for PredicatePattern<'script> {
     }
 }
 impl<'script> Compilable<'script> for ArrayPredicatePattern<'script> {
-    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
-        todo!()
+    fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
+        match self {
+            ArrayPredicatePattern::Expr(e) => {
+                let mid = e.meta().clone();
+                e.compile(compiler)?;
+                compiler.emit(Op::Binary { op: BinOpKind::Eq }, &mid);
+                compiler.emit(Op::LoadRB, &mid);
+            }
+            ArrayPredicatePattern::Tilde(_) => todo!(),
+            ArrayPredicatePattern::Record(_) => todo!(),
+            ArrayPredicatePattern::Ignore => todo!(),
+        }
+        Ok(())
     }
 }
 
@@ -416,12 +427,12 @@ impl<'script> Compilable<'script> for Pattern<'script> {
 
             Pattern::Assign(_) => todo!(),
             Pattern::Tuple(t) => {
+                compiler.comment("Tuple pattern");
                 let mid = *t.mid;
                 compiler.emit(Op::TestIsArray, &mid);
-                let dst = compiler.new_jump_point();
-                compiler.emit(Op::JumpFalse { dst }, &mid);
-                // copy the item to the stack so we can itterate
-                compiler.emit(Op::CopyV1, &mid);
+                let dst_next = compiler.new_jump_point();
+                compiler.emit(Op::JumpFalse { dst: dst_next }, &mid);
+                compiler.comment("Check if the array is long enough");
                 compiler.emit(Op::InspectLen, &mid);
                 compiler.emit_const(t.exprs.len(), &mid);
 
@@ -430,23 +441,26 @@ impl<'script> Compilable<'script> for Pattern<'script> {
                 } else {
                     compiler.emit(Op::Binary { op: BinOpKind::Eq }, &mid);
                 }
+                compiler.emit(Op::LoadRB, &mid);
                 let end_and_pop = compiler.new_jump_point();
 
                 compiler.emit(Op::JumpFalse { dst: end_and_pop }, &mid);
 
-                // reverse the array so we can pop in the right order
+                compiler.comment("Save array for itteration and reverse it");
+                compiler.emit(Op::CopyV1, &mid);
                 compiler.emit(Op::ArrayReverse, &mid);
-                for e in t.exprs {
+                for (i, e) in t.exprs.into_iter().enumerate() {
+                    compiler.comment(&format!("Test tuple element {}", i));
                     compiler.emit(Op::ArrayPop, &mid);
                     e.compile(compiler)?;
+                    compiler.comment("Jump on no match");
                     compiler.emit(Op::JumpFalse { dst: end_and_pop }, &mid);
-                    todo!("we need to look at all the array elements :sob:")
                 }
-                compiler.emit(Op::LoadRB, &mid);
-                compiler.set_jump_target(end_and_pop);
                 // remove the array from the stack
+                compiler.comment("Remove the array from the stack");
+                compiler.set_jump_target(end_and_pop);
                 compiler.emit(Op::Pop, &mid);
-                compiler.set_jump_target(dst);
+                compiler.set_jump_target(dst_next);
             }
             Pattern::Extract(_) => todo!(),
             Pattern::DoNotCare => {

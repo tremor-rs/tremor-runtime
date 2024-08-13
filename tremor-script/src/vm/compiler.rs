@@ -1,7 +1,12 @@
 mod impls;
 
 use crate::{ast::Script, errors::Result, NodeMeta};
-use std::{collections::HashMap, fmt::Display, mem};
+use simd_json_derive::Serialize;
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Display,
+    mem,
+};
 use tremor_value::Value;
 
 use super::Op;
@@ -16,6 +21,7 @@ pub struct Compiler<'script> {
     consts: Vec<Value<'script>>,
     keys: Vec<tremor_value::KnownKey<'script>>,
     max_locals: usize,
+    pub(crate) comments: BTreeMap<usize, String>,
 }
 
 trait Compilable<'script>: Sized {
@@ -38,6 +44,7 @@ impl<'script> Compiler<'script> {
         let consts = mem::take(&mut self.consts);
         let mut jump_table = HashMap::with_capacity(self.jump_table.len());
         let keys = mem::take(&mut self.keys);
+        let comments = mem::take(&mut self.comments);
 
         for op in &mut opcodes {
             match op {
@@ -57,6 +64,7 @@ impl<'script> Compiler<'script> {
             jump_table,
             consts,
             keys,
+            comments,
             max_locals: self.max_locals,
         })
     }
@@ -72,6 +80,7 @@ impl<'script> Compiler<'script> {
             consts: Vec::new(),
             keys: Vec::new(),
             max_locals: 0,
+            comments: BTreeMap::new(),
         }
     }
 
@@ -80,6 +89,13 @@ impl<'script> Compiler<'script> {
     //     assert!(!self.opcodes.is_empty());
     //     self.opcodes.len() as u32 - 1
     // }
+
+    pub(crate) fn comment<S>(&mut self, comment: S)
+    where
+        S: Into<String>,
+    {
+        self.comments.insert(self.opcodes.len(), comment.into());
+    }
 
     pub(crate) fn emit(&mut self, op: Op, mid: &NodeMeta) {
         self.opcodes.push(op);
@@ -161,11 +177,16 @@ pub struct Program<'script> {
     pub(crate) consts: Vec<Value<'script>>,
     pub(crate) keys: Vec<tremor_value::KnownKey<'script>>,
     pub(crate) max_locals: usize,
+    pub(crate) comments: BTreeMap<usize, String>,
 }
 
 impl Display for Program<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Program: ")?;
         for (idx, op) in self.opcodes.iter().enumerate() {
+            if let Some(comment) = self.comments.get(&idx) {
+                writeln!(f, "\n          # {comment}")?;
+            }
             if let Some(dst) = self.jump_table.get(&idx).copied() {
                 writeln!(f, "JMP<{dst:03}>")?;
             }
@@ -196,6 +217,12 @@ impl Display for Program<'_> {
                         .get(&(*dst as usize))
                         .copied()
                         .unwrap_or_default()
+                )?,
+                Op::Const { idx: c } => writeln!(
+                    f,
+                    "          {idx:04}: {:30} {c:<15} {}",
+                    "const",
+                    self.consts[*c as usize].json_string().unwrap_or_default(),
                 )?,
                 _ => writeln!(f, "          {idx:04}: {op}")?,
             }
