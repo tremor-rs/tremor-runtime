@@ -421,8 +421,7 @@ impl<'script> Compilable<'script> for Pattern<'script> {
             Pattern::Expr(e) => {
                 let mid = e.meta().clone();
                 e.compile(compiler)?;
-                compiler.emit(Op::Binary { op: BinOpKind::Eq }, &mid);
-                compiler.emit(Op::LoadRB, &NodeMeta::dummy());
+                compiler.emit(Op::TestEq, &mid);
             }
 
             Pattern::Assign(_) => todo!(),
@@ -444,7 +443,7 @@ impl<'script> Compilable<'script> for Pattern<'script> {
                 compiler.emit(Op::LoadRB, &mid);
                 let end_and_pop = compiler.new_jump_point();
 
-                compiler.emit(Op::JumpFalse { dst: end_and_pop }, &mid);
+                compiler.emit(Op::JumpFalse { dst: dst_next }, &mid);
 
                 compiler.comment("Save array for itteration and reverse it");
                 compiler.emit(Op::CopyV1, &mid);

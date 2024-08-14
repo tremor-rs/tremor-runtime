@@ -1,6 +1,8 @@
 mod imut_expr;
 mod mut_expr;
 
+use tremor_value::Value;
+
 use crate::{
     ast::{
         ClauseGroup, Comprehension, DefaultCase, Expression, IfElse, Match, Path, PredicateClause,
@@ -37,7 +39,6 @@ where
         let end_dst = compiler.end_dst()?;
         let dst = compiler.new_jump_point();
         compiler.comment("Predicate Clause");
-        compiler.emit(Op::CopyV1, &mid);
         pattern.compile_to_b(compiler)?;
         compiler.comment("Jump to the next pattern");
         compiler.emit(Op::JumpFalse { dst }, &mid);
@@ -106,7 +107,7 @@ where
             }
             ClauseGroup::SearchTree {
                 precondition,
-                tree: _,
+                tree,
                 rest,
             } => {
                 if let Some(precondition) = precondition {
@@ -114,12 +115,18 @@ where
                     precondition.compile_to_b(compiler)?;
                     compiler.comment("Jump to next case if precondition is false");
                     compiler.emit(Op::JumpFalse { dst: next }, &NodeMeta::dummy());
-                    // FIXME
+                }
+                compiler.comment("Encode binary search tree");
+
+                let tree = tree.into_iter().collect::<Vec<_>>();
+                traverse_tree(compiler, &tree)?;
+
+                if !rest.is_empty() {
+                    compiler.comment("Test remaining matches");
                 }
                 for r in rest {
                     r.compile(compiler)?;
                 }
-                todo!("the tree has to go before therest!");
             }
             ClauseGroup::Combined {
                 precondition,
@@ -152,6 +159,54 @@ where
         compiler.set_jump_target(next);
         Ok(())
     }
+}
+
+fn traverse_tree<'script, Ex>(
+    compiler: &mut Compiler<'script>,
+    tree: &[(Value<'script>, (Vec<Ex>, Ex))],
+) -> Result<()>
+where
+    Ex: Compilable<'script> + Expression,
+{
+    let mid = NodeMeta::dummy();
+    let (lower, upper) = tree.split_at(tree.len() / 2);
+
+    assert!(lower.len() <= upper.len());
+    let Some(((val, (exprs, last)), upper_rest)) = upper.split_first() else {
+        // we know that in the case of a odd number the upper half is always larger or equal to the lower half
+        // so if it is empty we have nothing left to do in the tree
+        return Ok(());
+    };
+    let gt = compiler.new_jump_point();
+    let lt = compiler.new_jump_point();
+    compiler.comment("Binary search tree node");
+    compiler.emit_const(val.clone(), &mid);
+    compiler.comment("Test if value is greater than the current node");
+    compiler.emit(Op::TestGt, &mid);
+    compiler.emit(Op::JumpTrue { dst: gt }, &mid);
+    compiler.comment("Test if value is lesser than the current node");
+    compiler.emit(Op::TestLt, &mid);
+    compiler.emit(Op::JumpTrue { dst: lt }, &mid);
+    compiler.comment("Value is equal to the current node");
+    for e in exprs {
+        // FIXME: kins of annoying to clone but eh
+        e.clone().compile(compiler)?;
+    } // FIXME: kins of annoying to clone but eh
+
+    last.clone().compile(compiler)?;
+    compiler.comment("We found and executed a match, jump to the end of the match statement");
+    compiler.emit(
+        Op::Jump {
+            dst: compiler.end_dst()?,
+        },
+        &mid,
+    );
+    compiler.comment("Llesser half of the tree");
+    compiler.set_jump_target(lt);
+    traverse_tree(compiler, lower)?;
+    compiler.set_jump_target(gt);
+    traverse_tree(compiler, upper_rest)?;
+    Ok(())
 }
 
 impl<'script, Ex> Compilable<'script> for Match<'script, Ex>

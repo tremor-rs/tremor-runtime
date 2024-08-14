@@ -114,6 +114,17 @@ pub(crate) enum Op {
     TestIsI64,
     TestIsBytes,
     #[allow(dead_code)]
+    TestEq,
+    #[allow(dead_code)]
+    TestNeq,
+    TestGt,
+    #[allow(dead_code)]
+    TestGte,
+    TestLt,
+    #[allow(dead_code)]
+    TestLte,
+
+    #[allow(dead_code)]
     TestArrayIsEmpty,
     TestRecordIsEmpty,
 
@@ -190,6 +201,12 @@ impl Display for Op {
             Op::TestIsArray => write!(f, "test_is_array"),
             Op::TestArrayIsEmpty => write!(f, "test_array_is_empty"),
             Op::TestRecordIsEmpty => write!(f, "test_record_is_empty"),
+            Op::TestEq => write!(f, "test_eq"),
+            Op::TestNeq => write!(f, "test_neq"),
+            Op::TestGt => write!(f, "test_gt"),
+            Op::TestGte => write!(f, "test_gte"),
+            Op::TestLt => write!(f, "test_lt"),
+            Op::TestLte => write!(f, "test_lte"),
 
             Op::InspectLen => write!(f, "inspect_len"),
 

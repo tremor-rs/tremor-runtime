@@ -341,6 +341,42 @@ impl<'run, 'event> Scope<'run, 'event> {
                 Op::TestArrayIsEmpty => {
                     self.reg.b1 = self.reg.v1.as_array().map_or(true, Vec::is_empty);
                 }
+                Op::TestEq => {
+                    let rhs = last(&stack, *pc, *cc)?;
+                    self.reg.b1 =
+                        exec_binary(mid, mid, crate::ast::BinOpKind::Eq, &self.reg.v1, rhs)?
+                            .try_as_bool()?;
+                }
+                Op::TestNeq => {
+                    let rhs = last(&stack, *pc, *cc)?;
+                    self.reg.b1 =
+                        exec_binary(mid, mid, crate::ast::BinOpKind::NotEq, &self.reg.v1, rhs)?
+                            .try_as_bool()?;
+                }
+                Op::TestGt => {
+                    let rhs = last(&stack, *pc, *cc)?;
+                    self.reg.b1 =
+                        exec_binary(mid, mid, crate::ast::BinOpKind::Gt, &self.reg.v1, rhs)?
+                            .try_as_bool()?;
+                }
+                Op::TestLt => {
+                    let rhs = last(&stack, *pc, *cc)?;
+                    self.reg.b1 =
+                        exec_binary(mid, mid, crate::ast::BinOpKind::Lt, &self.reg.v1, rhs)?
+                            .try_as_bool()?;
+                }
+                Op::TestGte => {
+                    let rhs = last(&stack, *pc, *cc)?;
+                    self.reg.b1 =
+                        exec_binary(mid, mid, crate::ast::BinOpKind::Gte, &self.reg.v1, rhs)?
+                            .try_as_bool()?;
+                }
+                Op::TestLte => {
+                    let rhs = last(&stack, *pc, *cc)?;
+                    self.reg.b1 =
+                        exec_binary(mid, mid, crate::ast::BinOpKind::Gte, &self.reg.v1, rhs)?
+                            .try_as_bool()?;
+                }
                 Op::TestRecordIsEmpty => {
                     self.reg.b1 = self
                         .reg
@@ -350,10 +386,9 @@ impl<'run, 'event> Scope<'run, 'event> {
                 }
                 // Inspect
                 Op::InspectLen => {
-                    let v = last(&stack, *pc, *cc)?;
-                    let len = if let Some(v) = v.as_array() {
+                    let len = if let Some(v) = self.reg.v1.as_array() {
                         v.len()
-                    } else if let Some(v) = v.as_object() {
+                    } else if let Some(v) = self.reg.v1.as_object() {
                         v.len()
                     } else {
                         return Err("Not an array or object".into());

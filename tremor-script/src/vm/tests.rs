@@ -3,13 +3,13 @@ use tremor_value::literal;
 use super::{Op::*, *};
 use crate::{
     arena::Arena,
-    ast::{BinOpKind::*, Helper, UnaryOpKind},
+    ast::{optimizer::Optimizer, BinOpKind::*, Helper, UnaryOpKind},
     lexer::Lexer,
     parser::g::ScriptParser,
     registry, AggrRegistry, Compiler,
 };
 
-fn compile(src: &str) -> Result<Program<'static>> {
+fn compile(optimize: bool, src: &str) -> Result<Program<'static>> {
     let mut compiler: Compiler = Compiler::new();
     let reg = registry::registry();
     let fake_aggr_reg = AggrRegistry::default();
@@ -21,8 +21,10 @@ fn compile(src: &str) -> Result<Program<'static>> {
     let script_raw = ScriptParser::new().parse(filtered_tokens)?;
     let mut helper = Helper::new(&reg, &fake_aggr_reg);
     // helper.consts.args = args.clone_static();
-    let script = script_raw.up_script(&mut helper)?;
-    // Optimizer::new(&helper).walk_script(&mut script)?;
+    let mut script = script_raw.up_script(&mut helper)?;
+    if optimize {
+        Optimizer::new(&helper).walk_script(&mut script)?;
+    }
     let p = compiler.compile(script)?;
     println!("{p}");
     Ok(p)
@@ -61,7 +63,7 @@ fn op_size() {
 }
 #[test]
 fn simple() -> Result<()> {
-    let p = compile("42")?;
+    let p = compile(false, "42")?;
 
     assert_eq!(p.opcodes, [Const { idx: 0 }]);
     assert_eq!(run(&p)?, 42);
@@ -70,7 +72,7 @@ fn simple() -> Result<()> {
 
 #[test]
 fn simple_add() -> Result<()> {
-    let p = compile("42 + 42")?;
+    let p = compile(false, "42 + 42")?;
 
     assert_eq!(
         p.opcodes,
@@ -89,7 +91,7 @@ fn simple_add() -> Result<()> {
 
 #[test]
 fn simple_add_sub() -> Result<()> {
-    let p = compile("42 + 43 - 44")?;
+    let p = compile(false, "42 + 43 - 44")?;
 
     assert_eq!(
         p.opcodes,
@@ -112,7 +114,7 @@ fn simple_add_sub() -> Result<()> {
 
 #[test]
 fn logical_and() -> Result<()> {
-    let p = compile("true and false")?;
+    let p = compile(false, "true and false")?;
 
     assert_eq!(
         p.opcodes,
@@ -131,7 +133,7 @@ fn logical_and() -> Result<()> {
 
 #[test]
 fn logical_or() -> Result<()> {
-    let p = compile("true or false")?;
+    let p = compile(false, "true or false")?;
 
     println!("{p}");
     assert_eq!(
@@ -151,7 +153,7 @@ fn logical_or() -> Result<()> {
 
 #[test]
 fn logical_not() -> Result<()> {
-    let p = compile("not true")?;
+    let p = compile(false, "not true")?;
 
     assert_eq!(
         p.opcodes,
@@ -168,7 +170,7 @@ fn logical_not() -> Result<()> {
 
 #[test]
 fn simple_eq() -> Result<()> {
-    let p = compile("42 == 42")?;
+    let p = compile(false, "42 == 42")?;
 
     assert_eq!(
         p.opcodes,
@@ -186,7 +188,7 @@ fn simple_eq() -> Result<()> {
 
 #[test]
 fn patch_insert() -> Result<()> {
-    let p = compile(r#"patch {} of  insert "foo" => 42 end"#)?;
+    let p = compile(false, r#"patch {} of  insert "foo" => 42 end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -218,7 +220,7 @@ fn patch_insert() -> Result<()> {
 
 #[test]
 fn patch_default_key() -> Result<()> {
-    let p = compile(r#"patch {} of  default "foo" => 42 end"#)?;
+    let p = compile(false, r#"patch {} of  default "foo" => 42 end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -249,6 +251,7 @@ fn patch_default_key() -> Result<()> {
 #[test]
 fn patch_default() -> Result<()> {
     let p = compile(
+        false,
         r#"patch {"snot": 42} of  default  => {"snot": 23, "badger": 23, "cake": "cookie"} end"#,
     )?;
 
@@ -304,7 +307,7 @@ fn patch_default() -> Result<()> {
 
 #[test]
 fn patch_default_present() -> Result<()> {
-    let p = compile(r#"patch {"foo":"bar"} of  default "foo" => 42 end"#)?;
+    let p = compile(false, r#"patch {"foo":"bar"} of  default "foo" => 42 end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -338,7 +341,7 @@ fn patch_default_present() -> Result<()> {
 
 #[test]
 fn patch_insert_error() -> Result<()> {
-    let p = compile(r#"patch {"foo":"bar"} of insert "foo" => 42 end"#)?;
+    let p = compile(false, r#"patch {"foo":"bar"} of insert "foo" => 42 end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -369,7 +372,7 @@ fn patch_insert_error() -> Result<()> {
 
 #[test]
 fn patch_update() -> Result<()> {
-    let p = compile(r#"patch {"foo":"bar"} of update "foo" => 42 end"#)?;
+    let p = compile(false, r#"patch {"foo":"bar"} of update "foo" => 42 end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -405,7 +408,7 @@ fn patch_update() -> Result<()> {
 
 #[test]
 fn patch_update_error() -> Result<()> {
-    let p = compile(r#"patch {} of update "foo" => 42 end"#)?;
+    let p = compile(false, r#"patch {} of update "foo" => 42 end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -432,7 +435,7 @@ fn patch_update_error() -> Result<()> {
 
 #[test]
 fn patch_upsert_1() -> Result<()> {
-    let p = compile(r#"patch {"foo":"bar"} of upsert "foo" => 42 end"#)?;
+    let p = compile(false, r#"patch {"foo":"bar"} of upsert "foo" => 42 end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -464,7 +467,7 @@ fn patch_upsert_1() -> Result<()> {
 
 #[test]
 fn patch_upsert_2() -> Result<()> {
-    let p = compile(r#"patch {} of upsert "foo" => 42 end"#)?;
+    let p = compile(false, r#"patch {} of upsert "foo" => 42 end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -493,6 +496,7 @@ fn patch_upsert_2() -> Result<()> {
 #[test]
 fn patch_patch_patch() -> Result<()> {
     let p = compile(
+        false,
         r#"patch patch {"foo":"bar"} of upsert "bar" => "baz" end of insert "baz" => 42 end"#,
     )?;
 
@@ -542,7 +546,10 @@ fn patch_patch_patch() -> Result<()> {
 
 #[test]
 fn patch_merge() -> Result<()> {
-    let p = compile(r#"patch {"snot":"badger"} of merge => {"badger":"snot"} end"#)?;
+    let p = compile(
+        false,
+        r#"patch {"snot":"badger"} of merge => {"badger":"snot"} end"#,
+    )?;
 
     assert_eq!(
         p.opcodes,
@@ -578,7 +585,10 @@ fn patch_merge() -> Result<()> {
 
 #[test]
 fn patch_merge_key() -> Result<()> {
-    let p = compile(r#"(patch event of merge "object" => {"badger":"snot"} end).object"#)?;
+    let p = compile(
+        false,
+        r#"(patch event of merge "object" => {"badger":"snot"} end).object"#,
+    )?;
 
     assert_eq!(
         p.opcodes,
@@ -614,7 +624,7 @@ fn patch_merge_key() -> Result<()> {
 
 #[test]
 fn merge() -> Result<()> {
-    let p = compile(r#"merge {"snot":"badger"} of {"badger":"snot"} end"#)?;
+    let p = compile(false, r#"merge {"snot":"badger"} of {"badger":"snot"} end"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -650,7 +660,7 @@ fn merge() -> Result<()> {
 
 #[test]
 fn array_index_fast() -> Result<()> {
-    let p = compile("[1,2,3][1]")?;
+    let p = compile(false, "[1,2,3][1]")?;
 
     assert_eq!(
         p.opcodes,
@@ -670,7 +680,7 @@ fn array_index_fast() -> Result<()> {
 
 #[test]
 fn array_index() -> Result<()> {
-    let p = compile("[1,2,3][1+1]")?;
+    let p = compile(false, "[1,2,3][1+1]")?;
 
     assert_eq!(
         p.opcodes,
@@ -693,7 +703,7 @@ fn array_index() -> Result<()> {
 
 #[test]
 fn record_key() -> Result<()> {
-    let p = compile(r#"{"snot":"badger"}.snot"#)?;
+    let p = compile(false, r#"{"snot":"badger"}.snot"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -714,7 +724,7 @@ fn record_key() -> Result<()> {
 
 #[test]
 fn record_path() -> Result<()> {
-    let p = compile(r#"{"snot":"badger"}["snot"]"#)?;
+    let p = compile(false, r#"{"snot":"badger"}["snot"]"#)?;
 
     assert_eq!(
         p.opcodes,
@@ -737,7 +747,7 @@ fn record_path() -> Result<()> {
 
 #[test]
 fn array_range() -> Result<()> {
-    let p = compile("[1,2,3][0:2]")?;
+    let p = compile(false, "[1,2,3][0:2]")?;
 
     assert_eq!(
         p.opcodes,
@@ -761,7 +771,7 @@ fn array_range() -> Result<()> {
 
 #[test]
 fn event_key() -> Result<()> {
-    let p = compile("event.int")?;
+    let p = compile(false, "event.int")?;
 
     assert_eq!(p.opcodes, &[LoadEvent, GetKey { key: 0 },]);
 
@@ -771,7 +781,7 @@ fn event_key() -> Result<()> {
 
 #[test]
 fn event_nested() -> Result<()> {
-    let p = compile("event.object.a")?;
+    let p = compile(false, "event.object.a")?;
 
     assert_eq!(
         p.opcodes,
@@ -784,7 +794,7 @@ fn event_nested() -> Result<()> {
 
 #[test]
 fn event_nested_index() -> Result<()> {
-    let p = compile("event.array[1]")?;
+    let p = compile(false, "event.array[1]")?;
 
     assert_eq!(
         p.opcodes,
@@ -797,7 +807,7 @@ fn event_nested_index() -> Result<()> {
 
 #[test]
 fn test_local() -> Result<()> {
-    let p = compile("let a = 42; a")?;
+    let p = compile(false, "let a = 42; a")?;
 
     assert_eq!(p.max_locals, 0);
     assert_eq!(
@@ -818,7 +828,7 @@ fn test_local() -> Result<()> {
 
 #[test]
 fn test_local_event() -> Result<()> {
-    let p = compile("let a = event; a.int")?;
+    let p = compile(false, "let a = event; a.int")?;
 
     assert_eq!(p.max_locals, 0);
     assert_eq!(
@@ -840,7 +850,7 @@ fn test_local_event() -> Result<()> {
 
 #[test]
 fn test_match_if_else() -> Result<()> {
-    let p = compile("match event.int of case 42 => 42 case _ => 0 end")?;
+    let p = compile(false, "match event.int of case 42 => 42 case _ => 0 end")?;
 
     println!("{p}");
     assert_eq!(
@@ -850,13 +860,11 @@ fn test_match_if_else() -> Result<()> {
             LoadEvent,
             GetKey { key: 0 },
             LoadV1,
-            CopyV1,
             Const { idx: 0 },
-            Binary { op: Eq },
-            LoadRB,
-            JumpFalse { dst: 11 },
+            TestEq,
+            JumpFalse { dst: 9 },
             Const { idx: 0 },
-            Jump { dst: 12 },
+            Jump { dst: 10 },
             Const { idx: 1 },
             LoadV1,
             SwapV1,
@@ -869,7 +877,10 @@ fn test_match_if_else() -> Result<()> {
 
 #[test]
 fn test_match_record_type() -> Result<()> {
-    let p = compile("match event.object of case 42 => 42 case %{} => \"record\" case _ => 0 end")?;
+    let p = compile(
+        false,
+        "match event.object of case 42 => 42 case %{} => \"record\" case _ => 0 end",
+    )?;
 
     assert_eq!(
         p.opcodes,
@@ -878,20 +889,17 @@ fn test_match_record_type() -> Result<()> {
             LoadEvent,
             GetKey { key: 0 },
             LoadV1,
-            CopyV1,
             Const { idx: 0 },
-            Binary { op: Eq },
-            LoadRB,
-            JumpFalse { dst: 11 },
+            TestEq,
+            JumpFalse { dst: 9 },
             Const { idx: 0 },
-            Jump { dst: 19 },
-            CopyV1,
+            Jump { dst: 16 },
             TestIsRecord,
-            JumpFalse { dst: 14 },
-            JumpFalse { dst: 18 },
+            JumpFalse { dst: 11 },
+            JumpFalse { dst: 15 },
             Const { idx: 1 },
             String { size: 1 },
-            Jump { dst: 19 },
+            Jump { dst: 16 },
             Const { idx: 2 },
             LoadV1,
             SwapV1,
@@ -904,7 +912,7 @@ fn test_match_record_type() -> Result<()> {
 
 #[test]
 fn test_event_assign_nested() -> Result<()> {
-    let p = compile("let event.string = \"snot\"; event.string")?;
+    let p = compile(false, "let event.string = \"snot\"; event.string")?;
 
     assert_eq!(p.max_locals, 0);
     assert_eq!(
@@ -925,7 +933,7 @@ fn test_event_assign_nested() -> Result<()> {
 
 #[test]
 fn test_event_assign_nested_new() -> Result<()> {
-    let p = compile("let event.badger = \"snot\"; event.badger")?;
+    let p = compile(false, "let event.badger = \"snot\"; event.badger")?;
 
     assert_eq!(p.max_locals, 0);
     assert_eq!(
@@ -946,7 +954,7 @@ fn test_event_assign_nested_new() -> Result<()> {
 
 #[test]
 fn test_event_array_assign_nested() -> Result<()> {
-    let p = compile("let event.array[1] = 42; event.array")?;
+    let p = compile(false, "let event.array[1] = 42; event.array")?;
 
     assert_eq!(p.max_locals, 0);
     assert_eq!(
@@ -967,7 +975,7 @@ fn test_event_array_assign_nested() -> Result<()> {
 
 #[test]
 fn test_local_assign_nested() -> Result<()> {
-    let p = compile("let a = {}; let a.b = 1; a.b")?;
+    let p = compile(false, "let a = {}; let a.b = 1; a.b")?;
 
     assert_eq!(p.max_locals, 0);
     assert_eq!(
@@ -996,7 +1004,7 @@ fn test_local_assign_nested() -> Result<()> {
 
 #[test]
 fn test_local_array_assign_nested() -> Result<()> {
-    let p = compile("let a = [1,2]; let a[0]=-1; a")?;
+    let p = compile(false, "let a = [1,2]; let a[0]=-1; a")?;
 
     assert_eq!(p.max_locals, 0);
     assert_eq!(
@@ -1029,7 +1037,16 @@ fn test_local_array_assign_nested() -> Result<()> {
 
 #[test]
 fn test_match_touple() -> Result<()> {
-    let p = compile("match [42, 23] of case %(42, 24) => 24 case %(42, 23, 7) => 7 case %(42, 23) => 42 case _ => 0 end")?;
+    let p = compile(
+        false,
+        r"
+        match [42, 23] of 
+          case %(42, 24) => 24
+          case %(42, 23, 7) => 7
+          case %(42, 23) => 42
+          case _ => 0
+        end",
+    )?;
 
     assert_eq!(
         p.opcodes,
@@ -1040,9 +1057,8 @@ fn test_match_touple() -> Result<()> {
             Const { idx: 2 },
             Array { size: 2 },
             LoadV1,
-            CopyV1,
             TestIsArray,
-            JumpFalse { dst: 27 },
+            JumpFalse { dst: 26 },
             InspectLen,
             Const { idx: 3 },
             Binary { op: Eq },
@@ -1054,74 +1070,97 @@ fn test_match_touple() -> Result<()> {
             Const { idx: 0 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 26 },
+            JumpFalse { dst: 25 },
             ArrayPop,
             Const { idx: 4 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 26 },
+            JumpFalse { dst: 25 },
             Pop,
-            JumpFalse { dst: 30 },
+            JumpFalse { dst: 29 },
             Const { idx: 4 },
-            Jump { dst: 84 },
-            CopyV1,
+            Jump { dst: 81 },
             TestIsArray,
-            JumpFalse { dst: 56 },
+            JumpFalse { dst: 54 },
             InspectLen,
             Const { idx: 5 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 55 },
+            JumpFalse { dst: 54 },
             CopyV1,
             ArrayReverse,
             ArrayPop,
             Const { idx: 0 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 55 },
+            JumpFalse { dst: 53 },
             ArrayPop,
             Const { idx: 1 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 55 },
+            JumpFalse { dst: 53 },
             ArrayPop,
             Const { idx: 6 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 55 },
+            JumpFalse { dst: 53 },
             Pop,
-            JumpFalse { dst: 59 },
+            JumpFalse { dst: 57 },
             Const { idx: 6 },
-            Jump { dst: 84 },
-            CopyV1,
+            Jump { dst: 81 },
             TestIsArray,
-            JumpFalse { dst: 80 },
+            JumpFalse { dst: 77 },
             InspectLen,
             Const { idx: 3 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 79 },
+            JumpFalse { dst: 77 },
             CopyV1,
             ArrayReverse,
             ArrayPop,
             Const { idx: 0 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 79 },
+            JumpFalse { dst: 76 },
             ArrayPop,
             Const { idx: 1 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 79 },
+            JumpFalse { dst: 76 },
             Pop,
-            JumpFalse { dst: 83 },
+            JumpFalse { dst: 80 },
             Const { idx: 0 },
-            Jump { dst: 84 },
+            Jump { dst: 81 },
             Const { idx: 7 },
             LoadV1,
             SwapV1,
         ]
     );
+
+    assert_eq!(run(&p)?, 42);
+    Ok(())
+}
+#[test]
+fn test_match_search_tree() -> Result<()> {
+    let p = compile(
+        true,
+        r"
+        match event.int of
+          case 1 => 1
+          case 2 => 2
+          case 3 => 3
+          case 4 => 4
+          case 5 => 5
+          case 6 => 6
+          case 7 => 7
+          case 8 => 8
+          case 9 => 9
+          case 42 => 42
+          case _ => 23
+        end",
+    )?;
+
+    // assert_eq!(p.opcodes, &[]);
 
     assert_eq!(run(&p)?, 42);
     Ok(())
