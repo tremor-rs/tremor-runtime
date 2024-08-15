@@ -22,6 +22,7 @@ use op::Op;
 #[allow(dead_code)]
 pub struct Vm {}
 
+#[derive(Debug)]
 struct Registers<'run, 'event> {
     /// Value register 1
     v1: Cow<'run, Value<'event>>,
@@ -92,7 +93,13 @@ impl<'run, 'event> Scope<'run, 'event> {
             *cc += 1;
             let mid = &self.program.meta[*pc];
             // ALLOW: we test that pc is always in bounds in the while loop above
-            match unsafe { *self.program.opcodes.get_unchecked(*pc) } {
+            let op = unsafe { *self.program.opcodes.get_unchecked(*pc) };
+            // if let Some(comment) = self.program.comments.get(pc) {
+            //     println!("# {comment}");
+            // }
+            // dbg!(stack.last(), &self.reg);
+            // println!("{pc:3}: {op}");
+            match op {
                 Op::Nop => continue,
                 // Loads
                 Op::LoadV1 => self.reg.v1 = pop(&mut stack, *pc, *cc)?,
@@ -105,6 +112,9 @@ impl<'run, 'event> Scope<'run, 'event> {
                     self.reg.b1 = pop(&mut stack, *pc, *cc)?.try_as_bool()?;
                 }
                 Op::StoreRB => stack.push(Cow::Owned(Value::from(self.reg.b1))),
+                Op::NotRB => self.reg.b1 = !self.reg.b1,
+                Op::TrueRB => self.reg.b1 = true,
+                Op::FalseRB => self.reg.b1 = false,
                 Op::LoadEvent => stack.push(Cow::Owned(event.clone())),
                 Op::StoreEvent { elements } => unsafe {
                     let mut tmp = event as *mut Value;
@@ -384,6 +394,10 @@ impl<'run, 'event> Scope<'run, 'event> {
                         .as_object()
                         .map_or(true, halfbrown::SizedHashMap::is_empty);
                 }
+                Op::TestRecordContainsKey { key } => {
+                    let key = &self.program.keys[key as usize];
+                    self.reg.b1 = key.lookup(&self.reg.v1).is_some();
+                }
                 // Inspect
                 Op::InspectLen => {
                     let len = if let Some(v) = self.reg.v1.as_array() {
@@ -450,6 +464,12 @@ impl<'run, 'event> Scope<'run, 'event> {
                     let v = pop(&mut stack, *pc, *cc)?;
                     // FIXME: can we avoid this clone here
                     let res = key.lookup(&v).ok_or("Missing Key FIXME")?.clone();
+                    stack.push(Cow::Owned(res));
+                }
+                Op::GetKeyRegV1 { key } => {
+                    let key = &self.program.keys[key as usize];
+                    // FIXME: can we avoid this clone here
+                    let res = key.lookup(&self.reg.v1).ok_or("Missing Key FIXME")?.clone();
                     stack.push(Cow::Owned(res));
                 }
                 Op::Get => {

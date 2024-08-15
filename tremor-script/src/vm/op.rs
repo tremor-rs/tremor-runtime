@@ -1,3 +1,16 @@
+// Copyright 2020-2024, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 use std::fmt::Display;
 
 use crate::ast::{BinOpKind, UnaryOpKind};
@@ -27,6 +40,13 @@ pub(crate) enum Op {
     /// Store boolean register to the top of the stack
     #[allow(dead_code)]
     StoreRB,
+    /// Negates the boolean register
+    NotRB,
+    /// Sets the boolean register to true
+    TrueRB,
+    /// Sets the boolean register to false
+    #[allow(dead_code)]
+    FalseRB,
     /// Puts the event on the stack
     LoadEvent,
     /// Takes the top of the stack and stores it in the event
@@ -97,6 +117,9 @@ pub(crate) enum Op {
     GetKey {
         key: u32,
     },
+    GetKeyRegV1 {
+        key: u32,
+    },
     Get,
     Index,
     IndexFast {
@@ -127,6 +150,9 @@ pub(crate) enum Op {
     #[allow(dead_code)]
     TestArrayIsEmpty,
     TestRecordIsEmpty,
+    TestRecordContainsKey {
+        key: u32,
+    },
 
     // Inspect - does not pop the stack result is stored on the stack
     //// returns the lenght of an array, object or 1 for scalar values
@@ -162,6 +188,9 @@ impl Display for Op {
 
             Op::LoadRB => write!(f, "{:30} B1", "load_reg"),
             Op::StoreRB => write!(f, "{:30} B1", "store_reg"),
+            Op::NotRB => write!(f, "{:30} B1", "not_reg"),
+            Op::TrueRB => write!(f, "{:30} B1", "true_reg"),
+            Op::FalseRB => write!(f, "{:30} B1", "false_reg"),
 
             Op::LoadEvent => write!(f, "laod_event"),
             Op::StoreEvent { elements } => write!(f, "{:30} {elements:<5}", "store_event"),
@@ -186,7 +215,8 @@ impl Display for Op {
             Op::Xor => write!(f, "xor"),
             Op::Binary { op } => write!(f, "{:30} {:<5?}", "binary", op),
             Op::Unary { op } => write!(f, "{:30} {:<5?}", "unary", op),
-            Op::GetKey { key } => write!(f, "{:30} {}", "lookup_key", key),
+            Op::GetKey { key } => write!(f, "{:30} {:<5?} stack", "lookup_key", key),
+            Op::GetKeyRegV1 { key } => write!(f, "{:30} {:<5?} V1", "lookup_key", key),
             Op::Get => write!(f, "lookup"),
             Op::Index => write!(f, "idx"),
             Op::IndexFast { idx } => write!(f, "{:30} {:<5}", "idx_fast", idx),
@@ -201,6 +231,9 @@ impl Display for Op {
             Op::TestIsArray => write!(f, "test_is_array"),
             Op::TestArrayIsEmpty => write!(f, "test_array_is_empty"),
             Op::TestRecordIsEmpty => write!(f, "test_record_is_empty"),
+            Op::TestRecordContainsKey { key } => {
+                write!(f, "{:32} {:<5}", "test_record_contains_key", key)
+            }
             Op::TestEq => write!(f, "test_eq"),
             Op::TestNeq => write!(f, "test_neq"),
             Op::TestGt => write!(f, "test_gt"),

@@ -1,12 +1,25 @@
+// Copyright 2020-2024, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 use tremor_value::Value;
 
 use crate::{
     ast::{
         raw::{BytesDataType, Endian},
-        ArrayPredicatePattern, AssignPattern, BaseExpr, BinOpKind, BooleanBinExpr,
+        ArrayPattern, ArrayPredicatePattern, AssignPattern, BaseExpr, BinOpKind, BooleanBinExpr,
         BooleanBinOpKind, BytesPart, ClausePreCondition, Field, ImutExpr, Invoke, List, Merge,
-        Patch, PatchOperation, Pattern, PredicatePattern, Record, Segment, StrLitElement,
-        StringLit,
+        Patch, PatchOperation, Pattern, PredicatePattern, Record, RecordPattern, Segment,
+        StrLitElement, StringLit, TestExpr, TuplePattern,
     },
     errors::Result,
     vm::{
@@ -369,8 +382,91 @@ impl<'script> Compilable<'script> for BytesPart<'script> {
 }
 
 impl<'script> Compilable<'script> for PredicatePattern<'script> {
-    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
-        todo!()
+    #[allow(unused_variables)]
+    fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
+        let key = compiler.add_key(self.key().clone());
+        let mid = NodeMeta::dummy(); // FIXME
+        compiler.comment("Test if the record contains the key");
+        compiler.emit(Op::TestRecordContainsKey { key }, &mid);
+        // handle the absent patter ndifferently
+        if let PredicatePattern::FieldAbsent { key: _, lhs: _ } = self {
+            compiler.emit(Op::NotRB, &mid);
+        } else if let PredicatePattern::FieldPresent { key: _, lhs: _ } = self {
+        } else {
+            let dst = compiler.new_jump_point();
+            compiler.emit(Op::JumpFalse { dst }, &mid);
+            compiler.comment("Fetch key to test");
+            compiler.emit(Op::GetKeyRegV1 { key }, &mid);
+            compiler.comment("Swap value in the register");
+            compiler.emit(Op::SwapV1, &mid);
+            match self {
+                PredicatePattern::TildeEq {
+                    assign,
+                    lhs,
+                    key,
+                    test,
+                } => todo!(),
+                PredicatePattern::Bin {
+                    lhs: _,
+                    key: _,
+                    rhs,
+                    kind,
+                } => {
+                    compiler.comment("Run binary pattern");
+                    rhs.compile(compiler)?;
+                    match kind {
+                        BinOpKind::Eq => compiler.emit(Op::TestEq, &mid),
+                        BinOpKind::NotEq => compiler.emit(Op::TestNeq, &mid),
+                        BinOpKind::Gte => compiler.emit(Op::TestGte, &mid),
+                        BinOpKind::Gt => compiler.emit(Op::TestGt, &mid),
+                        BinOpKind::Lte => compiler.emit(Op::TestLte, &mid),
+                        BinOpKind::Lt => compiler.emit(Op::TestLt, &mid),
+                        BinOpKind::BitXor
+                        | BinOpKind::BitAnd
+                        | BinOpKind::RBitShiftSigned
+                        | BinOpKind::RBitShiftUnsigned
+                        | BinOpKind::LBitShift
+                        | BinOpKind::Add
+                        | BinOpKind::Sub
+                        | BinOpKind::Mul
+                        | BinOpKind::Div
+                        | BinOpKind::Mod => {
+                            return Err(format!("Invalid operator {kind:?} in predicate").into());
+                        }
+                    }
+                    compiler.comment("Remove the value from the stack");
+                    compiler.emit(Op::Pop, &mid);
+                }
+                PredicatePattern::RecordPatternEq {
+                    lhs,
+                    key: _,
+                    pattern,
+                } => {
+                    compiler.comment("Run record pattern");
+                    pattern.compile(compiler)?;
+                }
+                PredicatePattern::ArrayPatternEq { lhs, key, pattern } => {
+                    compiler.comment("Run array  pattern");
+                    pattern.compile(compiler)?;
+                }
+                PredicatePattern::TuplePatternEq {
+                    lhs,
+                    key: _,
+                    pattern,
+                } => {
+                    compiler.comment("Run tuple  pattern");
+                    pattern.compile(compiler)?;
+                }
+                PredicatePattern::FieldPresent { .. } | PredicatePattern::FieldAbsent { .. } => {
+                    unreachable!("FieldAbsent and  FieldPresent should be handled earlier");
+                }
+            }
+            compiler.comment("Restore the register");
+            compiler.emit(Op::LoadV1, &mid);
+            compiler.set_jump_target(dst);
+        }
+
+        Ok(())
     }
 }
 impl<'script> Compilable<'script> for ArrayPredicatePattern<'script> {
@@ -382,8 +478,8 @@ impl<'script> Compilable<'script> for ArrayPredicatePattern<'script> {
                 compiler.emit(Op::TestEq, &mid);
             }
             ArrayPredicatePattern::Tilde(_) => todo!(),
-            ArrayPredicatePattern::Record(_) => todo!(),
-            ArrayPredicatePattern::Ignore => todo!(),
+            ArrayPredicatePattern::Record(p) => p.compile(compiler)?,
+            ArrayPredicatePattern::Ignore => compiler.emit(Op::TrueRB, &NodeMeta::dummy()),
         }
         Ok(())
     }
@@ -396,114 +492,36 @@ impl<'script> Compilable<'script> for Pattern<'script> {
     /// will return the match state in registers.B
     fn compile_to_b(self, compiler: &mut Compiler<'script>) -> Result<()> {
         match self {
-            Pattern::Record(r) => {
-                compiler.emit(Op::TestIsRecord, &r.mid);
-                let dst = compiler.new_jump_point();
-                compiler.emit(Op::JumpFalse { dst }, &r.mid);
-
-                for f in r.fields {
-                    f.compile(compiler)?;
-                }
-
-                compiler.set_jump_target(dst);
-            }
-            Pattern::Array(a) => {
-                let mid = *a.mid;
-                compiler.emit(Op::TestIsArray, &mid);
-                let dst = compiler.new_jump_point();
-                compiler.emit(Op::JumpFalse { dst }, &mid);
-                for e in a.exprs {
-                    e.compile(compiler)?;
-                    todo!("we need to look at all the array elements :sob:")
-                }
-                compiler.set_jump_target(dst);
-            }
+            Pattern::Record(p) => p.compile(compiler)?,
+            Pattern::Array(p) => p.compile(compiler)?,
             Pattern::Expr(e) => {
                 let mid = e.meta().clone();
                 e.compile(compiler)?;
                 compiler.emit(Op::TestEq, &mid);
             }
-
-            #[allow(clippy::cast_possible_truncation)]
-            Pattern::Assign(p) => {
-                let AssignPattern {
-                    id: _,
-                    idx,
-                    pattern,
-                } = p;
-                // FIXME: want a MID
-                let mid = NodeMeta::dummy();
-                compiler.comment("Assign pattern");
-                pattern.compile(compiler)?;
-                let dst = compiler.new_jump_point();
-                compiler.comment("Jump on no match");
-                compiler.emit(Op::JumpFalse { dst }, &mid);
-                compiler.comment("Store the value in the local");
-                compiler.emit(Op::CopyV1, &mid);
-                compiler.emit(
-                    Op::StoreLocal {
-                        idx: idx as u32,
-                        elements: 0,
-                    },
-                    &mid,
-                );
-                compiler.set_jump_target(dst);
-            }
-            Pattern::Tuple(t) => {
-                compiler.comment("Tuple pattern");
-                let mid = *t.mid;
-                compiler.emit(Op::TestIsArray, &mid);
-                let dst_next = compiler.new_jump_point();
-                compiler.emit(Op::JumpFalse { dst: dst_next }, &mid);
-                compiler.comment("Check if the array is long enough");
-                compiler.emit(Op::InspectLen, &mid);
-                compiler.emit_const(t.exprs.len(), &mid);
-
-                if t.open {
-                    compiler.emit(Op::Binary { op: BinOpKind::Gte }, &mid);
-                } else {
-                    compiler.emit(Op::Binary { op: BinOpKind::Eq }, &mid);
-                }
-                compiler.emit(Op::LoadRB, &mid);
-                let end_and_pop = compiler.new_jump_point();
-
-                compiler.emit(Op::JumpFalse { dst: dst_next }, &mid);
-
-                compiler.comment("Save array for itteration and reverse it");
-                compiler.emit(Op::CopyV1, &mid);
-                compiler.emit(Op::ArrayReverse, &mid);
-                for (i, e) in t.exprs.into_iter().enumerate() {
-                    compiler.comment(&format!("Test tuple element {i}"));
-                    compiler.emit(Op::ArrayPop, &mid);
-                    compiler.comment("Load value in register to test");
-                    compiler.emit(Op::SwapV1, &mid);
-                    e.compile(compiler)?;
-                    compiler.comment("restore original test value");
-                    compiler.emit(Op::LoadV1, &mid);
-                    compiler.comment("Jump on no match");
-                    compiler.emit(Op::JumpFalse { dst: end_and_pop }, &mid);
-                }
-                // remove the array from the stack
-                compiler.comment("Remove the array from the stack");
-                compiler.set_jump_target(end_and_pop);
-                compiler.emit(Op::Pop, &mid);
-                compiler.set_jump_target(dst_next);
-            }
-            Pattern::Extract(_) => todo!(),
-            Pattern::DoNotCare => {
-                compiler.emit(Op::True, &NodeMeta::dummy());
-                compiler.emit(Op::LoadRB, &NodeMeta::dummy());
-            }
+            Pattern::Assign(p) => p.compile(compiler)?,
+            Pattern::Tuple(p) => p.compile(compiler)?,
+            Pattern::Extract(p) => p.compile(compiler)?,
+            Pattern::DoNotCare => compiler.emit(Op::TrueRB, &NodeMeta::dummy()),
         }
         Ok(())
     }
 }
 
 impl<'script> Compilable<'script> for ClausePreCondition<'script> {
-    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
-        todo!()
+    fn compile_to_b(self, compiler: &mut Compiler<'script>) -> Result<()> {
+        let ClausePreCondition { mut path } = self;
+        assert!(path.segments().len() == 1);
+        if let Some(Segment::Id { key, mid }) = path.segments_mut().pop() {
+            let key = compiler.add_key(key);
+            compiler.emit(Op::TestRecordContainsKey { key }, &mid);
+            Ok(())
+        } else {
+            Err("Invalid path in pre condition".into())
+        }
     }
-    fn compile_to_b(self, _compiler: &mut Compiler<'script>) -> Result<()> {
+
+    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
         todo!()
     }
 }
@@ -574,6 +592,114 @@ impl<'script> Compilable<'script> for Record<'script> {
 }
 
 impl<'script> Compilable<'script> for Invoke<'script> {
+    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
+        todo!()
+    }
+}
+
+impl<'script> Compilable<'script> for RecordPattern<'script> {
+    fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
+        let RecordPattern { mid, fields } = self;
+        compiler.emit(Op::TestIsRecord, &mid);
+        let dst = compiler.new_jump_point();
+        compiler.emit(Op::JumpFalse { dst }, &mid);
+        for f in fields {
+            f.compile(compiler)?;
+        }
+        compiler.set_jump_target(dst);
+        Ok(())
+    }
+}
+
+impl<'script> Compilable<'script> for ArrayPattern<'script> {
+    fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
+        let ArrayPattern { mid, exprs } = self;
+        compiler.emit(Op::TestIsArray, &mid);
+        let dst = compiler.new_jump_point();
+        compiler.emit(Op::JumpFalse { dst }, &mid);
+        for e in exprs {
+            e.compile(compiler)?;
+        }
+        compiler.set_jump_target(dst);
+        todo!("we need to look at all the array elements :sob:");
+        // Ok(())
+    }
+}
+
+impl<'script> Compilable<'script> for AssignPattern<'script> {
+    #[allow(clippy::cast_possible_truncation)]
+    fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
+        let AssignPattern {
+            id: _,
+            idx,
+            pattern,
+        } = self;
+        // FIXME: want a MID
+        let mid = NodeMeta::dummy();
+        compiler.comment("Assign pattern");
+        pattern.compile(compiler)?;
+        let dst = compiler.new_jump_point();
+        compiler.comment("Jump on no match");
+        compiler.emit(Op::JumpFalse { dst }, &mid);
+        compiler.comment("Store the value in the local");
+        compiler.emit(Op::CopyV1, &mid);
+        compiler.emit(
+            Op::StoreLocal {
+                idx: idx as u32,
+                elements: 0,
+            },
+            &mid,
+        );
+        compiler.set_jump_target(dst);
+        Ok(())
+    }
+}
+
+impl<'script> Compilable<'script> for TuplePattern<'script> {
+    fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
+        let TuplePattern { mid, exprs, open } = self;
+        compiler.comment("Tuple pattern");
+        compiler.emit(Op::TestIsArray, &mid);
+        let dst_next = compiler.new_jump_point();
+        compiler.emit(Op::JumpFalse { dst: dst_next }, &mid);
+        compiler.comment("Check if the array is long enough");
+        compiler.emit(Op::InspectLen, &mid);
+        compiler.emit_const(exprs.len(), &mid);
+
+        if open {
+            compiler.emit(Op::Binary { op: BinOpKind::Gte }, &mid);
+        } else {
+            compiler.emit(Op::Binary { op: BinOpKind::Eq }, &mid);
+        }
+        compiler.emit(Op::LoadRB, &mid);
+        let end_and_pop = compiler.new_jump_point();
+
+        compiler.emit(Op::JumpFalse { dst: dst_next }, &mid);
+
+        compiler.comment("Save array for itteration and reverse it");
+        compiler.emit(Op::CopyV1, &mid);
+        compiler.emit(Op::ArrayReverse, &mid);
+        for (i, e) in exprs.into_iter().enumerate() {
+            compiler.comment(&format!("Test tuple element {i}"));
+            compiler.emit(Op::ArrayPop, &mid);
+            compiler.comment("Load value in register to test");
+            compiler.emit(Op::SwapV1, &mid);
+            e.compile(compiler)?;
+            compiler.comment("restore original test value");
+            compiler.emit(Op::LoadV1, &mid);
+            compiler.comment("Jump on no match");
+            compiler.emit(Op::JumpFalse { dst: end_and_pop }, &mid);
+        }
+        // remove the array from the stack
+        compiler.comment("Remove the array from the stack");
+        compiler.set_jump_target(end_and_pop);
+        compiler.emit(Op::Pop, &mid);
+        compiler.set_jump_target(dst_next);
+        Ok(())
+    }
+}
+
+impl<'script> Compilable<'script> for TestExpr {
     fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
         todo!()
     }
