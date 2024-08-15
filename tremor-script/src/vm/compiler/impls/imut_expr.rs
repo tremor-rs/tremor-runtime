@@ -3,9 +3,10 @@ use tremor_value::Value;
 use crate::{
     ast::{
         raw::{BytesDataType, Endian},
-        ArrayPredicatePattern, BaseExpr, BinOpKind, BooleanBinExpr, BooleanBinOpKind, BytesPart,
-        ClausePreCondition, Field, ImutExpr, Invoke, List, Merge, Patch, PatchOperation, Pattern,
-        PredicatePattern, Record, Segment, StrLitElement, StringLit,
+        ArrayPredicatePattern, AssignPattern, BaseExpr, BinOpKind, BooleanBinExpr,
+        BooleanBinOpKind, BytesPart, ClausePreCondition, Field, ImutExpr, Invoke, List, Merge,
+        Patch, PatchOperation, Pattern, PredicatePattern, Record, Segment, StrLitElement,
+        StringLit,
     },
     errors::Result,
     vm::{
@@ -378,8 +379,7 @@ impl<'script> Compilable<'script> for ArrayPredicatePattern<'script> {
             ArrayPredicatePattern::Expr(e) => {
                 let mid = e.meta().clone();
                 e.compile(compiler)?;
-                compiler.emit(Op::Binary { op: BinOpKind::Eq }, &mid);
-                compiler.emit(Op::LoadRB, &mid);
+                compiler.emit(Op::TestEq, &mid);
             }
             ArrayPredicatePattern::Tilde(_) => todo!(),
             ArrayPredicatePattern::Record(_) => todo!(),
@@ -424,7 +424,31 @@ impl<'script> Compilable<'script> for Pattern<'script> {
                 compiler.emit(Op::TestEq, &mid);
             }
 
-            Pattern::Assign(_) => todo!(),
+            #[allow(clippy::cast_possible_truncation)]
+            Pattern::Assign(p) => {
+                let AssignPattern {
+                    id: _,
+                    idx,
+                    pattern,
+                } = p;
+                // FIXME: want a MID
+                let mid = NodeMeta::dummy();
+                compiler.comment("Assign pattern");
+                pattern.compile(compiler)?;
+                let dst = compiler.new_jump_point();
+                compiler.comment("Jump on no match");
+                compiler.emit(Op::JumpFalse { dst }, &mid);
+                compiler.comment("Store the value in the local");
+                compiler.emit(Op::CopyV1, &mid);
+                compiler.emit(
+                    Op::StoreLocal {
+                        idx: idx as u32,
+                        elements: 0,
+                    },
+                    &mid,
+                );
+                compiler.set_jump_target(dst);
+            }
             Pattern::Tuple(t) => {
                 compiler.comment("Tuple pattern");
                 let mid = *t.mid;
@@ -449,9 +473,13 @@ impl<'script> Compilable<'script> for Pattern<'script> {
                 compiler.emit(Op::CopyV1, &mid);
                 compiler.emit(Op::ArrayReverse, &mid);
                 for (i, e) in t.exprs.into_iter().enumerate() {
-                    compiler.comment(&format!("Test tuple element {}", i));
+                    compiler.comment(&format!("Test tuple element {i}"));
                     compiler.emit(Op::ArrayPop, &mid);
+                    compiler.comment("Load value in register to test");
+                    compiler.emit(Op::SwapV1, &mid);
                     e.compile(compiler)?;
+                    compiler.comment("restore original test value");
+                    compiler.emit(Op::LoadV1, &mid);
                     compiler.comment("Jump on no match");
                     compiler.emit(Op::JumpFalse { dst: end_and_pop }, &mid);
                 }

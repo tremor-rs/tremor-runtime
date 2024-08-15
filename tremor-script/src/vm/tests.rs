@@ -1036,6 +1036,7 @@ fn test_local_array_assign_nested() -> Result<()> {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test_match_touple() -> Result<()> {
     let p = compile(
         false,
@@ -1058,79 +1059,86 @@ fn test_match_touple() -> Result<()> {
             Array { size: 2 },
             LoadV1,
             TestIsArray,
-            JumpFalse { dst: 26 },
+            JumpFalse { dst: 28 },
             InspectLen,
             Const { idx: 3 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 26 },
+            JumpFalse { dst: 28 },
             CopyV1,
             ArrayReverse,
             ArrayPop,
+            SwapV1,
             Const { idx: 0 },
-            Binary { op: Eq },
-            LoadRB,
-            JumpFalse { dst: 25 },
+            TestEq,
+            LoadV1,
+            JumpFalse { dst: 27 },
             ArrayPop,
+            SwapV1,
             Const { idx: 4 },
-            Binary { op: Eq },
-            LoadRB,
-            JumpFalse { dst: 25 },
+            TestEq,
+            LoadV1,
+            JumpFalse { dst: 27 },
             Pop,
-            JumpFalse { dst: 29 },
+            JumpFalse { dst: 31 },
             Const { idx: 4 },
-            Jump { dst: 81 },
+            Jump { dst: 88 },
             TestIsArray,
-            JumpFalse { dst: 54 },
+            JumpFalse { dst: 59 },
             InspectLen,
             Const { idx: 5 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 54 },
+            JumpFalse { dst: 59 },
             CopyV1,
             ArrayReverse,
             ArrayPop,
+            SwapV1,
             Const { idx: 0 },
-            Binary { op: Eq },
-            LoadRB,
-            JumpFalse { dst: 53 },
+            TestEq,
+            LoadV1,
+            JumpFalse { dst: 58 },
             ArrayPop,
+            SwapV1,
             Const { idx: 1 },
-            Binary { op: Eq },
-            LoadRB,
-            JumpFalse { dst: 53 },
+            TestEq,
+            LoadV1,
+            JumpFalse { dst: 58 },
             ArrayPop,
+            SwapV1,
             Const { idx: 6 },
-            Binary { op: Eq },
-            LoadRB,
-            JumpFalse { dst: 53 },
+            TestEq,
+            LoadV1,
+            JumpFalse { dst: 58 },
             Pop,
-            JumpFalse { dst: 57 },
+            JumpFalse { dst: 62 },
             Const { idx: 6 },
-            Jump { dst: 81 },
+            Jump { dst: 88 },
             TestIsArray,
-            JumpFalse { dst: 77 },
+            JumpFalse { dst: 84 },
             InspectLen,
             Const { idx: 3 },
             Binary { op: Eq },
             LoadRB,
-            JumpFalse { dst: 77 },
+            JumpFalse { dst: 84 },
             CopyV1,
             ArrayReverse,
             ArrayPop,
+            SwapV1,
             Const { idx: 0 },
-            Binary { op: Eq },
-            LoadRB,
-            JumpFalse { dst: 76 },
+            TestEq,
+            LoadV1,
+            JumpFalse { dst: 83 },
             ArrayPop,
+            SwapV1,
             Const { idx: 1 },
-            Binary { op: Eq },
-            LoadRB,
-            JumpFalse { dst: 76 },
+            TestEq,
+            LoadV1,
+            JumpFalse { dst: 83 },
             Pop,
-            JumpFalse { dst: 80 },
+            JumpFalse { dst: 87 },
             Const { idx: 0 },
-            Jump { dst: 81 },
+            Jump { dst: 88 },
             Const { idx: 7 },
             LoadV1,
             SwapV1,
@@ -1163,5 +1171,109 @@ fn test_match_search_tree() -> Result<()> {
     // assert_eq!(p.opcodes, &[]);
 
     assert_eq!(run(&p)?, 42);
+    Ok(())
+}
+
+#[test]
+fn test_match_assign() -> Result<()> {
+    let p = compile(
+        false,
+        r"
+        match 42 of 
+          case 24 => 24
+          case 7 => 7
+          case a = 42 => a
+          case _ => 0
+        end",
+    )?;
+
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            Const { idx: 0 },
+            LoadV1,
+            Const { idx: 1 },
+            TestEq,
+            JumpFalse { dst: 8 },
+            Const { idx: 1 },
+            Jump { dst: 22 },
+            Const { idx: 0 },
+            TestEq,
+            JumpFalse { dst: 13 },
+            CopyV1,
+            StoreLocal {
+                elements: 0,
+                idx: 0,
+            },
+            JumpFalse { dst: 16 },
+            LoadLocal { idx: 0 },
+            Jump { dst: 22 },
+            Const { idx: 2 },
+            TestEq,
+            JumpFalse { dst: 21 },
+            Const { idx: 2 },
+            Jump { dst: 22 },
+            Const { idx: 3 },
+            LoadV1,
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(run(&p)?, 42);
+    Ok(())
+}
+
+#[test]
+fn test_match_assign_nested() -> Result<()> {
+    let p = compile(
+        false,
+        r"
+        match [42] of 
+          case a = %(42) => a
+          case _ => 0
+        end",
+    )?;
+
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            Const { idx: 0 },
+            Const { idx: 1 },
+            Array { size: 1 },
+            LoadV1,
+            TestIsArray,
+            JumpFalse { dst: 21 },
+            InspectLen,
+            Const { idx: 2 },
+            Binary { op: Eq },
+            LoadRB,
+            JumpFalse { dst: 21 },
+            CopyV1,
+            ArrayReverse,
+            ArrayPop,
+            SwapV1,
+            Const { idx: 0 },
+            TestEq,
+            LoadV1,
+            JumpFalse { dst: 20 },
+            Pop,
+            JumpFalse { dst: 24 },
+            CopyV1,
+            StoreLocal {
+                elements: 0,
+                idx: 0,
+            },
+            JumpFalse { dst: 27 },
+            LoadLocal { idx: 0 },
+            Jump { dst: 28 },
+            Const { idx: 3 },
+            LoadV1,
+            SwapV1,
+        ]
+    );
+
+    assert_eq!(run(&p)?, literal!([42]));
     Ok(())
 }

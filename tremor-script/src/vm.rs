@@ -342,9 +342,9 @@ impl<'run, 'event> Scope<'run, 'event> {
                     self.reg.b1 = self.reg.v1.as_array().map_or(true, Vec::is_empty);
                 }
                 Op::TestEq => {
-                    let rhs = last(&stack, *pc, *cc)?;
+                    let rhs = pop(&mut stack, *pc, *cc)?;
                     self.reg.b1 =
-                        exec_binary(mid, mid, crate::ast::BinOpKind::Eq, &self.reg.v1, rhs)?
+                        exec_binary(mid, mid, crate::ast::BinOpKind::Eq, &self.reg.v1, &rhs)?
                             .try_as_bool()?;
                 }
                 Op::TestNeq => {
