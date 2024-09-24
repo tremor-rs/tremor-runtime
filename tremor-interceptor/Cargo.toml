@@ -25,8 +25,7 @@ anyhow = { version = "1.0", default-features = true }
 thiserror = { version = "1.0", default-features = false }
 
 #gelf
-rand = { version = "0.8", optional = true, default-features = false, features = [
-] }
+rand = { version = "0.8", optional = true, default-features = false, features =  ["std_rng"] }
 
 # Compression
 brotli = { version = "6", optional = true, default-features = false, features = [
