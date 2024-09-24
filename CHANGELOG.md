@@ -8,7 +8,8 @@
 ### Fixes
 * gbq connector naming is now `gbq_writer` as it is documented
 * fix gbq connector url missing `/`
-
+* fix GELF message-id from auto-increment to random-id in postprocessor/gelf_chunking.rs 
+  
 ## [0.13.0-rc.29]
 
 ### New features
