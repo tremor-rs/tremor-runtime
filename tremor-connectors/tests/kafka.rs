@@ -19,8 +19,11 @@ mod kafka {
     mod producer;
 }
 use std::time::Duration;
+use testcontainers::core::IntoContainerPort;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{core::WaitFor, ContainerAsync, GenericImage, RunnableImage};
+use testcontainers::GenericImage;
+use testcontainers::ImageExt;
+use testcontainers::{core::WaitFor, ContainerAsync};
 use tremor_connectors_test_helpers::free_port::find_free_tcp_port;
 
 const IMAGE: &str = "vectorized/redpanda";
@@ -29,7 +32,7 @@ pub(crate) const PRODUCE_TIMEOUT: Duration = Duration::from_secs(5);
 
 async fn redpanda_container() -> anyhow::Result<ContainerAsync<GenericImage>> {
     let kafka_port = find_free_tcp_port().await?;
-    let args = vec![
+    let args = [
         "redpanda",
         "start",
         "--overprovisioned",
@@ -48,17 +51,11 @@ async fn redpanda_container() -> anyhow::Result<ContainerAsync<GenericImage>> {
         "redpanda.enable_admin_api=false",
         "--set",
         "redpanda.developer_mode=true",
-    ]
-    .into_iter()
-    .map(ToString::to_string)
-    .collect();
-    let image = GenericImage::new(IMAGE, VERSION).with_wait_for(WaitFor::StdErrMessage {
-        message: "Successfully started Redpanda!".to_string(),
-    });
-    let image = RunnableImage::from((image, args))
-        // .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
-        // .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
-        // .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16))
-        .with_mapped_port((kafka_port, 9092_u16));
-    Ok(image.start().await)
+    ];
+    let image = GenericImage::new(IMAGE, VERSION)
+        .with_wait_for(WaitFor::message_on_stderr("Successfully started Redpanda!"))
+        .with_cmd(args)
+        .with_mapped_port(kafka_port, 9092_u16.tcp());
+
+    Ok(image.start().await?)
 }

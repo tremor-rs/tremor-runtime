@@ -20,11 +20,12 @@ use googapis::google::pubsub::v1::{
 use serial_test::serial;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use testcontainers::{clients::Cli, RunnableImage};
+use testcontainers::runners::AsyncRunner;
+use testcontainers_modules::google_cloud_sdk_emulators::{CloudSdk, PUBSUB_PORT};
 use tokio::time::timeout;
 use tonic::transport::Channel;
-use tremor_common::ports::IN;
-use tremor_connectors::{harness::Harness, impls::gpubsub::producer::Builder};
+use tremor_connectors::harness::Harness;
+use tremor_connectors_gcp::gpubsub::producer::Builder;
 use tremor_system::{
     event::{Event, EventId},
     instance::State,
@@ -81,16 +82,10 @@ async fn no_hostname() -> anyhow::Result<()> {
 #[serial(gpubsub)]
 async fn simple_publish() -> anyhow::Result<()> {
     let _ = env_logger::try_init();
-    let runner = Cli::docker();
 
-    let (pubsub, pubsub_args) =
-        testcontainers::images::google_cloud_sdk_emulators::CloudSdk::pubsub();
-    let runnable_image = RunnableImage::from((pubsub, pubsub_args));
-    let container = runner.run(runnable_image);
-
-    let port = container
-        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
-    let endpoint = format!("http://localhost:{port}");
+    let pubsub = CloudSdk::pubsub().start().await?;
+    let port = pubsub.get_host_port_ipv4(PUBSUB_PORT).await?;
+    let endpoint: String = format!("http://localhost:{port}");
     let endpoint_clone = endpoint.clone();
 
     // note we need to keep this around until the end of the test so we can't consume it
@@ -188,19 +183,12 @@ async fn simple_publish() -> anyhow::Result<()> {
 #[serial(gpubsub)]
 async fn simple_publish_with_timeout() -> anyhow::Result<()> {
     let _ = env_logger::try_init();
-    let runner = Cli::docker();
-
-    let (pubsub, pubsub_args) =
-        testcontainers::images::google_cloud_sdk_emulators::CloudSdk::pubsub();
-    let runnable_image = RunnableImage::from((pubsub, pubsub_args));
-    let container = runner.run(runnable_image);
-
-    let port = container
-        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+    let pubsub = CloudSdk::pubsub().start().await?;
+    let port = pubsub.get_host_port_ipv4(PUBSUB_PORT).await?;
+    let endpoint: String = format!("http://localhost:{port}");
 
     // note we need to keep this around until the end of the test so we can't consume it
     let token_file = crate::gouth_token().await?;
-    let endpoint = format!("http://localhost:{port}");
 
     let connector_yaml: Value = literal!({
         "codec": "binary",
@@ -250,7 +238,7 @@ async fn simple_publish_with_timeout() -> anyhow::Result<()> {
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
-    drop(container);
+    drop(pubsub);
 
     let event = Event {
         id: EventId::default(),

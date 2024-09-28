@@ -27,8 +27,8 @@ use std::{
     time::{Duration, Instant},
 };
 use testcontainers::runners::AsyncRunner;
-use testcontainers::ContainerAsync;
-use testcontainers::{GenericImage, RunnableImage};
+use testcontainers::{core::IntoContainerPort, GenericImage};
+use testcontainers::{ContainerAsync, ImageExt};
 use tremor_connectors_test_helpers::free_port::find_free_tcp_port;
 
 const IMAGE: &str = "minio/minio";
@@ -76,23 +76,21 @@ async fn create_bucket(bucket: &str, http_port: u16) -> anyhow::Result<()> {
 }
 
 async fn spawn_docker() -> (ContainerAsync<GenericImage>, u16) {
+    let http_port = find_free_tcp_port().await.unwrap_or(10080);
+    let http_tls_port = find_free_tcp_port().await.unwrap_or(10443);
+
     let image = GenericImage::new(IMAGE, VERSION)
         .with_env_var("MINIO_ROOT_USER", MINIO_ROOT_USER)
         .with_env_var("MINIO_ROOT_PASSWORD", MINIO_ROOT_PASSWORD)
-        .with_env_var("MINIO_REGION", MINIO_REGION);
-    let http_port = find_free_tcp_port().await.unwrap_or(10080);
-    let http_tls_port = find_free_tcp_port().await.unwrap_or(10443);
-    let image = RunnableImage::from((
-        image,
-        vec![
+        .with_env_var("MINIO_REGION", MINIO_REGION)
+        .with_cmd([
             String::from("server"),
             String::from("/data"),
             String::from("--console-address"),
             String::from(":9001"),
-        ],
-    ))
-    .with_mapped_port((http_port, 9000_u16))
-    .with_mapped_port((http_tls_port, 9001_u16));
+        ])
+        .with_mapped_port(http_port, 9000_u16.tcp())
+        .with_mapped_port(http_tls_port, 9001_u16.tcp());
     let container = image.start().await;
 
     (container.unwrap(), http_port)

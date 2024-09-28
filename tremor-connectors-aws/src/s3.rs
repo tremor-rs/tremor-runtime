@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_markdown, rustdoc::invalid_codeblock_attributes)]
 //! The Amazon Web Services `s3` provides integration with the AWS Simple Storage Service or
 //! drop-in compatible replacements such as [MinIO](https://www.min.io).
 //!

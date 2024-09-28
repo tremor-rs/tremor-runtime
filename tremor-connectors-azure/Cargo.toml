@@ -1,7 +1,3 @@
-bin = []
-bench = []
-test = []
-
 [package]
 name = "tremor-connectors-azure"
 edition = "2021"
@@ -44,12 +40,3 @@ mockito = "1.4.0"
 
 [features]
 integration-harness = []
-
-[lib]
-path = "src/lib.rs"
-name = "tremor_connectors_azure"
-plugin = false
-proc-macro = false
-edition = "2021"
-required-features = []
-crate-type = ["rlib"]

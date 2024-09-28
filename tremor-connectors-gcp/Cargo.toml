@@ -59,7 +59,7 @@ simd-json-derive = { version = "0.13", default-features = true }
 simd-json = { version = "0.13", default-features = true }
 
 [dev-dependencies]
-testcontainers = { version = "0.18", default-features = true }
+testcontainers = { version = "0.23", default-features = true }
 hyper = { version = "0.14", default-features = true, features = [
     "server",
     "http1",
@@ -74,6 +74,10 @@ tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.29" }
 tempfile = { version = "3", default-features = true }
 env_logger = { version = "0.11", default-features = true }
 tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.29" }
+serial_test = "3.1.1"
+testcontainers-modules = { version = "0.11.1", features = [
+    "google_cloud_sdk_emulators",
+] }
 
 [features]
 integration-harness = []

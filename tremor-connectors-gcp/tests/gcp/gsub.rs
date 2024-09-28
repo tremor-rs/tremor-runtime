@@ -20,11 +20,11 @@ use googapis::google::pubsub::v1::{
 };
 use serial_test::serial;
 use std::collections::HashMap;
-use testcontainers::clients::Cli;
-use testcontainers::RunnableImage;
+use testcontainers::runners::AsyncRunner;
+use testcontainers_modules::google_cloud_sdk_emulators::{CloudSdk, PUBSUB_PORT};
 use tonic::transport::Channel;
 use tremor_connectors::harness::Harness;
-use tremor_connectors::impls::gpubsub::consumer::Builder;
+use tremor_connectors_gcp::gpubsub::consumer::Builder;
 use tremor_system::controlplane::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::prelude::*;
@@ -104,14 +104,9 @@ async fn create_subscription(
 #[serial(gpubsub)]
 async fn simple_subscribe() -> anyhow::Result<()> {
     let _ = env_logger::try_init();
-    let runner = Cli::docker();
 
-    let (pubsub, pubsub_args) =
-        testcontainers::images::google_cloud_sdk_emulators::CloudSdk::pubsub();
-    let runnable_image = RunnableImage::from((pubsub, pubsub_args));
-    let container = runner.run(runnable_image);
-    let port = container
-        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+    let pubsub = CloudSdk::pubsub().start().await?;
+    let port = pubsub.get_host_port_ipv4(PUBSUB_PORT).await?;
     let endpoint = format!("http://localhost:{port}");
     let topic = "projects/test/topics/test";
     let subscription = "projects/test/subscriptions/test-subscription-a";

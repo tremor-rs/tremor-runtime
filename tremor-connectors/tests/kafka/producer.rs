@@ -37,7 +37,7 @@ use tremor_value::literal;
 #[serial(kafka)]
 async fn connector_kafka_producer() -> anyhow::Result<()> {
     let container = redpanda_container().await?;
-    let port = container.get_host_port_ipv4(9092).await;
+    let port = container.get_host_port_ipv4(9092).await?;
 
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{port}");

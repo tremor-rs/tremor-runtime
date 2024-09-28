@@ -13,7 +13,6 @@
 // limitations under the License.
 
 //! Tremor AWS connectors
-
 #![deny(warnings)]
 #![deny(missing_docs)]
 #![deny(
