@@ -165,7 +165,7 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
             .map_err(Error::from)?
     };
 
-    let data = if data.starts_with(|c| matches!(c, 'c' | 'h' | 's')) {
+    let data = if data.starts_with(['c', 'h', 's']) {
         let (t, data) = data.split_at(1);
         m.insert_nocheck("type".into(), t.into());
         data

@@ -730,7 +730,7 @@ mod test {
         assert_eq!(89, r[0].0.len());
         assert_eq!(10, r[1].0.len());
 
-        let r = pp.finish(Some(&[b'|']), None)?;
+        let r = pp.finish(Some(b"|"), None)?;
         assert_eq!(2, r.len());
         assert_eq!(0, r[0].0.len());
         assert_eq!(0, r[1].0.len());
@@ -752,7 +752,7 @@ mod test {
         assert_eq!(1, r.len());
         assert_eq!(89, r[0].0.len());
 
-        let r = pp.finish(Some(&[b'|', b'A']), None)?;
+        let r = pp.finish(Some(b"|A"), None)?;
         assert_eq!(2, r.len());
         assert_eq!(10, r[0].0.len());
         assert_eq!(1, r[1].0.len());

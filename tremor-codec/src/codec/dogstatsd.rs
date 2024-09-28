@@ -346,7 +346,7 @@ fn decode_metric(data: &str) -> Result<Value> {
 
     m.insert_nocheck("values".into(), Value::from(values));
 
-    let data = if data.starts_with(|c| matches!(c, 'c' | 'd' | 'g' | 'h' | 's')) {
+    let data = if data.starts_with(['c', 'd', 'g', 'h', 's']) {
         let (t, data) = data.split_at(1);
         m.insert_nocheck("type".into(), t.into());
         data

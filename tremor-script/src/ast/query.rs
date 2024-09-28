@@ -475,8 +475,7 @@ impl<'script> DefinitionalArgsWith<'script> {
     /// here the following happens:
     /// 1) The creational with is merged into the definitial with, overwriting defaults
     /// 2) We check if all mandatory fiends defined in the creational-args are set
-    /// 3) we incoperate the merged args into the creational with - this results in the final map
-    /// in the with section
+    /// 3) we incoperate the merged args into the creational with - this results in the final map in the with section
     ///
     /// # Errors
     /// for unknown keys
@@ -552,7 +551,7 @@ impl<'script> DefinitionalArgs<'script> {
     /// 1) The creational with is merged into the definitial with, overwriting defaults
     /// 2) We check if all mandatory fiends defined in the creational-args are set
     /// 3) we incoperate the merged args into the creational with - this results in the final map
-    /// in the with section
+    ///    in the with section
     ///
     /// # Errors
     /// for unknown keys

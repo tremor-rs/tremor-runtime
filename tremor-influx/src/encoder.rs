@@ -61,14 +61,14 @@ where
     tag_collection.sort_by_key(|v| v.0);
 
     for (key, value) in tag_collection {
-        output.write_all(&[b','])?;
+        output.write_all(b",")?;
         write_escaped_key(&mut output, key.as_bytes())?;
-        output.write_all(&[b'='])?;
+        output.write_all(b"=")?;
         // For the fields we escape differently then for values ...
         write_escaped_key(&mut output, value.as_bytes())?;
     }
 
-    output.write_all(&[b' '])?;
+    output.write_all(b" ")?;
 
     let fields = v
         .try_get_object("fields")?
@@ -83,10 +83,10 @@ where
         if first {
             first = false;
         } else {
-            output.write_all(&[b','])?;
+            output.write_all(b",")?;
         }
         write_escaped_key(&mut output, key.as_bytes())?;
-        output.write_all(&[b'='])?;
+        output.write_all(b"=")?;
 
         if let Some(s) = value.as_str() {
             write_escaped_value(&mut output, s.as_bytes())?;
@@ -95,14 +95,14 @@ where
                 ValueType::F64 | ValueType::Bool => value.write(&mut output)?,
                 ValueType::U64 | ValueType::I64 => {
                     value.write(&mut output)?;
-                    output.write_all(&[b'i'])?;
+                    output.write_all(b"i")?;
                 }
                 _ => return Err(Error::InvalidValue(key.to_string(), value.value_type())),
             }
         }
     }
 
-    output.write_all(&[b' '])?;
+    output.write_all(b" ")?;
     let t = v.get("timestamp").ok_or(Error::MissingField("timestamp"))?;
     if t.is_u64() {
         t.write(&mut output)?;
@@ -116,7 +116,7 @@ where
 fn write_escaped_value<W: Write>(writer: &mut W, string: &[u8]) -> Result<()> {
     let mut start = 0;
 
-    writer.write_all(&[b'"'])?;
+    writer.write_all(b"\"")?;
     for (index, ch) in string.iter().enumerate().skip(start) {
         let ch = *ch;
         if ch == b'"' || ch == b'\\' {
@@ -126,7 +126,7 @@ fn write_escaped_value<W: Write>(writer: &mut W, string: &[u8]) -> Result<()> {
         }
     }
     write_substr(writer, string, start..)?;
-    writer.write_all(&[b'"'])?;
+    writer.write_all(b"\"")?;
     Ok(())
 }
 

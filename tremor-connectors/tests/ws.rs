@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(feature = "websockets-integration")]
+#![cfg(feature = "integration-tests-websocket")]
 
 use anyhow::{anyhow, bail, Result};
 use futures::SinkExt;
 use futures::StreamExt;
 use log::info;
-use rustls::ServerName;
+use rustls::pki_types::ServerName;
 use std::{
     net::SocketAddr,
     sync::{
@@ -45,7 +45,7 @@ use tokio_tungstenite::{
     },
     WebSocketStream,
 };
-use tremor_common::{ports::IN, url::Url};
+use tremor_common::url::Url;
 use tremor_connectors::{
     harness::Harness,
     impls::ws::{self, Defaults},
@@ -127,7 +127,8 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
     fn new(url: &str) -> Result<Self> {
         use tokio_tungstenite::tungstenite::connect;
 
-        let (client, _http_response) = connect(Url::<Defaults>::parse(url)?.url())?;
+        let url = Url::<Defaults>::parse(url)?.url().to_string();
+        let (client, _http_response) = connect(url)?;
         Ok(Self { client })
     }
 

@@ -266,8 +266,11 @@ integration-harness-local = [
     "integration-tests-udp",
     "integration-tests-unix-socket",
     "integration-tests-wal",
-    "websocket-integration",
+    "integration-tests-websocket",
 ]
+
+# enable flaky tests
+flaky-test = []
 
 integration-tests-bench = ["bench"]
 integration-tests-clickhouse = ["clickhouse", "dep:chrono"]
@@ -281,4 +284,4 @@ integration-tests-tcp = ["tcp"]
 integration-tests-udp = ["udp"]
 integration-tests-unix-socket = ["unix-socket"]
 integration-tests-wal = ["wal"]
-websocket-integration = ["websocket"]
+integration-tests-websocket = ["websocket"]

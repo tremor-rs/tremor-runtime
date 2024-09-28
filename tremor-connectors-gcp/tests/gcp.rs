@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(feature = "integration-tests-gcp")]
+#![cfg(feature = "integration-harness")]
 
 use hyper::{
     service::{make_service_fn, service_fn},

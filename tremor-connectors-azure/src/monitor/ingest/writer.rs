@@ -147,7 +147,7 @@ impl RequestBuilder {
         let mut request = azure_core::Request::new(endpoint, Method::Post);
         request.insert_header("content-type", "application/json");
         if let Some(auth_token) = &self.auth_token {
-            request.insert_header("authorization", &format!("Bearer {auth_token}"));
+            request.insert_header("authorization", format!("Bearer {auth_token}"));
         }
 
         let mut bytes = vec![];
