@@ -519,3 +519,102 @@ fn test_record_tuple() -> Result<()> {
     assert_eq!(run(&p)?, 2);
     Ok(())
 }
+
+#[test]
+fn extraxtor_top() -> Result<()> {
+    let p = compile(
+        false,
+        r#"
+        match "badger" of 
+          case %{ } => 1
+          case ~re|.*er.*| => 2
+          case _ => 3
+        end"#,
+    )?;
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            Const { idx: 0 },
+            String { size: 1 },
+            LoadV1,
+            TestIsRecord,
+            JumpFalse { dst: 6 },
+            JumpFalse { dst: 9 },
+            Const { idx: 1 },
+            Jump { dst: 14 },
+            TestExtractor { extractor: 0 },
+            JumpFalse { dst: 13 },
+            Const { idx: 2 },
+            Jump { dst: 14 },
+            Const { idx: 3 },
+            LoadV1,
+            SwapV1,
+        ]
+    );
+    assert_eq!(run(&p)?, 2);
+    Ok(())
+}
+
+#[test]
+fn extraxtor_nested() -> Result<()> {
+    let p = compile(
+        false,
+        r"
+        match event of 
+          case r = %{string ~= re|snot|} => 1
+          case r = %{string ~= re|ing|} => 2
+        end",
+    )?;
+    assert_eq!(
+        p.opcodes,
+        &[
+            StoreV1,
+            LoadEvent,
+            LoadV1,
+            TestIsRecord,
+            JumpFalse { dst: 13 },
+            TestRecordContainsKey { key: 0 },
+            JumpFalse { dst: 13 },
+            GetKeyRegV1 { key: 0 },
+            SwapV1,
+            TestExtractor { extractor: 0 },
+            JumpFalse { dst: 12 },
+            Swap,
+            LoadV1,
+            JumpFalse { dst: 16 },
+            CopyV1,
+            StoreLocal {
+                elements: 0,
+                idx: 0,
+            },
+            JumpFalse { dst: 19 },
+            Const { idx: 0 },
+            Jump { dst: 36 },
+            TestIsRecord,
+            JumpFalse { dst: 29 },
+            TestRecordContainsKey { key: 0 },
+            JumpFalse { dst: 29 },
+            GetKeyRegV1 { key: 0 },
+            SwapV1,
+            TestExtractor { extractor: 1 },
+            JumpFalse { dst: 28 },
+            Swap,
+            LoadV1,
+            JumpFalse { dst: 32 },
+            CopyV1,
+            StoreLocal {
+                elements: 0,
+                idx: 0,
+            },
+            JumpFalse { dst: 35 },
+            Const { idx: 1 },
+            Jump { dst: 36 },
+            Nop,
+            LoadV1,
+            SwapV1,
+        ]
+    );
+    assert_eq!(run(&p)?, 2);
+    Ok(())
+}

@@ -13,7 +13,7 @@
 // limitations under the License.
 mod impls;
 
-use crate::{ast::Script, errors::Result, NodeMeta};
+use crate::{ast::Script, errors::Result, extractor::Extractor, NodeMeta};
 use simd_json_derive::Serialize;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -32,6 +32,7 @@ pub struct Compiler<'script> {
     jump_table: Vec<u32>,
     end_table: Vec<u32>,
     consts: Vec<Value<'script>>,
+    extractors: Vec<Extractor>,
     keys: Vec<tremor_value::KnownKey<'script>>,
     max_locals: usize,
     pub(crate) comments: BTreeMap<usize, String>,
@@ -58,6 +59,7 @@ impl<'script> Compiler<'script> {
         let mut jump_table = HashMap::with_capacity(self.jump_table.len());
         let keys = mem::take(&mut self.keys);
         let comments = mem::take(&mut self.comments);
+        let extractors = mem::take(&mut self.extractors);
 
         for op in &mut opcodes {
             match op {
@@ -78,6 +80,7 @@ impl<'script> Compiler<'script> {
             consts,
             keys,
             comments,
+            extractors,
             max_locals: self.max_locals,
         })
     }
@@ -92,6 +95,7 @@ impl<'script> Compiler<'script> {
             end_table: Vec::new(),
             consts: Vec::new(),
             keys: Vec::new(),
+            extractors: Vec::new(),
             max_locals: 0,
             comments: BTreeMap::new(),
         }
@@ -140,6 +144,16 @@ impl<'script> Compiler<'script> {
         self.keys.push(key);
         (self.keys.len() - 1) as u32
     }
+    #[allow(clippy::cast_possible_truncation)]
+    fn add_extractor(&mut self, extractor: Extractor) -> u32 {
+        for (idx, v) in self.extractors.iter().enumerate() {
+            if v == &extractor {
+                return idx as u32;
+            }
+        }
+        self.extractors.push(extractor);
+        (self.extractors.len() - 1) as u32
+    }
 
     #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn new_jump_point(&mut self) -> u32 {
@@ -181,7 +195,7 @@ impl<'script> Default for Compiler<'script> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Default, Eq)]
+#[derive(Debug, Clone, Default)]
 /// A compiler for tremor script
 pub struct Program<'script> {
     pub(crate) opcodes: Vec<Op>,
@@ -189,6 +203,7 @@ pub struct Program<'script> {
     pub(crate) jump_table: HashMap<usize, usize>,
     pub(crate) consts: Vec<Value<'script>>,
     pub(crate) keys: Vec<tremor_value::KnownKey<'script>>,
+    pub(crate) extractors: Vec<Extractor>,
     pub(crate) max_locals: usize,
     pub(crate) comments: BTreeMap<usize, String>,
 }

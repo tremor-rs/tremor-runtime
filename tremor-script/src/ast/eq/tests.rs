@@ -468,7 +468,6 @@ fn imut_expr() -> ImutExpr<'static> {
 #[test]
 fn predicate_pattern() {
     assert!(PredicatePattern::TildeEq {
-        assign: "assign".into(),
         lhs: "lhs".into(),
         key: "key".into(),
         test: Box::new(TestExpr {
@@ -479,7 +478,6 @@ fn predicate_pattern() {
         }),
     }
     .ast_eq(&PredicatePattern::TildeEq {
-        assign: "assign".into(),
         lhs: "lhs".into(),
         key: "key".into(),
         test: Box::new(TestExpr {

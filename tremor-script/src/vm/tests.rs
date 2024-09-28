@@ -65,7 +65,8 @@ fn run<'v>(p: &Program<'v>) -> Result<Value<'v>> {
             }
         }
     });
-    if let Return::Emit { value, .. } = vm.run(&mut event, p)? {
+    let ctx = EventContext::new(1, None);
+    if let Return::Emit { value, .. } = vm.run(&mut event, &ctx, p)? {
         Ok(value)
     } else {
         Err("Expected Emit".into())
@@ -554,5 +555,29 @@ fn test_local_array_assign_nested() -> Result<()> {
     );
 
     assert_eq!(run(&p)?, literal!([-1, 2]));
+    Ok(())
+}
+
+#[test]
+fn test_present() -> Result<()> {
+    let p = compile(false, r#"present event.object["a"][1] "#)?;
+
+    assert_eq!(p.max_locals, 0);
+    assert_eq!(
+        p.opcodes,
+        &[
+            LoadEvent,
+            SwapV1,
+            Const { idx: 0 },
+            Const { idx: 1 },
+            String { size: 1 },
+            Const { idx: 2 },
+            TestPresent { elements: 3 },
+            LoadV1,
+            StoreRB
+        ]
+    );
+    assert_eq!(run(&p)?, true);
+
     Ok(())
 }

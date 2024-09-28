@@ -16,6 +16,7 @@
 #![allow(clippy::large_enum_variant)]
 #![allow(deprecated)]
 #![allow(missing_docs)]
+#![allow(non_snake_case)]
 
 use crate::errors::ErrorKind::InvalidBinaryBoolean;
 pub use crate::prelude::ValueType;

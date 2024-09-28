@@ -19,9 +19,10 @@ use tremor_value::Value;
 use crate::{
     ast::{
         ClauseGroup, Comprehension, DefaultCase, Expression, IfElse, Match, Path, PredicateClause,
-        Script,
+        Script, Segment,
     },
-    errors::Result,
+    errors::{err_generic, Result},
+    prelude::Ranged as _,
     vm::{
         compiler::{Compilable, Compiler},
         Op,
@@ -335,4 +336,23 @@ where
     fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
         todo!()
     }
+}
+
+fn compile_segment_path<'script>(
+    compiler: &mut Compiler<'script>,
+    segmetn: Segment<'script>,
+) -> Result<()> {
+    match segmetn {
+        Segment::Id { mid, key } => compiler.emit_const(key.key().to_string(), &mid),
+        Segment::Element { expr, mid: _ } => expr.compile(compiler)?,
+        Segment::Idx { idx, mid } => compiler.emit_const(idx, &mid),
+        Segment::Range { mid, .. } | Segment::RangeExpr { mid, .. } => {
+            return err_generic(
+                &mid.extent(),
+                &mid.extent(),
+                &"range segment can't be assigned",
+            )
+        }
+    }
+    Ok(())
 }

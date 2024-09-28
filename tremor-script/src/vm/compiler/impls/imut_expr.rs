@@ -17,17 +17,19 @@ use crate::{
     ast::{
         raw::{BytesDataType, Endian},
         ArrayPattern, ArrayPredicatePattern, AssignPattern, BaseExpr, BinOpKind, BooleanBinExpr,
-        BooleanBinOpKind, BytesPart, ClausePreCondition, Field, ImutExpr, Invoke, List, Merge,
-        Patch, PatchOperation, Pattern, PredicatePattern, Record, RecordPattern, Segment,
-        StrLitElement, StringLit, TestExpr, TuplePattern,
+        BooleanBinOpKind, BytesPart, ClausePreCondition, EventPath, Field, ImutExpr, Invoke,
+        InvokeAggr, List, LocalPath, Merge, Patch, PatchOperation, Path, Pattern, PredicatePattern,
+        Record, RecordPattern, Segment, StrLitElement, StringLit, TestExpr, TuplePattern,
     },
-    errors::Result,
+    errors::{err_generic, Result},
     vm::{
         compiler::{Compilable, Compiler},
         Op,
     },
     NodeMeta,
 };
+
+use super::compile_segment_path;
 
 #[allow(clippy::too_many_lines)]
 impl<'script> Compilable<'script> for ImutExpr<'script> {
@@ -65,16 +67,15 @@ impl<'script> Compilable<'script> for ImutExpr<'script> {
             ImutExpr::Literal(l) => {
                 compiler.emit_const(l.value, &l.mid);
             }
-            ImutExpr::Present {
-                path: _path,
-                mid: _mid,
-            } => todo!(),
+            ImutExpr::Present { path, mid } => {
+                compile_present(compiler, &mid, path)?;
+            }
             ImutExpr::Invoke1(i) => i.compile(compiler)?,
             ImutExpr::Invoke2(i) => i.compile(compiler)?,
             ImutExpr::Invoke3(i) => i.compile(compiler)?,
             ImutExpr::Invoke(i) => i.compile(compiler)?,
-            ImutExpr::InvokeAggr(_) => todo!(),
-            ImutExpr::Recur(_) => todo!(),
+            ImutExpr::InvokeAggr(a) => a.compile(compiler)?,
+            ImutExpr::Recur(_r) => todo!(),
             ImutExpr::Bytes(b) => {
                 let size = u32::try_from(b.value.len())?;
                 let mid = b.mid;
@@ -401,11 +402,18 @@ impl<'script> Compilable<'script> for PredicatePattern<'script> {
             compiler.emit(Op::SwapV1, &mid);
             match self {
                 PredicatePattern::TildeEq {
-                    assign,
-                    lhs,
-                    key,
+                    lhs: _,
+                    key: _,
                     test,
-                } => todo!(),
+                } => {
+                    let dst = compiler.new_jump_point();
+                    compiler.comment("Run tilde pattern");
+                    test.compile(compiler)?;
+                    compiler.emit(Op::JumpFalse { dst }, &mid);
+                    compiler.comment("Swap the value of the tilde pattern and the stored register");
+                    compiler.emit(Op::Swap, &mid);
+                    compiler.set_jump_target(dst);
+                }
                 PredicatePattern::Bin {
                     lhs: _,
                     key: _,
@@ -477,7 +485,7 @@ impl<'script> Compilable<'script> for ArrayPredicatePattern<'script> {
                 e.compile(compiler)?;
                 compiler.emit(Op::TestEq, &mid);
             }
-            ArrayPredicatePattern::Tilde(_) => todo!(),
+            ArrayPredicatePattern::Tilde(p) => p.compile(compiler)?,
             ArrayPredicatePattern::Record(p) => p.compile(compiler)?,
             ArrayPredicatePattern::Ignore => compiler.emit(Op::TrueRB, &NodeMeta::dummy()),
         }
@@ -511,7 +519,7 @@ impl<'script> Compilable<'script> for Pattern<'script> {
 impl<'script> Compilable<'script> for ClausePreCondition<'script> {
     fn compile_to_b(self, compiler: &mut Compiler<'script>) -> Result<()> {
         let ClausePreCondition { mut path } = self;
-        assert!(path.segments().len() == 1);
+        assert!(path.len() == 1);
         if let Some(Segment::Id { key, mid }) = path.segments_mut().pop() {
             let key = compiler.add_key(key);
             compiler.emit(Op::TestRecordContainsKey { key }, &mid);
@@ -522,7 +530,11 @@ impl<'script> Compilable<'script> for ClausePreCondition<'script> {
     }
 
     fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
-        todo!()
+        err_generic(
+            &self.path,
+            &self.path,
+            &"Pre conditions are not supported in this context",
+        )
     }
 }
 
@@ -596,6 +608,11 @@ impl<'script> Compilable<'script> for Invoke<'script> {
         todo!()
     }
 }
+impl<'script> Compilable<'script> for InvokeAggr {
+    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
+        todo!()
+    }
+}
 
 impl<'script> Compilable<'script> for RecordPattern<'script> {
     fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
@@ -627,7 +644,6 @@ impl<'script> Compilable<'script> for ArrayPattern<'script> {
 }
 
 impl<'script> Compilable<'script> for AssignPattern<'script> {
-    #[allow(clippy::cast_possible_truncation)]
     fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
         let AssignPattern {
             id: _,
@@ -637,15 +653,19 @@ impl<'script> Compilable<'script> for AssignPattern<'script> {
         // FIXME: want a MID
         let mid = NodeMeta::dummy();
         compiler.comment("Assign pattern");
+        let is_extract = matches!(pattern.as_ref(), &Pattern::Extract(_));
         pattern.compile(compiler)?;
         let dst = compiler.new_jump_point();
         compiler.comment("Jump on no match");
         compiler.emit(Op::JumpFalse { dst }, &mid);
-        compiler.comment("Store the value in the local");
-        compiler.emit(Op::CopyV1, &mid);
+        // extract patterns will store the value in the local stack if they match
+        if !is_extract {
+            compiler.comment("Store the value in the local");
+            compiler.emit(Op::CopyV1, &mid);
+        }
         compiler.emit(
             Op::StoreLocal {
-                idx: idx as u32,
+                idx: u32::try_from(idx)?,
                 elements: 0,
             },
             &mid,
@@ -700,7 +720,61 @@ impl<'script> Compilable<'script> for TuplePattern<'script> {
 }
 
 impl<'script> Compilable<'script> for TestExpr {
-    fn compile(self, _compiler: &mut Compiler<'script>) -> Result<()> {
-        todo!()
+    fn compile(self, compiler: &mut Compiler<'script>) -> Result<()> {
+        let TestExpr {
+            mid,
+            id: _,
+            test: _,
+            extractor,
+        } = self;
+        let extractor = compiler.add_extractor(extractor);
+        compiler.emit(Op::TestExtractor { extractor }, &mid);
+        Ok(())
     }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn compile_present<'script>(
+    compiler: &mut Compiler<'script>,
+    mid: &NodeMeta,
+    path: Path<'script>,
+) -> Result<()> {
+    let elements = u32::try_from(path.len())?;
+    let segments = match path {
+        Path::Local(LocalPath { idx, mid, segments }) => {
+            compiler.comment("Store local on stack");
+            compiler.emit(
+                Op::LoadLocal {
+                    idx: u32::try_from(idx)?,
+                },
+                &mid,
+            );
+            segments
+        }
+        Path::Event(EventPath { mid, segments }) => {
+            compiler.comment("Store event on stack");
+            compiler.emit(Op::LoadEvent, &mid);
+            segments
+        }
+        Path::State(_p) => todo!(),
+        Path::Meta(_p) => todo!(),
+        Path::Expr(_p) => todo!(),
+        Path::Reserved(_p) => todo!(),
+    };
+    dbg!(&segments);
+    compiler.comment("Swap in V1 to save the current value and load the base for the test");
+    compiler.emit(Op::SwapV1, mid);
+    if !segments.is_empty() {
+        compiler.comment("Load the path");
+    }
+    for s in segments {
+        compile_segment_path(compiler, s)?;
+    }
+    compiler.comment("Test if the value is present");
+    compiler.emit(Op::TestPresent { elements }, mid);
+    compiler.comment("Restore V1");
+    compiler.emit(Op::LoadV1, mid);
+    compiler.comment("Save result");
+    compiler.emit(Op::StoreRB, mid);
+    Ok(())
 }

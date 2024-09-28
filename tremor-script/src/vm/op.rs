@@ -154,6 +154,13 @@ pub(crate) enum Op {
         key: u32,
     },
 
+    TestExtractor {
+        extractor: u32,
+    },
+    TestPresent {
+        elements: u32,
+    },
+
     // Inspect - does not pop the stack result is stored on the stack
     //// returns the lenght of an array, object or 1 for scalar values
     InspectLen,
@@ -240,6 +247,10 @@ impl Display for Op {
             Op::TestGte => write!(f, "test_gte"),
             Op::TestLt => write!(f, "test_lt"),
             Op::TestLte => write!(f, "test_lte"),
+            Op::TestExtractor { extractor } => {
+                write!(f, "{:30} {:<5}", "test_extractor", extractor)
+            }
+            Op::TestPresent { elements: depth } => write!(f, "{:30} {:<5}", "test_present", depth),
 
             Op::InspectLen => write!(f, "inspect_len"),
 

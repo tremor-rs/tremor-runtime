@@ -1,4 +1,4 @@
-use std::{borrow::Cow, mem};
+use std::{borrow::Cow, mem, ptr};
 
 use compiler::Program;
 use simd_json::{prelude::*, ValueBuilder};
@@ -10,9 +10,10 @@ use crate::{
         raw::{BytesDataType, Endian},
     },
     errors::{error_generic, Result},
+    extractor,
     interpreter::{exec_binary, exec_unary, merge_values},
     prelude::Ranged,
-    NodeMeta, Return,
+    EventContext, NodeMeta, Return,
 };
 
 pub(super) mod compiler;
@@ -46,6 +47,7 @@ impl Vm {
     pub fn run<'run, 'prog, 'event>(
         &self,
         event: &mut Value<'event>,
+        ctx: &EventContext,
         program: &'run Program<'prog>,
     ) -> Result<Return<'event>>
     where
@@ -72,7 +74,7 @@ impl Vm {
 
         // ensure that the opcodes and meta are the same length
         assert_eq!(program.opcodes.len(), program.meta.len());
-        root.run(event, &mut pc, &mut cc)
+        root.run(event, ctx, &mut pc, &mut cc)
     }
 }
 
@@ -81,6 +83,7 @@ impl<'run, 'event> Scope<'run, 'event> {
     pub fn run<'prog>(
         &mut self,
         event: &'run mut Value<'event>,
+        ctx: &EventContext,
         pc: &mut usize,
         cc: &mut usize,
     ) -> Result<Return<'event>>
@@ -118,7 +121,13 @@ impl<'run, 'event> Scope<'run, 'event> {
                 Op::LoadEvent => stack.push(Cow::Owned(event.clone())),
                 Op::StoreEvent { elements } => unsafe {
                     let mut tmp = event as *mut Value;
-                    nested_assign(elements, &mut stack, &mut tmp, mid, *pc, *cc)?;
+                    if stack.len() < elements as usize {
+                        return Err(format!("Stack underflow @{pc}:{cc}").into());
+                    }
+                    let path = stack
+                        .drain(stack.len() - (elements as usize)..)
+                        .collect::<Vec<_>>();
+                    nested_assign(path, &mut tmp, mid)?;
                     let r: &mut Value = tmp
                         .as_mut()
                         .ok_or("this is nasty, we have a null pointer")?;
@@ -134,7 +143,14 @@ impl<'run, 'event> Scope<'run, 'event> {
                     let idx = idx as usize;
                     if let Some(var) = self.locals[idx].as_mut() {
                         let mut tmp = var as *mut Value;
-                        nested_assign(elements, &mut stack, &mut tmp, mid, *pc, *cc)?;
+                        if stack.len() < elements as usize {
+                            return Err(format!("Stack underflow @{pc}:{cc}").into());
+                        }
+                        let path = stack
+                            .drain(stack.len() - (elements as usize)..)
+                            .collect::<Vec<_>>();
+
+                        nested_assign(path, &mut tmp, mid)?;
                         let r: &mut Value = tmp
                             .as_mut()
                             .ok_or("this is nasty, we have a null pointer")?;
@@ -147,6 +163,7 @@ impl<'run, 'event> Scope<'run, 'event> {
                     }
                 },
 
+                // Others
                 Op::True => stack.push(Cow::Owned(Value::const_true())),
                 Op::False => stack.push(Cow::Owned(Value::const_false())),
                 Op::Null => stack.push(Cow::Owned(Value::null())),
@@ -300,20 +317,6 @@ impl<'run, 'event> Scope<'run, 'event> {
                     stack.push(Cow::Owned(Value::Bytes(bytes.into())));
                 }
 
-                // Compairsons ops that store in the B1 register
-                // Op::Binary {
-                //     op:
-                //         op @ (BinOpKind::Eq
-                //         | BinOpKind::NotEq
-                //         | BinOpKind::Gte
-                //         | BinOpKind::Gt
-                //         | BinOpKind::Lte
-                //         | BinOpKind::Lt),
-                // } => {
-                //     let rhs = pop(&mut stack, *pc, *cc)?;
-                //     let lhs = pop(&mut stack, *pc, *cc)?;
-                //     self.registers.b1 = exec_binary(mid, mid, op, &lhs, &rhs)?.try_as_bool()?;
-                // }
                 Op::Binary { op } => {
                     let rhs = pop(&mut stack, *pc, *cc)?;
                     let lhs = pop(&mut stack, *pc, *cc)?;
@@ -332,6 +335,35 @@ impl<'run, 'event> Scope<'run, 'event> {
                     let key = last(&stack, *pc, *cc)?;
                     self.reg.b1 = self.reg.v1.contains_key(key.try_as_str()?);
                 } // record operations on scope
+
+                Op::TestExtractor { extractor } => {
+                    let extractor: &_ = &self.program.extractors[extractor as usize];
+                    // FIXME: We don't always need the result
+                    let extracted = extractor.extract(true, self.reg.v1.as_ref(), ctx);
+                    match extracted {
+                        extractor::Result::MatchNull => {
+                            self.reg.b1 = true;
+                            stack.push(Cow::Owned(Value::null()));
+                        }
+                        extractor::Result::Match(v) => {
+                            self.reg.b1 = true;
+                            stack.push(Cow::Owned(v));
+                        }
+                        extractor::Result::NoMatch => self.reg.b1 = false,
+                        extractor::Result::Err(e) => {
+                            return Err(format!("extractor error: {e}").into())
+                        }
+                    }
+                }
+                Op::TestPresent { elements } => {
+                    if stack.len() < elements as usize {
+                        return Err(format!("Stack underflow @{pc}:{cc}").into());
+                    }
+                    let path = stack
+                        .drain(stack.len() - (elements as usize)..)
+                        .collect::<Vec<_>>();
+                    self.reg.b1 = present(path, &self.reg.v1);
+                }
 
                 Op::TestIsU64 => {
                     self.reg.b1 = self.reg.v1.is_u64();
@@ -555,34 +587,24 @@ impl<'run, 'event> Scope<'run, 'event> {
 /// This function is unsafe since it works with pointers.
 /// It remains safe since we never leak the pointer and just
 /// traverse the nested value a pointer at a time.
-unsafe fn nested_assign(
-    elements: u16,
-    stack: &mut Vec<Cow<Value>>,
-    tmp: &mut *mut Value,
-    mid: &NodeMeta,
-    pc: usize,
-    cc: usize,
-) -> Result<()> {
-    for _ in 0..elements {
-        let target = pop(stack, pc, cc)?;
+fn nested_assign(path: Vec<Cow<Value>>, tmp: &mut *mut Value, mid: &NodeMeta) -> Result<()> {
+    for target in path {
         if let Some(idx) = target.as_usize() {
-            let array = tmp
-                .as_mut()
+            let array = unsafe { tmp.as_mut() }
                 .ok_or("this is nasty, we have a null pointer")?
                 .as_array_mut()
                 .ok_or("needs object")?;
 
-            *tmp = std::ptr::from_mut::<Value>(match array.get_mut(idx) {
+            *tmp = ptr::from_mut::<Value>(match array.get_mut(idx) {
                 Some(v) => v,
                 None => return Err("Index out of bounds".into()),
             });
         } else if let Some(key) = target.as_str() {
-            let map = tmp
-                .as_mut()
+            let map = unsafe { tmp.as_mut() }
                 .ok_or("this is nasty, we have a null pointer")?
                 .as_object_mut()
                 .ok_or("needs object")?;
-            *tmp = std::ptr::from_mut::<Value>(match map.get_mut(key) {
+            *tmp = ptr::from_mut::<Value>(match map.get_mut(key) {
                 Some(v) => v,
                 None => map
                     .entry(key.to_string().into())
@@ -593,6 +615,36 @@ unsafe fn nested_assign(
         }
     }
     Ok(())
+}
+
+/// This function is unsafe since it works with pointers.
+/// It remains safe since we never leak the pointer and just
+/// traverse the nested value a pointer at a time.
+fn present(keys: Vec<Cow<Value>>, val: &Value) -> bool {
+    let mut tmp = ptr::from_ref(val);
+    // the path is stored reversed on the stack so we have to approach it from back to front
+    for target in keys {
+        if let Some(idx) = target.as_usize() {
+            let Some(array) = unsafe { tmp.as_ref() }.and_then(|v| v.as_array()) else {
+                return false;
+            };
+            let Some(v) = array.get(idx) else {
+                return false;
+            };
+            tmp = ptr::from_ref(v);
+        } else if let Some(key) = target.as_str() {
+            let Some(map) = unsafe { tmp.as_ref() }.and_then(|v| v.as_object()) else {
+                return false;
+            };
+            let Some(v) = map.get(key) else {
+                return false;
+            };
+            tmp = ptr::from_ref(v);
+        } else {
+            return false;
+        }
+    }
+    true
 }
 
 #[inline]
