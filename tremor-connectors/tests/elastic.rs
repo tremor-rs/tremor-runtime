@@ -29,7 +29,7 @@ use log::error;
 use serial_test::serial;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use testcontainers::core::{Mount, WaitFor};
+use testcontainers::core::Mount;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::GenericImage;
 use testcontainers::ImageExt;
@@ -53,7 +53,6 @@ const VERSION: &str = "8.6.2";
 
 fn default_image() -> ContainerRequest<GenericImage> {
     GenericImage::new(IMAGE, VERSION)
-        .with_wait_for(WaitFor::message_on_stdout("license mode is"))
         // JVM memory settings
         .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
         // single node mode
