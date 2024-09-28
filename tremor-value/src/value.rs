@@ -592,7 +592,7 @@ impl<'de> ValueDeserializer<'de> {
         Self(de)
     }
 
-    #[cfg_attr(not(feature = "no-inline"), inline(always))]
+    #[inline]
     pub fn parse(&mut self) -> Value<'de> {
         // We know the tape is valid JSON
         match unsafe { self.0.next_() } {
@@ -603,7 +603,7 @@ impl<'de> ValueDeserializer<'de> {
         }
     }
 
-    #[cfg_attr(not(feature = "no-inline"), inline(always))]
+    #[inline]
     #[allow(clippy::uninit_vec)]
     fn parse_array(&mut self, len: usize) -> Value<'de> {
         // Rust doesn't optimize the normal loop away here
@@ -619,7 +619,7 @@ impl<'de> ValueDeserializer<'de> {
         Value::Array(res)
     }
 
-    #[cfg_attr(not(feature = "no-inline"), inline(always))]
+    #[inline]
     fn parse_map(&mut self, len: usize) -> Value<'de> {
         let mut res = Object::with_capacity_and_hasher(len, ObjectHasher::default());
 

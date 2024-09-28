@@ -32,7 +32,6 @@ pin_project! {
     ///
     /// [`merge`]: trait.Stream.html#method.merge
     /// [`Stream`]: trait.Stream.html
-    #[cfg_attr(feature = "docs", doc(cfg(unstable)))]
     #[derive(Debug)]
     pub struct PriorityMerge<T, High, Low> {
         #[pin]
