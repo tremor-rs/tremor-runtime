@@ -41,7 +41,7 @@ use crate::{redpanda_container, PRODUCE_TIMEOUT};
 async fn transactional_retry() -> anyhow::Result<()> {
     let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092).await;
+    let port = container.get_host_port_ipv4(9092).await?;
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test";
     let group_id = "transactional_retry";
@@ -266,7 +266,7 @@ async fn transactional_retry() -> anyhow::Result<()> {
 async fn custom_no_retry() -> anyhow::Result<()> {
     let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092).await;
+    let port = container.get_host_port_ipv4(9092).await?;
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_no_retry";
     let group_id = "test1";
@@ -474,7 +474,7 @@ async fn custom_no_retry() -> anyhow::Result<()> {
 
 async fn performance() -> anyhow::Result<()> {
     let container = redpanda_container().await?;
-    let port = container.get_host_port_ipv4(9092).await;
+    let port = container.get_host_port_ipv4(9092).await?;
 
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_no_retry";
@@ -765,7 +765,7 @@ async fn invalid_rdkafka_options() -> anyhow::Result<()> {
 async fn connector_kafka_consumer_pause_resume() -> anyhow::Result<()> {
     let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092).await;
+    let port = container.get_host_port_ipv4(9092).await?;
 
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_pause_resume";
@@ -858,7 +858,7 @@ async fn connector_kafka_consumer_pause_resume() -> anyhow::Result<()> {
 async fn transactional_store_offset_handling() -> anyhow::Result<()> {
     let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092).await;
+    let port = container.get_host_port_ipv4(9092).await?;
 
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_store_offsets";
@@ -1058,7 +1058,7 @@ async fn transactional_store_offset_handling() -> anyhow::Result<()> {
 async fn transactional_commit_offset_handling() -> anyhow::Result<()> {
     let container = redpanda_container().await?;
 
-    let port = container.get_host_port_ipv4(9092).await;
+    let port = container.get_host_port_ipv4(9092).await?;
     let broker = format!("127.0.0.1:{port}");
     let topic = "tremor_test_commit_offset";
     let group_id = "group_commit_offset";

@@ -55,8 +55,10 @@ use chrono::DateTime;
 use clickhouse_chrono_tz::Tz;
 use clickhouse_rs::Pool;
 use log::error;
+use testcontainers::core::IntoContainerPort;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{GenericImage, RunnableImage};
+use testcontainers::GenericImage;
+use testcontainers::ImageExt;
 use tremor_common::ports::IN;
 use tremor_connectors::{harness::Harness, impls::clickhouse};
 use tremor_connectors_test_helpers::free_port;
@@ -86,15 +88,14 @@ async fn test() -> Result<()> {
     let _ = env_logger::try_init();
     // The following lines spin up a regular ClickHouse container and wait for
     // the database to be up and running.
+    let local = free_port::find_free_tcp_port().await?;
 
-    let image = GenericImage::new(utils::CONTAINER_NAME, utils::CONTAINER_VERSION);
+    let image = GenericImage::new(utils::CONTAINER_NAME, utils::CONTAINER_VERSION)
+        .with_mapped_port(local, utils::SERVER_PORT.tcp());
     // We want to access the container from the host, so we need to make the
     // corresponding port available.
-    let local = free_port::find_free_tcp_port().await?;
-    let port_to_expose = (local, utils::SERVER_PORT);
-    let image = RunnableImage::from(image).with_mapped_port(port_to_expose);
-    let container = image.start().await;
-    let port = container.get_host_port_ipv4(9000).await;
+    let container = image.start().await?;
+    let port = container.get_host_port_ipv4(9000).await?;
     utils::wait_for_ok(port).await?;
 
     // Once the database is available, we use the regular client to create the
@@ -356,7 +357,7 @@ async fn test() -> Result<()> {
         );
     }
 
-    container.stop().await;
+    container.stop().await?;
     Ok(())
 }
 

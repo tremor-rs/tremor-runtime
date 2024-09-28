@@ -29,9 +29,11 @@ use log::error;
 use serial_test::serial;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use testcontainers::core::Mount;
+use testcontainers::core::{Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{core::WaitFor, GenericImage, RunnableImage};
+use testcontainers::GenericImage;
+use testcontainers::ImageExt;
+use testcontainers::{core::IntoContainerPort, ContainerRequest};
 use tokio::process;
 use tremor_common::ports::IN;
 use tremor_connectors::{
@@ -49,8 +51,9 @@ use value_trait::prelude::*;
 const IMAGE: &str = "elasticsearch";
 const VERSION: &str = "8.6.2";
 
-fn default_image() -> GenericImage {
+fn default_image() -> ContainerRequest<GenericImage> {
     GenericImage::new(IMAGE, VERSION)
+        .with_wait_for(WaitFor::message_on_stdout("license mode is"))
         // JVM memory settings
         .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
         // single node mode
@@ -65,15 +68,13 @@ fn default_image() -> GenericImage {
 #[serial(elastic)]
 async fn connector_elastic() -> anyhow::Result<()> {
     let port = find_free_tcp_port().await?;
-    let image = RunnableImage::from(
-        default_image()
-            .with_env_var("xpack.security.enabled", "false")
-            .with_env_var("xpack.security.http.ssl.enabled", "false"),
-    )
-    .with_mapped_port((port, 9200_u16));
+    let image = default_image()
+        .with_env_var("xpack.security.enabled", "false")
+        .with_env_var("xpack.security.http.ssl.enabled", "false")
+        .with_mapped_port(port, 9200_u16.tcp());
 
-    let container = image.start().await;
-    let port = container.get_host_port_ipv4(9200).await;
+    let container = image.start().await?;
+    let port = container.get_host_port_ipv4(9200).await?;
 
     // wait for the image to be reachable
     let elastic = Elasticsearch::new(Transport::single_node(
@@ -424,7 +425,7 @@ async fn connector_elastic() -> anyhow::Result<()> {
     );
 
     // check what happens when ES isnt reachable
-    container.stop().await;
+    container.stop().await?;
 
     let event = Event {
         id: EventId::new(0, 0, 2, 2),
@@ -479,15 +480,13 @@ async fn connector_elastic() -> anyhow::Result<()> {
 #[serial(elastic)]
 async fn elastic_routing() -> anyhow::Result<()> {
     let port = find_free_tcp_port().await?;
-    let image = RunnableImage::from(
-        default_image()
-            .with_env_var("xpack.security.enabled", "false")
-            .with_env_var("xpack.security.http.ssl.enabled", "false"),
-    )
-    .with_mapped_port((port, 9200_u16));
+    let image = default_image()
+        .with_env_var("xpack.security.enabled", "false")
+        .with_env_var("xpack.security.http.ssl.enabled", "false")
+        .with_mapped_port(port, 9200_u16.tcp());
 
-    let container = image.start().await;
-    let port = container.get_host_port_ipv4(9200).await;
+    let container = image.start().await?;
+    let port = container.get_host_port_ipv4(9200).await?;
 
     // wait for the image to be reachable
     let elastic = Elasticsearch::new(Transport::single_node(
@@ -795,15 +794,13 @@ async fn elastic_routing() -> anyhow::Result<()> {
 async fn auth_basic() -> anyhow::Result<()> {
     let port = find_free_tcp_port().await?;
     let password = "snot";
-    let image = RunnableImage::from(
-        default_image()
-            .with_env_var("ELASTIC_PASSWORD", password)
-            .with_env_var("xpack.security.enabled", "true"),
-    )
-    .with_mapped_port((port, 9200_u16));
+    let image = default_image()
+        .with_env_var("ELASTIC_PASSWORD", password)
+        .with_env_var("xpack.security.enabled", "true")
+        .with_mapped_port(port, 9200_u16.tcp());
 
-    let container = image.start().await;
-    let port = container.get_host_port_ipv4(9200).await;
+    let container = image.start().await?;
+    let port = container.get_host_port_ipv4(9200).await?;
     let conn_pool = SingleNodeConnectionPool::new(format!("http://127.0.0.1:{port}").parse()?);
     let transport = TransportBuilder::new(conn_pool).auth(Credentials::Basic(
         "elastic".to_string(),
@@ -850,16 +847,14 @@ async fn auth_basic() -> anyhow::Result<()> {
 async fn auth_api_key() -> anyhow::Result<()> {
     let port = find_free_tcp_port().await?;
     let password = "snot";
-    let image = RunnableImage::from(
-        default_image()
-            .with_env_var("ELASTIC_PASSWORD", password)
-            .with_env_var("xpack.security.enabled", "true")
-            .with_env_var("xpack.security.authc.api_key.enabled", "true"),
-    )
-    .with_mapped_port((port, 9200_u16));
+    let image = default_image()
+        .with_env_var("ELASTIC_PASSWORD", password)
+        .with_env_var("xpack.security.enabled", "true")
+        .with_env_var("xpack.security.authc.api_key.enabled", "true")
+        .with_mapped_port(port, 9200_u16.tcp());
 
-    let container = image.start().await;
-    let port = container.get_host_port_ipv4(9200).await;
+    let container = image.start().await?;
+    let port = container.get_host_port_ipv4(9200).await?;
     let conn_pool = SingleNodeConnectionPool::new(format!("http://127.0.0.1:{port}").parse()?);
     let transport = TransportBuilder::new(conn_pool).auth(Credentials::Basic(
         "elastic".to_string(),
@@ -933,37 +928,35 @@ async fn auth_client_cert() -> anyhow::Result<()> {
 
     let port = find_free_tcp_port().await?;
     let password = "snot";
-    let image = RunnableImage::from(
-        default_image()
-            .with_env_var("ELASTIC_PASSWORD", password)
-            .with_env_var("xpack.security.enabled", "true")
-            .with_env_var("xpack.security.http.ssl.client_authentication", "required")
-            .with_env_var("xpack.security.http.ssl.enabled", "true")
-            .with_env_var(
-                "xpack.security.http.ssl.key",
-                "/usr/share/elasticsearch/config/certificates/localhost.key",
-            )
-            .with_env_var(
-                "xpack.security.http.ssl.certificate_authorities",
-                "/usr/share/elasticsearch/config/certificates/localhost.cert",
-            )
-            .with_env_var(
-                "xpack.security.http.ssl.certificate",
-                "/usr/share/elasticsearch/config/certificates/localhost.cert",
-            ),
-    )
-    .with_mount(Mount::bind_mount(
-        tests_dir.display().to_string(),
-        "/usr/share/elasticsearch/config/certificates".to_string(),
-    ))
-    .with_mapped_port((port, 9200_u16));
+    let image = default_image()
+        .with_env_var("ELASTIC_PASSWORD", password)
+        .with_env_var("xpack.security.enabled", "true")
+        .with_env_var("xpack.security.http.ssl.client_authentication", "required")
+        .with_env_var("xpack.security.http.ssl.enabled", "true")
+        .with_env_var(
+            "xpack.security.http.ssl.key",
+            "/usr/share/elasticsearch/config/certificates/localhost.key",
+        )
+        .with_env_var(
+            "xpack.security.http.ssl.certificate_authorities",
+            "/usr/share/elasticsearch/config/certificates/localhost.cert",
+        )
+        .with_env_var(
+            "xpack.security.http.ssl.certificate",
+            "/usr/share/elasticsearch/config/certificates/localhost.cert",
+        )
+        .with_mount(Mount::bind_mount(
+            tests_dir.display().to_string(),
+            "/usr/share/elasticsearch/config/certificates".to_string(),
+        ))
+        .with_mapped_port(port, 9200_u16.tcp());
     let mut cafile = tests_dir.clone();
     cafile.push("localhost.cert");
     let mut keyfile = tests_dir.clone();
     keyfile.push("localhost.key");
 
-    let container = image.start().await;
-    let port = container.get_host_port_ipv4(9200).await;
+    let container = image.start().await?;
+    let port = container.get_host_port_ipv4(9200).await?;
     let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
     let ca = tokio::fs::read_to_string(&cafile).await?;
     let mut cert = tokio::fs::read(&cafile).await?;
@@ -1064,37 +1057,34 @@ async fn elastic_https() -> anyhow::Result<()> {
 
     let port = find_free_tcp_port().await?;
     let password = "snot";
-    let image = RunnableImage::from(
-        default_image()
-            .with_env_var("ELASTIC_PASSWORD", password)
-            .with_env_var("node.name", "snot")
-            .with_env_var("xpack.security.enabled", "true")
-            .with_env_var("xpack.security.http.ssl.enabled", "true")
-            .with_env_var(
-                "xpack.security.http.ssl.key",
-                "/usr/share/elasticsearch/config/certificates/localhost.key",
-            )
-            .with_env_var(
-                "xpack.security.http.ssl.certificate_authorities",
-                "/usr/share/elasticsearch/config/certificates/localhost.cert",
-            )
-            .with_env_var(
-                "xpack.security.http.ssl.certificate",
-                "/usr/share/elasticsearch/config/certificates/localhost.cert",
-            )
-            // .with_wait_for(WaitFor::message_on_stdout("[YELLOW] to [GREEN]")),
-            .with_wait_for(WaitFor::message_on_stdout("license mode is")),
-    )
-    .with_mount(Mount::bind_mount(
-        tests_dir.display().to_string(),
-        "/usr/share/elasticsearch/config/certificates",
-    ))
-    .with_mapped_port((port, 9200_u16));
+    let image = default_image()
+        .with_env_var("ELASTIC_PASSWORD", password)
+        .with_env_var("node.name", "snot")
+        .with_env_var("xpack.security.enabled", "true")
+        .with_env_var("xpack.security.http.ssl.enabled", "true")
+        .with_env_var(
+            "xpack.security.http.ssl.key",
+            "/usr/share/elasticsearch/config/certificates/localhost.key",
+        )
+        .with_env_var(
+            "xpack.security.http.ssl.certificate_authorities",
+            "/usr/share/elasticsearch/config/certificates/localhost.cert",
+        )
+        .with_env_var(
+            "xpack.security.http.ssl.certificate",
+            "/usr/share/elasticsearch/config/certificates/localhost.cert",
+        )
+        // .with_wait_for(WaitFor::message_on_stdout("[YELLOW] to [GREEN]")),
+        .with_mount(Mount::bind_mount(
+            tests_dir.display().to_string(),
+            "/usr/share/elasticsearch/config/certificates",
+        ))
+        .with_mapped_port(port, 9200_u16.tcp());
     let mut cafile = tests_dir.clone();
     cafile.push("localhost.cert");
 
-    let container = image.start().await;
-    let port = container.get_host_port_ipv4(9200).await;
+    let container = image.start().await?;
+    let port = container.get_host_port_ipv4(9200).await?;
     let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
     let ca = tokio::fs::read_to_string(&cafile).await?;
     let transport = TransportBuilder::new(conn_pool).cert_validation(CertificateValidation::Full(
