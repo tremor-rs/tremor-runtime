@@ -497,10 +497,7 @@ where
             rdkafka::config::RDKafkaLogLevel::Warning => {
                 warn!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message);
             }
-            rdkafka::config::RDKafkaLogLevel::Notice => {
-                info!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message);
-            }
-            rdkafka::config::RDKafkaLogLevel::Info => {
+            rdkafka::config::RDKafkaLogLevel::Notice | rdkafka::config::RDKafkaLogLevel::Info => {
                 info!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message);
             }
             rdkafka::config::RDKafkaLogLevel::Debug => {
