@@ -24,7 +24,7 @@ beef = "0.5"
 byteorder = "1.5"
 itoa = "1"
 ryu = "1"
-lexical = "6"
+lexical = "7"
 simdutf8 = "0.1"
 chrono = "0.4"
 uuid = { version = "1.9", features = ["v4"] }
