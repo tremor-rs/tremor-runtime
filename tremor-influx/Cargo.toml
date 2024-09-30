@@ -17,7 +17,7 @@ rustc-args = ["-C target-feature=+avx,+avx2,+sse4.2"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lexical = "6.1.1"
+lexical = "7.0.0"
 value-trait = "0.8"
 
 [dev-dependencies]
