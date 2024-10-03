@@ -43,11 +43,12 @@ use crate::{
     },
     ctx::NO_CONTEXT,
     errors::{
-        err_need_obj, error_array_out_of_bound, error_bad_array_index, error_bad_key,
-        error_bad_key_err, error_decreasing_range, error_division_by_zero, error_guard_not_bool,
-        error_invalid_binary, error_invalid_bitshift, error_need_arr, error_need_int,
-        error_need_obj, error_need_str, error_oops, error_overflow, error_patch_key_exists,
-        error_patch_merge_type_conflict, error_patch_update_key_missing, unknown_local, Result,
+        err_invalid_unary, err_need_obj, error_array_out_of_bound, error_bad_array_index,
+        error_bad_key, error_bad_key_err, error_decreasing_range, error_division_by_zero,
+        error_guard_not_bool, error_invalid_binary, error_invalid_bitshift, error_need_arr,
+        error_need_int, error_need_obj, error_need_str, error_oops, error_overflow,
+        error_patch_key_exists, error_patch_merge_type_conflict, error_patch_update_key_missing,
+        unknown_local, Result,
     },
     prelude::*,
     stry, NO_AGGRS, NO_CONSTS,
@@ -385,16 +386,14 @@ where
     }
 }
 #[inline]
-pub(crate) fn exec_binary<'run, 'event, OuterExpr, InnerExpr>(
-    outer: &OuterExpr,
-    inner: &InnerExpr,
+pub(crate) fn exec_binary<'run, 'event>(
+    outer: &impl BaseExpr,
+    inner: &impl BaseExpr,
     op: BinOpKind,
     lhs: &Value<'event>,
     rhs: &Value<'event>,
 ) -> Result<Cow<'run, Value<'event>>>
 where
-    OuterExpr: BaseExpr,
-    InnerExpr: BaseExpr,
     'event: 'run,
 {
     // Lazy Heinz doesn't want to write that 10000 times
@@ -499,49 +498,56 @@ where
 
 #[inline]
 pub(crate) fn exec_unary<'run, 'event: 'run>(
+    outer: &impl BaseExpr,
+    inner: &impl BaseExpr,
     op: UnaryOpKind,
     val: &Value<'event>,
-) -> Option<Cow<'run, Value<'event>>> {
+) -> Result<Cow<'run, Value<'event>>> {
     // Lazy Heinz doesn't want to write that 10000 times
     // - snot badger - Darach
     use UnaryOpKind::{BitNot, Minus, Not, Plus};
     if let Some(x) = val.as_f64() {
         match &op {
-            Minus => Some(Cow::Owned(Value::from(-x))),
-            Plus => Some(Cow::Owned(Value::from(x))),
-            _ => None,
+            Minus => Ok(Cow::Owned(Value::from(-x))),
+            Plus => Ok(Cow::Owned(Value::from(x))),
+            _ => Err(err_invalid_unary(outer, inner, op, val)),
         }
     } else if let Some(x) = val.as_u64() {
         match &op {
             Minus => {
                 if x == 9_223_372_036_854_775_808 {
-                    Some(Cow::Owned(Value::from(i64::MIN)))
+                    Ok(Cow::Owned(Value::from(i64::MIN)))
                 } else {
                     x.try_into()
                         .ok()
                         .and_then(i64::checked_neg)
                         .map(Value::from)
                         .map(Cow::Owned)
+                        .ok_or_else(|| err_invalid_unary(outer, inner, op, val))
                 }
             }
-            Plus => Some(Cow::Owned(Value::from(x))),
-            BitNot => Some(Cow::Owned(Value::from(!x))),
-            Not => None,
+            Plus => Ok(Cow::Owned(Value::from(x))),
+            BitNot => Ok(Cow::Owned(Value::from(!x))),
+            Not => Err(err_invalid_unary(outer, inner, op, val)),
         }
     } else if let Some(x) = val.as_i64() {
         match &op {
-            Minus => x.checked_neg().map(Value::from).map(Cow::Owned),
-            Plus => Some(Cow::Owned(Value::from(x))),
-            BitNot => Some(Cow::Owned(Value::from(!x))),
-            Not => None,
+            Minus => x
+                .checked_neg()
+                .map(Value::from)
+                .map(Cow::Owned)
+                .ok_or_else(|| err_invalid_unary(outer, inner, op, val)),
+            Plus => Ok(Cow::Owned(Value::from(x))),
+            BitNot => Ok(Cow::Owned(Value::from(!x))),
+            Not => Err(err_invalid_unary(outer, inner, op, val)),
         }
     } else if let Some(x) = val.as_bool() {
         match &op {
-            BitNot | Not => Some(static_bool!(!x)),
-            _ => None,
+            BitNot | Not => Ok(static_bool!(!x)),
+            _ => Err(err_invalid_unary(outer, inner, op, val)),
         }
     } else {
-        None
+        Err(err_invalid_unary(outer, inner, op, val))
     }
 }
 
@@ -745,7 +751,10 @@ where
     ))
 }
 
-fn merge_values<'event>(value: &mut Value<'event>, replacement: &Value<'event>) -> Result<()> {
+pub(crate) fn merge_values<'event>(
+    value: &mut Value<'event>,
+    replacement: &Value<'event>,
+) -> Result<()> {
     if let Some((rep, map)) = replacement.as_object().zip(value.as_object_mut()) {
         for (k, v) in rep {
             if let Some(k) = map.get_mut(k) {

@@ -131,7 +131,6 @@ impl Script {
         // helper.consts.args = args.clone_static();
         let mut script = script_raw.up_script(&mut helper)?;
         Optimizer::new(&helper).walk_script(&mut script)?;
-        let script = script;
 
         Ok(Self {
             script,

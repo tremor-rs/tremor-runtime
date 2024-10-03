@@ -354,7 +354,6 @@ fn pp_is_exclusive() {
     );
     let teq = PredicatePattern::TildeEq {
         lhs: "k1".into(),
-        assign: "k".into(),
         key: "k1".into(),
         test: Box::new(TestExpr {
             mid: NodeMeta::dummy(),
@@ -365,7 +364,6 @@ fn pp_is_exclusive() {
     };
     let test_eq2 = PredicatePattern::TildeEq {
         lhs: "k2".into(),
-        assign: "k".into(),
         key: "k2".into(),
         test: Box::new(TestExpr {
             mid: NodeMeta::dummy(),
@@ -376,7 +374,6 @@ fn pp_is_exclusive() {
     };
     let teq3 = PredicatePattern::TildeEq {
         lhs: "k1".into(),
-        assign: "k".into(),
         key: "k1".into(),
         test: Box::new(TestExpr {
             mid: NodeMeta::dummy(),

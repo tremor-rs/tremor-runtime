@@ -17,8 +17,8 @@ use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
     ast::{base_expr::Ranged, binary::extend_bytes_from_value, NodeMeta},
     errors::{
-        err_generic, err_invalid_unary, err_need_int, error_array_out_of_bound, error_bad_key,
-        error_decreasing_range, error_need_arr, error_need_obj,
+        err_generic, err_need_int, error_array_out_of_bound, error_bad_key, error_decreasing_range,
+        error_need_arr, error_need_obj,
     },
     interpreter::{exec_binary, exec_unary, Env},
     lexer::Span,
@@ -160,13 +160,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
                     mid,
                 } = b.as_ref()
                 {
-                    let value = exec_unary(*kind, value)
-                        .ok_or_else(|| {
-                            let inner = b.extent();
-                            let outer = b.extent();
-                            err_invalid_unary(&outer, &inner, *kind, value)
-                        })?
-                        .into_owned();
+                    let value = exec_unary(b.as_ref(), b.as_ref(), *kind, value)?.into_owned();
                     Lit(Literal {
                         mid: mid.clone(),
                         value,

@@ -437,19 +437,13 @@ impl<'script> AstEq for PredicatePattern<'script> {
         use PredicatePattern::{ArrayPatternEq, Bin, RecordPatternEq, TildeEq};
         match (self, other) {
             (
+                TildeEq { lhs, key, test },
                 TildeEq {
-                    assign,
-                    lhs,
-                    key,
-                    test,
-                },
-                TildeEq {
-                    assign: a2,
                     lhs: l2,
                     key: k2,
                     test: t2,
                 },
-            ) => assign == a2 && lhs == l2 && key == k2 && test.ast_eq(t2.as_ref()),
+            ) => lhs == l2 && key == k2 && test.ast_eq(t2.as_ref()),
             (
                 Bin {
                     lhs,
