@@ -16,18 +16,19 @@
 
 use super::Postprocessor;
 use std::time::{SystemTime, UNIX_EPOCH};
-use sha2::{Sha256, Digest};
 use std::thread;
 use std::hash::{Hash, Hasher, DefaultHasher};
 
 #[derive(Clone)]
 pub struct Gelf {
+    auto_increment_id: u64,
     chunk_size: usize,
 }
 
 impl Default for Gelf {
     fn default() -> Self {
         Self {
+            auto_increment_id: 0,
             chunk_size: 8192,
         }
     }
@@ -42,9 +43,11 @@ enum Error {
     ChunkCount(usize),
 }
 
-fn generate_message_id(epoch_timestamp: u64, data: &[u8]) -> u64{
+fn generate_message_id(epoch_timestamp: u64, auto_increment_id: u64) -> u64{
 
     /*
+     * OLD/OTHER CONTEXT:
+     *
      * REFERENCE(/Explaination) TAKEN FROM: https://github.com/osiegmar/logback-gelf/blob/master/src/main/java/de/siegmar/logbackgelf/MessageIdSupplier.java#L61
      * 
      * 
@@ -73,13 +76,16 @@ fn generate_message_id(epoch_timestamp: u64, data: &[u8]) -> u64{
      * Then we can spend the rest on a random number.
      */
 
+
+     /*
+     
+     Approach taken here is similar to others mentioned above but with a slight modification.
+
+     We are using ingest_ns + increment_id + thread_id combination as the message id
+     
+      */
+
     const BITS_13: u64 = 0b1_1111_1111_1111;
-
-    let mut sha_hasher = Sha256::new();
-    sha_hasher.update(data);
-    let data_sha_hash  = sha_hasher.finalize();
-    let data_sha_hash_u64 = u64::from_be_bytes(data_sha_hash[0..8].try_into().expect("slice with incorrect length"));
-
 
     let current_thread = thread::current();
     let thread_id = current_thread.id();
@@ -88,7 +94,7 @@ fn generate_message_id(epoch_timestamp: u64, data: &[u8]) -> u64{
     thread_id.hash(&mut hasher);
     let thread_id_u64 = hasher.finish();
 
-    return (epoch_timestamp & BITS_13) | (data_sha_hash_u64 & !BITS_13) | (thread_id_u64 & BITS_13)
+    (epoch_timestamp & BITS_13) | (auto_increment_id & !BITS_13) | (thread_id_u64 & BITS_13)
 }
 
 impl Gelf {
@@ -103,8 +109,15 @@ impl Gelf {
             return Err(Error::ChunkCount(n));
         };
 
-        let id = generate_message_id(epoch_timestamp,data);
+        let gelf_message_id = generate_message_id(epoch_timestamp,self.auto_increment_id);
 
+        if self.auto_increment_id == u64::MAX {
+            self.auto_increment_id = 0;
+        }
+        else{
+            self.auto_increment_id+=1;
+        }
+    
         Ok(chunks
             .enumerate()
             .map(|(i, chunk)| {
@@ -114,7 +127,7 @@ impl Gelf {
                 // magic number
                 buf.append(&mut vec![0x1e, 0x0f]);
                 // gelf package id
-                buf.append(&mut id.to_be_bytes().to_vec());
+                buf.append(&mut gelf_message_id.to_be_bytes().to_vec());
                 // sequence number
                 buf.push(i as u8);
                 // sequence count
@@ -182,6 +195,7 @@ mod test {
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
         ];
         let mut encoder = super::Gelf {
+            auto_increment_id: 0,
             chunk_size: 20,
         };
 
@@ -208,11 +222,12 @@ mod test {
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
         ];
         let mut encoder = super::Gelf {
+            auto_increment_id: 0,
             chunk_size: 20
         };
 
         let encoded_gelf = encoder.encode_gelf(&input_data, 0)?;
-        let expected_message_id = generate_message_id(0, &input_data);
+        let expected_message_id = generate_message_id(0, 0);
         assert_eq!(u64::from_be_bytes(encoded_gelf[1][2..10].try_into().expect("slice with incorrect length")), expected_message_id);
 
         // print!("\nLength of encoding message: {}",encoded_gelf[1].len());
