@@ -160,7 +160,7 @@ where
 }
 
 pub(crate) async fn map_value_to_avro<'v, R>(
-    data: Object<'v>,
+    data: &Object<'v>,
     schema: &MapSchema,
     resolver: &R,
 ) -> Result<AvroValue>
