@@ -222,7 +222,7 @@ where
         }
         Schema::Map(s) => {
             map_value_to_avro(
-                data.as_object().ok_or("Expected an object/map")?.clone(),
+                data.try_as_object()?,
                 s,
                 resolver,
             )
