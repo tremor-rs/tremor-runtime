@@ -153,7 +153,7 @@ where
 {
     let mut res = Vec::with_capacity(data.len());
     for v in data {
-        let value = value_to_avro(&v, &schema.items, resolver).await?;
+        let value = value_to_avro(v, &schema.items, resolver).await?;
         res.push(value);
     }
     Ok(AvroValue::Array(res))
@@ -173,7 +173,7 @@ where
 
         res.insert(
             k.to_string(),
-            value_to_avro(&v, &schema.types, resolver).await?,
+            value_to_avro(v, &schema.types, resolver).await?,
         );
     }
     Ok(AvroValue::Map(res))
