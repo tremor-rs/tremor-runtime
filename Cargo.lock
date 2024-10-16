@@ -7372,7 +7372,7 @@ name = "tremor-connectors-gcp"
 version = "0.13.0-rc.29"
 dependencies = [
  "anyhow",
- "async-channel 1.9.0",
+ "async-channel 2.3.0",
  "async-stream",
  "async-trait",
  "bytes",
@@ -7429,7 +7429,7 @@ name = "tremor-connectors-otel"
 version = "0.13.0-rc.29"
 dependencies = [
  "anyhow",
- "async-channel 1.9.0",
+ "async-channel 2.3.0",
  "async-trait",
  "hex",
  "log",
