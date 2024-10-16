@@ -692,7 +692,7 @@ async fn connector_task(
                     info!("{ctx} Ignoring SourceDrained Msg. Current state: {connector_state}",);
                 }
                 Msg::SinkDrained => {
-                    info!("{ctx} Ignoring SourceDrained Msg. Current state: {connector_state}",);
+                    info!("{ctx} Ignoring SinkDrained Msg. Current state: {connector_state}",);
                 }
                 Msg::Stop(sender) => {
                     info!("{ctx} Stopping...");
