@@ -187,7 +187,7 @@ impl Postprocessor for Gelf {
 
     fn finish(&mut self, data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
         if let Some(data) = data {
-            let current_epoch_timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64; 
+            let current_epoch_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as u64; 
             Ok(self.encode_gelf(data, current_epoch_timestamp)?)
         } else {
             Ok(vec![])
