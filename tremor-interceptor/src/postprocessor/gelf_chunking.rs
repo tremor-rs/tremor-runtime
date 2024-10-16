@@ -16,7 +16,7 @@
 //!
 //! ## What's the logic for creating messgae id?
 //! 
-//! TL;DR: We are using ingest_ns + increment_id + thread_id combination as the message id.
+//! TL;DR: We are using `ingest_ns + increment_id + thread_id` combination as the message id.
 //! 
 //! *Long explaination:*
 //! 
@@ -34,11 +34,11 @@
 //! It probably doesn't have to be that clever:
 //! 
 //! Using the timestamp plus a random number will mean we only have to worry about collision of random numbers,
-//! we can make it more deterministic by using the ingest_ns + an incremental id as a message ID. 
+//! we can make it more deterministic by using the `ingest_ns` + an incremental id as a message ID. 
 //! 
-//! To keep it simple we're using this logic: (epoch_timestamp & 0xFF_FF) | (auto_increment_id << 16 )
+//! To keep it simple we're using this logic: `(epoch_timestamp & 0xFF_FF) | (auto_increment_id << 16 )`
 //! 
-//! [Reference conversation]{https://github.com/tremor-rs/tremor-runtime/pull/2662}
+//! [Reference conversation]<https://github.com/tremor-rs/tremor-runtime/pull/2662>
 //!
 
 use super::Postprocessor;
@@ -185,9 +185,10 @@ impl Postprocessor for Gelf {
         Ok(self.encode_gelf(data,ingest_ns)?)
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn finish(&mut self, data: Option<&[u8]>) -> anyhow::Result<Vec<Vec<u8>>> {
         if let Some(data) = data {
-            let current_epoch_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as u64; 
+            let current_epoch_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as u64;
             Ok(self.encode_gelf(data, current_epoch_timestamp)?)
         } else {
             Ok(vec![])
