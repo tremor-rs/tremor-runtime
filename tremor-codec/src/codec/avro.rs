@@ -144,7 +144,7 @@ impl SchemaResolver for AvroRegistry {
 }
 
 pub(crate) async fn array_value_to_avro<'v, R>(
-    data: Vec<Value<'v>>,
+    data: &[Value<'v>],
     schema: &ArraySchema,
     resolver: &R,
 ) -> Result<AvroValue>
