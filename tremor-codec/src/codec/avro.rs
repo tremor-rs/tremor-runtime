@@ -45,16 +45,19 @@
 //! | decimal | bytes | bytes |
 //! | time-millis | i64 | i64, u64 |
 //! | time-micros | i64 | i64, u64 |
+//! | time-nanos  | i64 | i64, u64 |
 //! | timestamp-millis | i64 | i64, u64 |
 //! | timestamp-micros | i64 | i64, u64 |
+//! | timestamp-nanos | i64 | i64, u64 |
 //! | duration | bytes[12] | bytes[12] |
 
 use std::{collections::HashMap, sync::Arc};
 
 use crate::prelude::*;
 use apache_avro::{
-    schema::Name, types::Value as AvroValue, Codec as Compression, Decimal, Duration, Reader,
-    Schema, Writer,
+    schema::{ArraySchema, MapSchema, Name},
+    types::Value as AvroValue,
+    Codec as Compression, Decimal, Duration, Reader, Schema, Writer,
 };
 use schema_registry_converter::avro_common::AvroSchema;
 use serde::Deserialize;
@@ -140,6 +143,42 @@ impl SchemaResolver for AvroRegistry {
     }
 }
 
+pub(crate) async fn array_value_to_avro<'v, R>(
+    data: Vec<Value<'v>>,
+    schema: &ArraySchema,
+    resolver: &R,
+) -> Result<AvroValue>
+where
+    R: SchemaResolver + Sync,
+{
+    let mut res = Vec::with_capacity(data.len());
+    for v in data {
+        let value = value_to_avro(&v, &schema.items, resolver).await?;
+        res.push(value);
+    }
+    Ok(AvroValue::Array(res))
+}
+
+pub(crate) async fn map_value_to_avro<'v, R>(
+    data: Object<'v>,
+    schema: &MapSchema,
+    resolver: &R,
+) -> Result<AvroValue>
+where
+    R: SchemaResolver + Sync,
+{
+    let mut res = HashMap::with_capacity(data.len());
+    for (k, v) in data {
+        // is it a decimal logical type for this key?
+
+        res.insert(
+            k.to_string(),
+            value_to_avro(&v, &schema.types, resolver).await?,
+        );
+    }
+    Ok(AvroValue::Map(res))
+}
+
 #[allow(clippy::too_many_lines)]
 #[async_recursion::async_recursion]
 pub(crate) async fn value_to_avro<'v, R>(
@@ -166,25 +205,28 @@ where
         Schema::Boolean => AvroValue::Boolean(data.try_as_bool()?),
         Schema::Int => AvroValue::Int(data.try_as_i32()?),
         Schema::Long => AvroValue::Long(data.try_as_i64()?),
+        Schema::BigDecimal => {
+            return Err("BigDecimal is not supported".into());
+        }
         Schema::Float => AvroValue::Float(data.try_as_f32()?),
         Schema::Double => AvroValue::Double(data.try_as_f64()?),
         Schema::Bytes => AvroValue::Bytes(data.try_as_bytes()?.to_vec()),
         Schema::String => AvroValue::String(data.try_as_str()?.to_string()),
         Schema::Array(s) => {
-            let data = data.try_as_array()?;
-            let mut res = Vec::with_capacity(data.len());
-            for d in data {
-                res.push(value_to_avro(d, s, resolver).await?);
-            }
-            AvroValue::Array(res)
+            array_value_to_avro(
+                data.as_array().ok_or("Expected an array")?.clone(),
+                s,
+                resolver,
+            )
+            .await?
         }
         Schema::Map(s) => {
-            let obj = data.try_as_object()?;
-            let mut res = HashMap::with_capacity(obj.len());
-            for (k, v) in obj {
-                res.insert(k.to_string(), value_to_avro(v, s, resolver).await?);
-            }
-            AvroValue::Map(res)
+            map_value_to_avro(
+                data.as_object().ok_or("Expected an object/map")?.clone(),
+                s,
+                resolver,
+            )
+            .await?
         }
         Schema::Union(s) => {
             for (i, variant) in s.variants().iter().enumerate() {
@@ -253,8 +295,10 @@ where
         Schema::TimeMicros => AvroValue::TimeMicros(data.try_as_i64()?),
         Schema::TimestampMillis => AvroValue::TimestampMillis(data.try_as_i64()?),
         Schema::TimestampMicros => AvroValue::TimestampMicros(data.try_as_i64()?),
+        Schema::TimestampNanos => AvroValue::TimestampNanos(data.try_as_i64()?),
         Schema::LocalTimestampMillis => AvroValue::LocalTimestampMillis(data.try_as_i64()?),
         Schema::LocalTimestampMicros => AvroValue::LocalTimestampMicros(data.try_as_i64()?),
+        Schema::LocalTimestampNanos => AvroValue::LocalTimestampNanos(data.try_as_i64()?),
         Schema::Duration => {
             let v: [u8; 12] = data
                 .as_bytes()
@@ -277,9 +321,15 @@ pub(crate) fn avro_to_value(val: AvroValue) -> Result<Value<'static>> {
         AvroValue::Null => Value::const_null(),
         AvroValue::Boolean(v) => Value::from(v),
         AvroValue::Int(v) | AvroValue::TimeMillis(v) | AvroValue::Date(v) => Value::from(v),
+        AvroValue::BigDecimal(_v) => {
+            // throw an error unsupported
+            return Err("BigDecimal is not supported".into());
+        }
         AvroValue::Long(v)
+        | AvroValue::TimestampNanos(v)
         | AvroValue::TimestampMicros(v)
         | AvroValue::TimestampMillis(v)
+        | AvroValue::LocalTimestampNanos(v)
         | AvroValue::LocalTimestampMillis(v)
         | AvroValue::LocalTimestampMicros(v)
         | AvroValue::TimeMicros(v) => Value::from(v),
@@ -589,6 +639,20 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn time_nanos() -> Result<()> {
+        let mut codec: Box<dyn Codec> = test_codec(literal!({
+            "name": "time_nanos",
+            "type": "long",
+            "logicalType": "time-nanos"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn timestamp_millis() -> Result<()> {
         let mut codec: Box<dyn Codec> = test_codec(literal!({
             "name": "timestamp_millis",
@@ -608,6 +672,20 @@ mod test {
             "name": "timestamp_micros",
             "type": "long",
             "logicalType": "timestamp-micros"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn timestamp_nanos() -> Result<()> {
+        let mut codec: Box<dyn Codec> = test_codec(literal!({
+            "name": "timestamp_nanos",
+            "type": "long",
+            "logicalType": "timestamp-nanos"
         }))?;
         let decoded = literal!(1);
         let encoded = codec.encode(&decoded, &Value::const_null()).await;
@@ -641,6 +719,39 @@ mod test {
         let encoded = codec.encode(&decoded, &Value::const_null()).await;
 
         assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn local_timestamp_nanos() -> Result<()> {
+        let mut codec: Box<dyn Codec> = test_codec(literal!({
+            "name": "local_timestamp_nanos",
+            "type": "long",
+            "logicalType": "local-timestamp-nanos"
+        }))?;
+        let decoded = literal!(1);
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+
+        assert!(encoded.is_ok());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn bigdecimal_is_a_bit_of_a_hobbit() -> Result<()> {
+        let mut codec: Box<dyn Codec> = test_codec(literal!({
+            "name": "bigdecimal",
+            "type": "bytes",
+            "logicalType": "decimal"
+        }))?;
+        // NOTE Tremor neither helps nor hinders with [byte] encoded big decimals
+        let decoded = literal!(Value::Bytes(vec![1u8, 2, 3].into()));
+        let encoded = codec.encode(&decoded, &Value::const_null()).await;
+        assert!(encoded.is_ok());
+        let mut encoded = encoded?;
+        let back_again = codec.decode(&mut encoded, 0, Value::object()).await?;
+        assert_eq!(back_again, Some((decoded, Value::object())));
+        // So we can't really test this - let the hobbits pass through unsoiled and unharmed
+
         Ok(())
     }
 
@@ -717,10 +828,13 @@ mod test {
                     {"name": "date",                   "type": "int",    "logicalType": "date"},
                     {"name": "time_millis",            "type": "int",    "logicalType": "time-millis"},
                     {"name": "time_micros",            "type": "long",   "logicalType": "time-micros"},
+                    {"name": "time_nanos",             "type": "long",   "logicalType": "time-nanos"},
                     {"name": "timestamp_millis",       "type": "long",   "logicalType": "timestamp-millis"},
                     {"name": "timestamp_micros",       "type": "long",   "logicalType": "timestamp-micros"},
+                    {"name": "timestamp_nanos",       "type": "long",   "logicalType": "timestamp-nanos"},
                     {"name": "local_timestamp_millis", "type": "long",   "logicalType": "local-timestamp-millis"},
                     {"name": "local_timestamp_micros", "type": "long",   "logicalType": "local-timestamp-micros"},
+                    {"name": "local_timestamp_nanos", "type": "long",   "logicalType": "local-timestamp-nanos"},
                     // {"name": "duration",               "type": "int",    "logicalType": "duration"},
 
                 ]
@@ -745,10 +859,13 @@ mod test {
             "date": 1,
             "time_millis": 2,
             "time_micros": 3,
-            "timestamp_millis": 4,
-            "timestamp_micros": 5,
-            "local_timestamp_millis": 6,
-            "local_timestamp_micros": 7,
+            "time_nanos": 4,
+            "timestamp_millis": 5,
+            "timestamp_micros": 6,
+            "timestamp_nanos": 7,
+            "local_timestamp_millis": 8,
+            "local_timestamp_micros": 9,
+            "local_timestamp_nanos": 10,
             // "duration": 8,
         });
         let mut encoded = codec.encode(&decoded, &Value::const_null()).await?;

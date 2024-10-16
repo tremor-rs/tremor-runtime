@@ -30,7 +30,7 @@ chrono = "0.4"
 uuid = { version = "1.9", features = ["v4"] }
 async-recursion = "1"
 
-schema_registry_converter = { version = "4", default-features = false, features = [
+schema_registry_converter = { version = "4.2", default-features = false, features = [
     "futures",
     "rustls_tls",
     "avro",
@@ -45,14 +45,13 @@ reqwest = { version = "0.12", default-features = false, features = [
 csv = "1.2"
 tremor-influx = { version = "0.13.0-rc.29", path = "../tremor-influx" }
 simd-json = "0.13"
-apache-avro = { version = "0.16", features = [
+apache-avro = { version = "0.17", features = [
     "snappy",
     "bzip",
     "xz",
     "zstandard",
-    "bzip2",
 ] }
-# 
+#
 serde = "1"
 rmp-serde = "1.2"
 syslog_loose = "0.21"
