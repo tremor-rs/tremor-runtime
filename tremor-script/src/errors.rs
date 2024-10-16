@@ -16,6 +16,7 @@
 #![allow(clippy::large_enum_variant)]
 #![allow(deprecated)]
 #![allow(missing_docs)]
+#![allow(non_snake_case)]
 
 use crate::errors::ErrorKind::InvalidBinaryBoolean;
 pub use crate::prelude::ValueType;
@@ -247,11 +248,11 @@ impl ErrorKind {
             Msg, NoClauseHit, NoConstsAllowed, NoEventReferencesAllowed, NoLocalsAllowed,
             NoObjectError, NotConstant, NotFound, Oops, Overflow, ParseIntError, ParserError,
             PatchKeyExists, PipelineUnknownPort, QueryNodeDuplicateName, QueryNodeReservedName,
-            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
-            TypeError, UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode,
-            UnknownLocal, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
-            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
-            UpdateKeyMissing, Utf8Error, ValueError, WithParamNoArg,
+            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TryFromInt,
+            TypeConflict, TypeError, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnknownLocal, UnrecognizedToken, UnterminatedExtractor,
+            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
+            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError, WithParamNoArg,
         };
         match self {
             NoClauseHit(outer)
@@ -350,6 +351,7 @@ impl ErrorKind {
             | Self::__Nonexhaustive { .. }
             | Utf8Error(_)
             | FromUtf8Error(_)
+            | TryFromInt(_)
             | ValueError(_) => (Some(Span::yolo()), None),
         }
     }
@@ -567,6 +569,7 @@ error_chain! {
         AccessError(value_trait::AccessError);
         CodecError(tremor_codec::Error);
         Common(tremor_common::Error);
+        TryFromInt(std::num::TryFromIntError);
     }
     errors {
         /*
@@ -1209,15 +1212,6 @@ pub(crate) fn error_guard_not_bool<T, O: Ranged, I: Ranged>(
     got: &Value,
 ) -> Result<T> {
     error_type_conflict(outer, inner, got.value_type(), ValueType::Bool)
-}
-
-pub(crate) fn error_invalid_unary<T, O: Ranged, I: Ranged>(
-    outer: &O,
-    inner: &I,
-    op: ast::UnaryOpKind,
-    val: &Value,
-) -> Result<T> {
-    Err(err_invalid_unary(outer, inner, op, val))
 }
 
 pub(crate) fn err_invalid_unary<O: Ranged, I: Ranged>(

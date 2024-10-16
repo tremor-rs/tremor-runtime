@@ -138,7 +138,8 @@ use tremor_value::Value;
 use value_trait::prelude::*;
 
 pub(crate) fn execute(s: &str, result_needed: bool, compiled: &Regex) -> Result<'static> {
-    compiled.captures(s).map_or(Result::NoMatch, |caps| {
+    let res = compiled.captures(s);
+    res.map_or(Result::NoMatch, |caps| {
         if result_needed {
             let matches: HashMap<Cow<str>, Value, _> = compiled
                 .capture_names()

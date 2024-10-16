@@ -21,8 +21,7 @@ use crate::{
     errors::Kind as ErrorKind,
     errors::{
         err_invalid_fold, error_bad_key, error_decreasing_range, error_invalid_bool_op,
-        error_invalid_unary, error_need_obj, error_need_str, error_no_clause_hit, error_oops,
-        error_oops_err, Result,
+        error_need_obj, error_need_str, error_no_clause_hit, error_oops, error_oops_err, Result,
     },
     interpreter::{
         exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
@@ -726,11 +725,8 @@ impl<'script> ImutExpr<'script> {
         'script: 'event,
     {
         let rhs = stry!(expr.expr.run(opts, env, event, state, meta, local));
-        // TODO align this implemenation to be similar to exec_binary?
-        match exec_unary(expr.kind, &rhs) {
-            Some(v) => Ok(v),
-            None => error_invalid_unary(self, &expr.expr, expr.kind, &rhs),
-        }
+        // TOO align this implemenation to be similar to exec_binary?
+        exec_unary(self, expr, expr.kind, &rhs)
     }
 
     // TODO: Quite some overlap with `interpreter::resolve` (and some with `expr::assign`)

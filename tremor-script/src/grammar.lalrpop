@@ -1425,8 +1425,9 @@ WhenClause: Option<ImutExprRaw<'input>> = {
 
 /// Predicate Patterns (aka tests) for record pattrens
 PredicateFieldPattern: PredicatePatternRaw<'input> = {
-    <lhs:Ident> "~=" <expr:TestExpr> => PredicatePatternRaw::TildeEq { assign: lhs.id.clone(), lhs: lhs.id, test: expr},
-    <assign:Ident> "=" <lhs:Ident> "~=" <expr:TestExpr> => PredicatePatternRaw::TildeEq { assign: assign.id, lhs: lhs.id, test: expr} ,
+    <lhs:Ident> "~=" <expr:TestExpr> => PredicatePatternRaw::TildeEq { lhs: lhs.id, test: expr},
+    // FIXME: why was assign never used in here?
+    <_assign:Ident> "=" <lhs:Ident> "~=" <expr:TestExpr> => PredicatePatternRaw::TildeEq { lhs: lhs.id, test: expr} ,
     <lhs:Ident> "~=" <rp:RecordPattern> => PredicatePatternRaw::RecordPatternEq { lhs: lhs.id, pattern: rp },
     <lhs:Ident> "~=" <ap:ArrayPattern>  => PredicatePatternRaw::ArrayPatternEq { lhs: lhs.id, pattern: ap },
     <lhs:Ident> "~=" <ap:TuplePattern>  => PredicatePatternRaw::TuplePatternEq { lhs: lhs.id, pattern: ap },

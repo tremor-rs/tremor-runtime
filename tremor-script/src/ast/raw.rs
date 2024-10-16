@@ -1397,8 +1397,6 @@ pub enum PredicatePatternRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     TildeEq {
         /// we're forced to make this pub because of lalrpop
-        assign: Cow<'script, str>,
-        /// we're forced to make this pub because of lalrpop
         lhs: Cow<'script, str>,
         /// we're forced to make this pub because of lalrpop
         test: TestExprRaw,
@@ -1453,8 +1451,7 @@ impl<'script> Upable<'script> for PredicatePatternRaw<'script> {
             TuplePatternEq,
         };
         Ok(match self {
-            TildeEq { assign, lhs, test } => PredicatePattern::TildeEq {
-                assign,
+            TildeEq { lhs, test } => PredicatePattern::TildeEq {
                 key: KnownKey::from(lhs.clone()),
                 lhs,
                 test: Box::new(test.up(helper)?),

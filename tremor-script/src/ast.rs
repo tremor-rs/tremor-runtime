@@ -197,7 +197,7 @@ impl<'script> BytesPart<'script> {
 /// Binary semiliteral
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Bytes<'script> {
-    mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Bytes
     pub value: Vec<BytesPart<'script>>,
 }
@@ -1673,8 +1673,6 @@ impl<'script> Pattern<'script> {
 pub enum PredicatePattern<'script> {
     /// Structural application
     TildeEq {
-        /// Assignment bind point
-        assign: Cow<'script, str>,
         /// Lhs
         lhs: Cow<'script, str>,
         /// Key
@@ -1974,6 +1972,11 @@ pub enum Path<'script> {
 }
 
 impl<'script> Path<'script> {
+    /// Get the length of the path
+    #[must_use]
+    pub(crate) fn len(&self) -> usize {
+        self.segments().len()
+    }
     /// Get segments as slice
     #[must_use]
     pub(crate) fn segments(&self) -> &Segments<'script> {
