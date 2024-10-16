@@ -214,7 +214,7 @@ where
         Schema::String => AvroValue::String(data.try_as_str()?.to_string()),
         Schema::Array(s) => {
             array_value_to_avro(
-                data.as_array().ok_or("Expected an array")?.clone(),
+                data.try_as_array()?,
                 s,
                 resolver,
             )
