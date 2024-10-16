@@ -2,10 +2,13 @@
 
 ## Unreleased
 
+### New features
+* update apache-avro to version 0.17 adding support for nano resolution timestamp logical types in schemas
+
 ### Fixes
 * gbq connector naming is now `gbq_writer` as it is documented
 * fix gbq connector url missing `/`
-  
+
 ## [0.13.0-rc.29]
 
 ### New features
@@ -186,7 +189,7 @@
 - Fixed error reporting in ConnectOutput and ConnectInput functions
 - Fixed kv test cases
 
-## [0.13.0-rc.1] 
+## [0.13.0-rc.1]
 
 ### Breaking Changes
 
