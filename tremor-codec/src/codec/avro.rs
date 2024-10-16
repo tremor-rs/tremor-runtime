@@ -212,22 +212,8 @@ where
         Schema::Double => AvroValue::Double(data.try_as_f64()?),
         Schema::Bytes => AvroValue::Bytes(data.try_as_bytes()?.to_vec()),
         Schema::String => AvroValue::String(data.try_as_str()?.to_string()),
-        Schema::Array(s) => {
-            array_value_to_avro(
-                data.try_as_array()?,
-                s,
-                resolver,
-            )
-            .await?
-        }
-        Schema::Map(s) => {
-            map_value_to_avro(
-                data.try_as_object()?,
-                s,
-                resolver,
-            )
-            .await?
-        }
+        Schema::Array(s) => array_value_to_avro(data.try_as_array()?, s, resolver).await?,
+        Schema::Map(s) => map_value_to_avro(data.try_as_object()?, s, resolver).await?,
         Schema::Union(s) => {
             for (i, variant) in s.variants().iter().enumerate() {
                 if let Ok(v) = value_to_avro(data, variant, resolver).await {
