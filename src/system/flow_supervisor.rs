@@ -188,11 +188,8 @@ impl FlowSupervisor {
             }
             task::spawn(async move {
                 while alive_flows > 0 {
-                    match rx.recv().await {
-                        Some(Err(e)) => {
-                            error!("Error during Draining: {e}");
-                        }
-                        None | Some(_) => {}
+                    if let Some(Err(e)) = rx.recv().await {
+                        error!("Error during Draining: {e}");
                     };
                     alive_flows -= 1;
                 }
