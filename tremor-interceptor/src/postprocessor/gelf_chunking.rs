@@ -264,4 +264,24 @@ mod test {
 
         Ok(())
     }
+
+    #[test]
+    fn gelf_message_id_validation_with_max_autoincrement_id() -> anyhow::Result<()> {
+        let input_data = vec![
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+        ];
+        let mut encoder = super::Gelf {
+            auto_increment_id: u64::MAX,
+            chunk_size: 20
+        };
+
+        let encoded_gelf = encoder.encode_gelf(&input_data, 0)?;
+        let expected_message_id = generate_message_id(0, u64::MAX);
+        let encoded_gelf_2 = encoder.encode_gelf(&input_data, 0)?;
+        let expected_message_id_2 = generate_message_id(0, 0);
+        assert_eq!(u64::from_be_bytes(encoded_gelf[1][2..10].try_into().expect("slice with incorrect length")), expected_message_id);
+        assert_eq!(u64::from_be_bytes(encoded_gelf_2[1][2..10].try_into().expect("slice with incorrect length")), expected_message_id_2);
+
+        Ok(())
+    }
 }
