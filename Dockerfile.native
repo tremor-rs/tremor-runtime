@@ -1,4 +1,4 @@
-FROM rust:1.81-bookworm as builder
+FROM rust:1.82-bookworm as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
