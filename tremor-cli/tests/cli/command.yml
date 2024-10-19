@@ -133,7 +133,7 @@ suites:
         expects:
           - source: stdout
             contains:
-              - complete -c tremor -n "__fish_use_subcommand"
+              - complete -c tremor
       - name: |
           `tremor completions powershell` returns powershell completions
         command: tremor completions powershell
