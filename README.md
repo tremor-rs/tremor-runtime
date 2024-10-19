@@ -100,13 +100,13 @@ Docker images are published to both [Docker Hub](https://hub.docker.com/r/tremor
 
 We publish our images with a set of different tags as explained below
 
-| Image tags | Explanation                         | Example   |
-| ---------- | ----------------------------------- | --------- |
-| `edge`     | Tracking the `main` branch          |           |
-| `latest`   | The latest release                  |           |
+| Image tags | Explanation                         | Example  |
+| ---------- | ----------------------------------- | -------- |
+| `edge`     | Tracking the `main` branch          |          |
+| `latest`   | The latest release                  |          |
 | `0.X.Y`    | The exact release                   | `0.12.1` |
-| `0.X`      | The latest bugfix release for `0.X` | `0.12`    |
-| `0`        | The latest minor release for `0`    | `0`       |
+| `0.X`      | The latest bugfix release for `0.X` | `0.12`   |
+| `0`        | The latest minor release for `0`    | `0`      |
 
 ### Building the Docker Image
 
@@ -158,7 +158,7 @@ docker exec -it fa7e3b4cec86 sh
 
 If you are not comfortable with managing library packages on your system or don't have experience with, please use the Docker image provided above. 
 
-For local builds, tremor requires rust 2021 (version `1.62` or later), along with all the tools needed to build rust programs. Eg: for CentOS, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.
+For local builds, tremor requires rust 2021 (version `1.76` or later), along with all the tools needed to build rust programs. Eg: for CentOS, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.
 **NOTE** AVX2, SSE4.2 or NEON are needed to build [simd-json](https://github.com/simd-lite/simd-json#cpu-target) used by tremor. So if you are building in vm, check which processor instruction are passed to it. Like `lscpu | grep Flags`
 For a more detailed guide on local builds, please refer to the [tremor development docs](https://www.tremor.rs/community/development/quick-start).
 
