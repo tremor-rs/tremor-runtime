@@ -159,9 +159,7 @@ impl Separate {
     }
 
     fn exceeds_max_length(&self, len: usize) -> bool {
-        self.max_length
-            .map(|max| max.get() < len)
-            .unwrap_or_default()
+        self.max_length.is_some_and(|max| max.get() < len)
     }
 
     fn save_fragment(&mut self, v: &[u8]) -> Result<(), Error> {
