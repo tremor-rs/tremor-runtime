@@ -43,6 +43,11 @@
 //! ## Considerations
 //!
 //! If timestamp value is -1 it will be replaced with the current time as the event's timestamp.
+//!
+//! Tremor uses nanosecond resolution for timestamps, while graphite uses seconds. When encoding, the timestamp will be truncated to seconds.
+//! When decoding, the timestamp will be multiplied by `1_000_000_000` to convert seconds to nanoseconds. In this way processing logic inside
+//! tremor can be agnostic to the resolution of the timestamp in the incoming data but consistent in processing as timestamps should always
+//! be in nanoseconds resolution within tremor itself.
 
 use crate::prelude::*;
 use simd_json::ObjectHasher;
@@ -96,11 +101,15 @@ fn encode_plaintext(value: &Value, r: &mut impl Write) -> Result<()> {
         return Err(ErrorKind::InvalidGraphitePlaintext.into());
     };
 
+    // Truncate to seconds resolution for graphite
+    let ts = ts.as_u64().ok_or(ErrorKind::InvalidGraphitePlaintext)? / 1_000_000_000;
+    let ts = ts.to_string();
+
     r.write_all(metric.as_bytes())?;
     r.write_all(b" ")?;
     r.write_all(val.encode().as_bytes())?;
     r.write_all(b" ")?;
-    r.write_all(ts.encode().as_bytes())?;
+    r.write_all(ts.as_bytes())?;
 
     Ok(())
 }
@@ -135,9 +144,11 @@ fn decode_plaintext(data: &[u8], ingest_ns: u64) -> Result<Value> {
     m.insert_nocheck("metric".into(), Value::from(metric));
 
     if "-1" == ts {
+        // We are using tremor's ingest_ns, so this is always ns resolution
         m.insert("timestamp".into(), Value::from(ingest_ns));
     } else {
         let ts = lexical::parse::<u64, _>(ts)?;
+        let ts = ts * 1_000_000_000; // from seconds ( graphite ) to nanoseconds which is normative in tremor
         m.insert("timestamp".into(), Value::from(ts));
     }
 
@@ -160,7 +171,7 @@ mod test {
             let expected = literal!({
                 "metric": "beep.boop",
                 "value": 7,
-                "timestamp": 1_620_649_445i64,
+                "timestamp": 1_620_649_445_000_000_000i64,
 
             });
             assert_eq!(parsed, expected);
@@ -173,16 +184,16 @@ mod test {
         #[tokio::test(flavor = "multi_thread")]
         async fn name_value_minusone() {
             let data = b"beep.boop 320.0 -1";
-            let parsed = decode_plaintext(data, 1234).expect("failed to decode");
+            let parsed = decode_plaintext(data, 1_234_000_000_000).expect("failed to decode");
             let expected = literal!({
                 "metric": "beep.boop",
                 "value": 320.0,
-                "timestamp": 1234,
+                "timestamp": 1_234_000_000_000u64, // this is logically ns resolution
             });
             assert_eq!(parsed, expected);
             let mut encoded = Vec::new();
             encode_plaintext(&parsed, &mut encoded).expect("failed to encode");
-            assert_eq!(encoded, b"beep.boop 320.0 1234"); // -1 is replaced with 1234 so this is asymetric w.r.t. input
+            assert_eq!(encoded, b"beep.boop 320.0 1234"); // -1 is replaced with 1234000000000 but graphite is seconds resolution, so we strip the last 9 digits!
         }
 
         #[tokio::test(flavor = "multi_thread")]
@@ -200,7 +211,7 @@ mod test {
                     literal!({
                         "metric": "beep.boop",
                         "value": 7,
-                        "timestamp": 1_620_649_445i64,
+                        "timestamp": 1_620_649_445_000_000_000i64,
                     }),
                     Value::null()
                 )))
