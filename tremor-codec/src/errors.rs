@@ -85,6 +85,12 @@ error_chain! {
             description("Invalid statsd metric")
                 display("Invalid statsd metric")
         }
+
+        InvalidGraphitePlaintext {
+            description("Invalid graphite plaintext protocol metric")
+                display("Invalid graphite plaintext protocol metric")
+        }
+
         InvalidDogStatsD {
             description("Invalid dogstatsd metric")
                 display("Invalid dogstatsd metric")
