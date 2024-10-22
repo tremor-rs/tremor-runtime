@@ -42,8 +42,6 @@
 //!
 //! ## Considerations
 //!
-//! If timestamps are not provided, the codec will use the current time as the event's timestamp.
-//!
 //! If timestamp value is -1 it will be replaced with the current time as the event's timestamp.
 
 use crate::prelude::*;
@@ -72,7 +70,7 @@ impl Codec for PlaintextProtocol {
 
     async fn encode(&mut self, data: &Value, _meta: &Value) -> Result<Vec<u8>> {
         encode_plaintext(data, &mut self.buf)?;
-        let v = self.buf.clone();
+        let v = std::mem::take(&mut self.buf);
         self.buf.clear();
         Ok(v)
     }
@@ -83,7 +81,9 @@ impl Codec for PlaintextProtocol {
 }
 
 fn encode_plaintext(value: &Value, r: &mut impl Write) -> Result<()> {
-    let metric = value.get_str("metric").ok_or(ErrorKind::InvalidStatsD)?;
+    let metric = value
+        .get_str("metric")
+        .ok_or(ErrorKind::InvalidGraphitePlaintext)?;
     let val = value
         .get("value")
         .ok_or(ErrorKind::InvalidGraphitePlaintext)?;
