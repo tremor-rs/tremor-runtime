@@ -184,5 +184,60 @@ mod test {
             encode_plaintext(&parsed, &mut encoded).expect("failed to encode");
             assert_eq!(encoded, b"beep.boop 320.0 1234"); // -1 is replaced with 1234 so this is asymetric w.r.t. input
         }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_for_coverage() {
+            let mut codec = PlaintextProtocol::default();
+            assert_eq!("graphite-plaintext", codec.name());
+            let cloned = codec.boxed_clone();
+            assert_eq!("graphite-plaintext", cloned.name());
+
+            let mut data = b"beep.boop 7 1620649445".to_vec();
+            let decoded = codec.decode(&mut data, 0, Value::null()).await;
+            assert_eq!(
+                decoded,
+                Ok(Some((
+                    literal!({
+                        "metric": "beep.boop",
+                        "value": 7,
+                        "timestamp": 1_620_649_445i64,
+                    }),
+                    Value::null()
+                )))
+            );
+
+            let mut bad = b"".to_vec();
+            let decoded = codec.decode(&mut bad, 0, Value::null()).await;
+            assert!(decoded.is_err());
+
+            let mut bad = b"metric.no.measure.no.timestamp".to_vec();
+            let decoded = codec.decode(&mut bad, 0, Value::null()).await;
+            assert!(decoded.is_err());
+
+            let mut bad = b"metric.with.measure.no.timestamp 320.0".to_vec();
+            let decoded = codec.decode(&mut bad, 0, Value::null()).await;
+            assert!(decoded.is_err());
+
+            let encoded = codec
+                .encode(
+                    &literal!({
+                        "metric": "beep.boop",
+                        "value": 7
+                    }),
+                    &Value::null(),
+                )
+                .await;
+            assert!(encoded.is_err());
+
+            let encoded = codec
+                .encode(
+                    &literal!({
+                        "metric": "beep.boop"
+                    }),
+                    &Value::null(),
+                )
+                .await;
+            assert!(encoded.is_err());
+        }
     }
 }
