@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.13.0-rc.30]
 
 ### New features
 * update apache-avro to version 0.17 adding support for nano resolution timestamp logical types in schemas

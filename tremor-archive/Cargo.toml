@@ -8,11 +8,11 @@ homepage = "https://www.tremor.rs"
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.29"
+version = "0.13.0-rc.30"
 
 [dependencies]
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.29" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.29" }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.30" }
+tremor-script = { path = "../tremor-script", version = "0.13.0-rc.30" }
 
 tokio = { version = "1", default-features = false, features = [] }
 tokio-tar = "0.3"
