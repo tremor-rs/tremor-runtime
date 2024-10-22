@@ -3434,12 +3434,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7943c866cc5cd64cbc25b2e01621d07fa8eb2a1a23160ee81ce38704e97b8ecf"
 
 [[package]]
-name = "iter-read"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c397ca3ea05ad509c4ec451fea28b4771236a376ca1c69fd5143aae0cf8f93c4"
-
-[[package]]
 name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5621,19 +5615,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-pickle"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c762ad136a26407c6a80825813600ceeab5e613660d93d79a41f0ec877171e71"
-dependencies = [
- "byteorder",
- "iter-read",
- "num-bigint 0.4.6",
- "num-traits",
- "serde",
-]
-
-[[package]]
 name = "serde-value"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7160,8 +7141,6 @@ dependencies = [
  "ryu",
  "schema_registry_converter",
  "serde",
- "serde-pickle",
- "serde_json",
  "serde_yaml",
  "simd-json",
  "simd-json-derive",
