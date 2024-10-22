@@ -37,6 +37,7 @@ mod codec {
     pub(crate) mod confluent_schema_registry;
     pub(crate) mod csv;
     pub(crate) mod dogstatsd;
+    pub(crate) mod graphite;
     pub(crate) mod influx;
     /// JSON codec
     pub mod json;
@@ -138,6 +139,7 @@ pub fn resolve(config: &Config) -> Result<Box<dyn Codec>> {
         "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
         "tremor" => Ok(Box::<tremor::Tremor>::default()),
         "yaml" => Ok(Box::new(yaml::Yaml {})),
+        "graphite-plaintext" => Ok(Box::new(graphite::PlaintextProtocol::default())),
         s => Err(ErrorKind::CodecNotFound(s.into()).into()),
     }
 }
