@@ -1,3 +1,3 @@
-# tremor-commons
+# tremor-common
 
 Shared and useful functions for tremor
