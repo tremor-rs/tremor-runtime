@@ -7,7 +7,7 @@ jobs:
     name: Publish tremor common
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - run: cargo install cargo-release
@@ -16,12 +16,38 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo release publish -p tremor-common -x
 
+  publish-tremor-config:
+    name: Publish tremor config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: cargo install cargo-release
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo release publish -p tremor-config -x
+
+  publish-tremor-codec:
+    name: Publish tremor codec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: cargo install cargo-release
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo release publish -p tremor-codec -x
+
   publish-tremor-value:
     needs: [publish-tremor-common]
     name: Publish tremor value
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - run: cargo install cargo-release
@@ -34,7 +60,7 @@ jobs:
     name: Publish tremor influx
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - run: cargo install cargo-release
@@ -48,7 +74,7 @@ jobs:
     name: Publish tremor script
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - run: cargo install cargo-release

@@ -16,12 +16,12 @@ jobs:
       - name: List files
         run: ls packaging/out/*
       - name: Archive production artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: packages
           path: |
             packaging/out/*
-      - uses: AButler/upload-release-assets@v2.0
+      - uses: AButler/upload-release-assets@v3.0
         with:
           files: "packaging/out/*"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
