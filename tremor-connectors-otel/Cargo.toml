@@ -1,6 +1,6 @@
 [package]
 name = "tremor-connectors-otel"
-version = "0.13.0-rc.31"
+version = "0.13.0-rc.32"
 edition = "2021"
 license = "Apache-2.0"
 homepage = "https://www.tremor.rs"
@@ -9,12 +9,12 @@ authors = ["The Tremor Team"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.31", default-features = false }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.31" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.31" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.31" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.31" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.31" }
+tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.32", default-features = false }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.32" }
+tremor-system = { path = "../tremor-system", version = "0.13.0-rc.32" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.32" }
+tremor-config = { path = "../tremor-config", version = "0.13.0-rc.32" }
+tremor-script = { path = "../tremor-script", version = "0.13.0-rc.32" }
 
 anyhow = { version = "1", default-features = true }
 async-trait = { version = "0.1", default-features = true }
