@@ -72,7 +72,13 @@ jobs:
         run: cargo release publish -p tremor-influx -x --no-confirm
 
   publish-tremor-script:
-    needs: [publish-tremor-common, publish-tremor-value, publish-tremor-influx]
+    needs:
+      [
+        publish-tremor-common,
+        publish-tremor-value,
+        publish-tremor-influx,
+        publish-tremor-codec,
+      ]
     name: Publish tremor script
     runs-on: ubuntu-latest
     steps:
