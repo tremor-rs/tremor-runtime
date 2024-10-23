@@ -14,33 +14,7 @@ jobs:
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo release publish -p tremor-common -x
-
-  publish-tremor-config:
-    name: Publish tremor config
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - run: cargo install cargo-release
-      - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo release publish -p tremor-config -x
-
-  publish-tremor-codec:
-    name: Publish tremor codec
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - run: cargo install cargo-release
-      - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo release publish -p tremor-codec -x
+        run: cargo release publish -p tremor-common -x --no-confirm
 
   publish-tremor-value:
     needs: [publish-tremor-common]
@@ -54,7 +28,35 @@ jobs:
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo release publish -p tremor-value -x
+        run: cargo release publish -p tremor-value -x --no-confirm
+
+  publish-tremor-config:
+    needs: [publish-tremor-value]
+    name: Publish tremor config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: cargo install cargo-release
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo release publish -p tremor-config -x --no-confirm
+
+  publish-tremor-codec:
+    needs: [publish-tremor-value, publish-tremor-common, publish-tremor-config]
+    name: Publish tremor codec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: cargo install cargo-release
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo release publish -p tremor-codec -x --no-confirm
 
   publish-tremor-influx:
     name: Publish tremor influx
@@ -67,7 +69,7 @@ jobs:
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo release publish -p tremor-influx -x
+        run: cargo release publish -p tremor-influx -x --no-confirm
 
   publish-tremor-script:
     needs: [publish-tremor-common, publish-tremor-value, publish-tremor-influx]
@@ -81,7 +83,7 @@ jobs:
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo release publish -p tremor-script -x
+        run: cargo release publish -p tremor-script -x --no-confirm
 
   invoke-tremor-language-server:
     needs: [publish-tremor-script]
