@@ -1,17 +1,17 @@
 [package]
 name = "tremor-connectors-azure"
 edition = "2021"
-version = "0.13.0-rc.30"
+version = "0.13.0-rc.31"
 authors = ["The Tremor Team"]
 homepage = "https://www.tremor.rs"
 license = "Apache-2.0"
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.30", default-features = false }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.30" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.30" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.30" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.30" }
+tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.31", default-features = false }
+tremor-common = { path = "../tremor-common", version = "0.13.0-rc.31" }
+tremor-system = { path = "../tremor-system", version = "0.13.0-rc.31" }
+tremor-value = { path = "../tremor-value", version = "0.13.0-rc.31" }
+tremor-config = { path = "../tremor-config", version = "0.13.0-rc.31" }
 
 azure_core = { version = "0.20.0", default-features = false, features = [
     "enable_reqwest",
@@ -25,7 +25,7 @@ url = "2.5.2"
 reqwest = { version = "0.12.4", default-features = false, features = ["json"] }
 tokio = "1.39.2"
 log = "0.4.21"
-tremor-script = { version = "0.13.0-rc.30", path = "../tremor-script" }
+tremor-script = { version = "0.13.0-rc.31", path = "../tremor-script" }
 bytes = "1.6.1"
 futures = { version = "0.3.30", default-features = false, features = [
     "alloc",
