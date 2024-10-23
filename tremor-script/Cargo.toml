@@ -8,7 +8,7 @@ license = "Apache-2.0"
 name = "tremor-script"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.30"
+version = "0.13.0-rc.31"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
@@ -51,10 +51,10 @@ value-trait = "0.8"
 sketches-ddsketch = "0.3"
 strip-ansi-escapes = "0.2"
 termcolor = "1.4"
-tremor-common = { version = "0.13.0-rc.30", path = "../tremor-common" }
-tremor-influx = { version = "0.13.0-rc.30", path = "../tremor-influx" }
-tremor-value = { version = "0.13.0-rc.30", path = "../tremor-value" }
-tremor-codec = { version = "0.13.0-rc.30", path = "../tremor-codec" }
+tremor-common = { version = "0.13.0-rc.31", path = "../tremor-common" }
+tremor-influx = { version = "0.13.0-rc.31", path = "../tremor-influx" }
+tremor-value = { version = "0.13.0-rc.31", path = "../tremor-value" }
+tremor-codec = { version = "0.13.0-rc.31", path = "../tremor-codec" }
 tremor-kv = "0.6"
 unicode-xid = "0.2"
 url = "2"
