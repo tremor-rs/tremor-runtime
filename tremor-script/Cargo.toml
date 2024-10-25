@@ -39,7 +39,7 @@ halfbrown = "0.2"
 hdrhistogram = "7"
 hostname = "0.4"
 jumphash = "0.1"
-lalrpop-util = "0.20"
+lalrpop-util = "0.22"
 lazy_static = "1.5"
 percent-encoding = "2"
 rand = { version = "0.8", features = ["small_rng"] }
