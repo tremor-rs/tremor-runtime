@@ -2448,6 +2448,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "float-cmp"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b09cf3155332e944990140d967ff5eceb70df778b34f77d8075db46e4704e6d8"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7094,7 +7103,7 @@ dependencies = [
  "difference",
  "env_logger",
  "error-chain",
- "float-cmp",
+ "float-cmp 0.10.0",
  "futures",
  "globwalk",
  "halfbrown",
@@ -7576,7 +7585,7 @@ dependencies = [
  "distance",
  "downcast-rs",
  "error-chain",
- "float-cmp",
+ "float-cmp 0.10.0",
  "glob",
  "grok",
  "halfbrown",
@@ -7634,7 +7643,7 @@ version = "0.13.0-rc.33"
 dependencies = [
  "base64 0.22.1",
  "beef",
- "float-cmp",
+ "float-cmp 0.10.0",
  "getopts",
  "halfbrown",
  "proptest",
@@ -7963,7 +7972,7 @@ version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dad8db98c1e677797df21ba03fca7d3bf9bec3ca38db930954e4fe6e1ea27eb4"
 dependencies = [
- "float-cmp",
+ "float-cmp 0.9.0",
  "halfbrown",
  "itoa 1.0.11",
  "ryu",
