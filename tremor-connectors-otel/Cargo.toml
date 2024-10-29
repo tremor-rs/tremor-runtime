@@ -26,7 +26,7 @@ serde = { version = "1.0", default-features = true, features = ["derive"] }
 thiserror = { version = "1", default-features = true }
 # value-trait = { version = "0.8", default-features = true }
 tokio = { version = "1.39", default-features = false }
-simd-json = { version = "0.13", default-features = true }
+simd-json = { version = "0.14", default-features = true }
 
 # opentelemetry
 tonic = { version = "0.6.1", default-features = false, features = [

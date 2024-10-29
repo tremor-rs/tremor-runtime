@@ -35,7 +35,7 @@ futures = { version = "0.3.30", default-features = false, features = [
 ] }
 serde_json = "1.0.120"
 beef = "0.5.2"
-simd-json = "0.13.10"
+simd-json = "0.14.2"
 mockito = "1.4.0"
 
 [features]
