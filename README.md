@@ -154,7 +154,7 @@ docker exec -it fa7e3b4cec86 sh
 
 ## Building From Source
 
-> :warning: Local builds are not supported and purely at your own risk. For contributing to Tremor please checkout our [Development Quick Start Guide](https://tremor.rs/docs/0.12/development/quick-start)
+> :warning: Local builds are not supported and purely at your own risk. For contributing to Tremor please checkout our [Development Quick Start Guide](https://www.tremor.rs/community/development/quick-start)
 
 If you are not comfortable with managing library packages on your system or don't have experience with, please use the Docker image provided above. 
 
@@ -173,16 +173,16 @@ RUSTCFLAGS="-C cpu-target=native" cargo +nightly build --features neon --all
 
 ## Configuration
 
-Tremor is configured using `.troy` files written in our own [Troy](https://tremor.rs/docs/0.12/language/troy/) language.
+Tremor is configured using `.troy` files written in our own [Troy](https://www.tremor.rs/docs/0.12/language/) language.
 
-Custom [Troy](https://tremor.rs/docs/0.12/language/troy/) modules can be loaded from any directory pointed to by the environment variable `TREMOR_PATH`.
+Custom [Troy](https://www.tremor.rs/docs/0.12/language/) modules can be loaded from any directory pointed to by the environment variable `TREMOR_PATH`.
 Directory entries need to be separated by a colon `:`.
 
 ### Docker
 
-For use in docker [Troy](https://tremor.rs/docs/0.12/language/troy/) files should be mounted to `/etc/tremor/config`.
+For use in docker [Troy](https://www.tremor.rs/docs/0.12/language/) files should be mounted to `/etc/tremor/config`.
 
-Custom [Troy](https://tremor.rs/docs/0.12/language/troy/) modules and libraries should be mounted to `/usr/local/share/tremor`.
+Custom [Troy](https://www.tremor.rs/docs/0.12/language/) modules and libraries should be mounted to `/usr/local/share/tremor`.
 ### Example
 
 This very simple example will consume lines from stdin and send them to stdout.
