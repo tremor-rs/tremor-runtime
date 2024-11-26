@@ -74,7 +74,7 @@ indexmap = "2"
 log = { version = "0.4", features = ["kv_unstable"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
-simd-json = { version = "0.13", features = ["known-key"] }
+simd-json = { version = "0.14", features = ["known-key"] }
 simd-json-derive = "0.13"
 value-trait = "0.8"
 
