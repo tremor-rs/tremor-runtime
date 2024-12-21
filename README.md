@@ -70,8 +70,8 @@ We currently do not recommend tremor where:
 
 - Your event structure is not mappable to a JSON-like data structure.
   - If in doubt, please reach out and create a ticket so we can assist and advice
-  - In many cases ( textual formats ) a [preprocessor](https://www.tremor.rs/docs/artefacts/preprocessors/), [postprocessor](https://www.tremor.rs/docs/artefacts/postprocessors/) or [codec](https://www.tremor.rs/docs/artefacts/codecs/) is sufficient and these are relatively easy to contribute.
-- You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the existing set of [connectors](https://www.tremor.rs/docs/artefacts/connectors).
+  - In many cases ( textual formats ) a [preprocessor](https://www.tremor.rs/docs/0.12/reference/preprocessors/), [postprocessor](https://www.tremor.rs/docs/0.12/reference/postprocessors/)
+- You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the existing set of [connectors](https://www.tremor.rs/docs/0.12/reference/connectors/).
   - If in doubt, please reach out and create a ticket so we can assist and advise.
 - You require complex and expensive operations on your event streams like joins of huge streams. Tremor is not built for huge analytical datasets, rather for tapping into infinite datastreams at their source (e.g. k8s events, syslog, kafka).
 
