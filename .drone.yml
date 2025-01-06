@@ -10,7 +10,7 @@ steps:
     environment:
       RUSTFLAGS: "-C target-cpu=native"
     commands:
-      - apt-get -qy update && apt-get install -y libssl-dev libssl1.1 cmake libclang-dev
+      - apt-get -qy update && apt-get install -y libssl-dev libssl3 cmake libclang-dev
       - rustup default nightly
       - rustup update
       - cargo +nightly test --verbose --all

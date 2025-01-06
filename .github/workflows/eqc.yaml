@@ -22,7 +22,7 @@ jobs:
           otp-version: "24"
           rebar3-version: "3"
       - name: Install deps
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
+        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl3
       - name: install yq
         run: wget https://github.com/mikefarah/yq/releases/download/v4.20.2/yq_linux_amd64 -O ~/yq && chmod +x ~/yq
       - name: install EQC
@@ -48,7 +48,7 @@ jobs:
           otp-version: "24"
           rebar3-version: "3"
       - name: Install deps
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
+        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl3
       - name: install EQC
         run: curl -O http://quviq-licencer.com/downloads/eqcR24.zip && unzip eqcR24.zip && cd Quviq* && erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
       - name: Activate EQC
