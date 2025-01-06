@@ -23,7 +23,7 @@ async-channel = { version = "2", default-features = false }
 thiserror = { version = "1", default-features = false }
 tokio = { version = "1.39", default-features = false }
 log = { version = "0.4", default-features = false }
-simd-json = { version = "0.13", default-features = false }
+simd-json = { version = "0.14", default-features = false }
 value-trait = { version = "0.8", default-features = false }
 
 aws-sdk-s3 = { version = "1", default-features = false, features = [
