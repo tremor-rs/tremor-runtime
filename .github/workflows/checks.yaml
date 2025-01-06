@@ -74,7 +74,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - name: Install deps
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
+        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl3
       - name: Check workflow permissions
         id: check_permissions
         uses: scherermichael-oss/action-has-permission@1.0.6

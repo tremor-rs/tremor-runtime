@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
+        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl3; sudo apt-get clean
       - name: Install llvm-tools-preview
         run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
@@ -79,7 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install deps
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1; sudo apt-get clean
+        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl3; sudo apt-get clean
       - name: Install llvm-tools-preview
         run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
