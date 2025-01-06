@@ -2,7 +2,7 @@
 
 This is a docker-compose based demonstration of some of the capabilities of Tremor.
 
-It starts a kafka node, elasticsearch single-node cluster, kibana and influxdb and, last but not least, one Tremor instance.
+It starts a kafka node, elasticsearch single-node cluster, kibana and influxdb and last, but not least, one Tremor instance.
 
 The two main files to check out are the `demo.yaml` compose file and the `configs/tremor/config/main.troy` file,
 containing the plumbing necessary for event routing and the core application logic.
