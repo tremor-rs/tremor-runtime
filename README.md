@@ -81,7 +81,7 @@ We accept and encourage contributions no matter how small so if tremor is compel
 
 See our [Demo](demo/README.md) for a complex Tremor setup that can easily be run locally by using docker compose.
 
-Checkout the [Recipes](https://www.tremor.rs/docs/recipes/README) on our website. Each comes with a docker compose file to run and play with without requiring lots of dependencies.
+Checkout the [Guides](https://www.tremor.rs/docs/0.12/guides/) on our website for more examples on how to use tremor.
 
 ## Packages
 
@@ -215,7 +215,7 @@ $ docker run -i -v"$PWD:/etc/tremor/config" tremorproject/tremor:latest
 
 Please also look at the [demo](demo/configs/tremor/config) for a fully documented example.
 
-For more involved examples check out our [Recipes](https://tremor.rs/docs/0.12/recipes/index).
+For more involved examples check out our [Recipes](https://www.tremor.rs/docs/0.12/language/common_patterns).
 
 
 ## Local Demo
