@@ -1,7 +1,7 @@
 # Release Process
 
 
-## preperation
+## preparation
 
 * Update version in all Cargo.toml files in the repository
   - ./Cargo.toml
@@ -36,7 +36,7 @@
   - Add a catchy title
   - Add the relevant changelog entries for this release in the description
 
-## follow up
+## follow-up
 
 * Release crates to crates.io:
   - Make sure you are an owner of the crates to publish
@@ -57,6 +57,10 @@
   ```
 
 * Create a corresponding release on tremor-www-docs. See [tremor-www-docs Release Process](https://github.com/tremor-rs/tremor-www-docs/blob/main/RELEASE_PROCESS.md)
+  - update the installation instructions with the appropriate version for the documentation version (https://www.tremor.rs/docs/0.13/getting-started/install)
+  - update tremor-runtime/readme.md references to point to "latest" release documentation version
+
+
 * Release https://github.com/tremor-rs/tremor-language-server
   - Bump version and update dependency `tremor-script` to the new version.
   - Checkout the new tremor-www-docs release tag in the `tremor-www-docs` submodule.
