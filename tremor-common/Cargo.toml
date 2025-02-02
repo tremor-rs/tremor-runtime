@@ -14,7 +14,7 @@ rand = { version = "0.8", default-features = false, features = ["small_rng"] }
 beef = { version = "0.5", default-features = false, features = ["impl_serde"] }
 serde = { version = "1", default-features = false, features = ["derive"] }
 url = { version = "2", default-features = false, features = ["serde"] }
-simd-json = { version = "0.13", features = ["known-key"] }
+simd-json = { version = "0.14", features = ["known-key"] }
 simd-json-derive = { version = "0.13", default-features = false }
 base64 = { version = "0.22", default-features = false, features = ["std"] }
 regex = { version = "1", default-features = false }
