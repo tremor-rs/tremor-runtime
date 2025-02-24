@@ -7,38 +7,38 @@ name = "tremor-pipeline"
 version = "0.13.0-rc.33"
 
 [dependencies]
-tokio = "1"
-beef = { version = "0.5", features = ["impl_serde"] }
-error-chain = "0.12"
-halfbrown = "0.2"
-indexmap = "2"
-rand = { version = "0.8", features = ["small_rng"] }
-lazy_static = "1"
-log = "0.4"
-lru = "0.12"
-petgraph = "0.6"
-regex = "1"
-rust-bert = { version = "0.21.0", optional = true }
-serde = "1"
-serde_yaml = "0.9"
-simd-json = { version = "0.13", features = ["known-key"] }
-simd-json-derive = "0.13"
-value-trait = "0.8"
-sled = "0.34"
-tremor-common = { version = "0.13.0-rc.33", path = "../tremor-common" }
-tremor-config = { version = "0.13.0-rc.33", path = "../tremor-config" }
-tremor-script = { version = "0.13.0-rc.33", path = "../tremor-script" }
-tremor-value = { version = "0.13.0-rc.33", path = "../tremor-value" }
-tremor-system = { version = "0.13.0-rc.33", path = "../tremor-system" }
+tokio = { workspace = true }
+beef = { workspace = true, features = ["impl_serde"] }
+error-chain = { workspace = true }
+halfbrown = { workspace = true }
+indexmap = { workspace = true }
+rand = { workspace = true, features = ["small_rng"] }
+lazy_static = { workspace = true }
+log = { workspace = true }
+lru = { workspace = true }
+petgraph = { workspace = true }
+regex = { workspace = true }
+rust-bert = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+simd-json = { workspace = true, features = ["known-key"] }
+simd-json-derive = { workspace = true }
+value-trait = { workspace = true }
+sled = { workspace = true }
+tremor-common = { workspace = true }
+tremor-config = { workspace = true }
+tremor-script = { workspace = true }
+tremor-value = { workspace = true }
+tremor-system = { workspace = true }
 
-url = "2"
-fenster = { version = "0.1.1" }
+url = { workspace = true }
+fenster = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.5"
-tempfile = "3.8"
-xz2 = "0.1"
-tokio = { version = "1.39", features = ["full"] }
+criterion = { workspace = true }
+tempfile = { workspace = true }
+xz2 = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 
 [features]
 bert = ["rust-bert"]

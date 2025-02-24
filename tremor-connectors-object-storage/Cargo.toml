@@ -9,11 +9,11 @@ authors = ["The Tremor Team"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.33", default-features = false }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.33" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.33" }
-serde = { version = "1.0", features = ["derive"] }
-thiserror = { version = "1", default-features = true }
-anyhow = { version = "1", default-features = true }
-async-trait = { version = "0.1", default-features = true }
-log = { version = "0.4", default-features = true }
+tremor-connectors = { workspace = true }
+tremor-value = { workspace = true }
+tremor-system = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+log = { workspace = true }

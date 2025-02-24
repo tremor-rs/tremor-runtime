@@ -21,56 +21,56 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "tremor_script"
 
 [dependencies]
-atty = "0.2"
-beef = { version = "0.5", features = ["impl_serde"] }
-byteorder = "1"
-chrono = "0.4"
-chrono-tz = "0.9"
-cidr-utils = "0.6"
-codespan = "0.11"
-dissect = "0.7"
-distance = "0.4"
-downcast-rs = "1.2"
-error-chain = "0.12"
-glob = "0.3"
-grok = "2"
-sha2 = "0.10"
-halfbrown = "0.2"
-hdrhistogram = "7"
-hostname = "0.4"
-jumphash = "0.1"
-lalrpop-util = "0.22"
-lazy_static = "1.5"
-percent-encoding = "2"
-rand = { version = "0.8", features = ["small_rng"] }
-regex = "1"
-serde = { version = "1", features = ["derive"] }
-simd-json = { version = "0.13", features = ["known-key"] }
-simd-json-derive = "0.13"
-value-trait = "0.8"
-sketches-ddsketch = "0.3"
-strip-ansi-escapes = "0.2"
-termcolor = "1.4"
-tremor-common = { version = "0.13.0-rc.33", path = "../tremor-common" }
-tremor-influx = { version = "0.13.0-rc.33", path = "../tremor-influx" }
-tremor-value = { version = "0.13.0-rc.33", path = "../tremor-value" }
-tremor-codec = { version = "0.13.0-rc.33", path = "../tremor-codec" }
-tremor-kv = "0.6"
-unicode-xid = "0.2"
-url = "2"
-xz2 = "0.1"
+atty = { workspace = true }
+beef = { workspace = true, features = ["impl_serde"] }
+byteorder = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+cidr-utils = { workspace = true }
+codespan = { workspace = true }
+dissect = { workspace = true }
+distance = { workspace = true }
+downcast-rs = { workspace = true }
+error-chain = { workspace = true }
+glob = { workspace = true }
+grok = { workspace = true }
+sha2 = { workspace = true }
+halfbrown = { workspace = true }
+hdrhistogram = { workspace = true }
+hostname = { workspace = true }
+jumphash = { workspace = true }
+lalrpop-util = { workspace = true }
+lazy_static = { workspace = true }
+percent-encoding = { workspace = true }
+rand = { workspace = true, features = ["small_rng"] }
+regex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+simd-json = { workspace = true, features = ["known-key"] }
+simd-json-derive = { workspace = true }
+value-trait = { workspace = true }
+sketches-ddsketch = { workspace = true }
+strip-ansi-escapes = { workspace = true }
+termcolor = { workspace = true }
+tremor-common = { workspace = true }
+tremor-influx = { workspace = true }
+tremor-value = { workspace = true }
+tremor-codec = { workspace = true }
+tremor-kv = { workspace = true }
+unicode-xid = { workspace = true }
+url = { workspace = true }
+xz2 = { workspace = true }
 
 [build-dependencies]
-lalrpop = "0.20"
-chrono-tz = "0.9"
+lalrpop = { workspace = true }
+chrono-tz = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.5"
-float-cmp = "0.10"
-pretty_assertions = "1"
-proptest = "1"
-tempfile = "3"
-test-case = "3"
+criterion = { workspace = true }
+float-cmp = { workspace = true }
+pretty_assertions = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+test-case = { workspace = true }
 
 [features]
 # this is required for the erlang EQC tests of the language

@@ -11,58 +11,58 @@ homepage = "https://www.tremor.rs"
 default-target = "x86_64-unknown-linux-gnu"
 
 [build-dependencies]
-lalrpop = "0.20"
-matches = "0.1.10"
+lalrpop = { workspace = true }
+matches = { workspace = true }
 
 [dev-dependencies]
-temp-dir = "0.1"
-criterion = "0.5"
-float-cmp = "0.10"
-matches = "0.1"
-pretty_assertions = "1.4"
+temp-dir = { workspace = true }
+criterion = { workspace = true }
+float-cmp = { workspace = true }
+matches = { workspace = true }
+pretty_assertions = { workspace = true }
 
 [dependencies]
-tokio = { version = "1.39", features = ["full"] }
-anyhow = "1"
-clap = { version = "4", features = ["color", "derive"] }
-clap_complete = "4"
-difference = "2"
-env_logger = "0.11"
-futures = "0.3"
-halfbrown = "0.2"
-http-types = "2"
-log = "0.4"
-log4rs = "1"
-serde = "1"
-serde_yaml = "0.9"
-signal-hook = "0.3"
-signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
-simd-json = { version = "0.13", features = ["known-key"] }
+tokio = { workspace = true, features = ["full"] }
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["color", "derive"] }
+clap_complete = { workspace = true }
+difference = { workspace = true }
+env_logger = { workspace = true }
+futures = { workspace = true }
+halfbrown = { workspace = true }
+http-types = { workspace = true }
+log = { workspace = true }
+log4rs = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+signal-hook = { workspace = true }
+signal-hook-tokio = { workspace = true, features = ["futures-v0_3"] }
+simd-json = { workspace = true, features = ["known-key"] }
 # We need to stay with 0.2 for now as there are reasons that can be named for the need to be able to
 # compile and run on operating systems that are a decade old. (insert apropriate ammount rage)
-snmalloc-rs = { version = "0.3" }
+snmalloc-rs = { workspace = true }
 surf = { version = "=2.3.2", default-features = false, features = [
   "encoding",
   "h1-client-rustls",
   "middleware-logger",
 ] }
-tremor-api = { version = "0.13.0-rc.33", path = "../tremor-api" }
-tremor-codec = { version = "0.13.0-rc.33", path = "../tremor-codec" }
-tremor-interceptor = { version = "0.13.0-rc.33", path = "../tremor-interceptor" }
-tremor-common = { version = "0.13.0-rc.33", path = "../tremor-common" }
-tremor-pipeline = { version = "0.13.0-rc.33", path = "../tremor-pipeline" }
-tremor-runtime = { version = "0.13.0-rc.33", path = "../" }
-tremor-script = { version = "0.13.0-rc.33", path = "../tremor-script" }
-tremor-value = { version = "0.13.0-rc.33", path = "../tremor-value" }
-tremor-system = { version = "0.13.0-rc.33", path = "../tremor-system" }
-tremor-archive = { version = "0.13.0-rc.33", path = "../tremor-archive" }
-url = "2"
-error-chain = "0.12"
-globwalk = "0.9"
-port_scanner = "0.1"
-shell-words = "1"
-tch = { version = "0.13", optional = true }
-termcolor = "1.4"
+tremor-api = { workspace = true }
+tremor-codec = { workspace = true }
+tremor-interceptor = { workspace = true }
+tremor-common = { workspace = true }
+tremor-pipeline = { workspace = true }
+tremor-runtime = { workspace = true }
+tremor-script = { workspace = true }
+tremor-value = { workspace = true }
+tremor-system = { workspace = true }
+tremor-archive = { workspace = true }
+url = { workspace = true }
+error-chain = { workspace = true }
+globwalk = { workspace = true }
+port_scanner = { workspace = true }
+shell-words = { workspace = true }
+tch = { workspace = true, optional = true }
+termcolor = { workspace = true }
 
 [[bin]]
 name = "tremor"

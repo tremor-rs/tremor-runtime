@@ -9,45 +9,40 @@ authors = ["The Tremor Team"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.33", default-features = false }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.33" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.33" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.33" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.33" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.33" }
+tremor-connectors = { workspace = true }
+tremor-common = { workspace = true }
+tremor-system = { workspace = true }
+tremor-value = { workspace = true }
+tremor-config = { workspace = true }
+tremor-script = { workspace = true }
 
-anyhow = { version = "1", default-features = true }
-async-trait = { version = "0.1", default-features = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
 # futures = { version = "0.3", default-features = true }
 # http = { version = "0.2", default-features = true }
 # http-body = { version = "1.0", default-features = true }
-log = { version = "0.4", default-features = true }
-serde = { version = "1.0", default-features = true, features = ["derive"] }
-thiserror = { version = "1", default-features = true }
+log = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
 # value-trait = { version = "0.8", default-features = true }
-tokio = { version = "1.39", default-features = false }
-simd-json = { version = "0.13", default-features = true }
+tokio = { workspace = true }
+simd-json = { workspace = true }
 
 # opentelemetry
-tonic = { version = "0.6.1", default-features = false, features = [
-    "transport",
-    "tls",
-] }
+tonic = { workspace = true, features = ["transport", "tls"] }
 # prost = { version = "0.9.0", default-features = false }
 # prost-types = { version = "0.9.0", default-features = false }
 # This is related to https://github.com/tremor-rs/tremor-runtime/issues/1688 the otel API's need to
 # be updated together with tonic
-tremor-otelapis = { version = "=0.2.4", default-features = false, features = [
-    "otel-all",
-] }
-rand = { version = "0.8.5", default-features = false }
+tremor-otelapis = { workspace = true, features = ["otel-all"] }
+rand = { workspace = true }
 async-channel = { version = "1.9", default-features = false }
-hex = { version = "0.4", default-features = false, features = ["alloc", "std"] }
+hex = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
-tokio = { version = "1.39", default-features = true }
-proptest = "1.5"
-test-case = "3"
+tokio = { workspace = true }
+proptest = { workspace = true }
+test-case = { workspace = true }
 
 [features]
 integration-harness = []

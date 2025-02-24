@@ -13,49 +13,36 @@ rust-version = "1.76"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.33" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.33" }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.33" }
-log = "0.4"
-serde = { version = "1", features = ["derive"] }
-byteorder = "1"
-value-trait = "0.8"
-memchr = "2.7"
-anyhow = { version = "1.0", default-features = true }
-thiserror = { version = "1.0", default-features = false }
+tremor-value = { workspace = true }
+tremor-config = { workspace = true }
+tremor-common = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+byteorder = { workspace = true }
+value-trait = { workspace = true }
+memchr = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
 
 #gelf
-rand = { version = "0.8", optional = true, default-features = false, features =  [] }
+rand = { workspace = true, features = [], optional = true }
 
 # Compression
-brotli = { version = "6", optional = true, default-features = false, features = [
-    "std",
-] }
-xz2 = { version = "0.1", optional = true, default-features = false, features = [
-] }
-lz4 = { version = "1", optional = true, default-features = false, features = [
-] }
-snap = { version = "1", optional = true, default-features = false, features = [
-] }
-zstd = { version = "0.13", optional = true, default-features = false, features = [
-] }
-libflate = { version = "2", optional = true, default-features = false, features = [
-    "std",
-] }
+brotli = { workspace = true, features = ["std"], optional = true }
+xz2 = { workspace = true, features = [], optional = true }
+lz4 = { workspace = true, features = [], optional = true }
+snap = { workspace = true, features = [], optional = true }
+zstd = { workspace = true, features = [], optional = true }
+libflate = { workspace = true, features = ["std"], optional = true }
 
 # Length Prefix
-bytes = { version = "1.6.1", optional = true, default-features = false, features = [
-] }
-ringbuf-blocking = { version = "0.1.0-rc.3", optional = true, default-features = false, features = [
-    "std",
-] }
-ringbuf = { version = "0.4.0-rc.3", optional = true, default-features = false, features = [
-    "std",
-] }
+bytes = { workspace = true, features = [], optional = true }
+ringbuf-blocking = { workspace = true, features = ["std"], optional = true }
+ringbuf = { workspace = true, features = ["std"], optional = true }
 
 
 [dev-dependencies]
-proptest = "1.5"
+proptest = { workspace = true }
 
 
 [features]

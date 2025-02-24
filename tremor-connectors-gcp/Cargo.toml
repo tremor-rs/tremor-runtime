@@ -9,37 +9,29 @@ authors = ["The Tremor Team"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.33", default-features = false }
-tremor-connectors-object-storage = { path = "../tremor-connectors-object-storage", version = "0.13.0-rc.33" }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.33" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.33" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.33" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.33" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.33" }
+tremor-connectors = { workspace = true }
+tremor-connectors-object-storage = { workspace = true }
+tremor-common = { workspace = true }
+tremor-system = { workspace = true }
+tremor-value = { workspace = true }
+tremor-config = { workspace = true }
+tremor-script = { workspace = true }
 
-anyhow = { version = "1", default-features = true }
-async-trait = { version = "0.1", default-features = true }
-futures = { version = "0.3", default-features = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
 http = { version = "0.2", default-features = true }
-log = { version = "0.4", default-features = true }
-serde = { version = "1.0", default-features = true, features = ["derive"] }
-thiserror = { version = "1", default-features = true }
+log = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
 
-bytes = { version = "1.6", default-features = true }
-googapis = { version = "0.6", default-features = true, features = [
-    "google-pubsub-v1",
-    "google-cloud-bigquery-storage-v1",
-    "google-logging-v2",
-    "google-storage-v2",
-] }
-gouth = { version = "0.2", default-features = true }
-prost = { version = "0.9.0", default-features = true }
-prost-types = { version = "0.9.0", default-features = true }
-tokio = { version = "1.39", default-features = true }
-tonic = { version = "0.6.1", default-features = true, features = [
-    "transport",
-    "tls",
-] }
+bytes = { workspace = true }
+googapis = { workspace = true, features = ["google-pubsub-v1", "google-cloud-bigquery-storage-v1", "google-logging-v2", "google-storage-v2"] }
+gouth = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true, features = ["transport", "tls"] }
 hyper = { version = "0.14", default-features = true, features = [
     "server",
     "http1",
@@ -52,32 +44,30 @@ hyper-rustls = { version = "0.24", default-features = true, features = [
     "http2",
     "tokio-runtime",
 ] }
-url = { version = "2.5", default-features = true }
+url = { workspace = true }
 async-channel = { version = "1.9", default-features = true }
-async-stream = { version = "0.3", default-features = true }
-simd-json-derive = { version = "0.13", default-features = true }
-simd-json = { version = "0.13", default-features = true }
+async-stream = { workspace = true }
+simd-json-derive = { workspace = true }
+simd-json = { workspace = true }
 
 [dev-dependencies]
-testcontainers = { version = "0.23", default-features = true }
+testcontainers = { workspace = true }
 hyper = { version = "0.14", default-features = true, features = [
     "server",
     "http1",
     "http2",
     "runtime",
 ] }
-tokio = { version = "1.39", default-features = true }
-value-trait = { version = "0.8" }
-test-case = { version = "3", default-features = true }
-anyhow = { version = "1" }
-tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.33" }
-tempfile = { version = "3", default-features = true }
-env_logger = { version = "0.11", default-features = true }
-tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.33" }
-serial_test = "3.1.1"
-testcontainers-modules = { version = "0.11.1", features = [
-    "google_cloud_sdk_emulators",
-] }
+tokio = { workspace = true }
+value-trait = { workspace = true }
+test-case = { workspace = true }
+anyhow = { workspace = true }
+tremor-codec = { workspace = true }
+tempfile = { workspace = true }
+env_logger = { workspace = true }
+tremor-connectors-test-helpers = { workspace = true }
+serial_test = { workspace = true }
+testcontainers-modules = { workspace = true, features = ["google_cloud_sdk_emulators"] }
 
 [features]
 integration-harness = []

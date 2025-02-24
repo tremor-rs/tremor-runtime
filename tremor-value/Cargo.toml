@@ -12,21 +12,21 @@ version = "0.13.0-rc.33"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64 = "0.22"
-beef = "0.5"
-halfbrown = "0.2"
-serde = "1.0"
-simd-json = "0.13"
-simd-json-derive = "0.13"
-value-trait = { version = "0.8", features = ["custom-types"] }
-tremor-common = { version = "0.13.0-rc.33", path = "../tremor-common" }
+base64 = { workspace = true }
+beef = { workspace = true }
+halfbrown = { workspace = true }
+serde = { workspace = true }
+simd-json = { workspace = true }
+simd-json-derive = { workspace = true }
+value-trait = { workspace = true, features = ["custom-types"] }
+tremor-common = { workspace = true }
 
 [dev-dependencies]
-float-cmp = "0.10"
-getopts = "0.2"
-proptest = "1.5"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+float-cmp = { workspace = true }
+getopts = { workspace = true }
+proptest = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 
 [features]
 128bit = []

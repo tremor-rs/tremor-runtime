@@ -9,74 +9,57 @@ authors = ["The Tremor Team"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.33" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.33" }
-tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.33" }
-tremor-pipeline = { path = "../tremor-pipeline", version = "0.13.0-rc.33" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.33" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.33" }
-tremor-interceptor = { path = "../tremor-interceptor", version = "0.13.0-rc.33" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.33" }
-tokio = { version = "1.39", default-features = false }
-beef = { version = "0.5", default-features = false }
-value-trait = { version = "0.8", default-features = false }
-futures = { version = "0.3.30", default-features = false, features = ["std"] }
-halfbrown = { version = "0.2", default-features = false }
-simd-json = { version = "0.13", default-features = false }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-url = { version = "2.5", default-features = false }
-async-trait = { version = "0.1", default-features = false }
-log = { version = "0.4", features = ["kv_unstable"] }
-tokio-stream = { version = "0.1", default-features = false }
-bimap = { version = "0.6", default-features = false, features = [
-    "serde",
-    "std",
-] }
-hostname = { version = "0.4", default-features = false }
-thiserror = { version = "1.0", default-features = false }
-anyhow = { version = "1.0", default-features = true }
-event-listener = { version = "5", default-features = false }
-lazy_static = { version = "1", default-features = false }
-either = { version = "1.13", default-features = false, features = ["serde"] }
-rand = { version = "0.8.5", default-features = false }
+tremor-common = { workspace = true }
+tremor-config = { workspace = true }
+tremor-codec = { workspace = true }
+tremor-pipeline = { workspace = true }
+tremor-script = { workspace = true }
+tremor-value = { workspace = true }
+tremor-interceptor = { workspace = true }
+tremor-system = { workspace = true }
+tokio = { workspace = true }
+beef = { workspace = true }
+value-trait = { workspace = true }
+futures = { workspace = true, features = ["std"] }
+halfbrown = { workspace = true }
+simd-json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+url = { workspace = true }
+async-trait = { workspace = true }
+log = { workspace = true, features = ["kv_unstable"] }
+tokio-stream = { workspace = true }
+bimap = { workspace = true, features = ["serde", "std"] }
+hostname = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+event-listener = { workspace = true }
+lazy_static = { workspace = true }
+either = { workspace = true, features = ["serde"] }
+rand = { workspace = true }
 
 # shared
-simd-json-derive = { version = "0.13", optional = true, default-features = false }
-uuid = { version = "1.9", optional = true, default-features = false, features = [
-    "v4",
-] }
+simd-json-derive = { workspace = true, optional = true }
+uuid = { workspace = true, features = ["v4"], optional = true }
 hyper = { version = "1.3.1", optional = true, default-features = false, features = [
     "server",
     "http1",
     "http2",
 ] }
-hyper-util = { version = "0.1.6", optional = true, default-features = false, features = [
-    "http1",
-    "http2",
-    "client",
-    "client-legacy",
-    "tokio",
-    "server-auto",
-] }
-gouth = { version = "0.2", optional = true, default-features = true }
+hyper-util = { workspace = true, features = ["http1", "http2", "client", "client-legacy", "tokio", "server-auto"], optional = true }
+gouth = { workspace = true, optional = true }
 
 
 # tls
-tokio-rustls = { version = "0.26", optional = true, default-features = false }
-rustls = { version = "0.23.18", optional = true, default-features = false }
-rustls-pemfile = { version = "2.1.2", optional = true, default-features = false }
-rustls-native-certs = { version = "0.7", optional = true, default-features = false }
+tokio-rustls = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+rustls-pemfile = { workspace = true, optional = true }
+rustls-native-certs = { workspace = true, optional = true }
 
 # dns
-trust-dns-resolver = { version = "0.23", optional = true, default-features = false, features = [
-    "tokio-runtime",
-    "system-config",
-] }
+trust-dns-resolver = { workspace = true, features = ["tokio-runtime", "system-config"], optional = true }
 
 # elasticsearch
-elasticsearch = { version = "=8.5.0-alpha.1", optional = true, default-features = false, features = [
-    "rustls-tls",
-] }
+elasticsearch = { workspace = true, features = ["rustls-tls"], optional = true }
 
 # http
 http = { version = "1.1", optional = true, default-features = false }
@@ -86,89 +69,63 @@ hyper-rustls = { version = "0.27", optional = true, default-features = false, fe
     "http2",
     "ring",
 ] }
-http-body-util = { version = "0.1", optional = true, default-features = false }
-mime = { version = "0.3", optional = true, default-features = false }
-base64 = { version = "0.22", optional = true, default-features = false }
-dashmap = { version = "6.0", optional = true, default-features = false }
-async-stream = { version = "0.3", optional = true, default-features = false }
+http-body-util = { workspace = true, optional = true }
+mime = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+dashmap = { workspace = true, optional = true }
+async-stream = { workspace = true, optional = true }
 
 # kafka
-rdkafka = { version = "0.36", optional = true, features = [
-    "cmake-build",
-    "libz-static",
-    "tokio",
-], default-features = false }
-rdkafka-sys = { version = "4.6", optional = true, features = [
-    "cmake-build",
-    "libz-static",
-], default-features = false }
-indexmap = { version = "2", optional = true, default-features = false }
+rdkafka = { workspace = true, features = ["cmake-build", "libz-static", "tokio"], optional = true }
+rdkafka-sys = { workspace = true, features = ["cmake-build", "libz-static"], optional = true }
+indexmap = { workspace = true, optional = true }
 
 # websockets
-tokio-tungstenite = { version = "0.23", optional = true, default-features = false, features = [
-    "handshake",
-] }
+tokio-tungstenite = { workspace = true, features = ["handshake"], optional = true }
 
 # discord
-serenity = { version = "0.11", optional = true, default-features = false, features = [
-    "client",
-    "gateway",
-    "rustls_backend",
-    "model",
-    "cache",
-] }
+serenity = { workspace = true, features = ["client", "gateway", "rustls_backend", "model", "cache"], optional = true }
 
 # file
-file-mode = { version = "0.1", optional = true, default-features = false }
-async-compression = { version = "0.4", optional = true, default-features = false, features = [
-    "xz",
-    "tokio",
-] }
+file-mode = { workspace = true, optional = true }
+async-compression = { workspace = true, features = ["xz", "tokio"], optional = true }
 
 # kv
-sled = { version = "0.34", optional = true, default-features = false }
+sled = { workspace = true, optional = true }
 
-qwal = { version = "0.1.0", optional = true, default-features = false, features = [
-    "tokio",
-] } # wal
+qwal = { workspace = true, features = ["tokio"], optional = true } # wal
 
 # bench
-hdrhistogram = { version = "7", optional = true, default-features = false }
-xz2 = { version = "0.1", optional = true, default-features = false }
+hdrhistogram = { workspace = true, optional = true }
+xz2 = { workspace = true, optional = true }
 
 
 # clickhouse
-clickhouse-rs = { version = "1.1.0-alpha.1", optional = true, default-features = false, features = [
-    "tokio_io",
-    "tls",
-] }
+clickhouse-rs = { workspace = true, features = ["tokio_io", "tls"], optional = true }
 # Clickhouse chrono-tz is out of date so we ringfence it here. Hopefully a new version will be released soon...
-clickhouse-chrono-tz = { package = "chrono-tz", version = "0.8", optional = true, default-features = false }
+clickhouse-chrono-tz = { workspace = true, optional = true }
 
 # crononome
-serde_yaml = { version = "0.9", optional = true, default-features = false }
-chrono = { version = "0.4", optional = true, default-features = false }
-cron = { version = "0.12", optional = true, default-features = false }
+serde_yaml = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+cron = { workspace = true, optional = true }
 
 # udp
-socket2 = { version = "0.5", optional = true, default-features = false }
+socket2 = { workspace = true, optional = true }
 
 [dev-dependencies]
-serde_yaml = { version = "0.9", default-features = false }
-test-case = "3.3"
-proptest = "1.5"
-testcontainers = "0.23"
-serial_test = "3.0"
-http-types = "2.0"
-bytes = "1.6"
-tempfile = { version = "3.8", default-features = false }
-env_logger = "0.11"
-tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.33" }
-tide = { version = "0.16", default-features = false } # TODO remove tide from TestHttpServer
-tokio = { version = "1.39", default-features = false, features = [
-    "full",
-    "test-util",
-] }
+serde_yaml = { workspace = true }
+test-case = { workspace = true }
+proptest = { workspace = true }
+testcontainers = { workspace = true }
+serial_test = { workspace = true }
+http-types = { workspace = true }
+bytes = { workspace = true }
+tempfile = { workspace = true }
+env_logger = { workspace = true }
+tremor-connectors-test-helpers = { workspace = true }
+tide = { workspace = true } # TODO remove tide from TestHttpServer
+tokio = { workspace = true, features = ["full", "test-util"] }
 
 [features]
 default = [

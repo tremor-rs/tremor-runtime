@@ -11,15 +11,15 @@ repository = "https://github.com/tremor-rs/tremor-runtime"
 version = "0.13.0-rc.33"
 
 [dependencies]
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.33" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.33" }
+tremor-common = { workspace = true }
+tremor-script = { workspace = true }
 
-tokio = { version = "1", default-features = false, features = [] }
-tokio-tar = "0.3"
-tokio-stream = "0.1"
-thiserror = "1"
-sha2 = "0.10"
-simd-json = "0.13"
-serde = { version = "1.0", features = ["derive"] }
-log = "0.4"
-serde_json = "1.0"
+tokio = { workspace = true, features = [] }
+tokio-tar = { workspace = true }
+tokio-stream = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+simd-json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+log = { workspace = true }
+serde_json = { workspace = true }

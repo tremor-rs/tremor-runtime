@@ -11,52 +11,39 @@ version = "0.13.0-rc.33"
 
 
 [dependencies]
-tremor-value = { version = "0.13.0-rc.33", path = "../tremor-value" }
-tremor-common = { version = "0.13.0-rc.33", path = "../tremor-common" }
-tremor-config = { version = "0.13.0-rc.33", path = "../tremor-config" }
-tokio = { version = "1.39", features = ["full"] }
-async-trait = "0.1"
-error-chain = "0.12"
-futures = "0.3"
-simd-json-derive = "0.13"
-value-trait = "0.8"
-beef = "0.5"
-byteorder = "1.5"
-itoa = "1"
-ryu = "1"
-lexical = "7"
-simdutf8 = "0.1"
-chrono = "0.4"
-uuid = { version = "1.9", features = ["v4"] }
-async-recursion = "1"
+tremor-value = { workspace = true }
+tremor-common = { workspace = true }
+tremor-config = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+async-trait = { workspace = true }
+error-chain = { workspace = true }
+futures = { workspace = true }
+simd-json-derive = { workspace = true }
+value-trait = { workspace = true }
+beef = { workspace = true }
+byteorder = { workspace = true }
+itoa = { workspace = true }
+ryu = { workspace = true }
+lexical = { workspace = true }
+simdutf8 = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+async-recursion = { workspace = true }
 
-schema_registry_converter = { version = "4.2", default-features = false, features = [
-    "futures",
-    "rustls_tls",
-    "avro",
-    "easy",
-] }
+schema_registry_converter = { workspace = true, features = ["futures", "rustls_tls", "avro", "easy"] }
 
 # codecs
-reqwest = { version = "0.12", default-features = false, features = [
-    "rustls-tls",
-    "rustls-tls-native-roots",
-] }
-csv = "1.2"
-tremor-influx = { version = "0.13.0-rc.33", path = "../tremor-influx" }
-simd-json = "0.13"
-apache-avro = { version = "0.17", features = [
-    "snappy",
-    "bzip",
-    "xz",
-    "zstandard",
-] }
+reqwest = { workspace = true, features = ["rustls-tls", "rustls-tls-native-roots"] }
+csv = { workspace = true }
+tremor-influx = { workspace = true }
+simd-json = { workspace = true }
+apache-avro = { workspace = true, features = ["snappy", "bzip", "xz", "zstandard"] }
 #
-serde = "1"
-rmp-serde = "1.2"
-syslog_loose = "0.21"
-serde_yaml = "0.9"
+serde = { workspace = true }
+rmp-serde = { workspace = true }
+syslog_loose = { workspace = true }
+serde_yaml = { workspace = true }
 
 [dev-dependencies]
-proptest = "1.5"
-test-case = "3"
+proptest = { workspace = true }
+test-case = { workspace = true }

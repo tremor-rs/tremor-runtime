@@ -39,55 +39,216 @@ default-members = ["tremor-cli"]
 
 exclude = ["tremor-script-nif"]
 
+[workspace.dependencies]
+anyhow = { version = "1.0.83", default-features = false }
+apache-avro = "0.17"
+async-compression = { version = "0.4", default-features = false }
+async-recursion = "1"
+async-stream = { version = "0.3", default-features = false }
+async-trait = { version = "0.1.81", default-features = false }
+atty = "0.2"
+aws-config = { version = "1", default-features = false }
+aws-credential-types = { version = "1", default-features = false }
+aws-sdk-s3 = { version = "1", default-features = false }
+aws-types = { version = "1", default-features = false }
+azure_core = { version = "0.20.0", default-features = false }
+base64 = { version = "0.22", default-features = false }
+beef = { version = "0.5.2", default-features = false }
+bimap = { version = "0.6", default-features = false }
+brotli = { version = "6", default-features = false }
+byteorder = "1.5"
+bytes = { version = "1.6.1", default-features = false }
+chrono = { version = "0.4", default-features = false }
+chrono-tz = "0.9"
+cidr-utils = "0.6"
+clap = "4"
+clap_complete = "4"
+clickhouse-chrono-tz = { version = "0.8", default-features = false }
+clickhouse-rs = { version = "1.1.0-alpha.1", default-features = false }
+codespan = "0.11"
+criterion = "0.5"
+cron = { version = "0.12", default-features = false }
+csv = "1.2"
+dashmap = { version = "6.0", default-features = false }
+difference = "2"
+dissect = "0.7"
+distance = "0.4"
+downcast-rs = "1.2"
+either = { version = "1.13", default-features = false }
+elasticsearch = { version = "=8.5.0-alpha.1", default-features = false }
+env_logger = "0.11"
+error-chain = "0.12"
+event-listener = { version = "5", default-features = false }
+fenster = "0.1.1"
+file-mode = { version = "0.1", default-features = false }
+float-cmp = "0.10"
+futures = { version = "0.3.30", default-features = false }
+getopts = "0.2"
+glob = "0.3"
+globwalk = "0.9"
+googapis = "0.6"
+gouth = "0.2"
+grok = "2"
+halfbrown = { version = "0.2", default-features = false }
+hashbrown = "0.14"
+hdrhistogram = { version = "7", default-features = false }
+hex = { version = "0.4", default-features = false }
+hostname = { version = "0.4", default-features = false }
+http-body-util = { version = "0.1", default-features = false }
+http-types = "2.0"
+hyper-util = { version = "0.1.6", default-features = false }
+indexmap = { version = "2", default-features = false }
+itoa = "1"
+jumphash = "0.1"
+lalrpop = "0.20"
+lalrpop-util = "0.22"
+lazy_static = { version = "1.5", default-features = false }
+lexical = "7.0.0"
+libflate = { version = "2", default-features = false }
+log = { version = "0.4.21", default-features = false }
+log4rs = "1"
+lru = "0.12"
+lz4 = { version = "1", default-features = false }
+matches = "0.1.10"
+memchr = "2.7"
+mime = { version = "0.3", default-features = false }
+mockito = "1.4.0"
+num_cpus = "1"
+percent-encoding = "2"
+petgraph = "0.6"
+pin-project-lite = { version = "0.2", default-features = false }
+port_scanner = "0.1"
+pretty_assertions = "1.4"
+proptest = "1.5"
+prost = "0.9.0"
+prost-types = "0.9.0"
+qwal = { version = "0.1.0", default-features = false }
+rand = { version = "0.8.5", default-features = false }
+rdkafka = { version = "0.36", default-features = false }
+rdkafka-sys = { version = "4.6", default-features = false }
+regex = { version = "1", default-features = false }
+reqwest = { version = "0.12.4", default-features = false }
+ringbuf = { version = "0.4.0-rc.3", default-features = false }
+ringbuf-blocking = { version = "0.1.0-rc.3", default-features = false }
+rmp-serde = "1.2"
+rust-bert = "0.21.0"
+rustls = { version = "0.23.18", default-features = false }
+rustls-native-certs = { version = "0.7", default-features = false }
+rustls-pemfile = { version = "2.1.2", default-features = false }
+ryu = "1"
+schema_registry_converter = { version = "4.2", default-features = false }
+serde = { version = "1.0.204", default-features = false }
+serde_json = "1.0.120"
+serde_yaml = { version = "0.9", default-features = false }
+serenity = { version = "0.11", default-features = false }
+serial_test = { version = "3.1.1", default-features = false }
+sha2 = "0.10"
+shell-words = "1"
+signal-hook = "0.3"
+signal-hook-tokio = "0.3"
+simd-json = { version = "0.13.10", default-features = false }
+simd-json-derive = { version = "0.13", default-features = false }
+simdutf8 = "0.1"
+sketches-ddsketch = "0.3"
+sled = { version = "0.34", default-features = false }
+snap = { version = "1", default-features = false }
+snmalloc-rs = "0.3"
+socket2 = { version = "0.5", default-features = false }
+strip-ansi-escapes = "0.2"
+syslog_loose = "0.21"
+tch = "0.13"
+temp-dir = "0.1"
+tempfile = { version = "3.8", default-features = false }
+termcolor = "1.4"
+test-case = "3.3"
+testcontainers = { version = "0.23", default-features = false }
+testcontainers-modules = "0.11.1"
+thiserror = { version = "1.0", default-features = false }
+tide = { version = "0.16", default-features = false }
+tokio = { version = "1.39.2", default-features = false }
+tokio-rustls = { version = "0.26", default-features = false }
+tokio-stream = { version = "0.1", default-features = false }
+tokio-tar = "0.3"
+tokio-tungstenite = { version = "0.23", default-features = false }
+tonic = { version = "0.6.1", default-features = false }
+tremor-api = { version = "0.13.0-rc.33", path = "tremor-api" }
+tremor-archive = { version = "0.13.0-rc.33", path = "tremor-archive" }
+tremor-codec = { version = "0.13.0-rc.33", path = "tremor-codec" }
+tremor-common = { version = "0.13.0-rc.33", path = "tremor-common" }
+tremor-config = { version = "0.13.0-rc.33", path = "tremor-config" }
+tremor-connectors = { version = "0.13.0-rc.33", path = "tremor-connectors", default-features = false }
+tremor-connectors-aws = { version = "0.13.0-rc.33", path = "tremor-connectors-aws" }
+tremor-connectors-azure = { version = "0.13.0-rc.33", path = "tremor-connectors-azure" }
+tremor-connectors-gcp = { version = "0.13.0-rc.33", path = "tremor-connectors-gcp" }
+tremor-connectors-object-storage = { version = "0.13.0-rc.33", path = "tremor-connectors-object-storage" }
+tremor-connectors-otel = { version = "0.13.0-rc.33", path = "tremor-connectors-otel" }
+tremor-connectors-test-helpers = { version = "0.13.0-rc.33", path = "tremor-connectors-test-helpers" }
+tremor-influx = { version = "0.13.0-rc.33", path = "tremor-influx" }
+tremor-interceptor = { version = "0.13.0-rc.33", path = "tremor-interceptor" }
+tremor-kv = "0.6"
+tremor-otelapis = { version = "=0.2.4", default-features = false }
+tremor-pipeline = { version = "0.13.0-rc.33", path = "tremor-pipeline" }
+tremor-runtime = { version = "0.13.0-rc.33", path = "" }
+tremor-script = { version = "0.13.0-rc.33", path = "tremor-script" }
+tremor-system = { version = "0.13.0-rc.33", path = "tremor-system" }
+tremor-value = { version = "0.13.0-rc.33", path = "tremor-value" }
+trust-dns-resolver = { version = "0.23", default-features = false }
+unicode-xid = "0.2"
+url = { version = "2.5.2", default-features = false }
+uuid = { version = "1.9", default-features = false }
+value-trait = { version = "0.8", default-features = false }
+xz2 = { version = "0.1", default-features = false }
+zstd = { version = "0.13", default-features = false }
+
 [profile.release]
 debug = true
 lto = "thin"
 opt-level = 3
 
 [dependencies]
-tremor-codec = { path = "tremor-codec", version = "0.13.0-rc.33" }
-tremor-common = { path = "tremor-common", version = "0.13.0-rc.33" }
-tremor-config = { path = "tremor-config", version = "0.13.0-rc.33" }
-tremor-connectors = { path = "tremor-connectors", version = "0.13.0-rc.33", default-features = false }
-tremor-connectors-aws = { path = "tremor-connectors-aws", version = "0.13.0-rc.33", optional = true }
-tremor-connectors-azure = { path = "tremor-connectors-azure", version = "0.13.0-rc.33", optional = true }
-tremor-connectors-gcp = { path = "tremor-connectors-gcp", version = "0.13.0-rc.33", optional = true }
-tremor-connectors-otel = { path = "tremor-connectors-otel", version = "0.13.0-rc.33", optional = true }
-tremor-influx = { path = "tremor-influx", version = "0.13.0-rc.33" }
-tremor-interceptor = { path = "tremor-interceptor", version = "0.13.0-rc.33" }
-tremor-pipeline = { path = "tremor-pipeline", version = "0.13.0-rc.33" }
-tremor-script = { path = "tremor-script", version = "0.13.0-rc.33" }
-tremor-system = { path = "tremor-system", version = "0.13.0-rc.33" }
-tremor-value = { path = "tremor-value", version = "0.13.0-rc.33" }
-tremor-archive = { path = "tremor-archive", version = "0.13.0-rc.33" }
+tremor-codec = { workspace = true }
+tremor-common = { workspace = true }
+tremor-config = { workspace = true }
+tremor-connectors = { workspace = true }
+tremor-connectors-aws = { workspace = true, optional = true }
+tremor-connectors-azure = { workspace = true, optional = true }
+tremor-connectors-gcp = { workspace = true, optional = true }
+tremor-connectors-otel = { workspace = true, optional = true }
+tremor-influx = { workspace = true }
+tremor-interceptor = { workspace = true }
+tremor-pipeline = { workspace = true }
+tremor-script = { workspace = true }
+tremor-system = { workspace = true }
+tremor-value = { workspace = true }
+tremor-archive = { workspace = true }
 
-tokio = { version = "1.39", features = ["full"] }
-tokio-stream = "0.1"
-anyhow = "1"
-async-trait = "0.1"
+tokio = { workspace = true, features = ["full"] }
+tokio-stream = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
 
-error-chain = "0.12"
-futures = "0.3.29"
-halfbrown = "0.2"
-hashbrown = { version = "0.14", features = ["serde"] }
-indexmap = "2"
-log = { version = "0.4", features = ["kv_unstable"] }
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
-simd-json = { version = "0.13", features = ["known-key"] }
-simd-json-derive = "0.13"
-value-trait = "0.8"
+error-chain = { workspace = true }
+futures = { workspace = true }
+halfbrown = { workspace = true }
+hashbrown = { workspace = true, features = ["serde"] }
+indexmap = { workspace = true }
+log = { workspace = true, features = ["kv_unstable"] }
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true }
+simd-json = { workspace = true, features = ["known-key"] }
+simd-json-derive = { workspace = true }
+value-trait = { workspace = true }
 
 
 [dev-dependencies]
-port_scanner = "0.1"
-env_logger = "0.11"
-proptest = "1.5"
-regex = "1"
-tempfile = { version = "3.8" }
-num_cpus = "1"
-serial_test = "3"
-pretty_assertions = "1"
+port_scanner = { workspace = true }
+env_logger = { workspace = true }
+proptest = { workspace = true }
+regex = { workspace = true }
+tempfile = { workspace = true }
+num_cpus = { workspace = true }
+serial_test = { workspace = true }
+pretty_assertions = { workspace = true }
 
 [features]
 default = ["all-connectors"]

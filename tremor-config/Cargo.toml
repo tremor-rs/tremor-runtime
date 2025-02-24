@@ -12,5 +12,5 @@ version = "0.13.0-rc.33"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.33" }
-serde = "1"
+tremor-value = { workspace = true }
+serde = { workspace = true }
