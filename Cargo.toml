@@ -1,16 +1,25 @@
 [package]
-authors = ["The Tremor Team"]
-build = "build.rs"
-description = "Tremor Runtime"
-documentation = "https://docs.tremor.rs"
-edition = "2021"
-homepage = "https://www.tremor.rs"
-license = "Apache-2.0"
 name = "tremor-runtime"
+description = "Tremor Runtime"
+build = "build.rs"
+authors.workspace = true
+documentation.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[workspace.package]
+authors = ["The Tremor Team"]
+documentation = "https://docs.tremor.rs"
+homepage = "https://www.tremor.rs"
+edition = "2021"
+license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
 version = "0.13.0-rc.33"
-rust-version = "1.76"
+rust-version = "1.86"
 
 [workspace]
 
@@ -44,39 +53,75 @@ debug = true
 lto = "thin"
 opt-level = 3
 
-[dependencies]
+[workspace.dependencies]
+anyhow = "1"
+beef = { version = "0.5", default-features = false, features = ["impl_serde"] }
+error-chain = "0.12"
+futures = "0.3"
+halfbrown = "0.3"
+hashbrown = { version = "0.15", features = ["serde"] }
+log = { version = "0.4", features = ["kv_unstable"] }
+rand = { version = "0.9", default-features = false, features = ["small_rng"] }
+regex = { version = "1", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+simd-json = { version = "0.15", features = ["known-key"] }
+simd-json-derive = "0.16"
+thiserror = { version = "2.0" }
+tokio = { version = "1.44", features = ["full"] }
+url = { version = "2", default-features = false, features = ["serde"] }
+value-trait = { version = "0.11", features = ["custom-types"] }
+
+tremor-api = { path = "tremor-api", version = "0.13.0-rc.33" }
+tremor-archive = { path = "tremor-archive", version = "0.13.0-rc.33" }
 tremor-codec = { path = "tremor-codec", version = "0.13.0-rc.33" }
 tremor-common = { path = "tremor-common", version = "0.13.0-rc.33" }
 tremor-config = { path = "tremor-config", version = "0.13.0-rc.33" }
 tremor-connectors = { path = "tremor-connectors", version = "0.13.0-rc.33", default-features = false }
+
+tremor-influx = { path = "tremor-influx", version = "0.13.0-rc.33" }
+tremor-interceptor = { path = "tremor-interceptor", version = "0.13.0-rc.33" }
+tremor-pipeline = { path = "tremor-pipeline", version = "0.13.0-rc.33" }
+tremor-runtime = { path = ".", version = "0.13.0-rc.33" }
+tremor-script = { path = "tremor-script", version = "0.13.0-rc.33" }
+tremor-system = { path = "tremor-system", version = "0.13.0-rc.33" }
+tremor-value = { path = "tremor-value", version = "0.13.0-rc.33" }
+
+
+[dependencies]
+tremor-codec.workspace = true
+tremor-common.workspace = true
+tremor-config.workspace = true
+tremor-connectors.workspace = true
 tremor-connectors-aws = { path = "tremor-connectors-aws", version = "0.13.0-rc.33", optional = true }
 tremor-connectors-azure = { path = "tremor-connectors-azure", version = "0.13.0-rc.33", optional = true }
 tremor-connectors-gcp = { path = "tremor-connectors-gcp", version = "0.13.0-rc.33", optional = true }
 tremor-connectors-otel = { path = "tremor-connectors-otel", version = "0.13.0-rc.33", optional = true }
-tremor-influx = { path = "tremor-influx", version = "0.13.0-rc.33" }
-tremor-interceptor = { path = "tremor-interceptor", version = "0.13.0-rc.33" }
-tremor-pipeline = { path = "tremor-pipeline", version = "0.13.0-rc.33" }
-tremor-script = { path = "tremor-script", version = "0.13.0-rc.33" }
-tremor-system = { path = "tremor-system", version = "0.13.0-rc.33" }
-tremor-value = { path = "tremor-value", version = "0.13.0-rc.33" }
-tremor-archive = { path = "tremor-archive", version = "0.13.0-rc.33" }
+tremor-influx.workspace = true
+tremor-interceptor.workspace = true
+tremor-pipeline.workspace = true
+tremor-script.workspace = true
+tremor-system.workspace = true
+tremor-value.workspace = true
+tremor-archive.workspace = true
 
-tokio = { version = "1.39", features = ["full"] }
+tokio.workspace = true
 tokio-stream = "0.1"
-anyhow = "1"
-async-trait = "0.1"
+anyhow.workspace = true
 
-error-chain = "0.12"
-futures = "0.3.29"
-halfbrown = "0.2"
-hashbrown = { version = "0.14", features = ["serde"] }
+error-chain.workspace = true
+futures.workspace = true
+halfbrown.workspace = true
+hashbrown.workspace = true
 indexmap = "2"
-log = { version = "0.4", features = ["kv_unstable"] }
-serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
-simd-json = { version = "0.13", features = ["known-key"] }
-simd-json-derive = "0.13"
-value-trait = "0.8"
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+simd-json.workspace = true
+simd-json-derive.workspace = true
+value-trait.workspace = true
 
 
 [dev-dependencies]
@@ -149,7 +194,7 @@ connector-gcp = ["tremor-connectors-gcp"]
 connector-otel = ["tremor-connectors-otel"]
 
 
-# those are falky tests
+# those are flaky tests
 flaky-test = []
 
 # for use during debian packaging, via cargo-deb
