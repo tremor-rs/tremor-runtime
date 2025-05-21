@@ -28,17 +28,17 @@ where
     V: Writable
         + ValueObjectAccess<Target = V>
         + ValueTryAsScalar
-        + ValueTryAsContainer
-        + ValueObjectAccessTryAsContainer<Target = V>
+        + ValueTryAsObject
+        + ValueObjectAccessTryAsObject
         + TypedValue
         + ValueAsScalar
         + 'input,
     <V as ValueObjectAccess>::Key: Hash + Eq + Ord + Borrow<str>,
-    <<V as ValueTryAsContainer>::Object as ObjectTrait>::Element: ValueAsScalar,
-    <<V as ValueTryAsContainer>::Object as ObjectTrait>::Key: Borrow<str>,
-    <<V as ValueObjectAccessTryAsContainer>::Object as ObjectTrait>::Key: Borrow<str>,
-    <V as ValueObjectAccessTryAsContainer>::Key: Hash + Eq + Ord + Borrow<str>,
-    <<V as ValueObjectAccessTryAsContainer>::Object as ObjectTrait>::Element:
+    <<V as ValueTryAsObject>::Object as ObjectTrait>::Element: ValueAsScalar,
+    <<V as ValueTryAsObject>::Object as ObjectTrait>::Key: Borrow<str>,
+    <<V as ValueObjectAccessTryAsObject>::Object as ObjectTrait>::Key: Borrow<str>,
+    <V as ValueObjectAccessTryAsObject>::Key: Hash + Eq + Ord + Borrow<str>,
+    <<V as ValueObjectAccessTryAsObject>::Object as ObjectTrait>::Element:
         ValueAsScalar + TypedValue + Writable,
 {
     let mut output: Vec<u8> = Vec::with_capacity(512);

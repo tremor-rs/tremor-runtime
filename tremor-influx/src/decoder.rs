@@ -37,7 +37,7 @@ where
 
     if data.is_empty() || data.starts_with('#') {
         return Ok(None);
-    };
+    }
     let mut total_idx = 0;
 
     let (measurement, idx1) = parse_to(total_idx, data, |c| c == ',' || c == ' ')?;
@@ -54,7 +54,7 @@ where
     if !data.is_empty() {
         total_idx += 1;
         data = get_rest(data, 1)?;
-    };
+    }
     let (fields, idx): (V, usize) = parse_fields(total_idx, data)?;
     total_idx += idx;
     data = get_rest(data, idx)?;
@@ -220,7 +220,7 @@ where
                 return Ok((res, offset));
             }
             _ => return Err(Error::InvalidFields(total_idx + offset)),
-        };
+        }
     }
 }
 
