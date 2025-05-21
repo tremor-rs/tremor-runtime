@@ -253,26 +253,20 @@ mod tests {
     fn invalid_event_origin_uris() {
         // Wrong protocol/host-separator: extra slash
         let err = EventOriginUri::parse("protocol:///the.host.name").expect_err("Invalid URI");
-        assert_eq!(
-            err.description(),
-            "EventOriginUri Parse Error: Missing host"
-        );
+        assert_eq!(&err.to_string(), "EventOriginUri Parse Error: Missing host");
 
         // Wrong protocol/host-separator: missing slash
         let err = EventOriginUri::parse("protocol:/the.host.name").expect_err("Invalid URI");
-        assert_eq!(
-            err.description(),
-            "EventOriginUri Parse Error: Missing host"
-        );
+        assert_eq!(&err.to_string(), "EventOriginUri Parse Error: Missing host");
 
         // Port number out of range
         let err = EventOriginUri::parse("protocol://the.host.name:66000").expect_err("Invalid URI");
-        assert_eq!(err.description(), "Url Parse Error: invalid port number");
+        assert_eq!(&err.to_string(), "Url Parse Error: invalid port number");
 
         // Space inside the host name
         let err = EventOriginUri::parse("protocol://oops.a space").expect_err("Invalid URI");
         assert_eq!(
-            err.description(),
+            &err.to_string(),
             "Url Parse Error: invalid domain character"
         );
     }

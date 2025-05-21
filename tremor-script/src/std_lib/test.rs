@@ -18,18 +18,18 @@ use crate::tremor_fn;
 
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (test|assert(ctx, desc, expected, got) {
-        if val_eq(expected, got) {
-            Ok(TRUE)
-        } else if ctx.panic_on_assert {
-            Err(to_runtime_error(format!(r#"
+            if val_eq(expected, got) {
+                Ok(TRUE)
+            } else if ctx.panic_on_assert {
+                Err(to_runtime_error(format!(r"
 Assertion for {desc} failed:
     expected: {}
     got: {}
-"#, expected.encode(), got.encode())))
-        } else {
-            Ok(Value::from(vec![(*expected).clone(), (*got).clone()]))
-        }
-    }));
+", expected.encode(), got.encode())))
+            } else {
+                Ok(Value::from(vec![(*expected).clone(), (*got).clone()]))
+            }
+        }));
 }
 
 #[cfg(test)]

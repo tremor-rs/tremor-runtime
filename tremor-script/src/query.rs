@@ -89,7 +89,6 @@ where
     ///
     /// # Errors
     /// if the query can not be parsed
-
     pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
         S: ToString + ?Sized,

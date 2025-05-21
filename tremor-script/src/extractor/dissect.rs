@@ -96,7 +96,7 @@ pub(crate) fn execute(s: &str, result_needed: bool, pattern: &Pattern) -> Result
             Result::Match(
                 o.into_iter()
                     .map(|(k, v)| {
-                        let v: simd_json::BorrowedValue<'static> = v.into_static();
+                        let v: simd_json::value::borrowed::Value<'static> = v.into_static();
                         let v: Value<'static> = Value::from(v);
                         (beef::Cow::from(k.to_string()), v)
                     })

@@ -18,7 +18,7 @@
 use crate::{
     arena::Arena,
     ast::warning::{self, Warning},
-    errors::{Error as ScriptError, UnfinishedToken},
+    errors::{Error as ScriptError, ErrorLocation, UnfinishedToken},
     lexer::{self, Span, Token, TokenSpan},
     pos::Location,
 };
@@ -60,7 +60,6 @@ pub struct Error {
 impl Error {
     /// Get start location of the error
     #[must_use]
-
     pub fn start(&self) -> Location {
         self.start
     }
@@ -99,7 +98,7 @@ impl Error {
 impl From<&ScriptError> for Error {
     fn from(error: &ScriptError) -> Self {
         let (start, end) = match error.context() {
-            (_, Some(inner)) => (inner.start(), inner.end()),
+            Some(ErrorLocation { inner, .. }) => (inner.start(), inner.end()),
             _ => (Location::yolo(), Location::yolo()),
         };
         Self {
@@ -154,11 +153,13 @@ pub trait Highlighter {
     /// # Errors
     /// on io errors
     fn format_error(&mut self, error: &crate::errors::Error) -> io::Result<()> {
-        if let Some((r, aid, script)) = error
-            .context()
-            .0
-            .and_then(|r| Some((r, r.aid(), Arena::io_get(r.aid()).ok()?)))
-        {
+        if let Some((r, aid, script)) = error.context().and_then(|errloc| {
+            Some((
+                errloc.expr,
+                errloc.expr.aid(),
+                Arena::io_get(errloc.expr.aid()).ok()?,
+            ))
+        }) {
             let tokens: Vec<_> = lexer::Lexer::new(script, aid)
                 .tokenize_until_err()
                 .collect();

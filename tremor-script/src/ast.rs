@@ -47,13 +47,14 @@ pub use self::helper::Helper;
 pub use self::node_id::{BaseRef, NodeId};
 use self::visitors::ConstFolder;
 use self::walkers::ImutExprWalker;
+use crate::errors::Error;
 use crate::{
     arena,
     ast::{
         eq::AstEq,
         raw::{BytesDataType, Endian},
     },
-    errors::{err_generic, error_no_locals, Kind as ErrorKind, Result},
+    errors::{err_generic, error_no_locals, Result},
     extractor::Extractor,
     impl_expr, impl_expr_ex, impl_expr_no_lt,
     interpreter::{Cont, Env, LocalStack},
@@ -263,8 +264,6 @@ impl<'script> Consts<'script> {
         }
     }
 }
-
-/// don't use
 
 /// A tremor script instance
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -749,7 +748,10 @@ impl<'script> ImutExpr<'script> {
             Ok(v)
         } else {
             let e = self.extent();
-            Err(ErrorKind::NotConstant(e, e.expand_lines(2)).into())
+            Err(Error::NotConstant {
+                inner: e,
+                expr: e.expand_lines(2),
+            })
         }
     }
     /// Tries to borrow the expression as a list

@@ -78,7 +78,7 @@ pub use crate::ast::module;
 pub use crate::ast::query::SelectType;
 pub use crate::ast::NodeMeta;
 pub use crate::ctx::{EventContext, EventOriginUri};
-pub use crate::errors::{Kind as ErrorKind, Result};
+pub use crate::errors::{Error, Result};
 pub use crate::query::Query;
 pub use crate::registry::{
     aggr as aggr_registry, registry, Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFn,
@@ -87,10 +87,9 @@ pub use crate::registry::{
 pub use crate::script::{Return, Script};
 use ast::{Consts, InvokeAggrFn};
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
-use lazy_static::lazy_static;
 use std::sync::{
     atomic::{AtomicU32, Ordering},
-    RwLock,
+    LazyLock, RwLock,
 };
 use tremor_common::stry;
 use tremor_value::{Object, Value};
@@ -106,20 +105,16 @@ pub fn recursion_limit() -> u32 {
     RECURSION_LIMIT.load(Ordering::Relaxed)
 }
 
-lazy_static! {
-    /// No Constants
-    pub static ref NO_CONSTS: Consts<'static> = Consts::new();
-}
+/// No Constants
+pub static NO_CONSTS: LazyLock<Consts<'static>> = LazyLock::new(Consts::new);
 
-lazy_static! {
-    /// Function registory for the pipeline to look up functions
-    // We wrap the registry in a mutex so that we can add functions from the outside
-    // if required.
-    pub static ref FN_REGISTRY: RwLock<Registry> = {
-        let registry: Registry = crate::registry();
-        RwLock::new(registry)
-    };
-}
+/// Function registory for the pipeline to look up functions
+// We wrap the registry in a mutex so that we can add functions from the outside
+// if required.
+pub static FN_REGISTRY: LazyLock<RwLock<Registry>> = LazyLock::new(|| {
+    let registry: Registry = crate::registry();
+    RwLock::new(registry)
+});
 
 #[cfg(test)]
 mod tests {

@@ -13,14 +13,16 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use std::{io, mem, pin::Pin, sync::RwLock};
-lazy_static::lazy_static! {
-    static ref ARENA: RwLock<Arena> = {
-        #[cfg(feature = "arena-delete")]
-        eprintln!("[ARENA] The memory Arena is compiled with deletions enabled, this should only ever happen in the tremor-language server!");
-        RwLock::new(Arena::default())
-    };
-}
+use std::{
+    io, mem,
+    pin::Pin,
+    sync::{LazyLock, RwLock},
+};
+static ARENA: LazyLock<RwLock<Arena>> = LazyLock::new(|| {
+    #[cfg(feature = "arena-delete")]
+    eprintln!("[ARENA] The memory Arena is compiled with deletions enabled, this should only ever happen in the tremor-language server!");
+    RwLock::new(Arena::default())
+});
 
 /// Memory arena for source to get static lifeimtes
 
@@ -83,7 +85,7 @@ impl Arena {
             if e.version == idx.version {
                 e.version += 1;
                 e.src = None;
-                eprintln!("[ARENA] Freed arena index {}", idx);
+                eprintln!("[ARENA] Freed arena index {idx}");
                 Ok(())
             } else {
                 Err("Invalid version to delete".into())

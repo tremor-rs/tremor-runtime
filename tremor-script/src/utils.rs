@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, Kind as ErrorKind};
+use crate::errors::Error;
 use crate::Value;
 use std::{io::prelude::*, path::Path};
 
@@ -20,10 +20,10 @@ use std::{io::prelude::*, path::Path};
 #[must_use]
 pub fn hostname() -> String {
     hostname::get()
-        .map_err(|ioe| Error::from(ErrorKind::Io(ioe)))
+        .map_err(Error::Io)
         .and_then(|hostname| {
             hostname.into_string().map_err(|os_string| {
-                ErrorKind::Msg(format!("Invalid hostname: {}", os_string.to_string_lossy())).into()
+                Error::InvalidHostname(os_string.to_string_lossy().into_owned())
             })
         })
         .unwrap_or_else(|_| "tremor_host.local".to_string())
@@ -58,7 +58,7 @@ pub fn load_event_file(base_name: &str) -> crate::errors::Result<Vec<Value<'stat
     } else if Path::new(name).exists() {
         (name, cfile::open(name)?)
     } else {
-        return Err(format!("File not found or not readable: {base_name}").into());
+        return Err(Error::FileNotFound(base_name.to_string()));
     };
     let mut in_data = Vec::new();
     if is_xz_file(effective_name) {

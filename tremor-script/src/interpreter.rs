@@ -632,7 +632,6 @@ where
                         },
                     )
                 }));
-                continue;
             }
             // Next segment is an index: index into `current`, if it's an array
             Segment::Idx { idx, .. } => {

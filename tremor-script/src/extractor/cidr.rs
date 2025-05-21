@@ -223,14 +223,20 @@ fn cidr_to_value(x: IpCidr) -> Result<'static> {
             // prefix
             let prefix = y.first_address().octets();
             let mask = y.mask().octets();
-            r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
-            r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
+            // SAFETY: we know the keys are unique
+            unsafe {
+                r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
+                r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
+            }
         }
         IpCidr::V6(y) => {
             let prefix = y.first_address().segments();
             let mask = y.mask().segments();
-            r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
-            r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
+            // SAFETY: we know the keys are unique
+            unsafe {
+                r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
+                r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
+            }
         }
     }
     Result::Match(Value::from(Object::from(r)))

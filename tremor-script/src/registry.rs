@@ -17,7 +17,7 @@ pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
 use crate::{
     ast::{base_expr::Ranged, warning},
-    errors::{best_hint, Error, Kind as ErrorKind, Result},
+    errors::{best_hint, Error, Result},
     tremor_fn,
     utils::hostname as get_hostname,
     EventContext, Value,
@@ -269,37 +269,61 @@ impl FunctionError {
         inner: &I,
         registry: Option<&Registry>,
     ) -> crate::errors::Error {
-        use FunctionError::{
-            BadArity, BadType, Error, MissingFunction, MissingModule, RecursionLimit, RuntimeError,
-        };
         let outer = outer.extent();
         let inner = inner.extent();
         match self {
-            BadArity { mfa, calling_a } => {
-                ErrorKind::BadArity(outer, inner, mfa.m, mfa.f, mfa.a..=mfa.a, calling_a).into()
-            }
-            RuntimeError { mfa, error } => {
-                ErrorKind::RuntimeError(outer, inner, mfa.m, mfa.f, mfa.a, error).into()
-            }
-            MissingModule { m } => {
+            Self::BadArity { mfa, calling_a } => Error::BadArity {
+                expr: outer,
+                inner,
+                m: mfa.m,
+                f: mfa.f,
+                a: mfa.a..=mfa.a,
+                calling_a,
+            },
+            Self::RuntimeError { mfa, error } => Error::RuntimeError {
+                expr: outer,
+                inner,
+                m: mfa.m,
+                f: mfa.f,
+                a: mfa.a,
+                c: error,
+            },
+            Self::MissingModule { m } => {
                 let suggestion = registry.and_then(|registry| {
                     let modules: Vec<String> = registry.functions.keys().cloned().collect();
                     best_hint(&m, &modules, 2)
                 });
-                ErrorKind::MissingModule(outer, inner, m, suggestion).into()
+                Error::MissingModule {
+                    outer,
+                    inner,
+                    m,
+                    suggestion,
+                }
             }
-            MissingFunction { m, f } => {
+            Self::MissingFunction { m, f } => {
                 let suggestion = registry.and_then(|registry| {
                     registry.functions.get(&m).and_then(|module| {
                         let functions: Vec<String> = module.keys().cloned().collect();
                         best_hint(&m, &functions, 2)
                     })
                 });
-                ErrorKind::MissingFunction(outer, inner, vec![m], f, suggestion).into()
+                Error::MissingFunction {
+                    expr: outer,
+                    inner,
+                    m: vec![m],
+                    f,
+                    suggestion,
+                }
             }
-            BadType { mfa } => ErrorKind::BadType(outer, inner, mfa.m, mfa.f, mfa.a).into(),
-            RecursionLimit => ErrorKind::RecursionLimit(outer, inner).into(),
-            Error(e) => *e,
+            Self::BadType { mfa } => Error::BadType {
+                expr: outer,
+                inner,
+                m: mfa.m,
+                f: mfa.f,
+                a: mfa.a,
+            },
+            Self::RecursionLimit => Error::RecursionLimit { expr: outer, inner }.into(),
+            Self::Error(e) => *e,
         }
     }
 }
@@ -952,6 +976,8 @@ impl Aggr {
 pub use tests::fun;
 #[cfg(test)]
 mod tests {
+    use crate::pos::Span;
+
     use super::*;
     use simd_json::prelude::*;
 
@@ -1004,12 +1030,12 @@ mod tests {
 
         // NOTE - equality checking of errors is unsupported and will always fail
         assert!(
-            FunctionError::Error(Box::new(Error::from("Snot")))
-                != FunctionError::Error(Box::new(Error::from("Snot")))
+            FunctionError::Error(Box::new(Error::NotFound))
+                != FunctionError::Error(Box::new(Error::NotFound))
         );
         assert!(
-            FunctionError::Error(Box::new(Error::from("Snot")))
-                != FunctionError::Error(Box::new(Error::from("Badger")))
+            FunctionError::Error(Box::new(Error::NotFound))
+                != FunctionError::Error(Box::new(Error::EmptyScript))
         );
     }
 
@@ -1240,7 +1266,7 @@ mod tests {
         registry.insert(tremor_const_fn!( foo::bar::baz | snot(_context) { Ok(Value::String("badger".into())) } ));
         let x = registry
             .find("foo::bar::baz", "snot")
-            .map_err(|_| "Failed to find function")?;
+            .map_err(|e| e.into_err(&Span::yolo(), &Span::yolo(), None))?;
         assert_eq!("foo::bar::baz", x.module);
         assert_eq!("snot", x.name);
 
@@ -1257,7 +1283,7 @@ mod tests {
                 "foo::bar::baz::beep::boop::fleek::flook::tick::tock::pop::weasel::snot",
                 "badger",
             )
-            .map_err(|_| "Failed to find function")?;
+            .map_err(|e| e.into_err(&Span::yolo(), &Span::yolo(), None))?;
         assert_eq!(
             "foo::bar::baz::beep::boop::fleek::flook::tick::tock::pop::weasel::snot",
             x.module

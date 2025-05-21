@@ -31,7 +31,7 @@ use crate::{
         Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
         UnaryOpKind,
     },
-    errors::{err_generic, error_generic, error_missing_effector, Kind as ErrorKind, Result},
+    errors::{err_generic, error_generic, error_missing_effector, Error, Result},
     extractor::Extractor,
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
     prelude::*,
@@ -585,7 +585,10 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
             ExprRaw::Comprehension(c) => Expr::Comprehension(Box::new(c.up(helper)?)),
             ExprRaw::Drop { mid } => {
                 if !helper.can_emit {
-                    return Err(ErrorKind::InvalidDrop(mid.range.expand_lines(2), mid.range).into());
+                    return Err(Error::InvalidDrop {
+                        expr: mid.range.expand_lines(2),
+                        inner: mid.range,
+                    });
                 }
                 Expr::Drop { mid }
             }
@@ -928,9 +931,10 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
         let was_leaf = helper.possible_leaf;
         helper.possible_leaf = false;
         if !was_leaf {
-            return Err(
-                ErrorKind::InvalidRecur(self.extent().expand_lines(2), self.extent()).into(),
-            );
+            return Err(Error::InvalidRecur {
+                expr: self.extent().expand_lines(2),
+                inner: self.extent(),
+            });
         };
         let argc = helper.fn_argc;
         let arglen = self.exprs.len();
@@ -962,9 +966,10 @@ impl<'script> Upable<'script> for EmitExprRaw<'script> {
     type Target = EmitExpr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         if !helper.can_emit {
-            return Err(
-                ErrorKind::InvalidEmit(self.extent().expand_lines(2), self.extent()).into(),
-            );
+            return Err(Error::InvalidEmit {
+                expr: self.extent().expand_lines(2),
+                inner: self.extent(),
+            });
         }
         Ok(EmitExpr {
             mid: self.mid,
@@ -1755,9 +1760,14 @@ impl<'script> Upable<'script> for SegmentElementRaw<'script> {
                     if let Some(idx) = other.as_usize() {
                         Ok(Segment::Idx { idx, mid })
                     } else {
-                        let exp = vec![ValueType::I64, ValueType::String];
+                        let expected = vec![ValueType::I64, ValueType::String];
                         let o = r.expand_lines(2);
-                        Err(ErrorKind::TypeConflict(o, r, other.value_type(), exp).into())
+                        Err(Error::TypeConflict {
+                            expr: o,
+                            inner: r,
+                            got: other.value_type(),
+                            expected,
+                        })
                     }
                 }
             },
@@ -2301,10 +2311,13 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                     args,
                 })
             } else {
-                Err(
-                    ErrorKind::MissingFunction(outer, inner, node_id.module, node_id.id, None)
-                        .into(),
-                )
+                Err(Error::MissingFunction {
+                    expr: outer,
+                    inner,
+                    m: node_id.module,
+                    f: node_id.id,
+                    suggestion: None,
+                })
             }
         }
     }
@@ -2345,7 +2358,10 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
     type Target = InvokeAggr;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         if helper.is_in_aggr {
-            return Err(ErrorKind::AggrInAggr(self.extent(), self.extent().expand_lines(2)).into());
+            return Err(Error::AggrInAggr {
+                inner: self.extent(),
+                expr: self.extent().expand_lines(2),
+            });
         };
         helper.is_in_aggr = true;
         let invocable = helper
@@ -2354,15 +2370,14 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             .map_err(|e| e.into_err(&self, &self, Some(helper.reg)))?
             .clone();
         if !invocable.valid_arity(self.args.len()) {
-            return Err(ErrorKind::BadArity(
-                self.extent(),
-                self.extent().expand_lines(2),
-                self.module.clone(),
-                self.fun.clone(),
-                invocable.arity(),
-                self.args.len(),
-            )
-            .into());
+            return Err(Error::BadArity {
+                inner: self.extent(),
+                expr: self.extent().expand_lines(2),
+                m: self.module.clone(),
+                f: self.fun.clone(),
+                a: invocable.arity(),
+                calling_a: self.args.len(),
+            });
         }
         if let Some((class, warning)) = invocable.warning() {
             helper.warn_with_scope(self.extent(), &warning, class);
@@ -2409,14 +2424,13 @@ impl<'script> Upable<'script> for TestExprRaw {
                 extractor: ex,
                 mid: self.mid,
             }),
-            Err(e) => Err(ErrorKind::InvalidExtractor(
-                self.extent().expand_lines(2),
-                self.extent(),
-                self.id,
-                self.test,
-                e.msg,
-            )
-            .into()),
+            Err(e) => Err(Error::InvalidExtractor {
+                expr: self.extent().expand_lines(2),
+                inner: self.extent(),
+                name: self.id,
+                pattern: self.test,
+                error: e.msg,
+            }),
         }
     }
 }

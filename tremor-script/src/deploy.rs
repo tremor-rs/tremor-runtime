@@ -118,7 +118,7 @@ where
 
     /// Parses a string into a deployment
     ///
-    /// this is used in the language server to delete lements on a
+    /// this is used in the language server to delete elements on a
     /// parsing error
     ///
     /// # Errors
@@ -133,7 +133,9 @@ where
         S: ToString + ?Sized,
     {
         let (aid, src) = Arena::insert(src)?;
-        Self::parse_(aid, src, reg, aggr_reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
+        let pre_cached_nodes = PreCachedNodes::new();
+        Self::parse_(aid, src, reg, aggr_reg, &pre_cached_nodes)
+            .map_err(|e| crate::errors::ErrorWithIndex(aid, e))
     }
 
     /// Parses a string into a deployment

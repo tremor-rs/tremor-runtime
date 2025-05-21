@@ -28,7 +28,7 @@ use super::{
 };
 use crate::{
     arena::{self, Arena},
-    errors::{already_defined_err, Error, Kind as ErrorKind, Result},
+    errors::{already_defined_err, Error, Result},
     impl_expr,
     lexer::{Lexer, Span},
     path::ModulePath,
@@ -42,11 +42,10 @@ use std::{
     path::PathBuf,
 };
 
-use std::sync::RwLock;
-lazy_static::lazy_static! {
-    /// loaded modules
-    pub static ref MODULES: RwLock<Manager> = RwLock::new(Manager::default());
-}
+use std::sync::{LazyLock, RwLock};
+/// loaded modules
+pub static MODULES: LazyLock<RwLock<Manager>> = LazyLock::new(|| RwLock::new(Manager::default()));
+
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ModuleStmtRaw<'script> {
@@ -278,11 +277,12 @@ impl Module {
                 ModuleStmtRaw::Use(UseRaw { modules, mid: meta }) => {
                     for (module, alias) in modules {
                         match Manager::load_(&module, ids, precached) {
-                            Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
-                                return Err(Error(
-                                    ErrorKind::CyclicUse(meta.range, meta.range, uses),
-                                    o,
-                                ));
+                            Err(Error::CyclicUse { uses, .. }) => {
+                                return Err(Error::CyclicUse {
+                                    expr: meta.range,
+                                    inner: meta.range,
+                                    uses,
+                                });
                             }
                             Err(e) => return Err(e),
                             Ok(mod_idx) => {
@@ -553,14 +553,14 @@ impl Manager {
 
             let path = &m.path;
 
-            let p = path.resolve_id(node_id).ok_or_else(|| {
-                crate::errors::ErrorKind::ModuleNotFound(
-                    node_id.extent().expand_lines(2),
-                    node_id.extent(),
-                    node_id.fqn(),
-                    path.mounts.clone(),
-                )
-            })?;
+            let p = path
+                .resolve_id(node_id)
+                .ok_or_else(|| Error::ModuleNotFound {
+                    range: node_id.extent().expand_lines(2),
+                    loc: node_id.extent(),
+                    resolved_relative_file_path: node_id.fqn(),
+                    expected: path.mounts.clone(),
+                })?;
 
             drop(m);
 
@@ -568,12 +568,11 @@ impl Manager {
         };
         let id = Id::from(src.as_bytes());
         if ids.iter().any(|(other, _)| &id == other) {
-            return Err(ErrorKind::CyclicUse(
-                Span::yolo(),
-                Span::yolo(),
-                ids.iter().map(|v| &v.1).cloned().collect(),
-            )
-            .into());
+            return Err(Error::CyclicUse {
+                expr: Span::yolo(),
+                inner: Span::yolo(),
+                uses: ids.iter().map(|v| &v.1).cloned().collect(),
+            });
         }
         ids.push((id.clone(), path.to_string_lossy().to_string()));
 
