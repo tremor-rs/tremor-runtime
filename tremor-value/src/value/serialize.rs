@@ -19,7 +19,7 @@
 // https://github.com/maciejhirsz/json-rust/blob/master/src/codegen.rs
 
 use super::{Object, Value};
-use simd_json::{prelude::*, stry};
+use simd_json::prelude::*;
 use std::io::{self, Write};
 use tremor_common::base64::BASE64;
 use value_trait::generator::{
@@ -28,7 +28,7 @@ use value_trait::generator::{
 
 //use util::print_dec;
 
-impl<'value> Writable for Value<'value> {
+impl Writable for Value<'_> {
     #[inline]
     fn encode(&self) -> String {
         let mut g = DumpGenerator::new();
@@ -71,7 +71,7 @@ trait Generator: BaseGenerator {
             self.write(b"{}")
         } else {
             let mut iter = object.iter();
-            stry!(self.write(b"{"));
+            self.write(b"{")?;
 
             // We know this exists since it's not empty
             let Some((key, value)) = iter.next() else {
@@ -79,20 +79,20 @@ trait Generator: BaseGenerator {
                 unreachable!()
             };
             self.indent();
-            stry!(self.new_line());
-            stry!(self.write_simple_string(key));
-            stry!(self.write_min(b": ", b':'));
-            stry!(self.write_json(value));
+            self.new_line()?;
+            self.write_simple_string(key)?;
+            self.write_min(b": ", b':')?;
+            self.write_json(value)?;
 
             for (key, value) in iter {
-                stry!(self.write(b","));
-                stry!(self.new_line());
-                stry!(self.write_simple_string(key));
-                stry!(self.write_min(b": ", b':'));
-                stry!(self.write_json(value));
+                self.write(b",")?;
+                self.new_line()?;
+                self.write_simple_string(key)?;
+                self.write_min(b": ", b':')?;
+                self.write_json(value)?;
             }
             self.dedent();
-            stry!(self.new_line());
+            self.new_line()?;
             self.write(b"}")
         }
     }
@@ -122,29 +122,29 @@ trait Generator: BaseGenerator {
                         // ALLOW: We check against size
                         unreachable!()
                     };
-                    stry!(self.write(b"["));
+                    self.write(b"[")?;
                     self.indent();
 
-                    stry!(self.new_line());
-                    stry!(self.write_json(item));
+                    self.new_line()?;
+                    self.write_json(item)?;
 
                     for item in iter {
-                        stry!(self.write(b","));
-                        stry!(self.new_line());
-                        stry!(self.write_json(item));
+                        self.write(b",")?;
+                        self.new_line()?;
+                        self.write_json(item)?;
                     }
                     self.dedent();
-                    stry!(self.new_line());
+                    self.new_line()?;
                     self.write(b"]")
                 }
             }
             Value::Object(ref object) => self.write_object(object),
             Value::Bytes(ref b) => {
-                stry!(self.write(b"\""));
+                self.write(b"\"")?;
                 {
                     let mut enc = base64::write::EncoderWriter::new(self.get_writer(), &BASE64);
-                    stry!(enc.write_all(b));
-                    stry!(enc.finish().map(|_| ()));
+                    enc.write_all(b)?;
+                    enc.finish()?;
                 }
                 self.write(b"\"")
             }
@@ -161,22 +161,22 @@ trait FastGenerator: BaseGenerator {
             self.write(b"{}")
         } else {
             let mut iter = object.iter();
-            stry!(self.write(b"{\""));
+            self.write(b"{\"")?;
 
             // We know this exists since it's not empty
             let Some((key, value)) = iter.next() else {
                 // ALLOW: We check against size
                 unreachable!()
             };
-            stry!(self.write_simple_str_content(key));
-            stry!(self.write(b"\":"));
-            stry!(self.write_json(value));
+            self.write_simple_str_content(key)?;
+            self.write(b"\":")?;
+            self.write_json(value)?;
 
             for (key, value) in iter {
-                stry!(self.write(b",\""));
-                stry!(self.write_simple_str_content(key));
-                stry!(self.write(b"\":"));
-                stry!(self.write_json(value));
+                self.write(b",\"")?;
+                self.write_simple_str_content(key)?;
+                self.write(b"\":")?;
+                self.write_json(value)?;
             }
             self.write(b"}")
         }
@@ -207,23 +207,23 @@ trait FastGenerator: BaseGenerator {
                         unreachable!()
                     };
 
-                    stry!(self.write(b"["));
-                    stry!(self.write_json(item));
+                    self.write(b"[")?;
+                    self.write_json(item)?;
 
                     for item in iter {
-                        stry!(self.write(b","));
-                        stry!(self.write_json(item));
+                        self.write(b",")?;
+                        self.write_json(item)?;
                     }
                     self.write(b"]")
                 }
             }
             Value::Object(ref object) => self.write_object(object),
             Value::Bytes(ref b) => {
-                stry!(self.write(b"\""));
+                self.write(b"\"")?;
                 {
                     let mut enc = base64::write::EncoderWriter::new(self.get_writer(), &BASE64);
-                    stry!(enc.write_all(b));
-                    stry!(enc.finish().map(|_| ()));
+                    enc.write_all(b)?;
+                    enc.finish().map(|_| ())?;
                 }
                 self.write(b"\"")
             }
@@ -239,14 +239,14 @@ impl Generator for PrettyGenerator {
     type T = Vec<u8>;
 }
 
-impl<'writer, W> FastGenerator for WriterGenerator<'writer, W>
+impl<W> FastGenerator for WriterGenerator<'_, W>
 where
     W: Write,
 {
     type T = W;
 }
 
-impl<'writer, W> Generator for PrettyWriterGenerator<'writer, W>
+impl<W> Generator for PrettyWriterGenerator<'_, W>
 where
     W: Write,
 {

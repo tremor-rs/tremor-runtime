@@ -16,11 +16,11 @@ use crate::{value::Bytes, Error, Object, Result, Value};
 use serde_ext::ser::{
     self, Serialize, SerializeMap as SerializeMapTrait, SerializeSeq as SerializeSeqTrait,
 };
-use simd_json::{stry, ObjectHasher, StaticNode};
+use simd_json::{ObjectHasher, StaticNode};
 
 type Impossible<T> = ser::Impossible<T, Error>;
 
-impl<'value> Serialize for Value<'value> {
+impl Serialize for Value<'_> {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: ser::Serializer,
@@ -193,7 +193,7 @@ impl serde::Serializer for Serializer {
         T: Serialize + ?Sized,
     {
         let mut values = Object::with_capacity_and_hasher(1, ObjectHasher::default());
-        values.insert(variant.into(), stry!(to_value(value)));
+        values.insert(variant.into(), to_value(value)?);
         Ok(Value::from(values))
     }
 
@@ -295,7 +295,7 @@ impl serde::ser::SerializeSeq for SerializeVec {
     where
         T: Serialize + ?Sized,
     {
-        self.vec.push(stry!(to_value(value)));
+        self.vec.push(to_value(value)?);
         Ok(())
     }
 
@@ -344,7 +344,7 @@ impl serde::ser::SerializeTupleVariant for SerializeTupleVariant {
     where
         T: Serialize + ?Sized,
     {
-        self.vec.push(stry!(to_value(value)));
+        self.vec.push(to_value(value)?);
         Ok(())
     }
 
@@ -369,7 +369,7 @@ impl serde::ser::SerializeMap for SerializeMap {
             Self::Map {
                 ref mut next_key, ..
             } => {
-                *next_key = Some(stry!(key.serialize(MapKeySerializer {})));
+                *next_key = Some(key.serialize(MapKeySerializer {})?);
                 Ok(())
             }
         }
@@ -387,7 +387,7 @@ impl serde::ser::SerializeMap for SerializeMap {
                 let key = next_key.take();
                 // ALLOW: Panic because this indicates a bug in the program rather than an expected failure.
                 let key = key.expect("serialize_value called before serialize_key");
-                map.insert(key.into(), stry!(to_value(value)));
+                map.insert(key.into(), to_value(value)?);
                 Ok(())
             }
         }
@@ -590,7 +590,7 @@ impl serde::ser::SerializeStruct for SerializeMap {
     {
         match *self {
             Self::Map { .. } => {
-                stry!(serde::ser::SerializeMap::serialize_key(self, key));
+                serde::ser::SerializeMap::serialize_key(self, key)?;
                 serde::ser::SerializeMap::serialize_value(self, value)
             }
         }
@@ -611,7 +611,7 @@ impl serde::ser::SerializeStructVariant for SerializeStructVariant {
     where
         T: Serialize + ?Sized,
     {
-        self.map.insert(key.into(), stry!(to_value(value)));
+        self.map.insert(key.into(), to_value(value)?);
         Ok(())
     }
 
@@ -663,7 +663,7 @@ mod tests {
             if let Some(&Value::Array(values)) = map.get("TupleStruct").as_ref() {
                 let first_field = values
                     .first()
-                    .and_then(ValueAsContainer::as_array)
+                    .and_then(ValueAsArray::as_array)
                     .ok_or("Vec<u8> not serialized as array")?;
                 assert_eq!(
                     Some(&Value::Static(StaticNode::I64(1))),

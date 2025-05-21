@@ -27,7 +27,7 @@ pub struct KnownKey<'key> {
     key: Cow<'key, str>,
     hash: u64,
 }
-impl<'key> std::fmt::Display for KnownKey<'key> {
+impl std::fmt::Display for KnownKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.key.fmt(f)
     }
@@ -108,7 +108,6 @@ impl<'key> KnownKey<'key> {
     ///   assert_eq!(known_key.map_lookup(inner).unwrap(), &42);
     /// }
     /// ```
-
     #[inline]
     #[must_use]
     pub fn map_lookup<'target, 'value>(
@@ -383,7 +382,7 @@ impl<'key> KnownKey<'key> {
     }
 }
 
-impl<'script> KnownKey<'script> {
+impl KnownKey<'_> {
     /// turns the key into one with static lifetime
     #[must_use]
     pub fn into_static(self) -> KnownKey<'static> {

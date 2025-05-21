@@ -88,9 +88,9 @@ pub enum Value<'value> {
     Bytes(Bytes<'value>),
 }
 
-impl<'value> Eq for Value<'value> {}
+impl Eq for Value<'_> {}
 
-impl<'value> Value<'value> {
+impl Value<'_> {
     /// Creates an empty array value
     #[must_use]
     pub const fn array() -> Value<'static> {
@@ -129,7 +129,8 @@ impl Ord for Static {
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss,
-        clippy::cast_sign_loss
+        clippy::cast_sign_loss,
+        clippy::too_many_lines
     )]
     fn cmp(&self, other: &Self) -> Ordering {
         match (self.0, other.0) {
@@ -174,10 +175,6 @@ impl Ord for Static {
                     v1.cmp(&(v2 as i64))
                 }
             }
-            // This is not great!
-            // While we don't expose it NaN but float doesn't implement Ord since it refuses to
-            // compare Nan==Nan which makes sense so we kind of cheat around it by saying if it is
-            // decide if one is greater or smaller then the other they're the same
             (StaticNode::F64(v1), StaticNode::F64(v2)) => {
                 if v1 > v2 {
                     Ordering::Greater
@@ -205,16 +202,111 @@ impl Ord for Static {
                     (v1 as i64).cmp(&v2)
                 }
             }
+            #[cfg(feature = "128bit")]
+            (StaticNode::I64(v1), StaticNode::I128(v2)) => i128::from(v1).cmp(&v2),
+            #[cfg(feature = "128bit")]
+            (StaticNode::I64(v1), StaticNode::U128(v2)) => {
+                if let Ok(v1) = v1.try_into() {
+                    let v1: u128 = v1;
+                    v1.cmp(&v2)
+                } else {
+                    Ordering::Less
+                }
+            }
+            #[cfg(feature = "128bit")]
+            (StaticNode::I128(v1), StaticNode::I64(v2)) => v1.cmp(&i128::from(v2)),
+            #[cfg(feature = "128bit")]
+            (StaticNode::I128(v1), StaticNode::I128(v2)) => v1.cmp(&v2),
+            #[cfg(feature = "128bit")]
+            (StaticNode::I128(v1), StaticNode::U64(v2)) => v1.cmp(&i128::from(v2)),
+            #[cfg(feature = "128bit")]
+            (StaticNode::I128(v1), StaticNode::U128(v2)) => {
+                if let Ok(v1) = v1.try_into() {
+                    let v1: u128 = v1;
+                    v1.cmp(&v2)
+                } else {
+                    Ordering::Less
+                }
+            }
+            #[cfg(feature = "128bit")]
+            (StaticNode::I128(v1), StaticNode::F64(v2)) => {
+                if v2 < i128::MIN as f64 {
+                    Ordering::Greater
+                } else if v2 > i128::MAX as f64 {
+                    Ordering::Less
+                } else {
+                    v1.cmp(&(v2 as i128))
+                }
+            }
+            #[cfg(feature = "128bit")]
+            (StaticNode::U64(v1), StaticNode::I128(v2)) => i128::from(v1).cmp(&v2),
+            #[cfg(feature = "128bit")]
+            (StaticNode::U64(v1), StaticNode::U128(v2)) => u128::from(v1).cmp(&v2),
+            #[cfg(feature = "128bit")]
+            (StaticNode::U128(v1), StaticNode::I64(v2)) => {
+                if let Ok(v2) = v2.try_into() {
+                    let v2: u128 = v2;
+                    v1.cmp(&v2)
+                } else {
+                    // v2 is negative
+                    Ordering::Greater
+                }
+            }
+            #[cfg(feature = "128bit")]
+            (StaticNode::U128(v1), StaticNode::I128(v2)) => {
+                // ALLOW: i128::MAX is within u128 bounds
+                if v1 > (i128::MAX as u128) || v2 < 0 {
+                    Ordering::Greater
+                } else {
+                    // ALLOW: see the bounds check above
+                    #[allow(clippy::cast_possible_wrap)]
+                    (v1 as i128).cmp(&v2)
+                }
+            }
+            #[cfg(feature = "128bit")]
+            (StaticNode::U128(v1), StaticNode::U64(v2)) => v1.cmp(&u128::from(v2)),
+            #[cfg(feature = "128bit")]
+            (StaticNode::U128(v1), StaticNode::U128(v2)) => v1.cmp(&v2),
+            #[cfg(feature = "128bit")]
+            (StaticNode::U128(v1), StaticNode::F64(v2)) => {
+                if v2.is_sign_negative() {
+                    Ordering::Greater
+                } else if v2 > u128::MAX as f64 {
+                    Ordering::Less
+                } else {
+                    v1.cmp(&(v2 as u128))
+                }
+            }
+            #[cfg(feature = "128bit")]
+            (StaticNode::F64(v1), StaticNode::I128(v2)) => {
+                if v1 < i128::MIN as f64 {
+                    Ordering::Less
+                } else if v1 > i128::MAX as f64 {
+                    Ordering::Greater
+                } else {
+                    (v1 as i128).cmp(&v2)
+                }
+            }
+            #[cfg(feature = "128bit")]
+            (StaticNode::F64(v1), StaticNode::U128(v2)) => {
+                if v1.is_sign_negative() {
+                    Ordering::Less
+                } else if v1 > u128::MAX as f64 {
+                    Ordering::Greater
+                } else {
+                    (v1 as u128).cmp(&v2)
+                }
+            }
         }
     }
 }
 
-impl<'value> PartialOrd for Value<'value> {
+impl PartialOrd for Value<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
-impl<'value> Ord for Value<'value> {
+impl Ord for Value<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (Value::Static(v1), Value::Static(v2)) => Static(*v1).cmp(&Static(*v2)),
@@ -244,7 +336,7 @@ fn cmp_map(left: &Object, right: &Object) -> Ordering {
     match left.len().cmp(&right.len()) {
         Ordering::Equal => (),
         o @ (Ordering::Greater | Ordering::Less) => return o,
-    };
+    }
 
     // compare keyspace (sorted keys cmp)
     let mut keys_left: Vec<_> = left.keys().collect();
@@ -255,7 +347,7 @@ fn cmp_map(left: &Object, right: &Object) -> Ordering {
     match keys_left.cmp(&keys_right) {
         Ordering::Equal => (),
         o @ (Ordering::Greater | Ordering::Less) => return o,
-    };
+    }
     // Compare values (the first sorted value being non equal determines order)
     for k in keys_left {
         if let Some(left_val) = left.get(k) {
@@ -403,11 +495,9 @@ impl<'value> ValueBuilder<'value> for Value<'value> {
     }
 }
 
-impl<'value> ValueAsMutContainer for Value<'value> {
+impl<'value> ValueAsMutArray for Value<'value> {
     /// The type for Arrays
     type Array = Vec<Value<'value>>;
-    /// The type for Objects
-    type Object = Object<'value>;
 
     #[inline]
     #[must_use]
@@ -417,6 +507,10 @@ impl<'value> ValueAsMutContainer for Value<'value> {
             _ => None,
         }
     }
+}
+
+impl<'value> ValueAsMutObject for Value<'value> {
+    type Object = Object<'value>;
     #[inline]
     #[must_use]
     fn as_object_mut(&mut self) -> Option<&mut Object<'value>> {
@@ -426,7 +520,7 @@ impl<'value> ValueAsMutContainer for Value<'value> {
         }
     }
 }
-impl<'value> TypedValue for Value<'value> {
+impl TypedValue for Value<'_> {
     #[inline]
     #[must_use]
     fn value_type(&self) -> ValueType {
@@ -439,7 +533,7 @@ impl<'value> TypedValue for Value<'value> {
         }
     }
 }
-impl<'value> ValueAsScalar for Value<'value> {
+impl ValueAsScalar for Value<'_> {
     #[inline]
     #[must_use]
     fn as_null(&self) -> Option<()> {
@@ -496,9 +590,9 @@ impl<'value> ValueAsScalar for Value<'value> {
         }
     }
 }
-impl<'value> ValueAsContainer for Value<'value> {
+impl<'value> ValueAsArray for Value<'value> {
     type Array = Vec<Value<'value>>;
-    type Object = Object<'value>;
+
     #[inline]
     #[must_use]
     fn as_array(&self) -> Option<&Vec<Value<'value>>> {
@@ -507,6 +601,10 @@ impl<'value> ValueAsContainer for Value<'value> {
             _ => None,
         }
     }
+}
+
+impl<'value> ValueAsObject for Value<'value> {
+    type Object = Object<'value>;
 
     #[inline]
     #[must_use]
@@ -518,7 +616,7 @@ impl<'value> ValueAsContainer for Value<'value> {
     }
 }
 
-impl<'value> TypedCustomValue for Value<'value> {
+impl TypedCustomValue for Value<'_> {
     #[inline]
     #[must_use]
     fn is_custom(&self) -> bool {
@@ -527,7 +625,7 @@ impl<'value> TypedCustomValue for Value<'value> {
 }
 
 // #[cfg_attr(coverage, no_coverage)]
-impl<'value> fmt::Display for Value<'value> {
+impl fmt::Display for Value<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Static(s) => write!(f, "{s}"),
@@ -559,7 +657,7 @@ impl<'value> Index<usize> for Value<'value> {
     }
 }
 
-impl<'value> IndexMut<&str> for Value<'value> {
+impl IndexMut<&str> for Value<'_> {
     #[inline]
     #[must_use]
     fn index_mut(&mut self, index: &str) -> &mut Self::Output {
@@ -568,7 +666,7 @@ impl<'value> IndexMut<&str> for Value<'value> {
     }
 }
 
-impl<'value> IndexMut<usize> for Value<'value> {
+impl IndexMut<usize> for Value<'_> {
     #[inline]
     #[must_use]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
@@ -577,7 +675,7 @@ impl<'value> IndexMut<usize> for Value<'value> {
     }
 }
 
-impl<'value> Default for Value<'value> {
+impl Default for Value<'_> {
     #[inline]
     #[must_use]
     fn default() -> Self {

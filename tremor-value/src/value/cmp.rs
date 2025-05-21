@@ -17,7 +17,7 @@ use simd_json::{prelude::*, BorrowedValue, OwnedValue};
 use tremor_common::base64::{Engine, BASE64};
 
 #[allow(clippy::cast_sign_loss, clippy::default_trait_access)]
-impl<'value> PartialEq for Value<'value> {
+impl PartialEq for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &Self) -> bool {
@@ -43,20 +43,20 @@ where
     }
 }
 
-impl<'value> PartialEq<OwnedValue> for Value<'value> {
+impl PartialEq<OwnedValue> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &OwnedValue) -> bool {
         match (self, other) {
             (Self::Static(s1), OwnedValue::Static(s2)) => s1 == s2,
             (Self::String(v1), OwnedValue::String(v2)) => v1.eq(v2),
-            (Self::Array(v1), OwnedValue::Array(v2)) => v1.eq(v2),
+            (Self::Array(v1), OwnedValue::Array(v2)) => v1.eq(v2.as_ref()),
             (Self::Object(v1), OwnedValue::Object(v2)) => {
                 if v1.len() != v2.len() {
                     return false;
                 }
                 v2.iter()
-                    .all(|(key, value)| v1.get(key.as_str()).map_or(false, |v| v.eq(value)))
+                    .all(|(key, value)| v1.get(key.as_str()).is_some_and(|v| v.eq(value)))
             }
             _ => false,
         }
@@ -70,13 +70,13 @@ impl<'value> PartialEq<BorrowedValue<'value>> for Value<'value> {
         match (self, other) {
             (Self::Static(s1), BorrowedValue::Static(s2)) => s1 == s2,
             (Self::String(v1), BorrowedValue::String(v2)) => v1.as_ref().eq(v2.as_ref()),
-            (Self::Array(v1), BorrowedValue::Array(v2)) => v1.eq(v2),
+            (Self::Array(v1), BorrowedValue::Array(v2)) => v1.eq(v2.as_ref()),
             (Self::Object(v1), BorrowedValue::Object(v2)) => {
                 if v1.len() != v2.len() {
                     return false;
                 }
                 v2.iter()
-                    .all(|(key, value)| v1.get(key.as_ref()).map_or(false, |v| v.eq(value)))
+                    .all(|(key, value)| v1.get(key.as_ref()).is_some_and(|v| v.eq(value)))
             }
             _ => false,
         }
@@ -111,7 +111,7 @@ impl<'value> From<Value<'value>> for BorrowedValue<'value> {
     }
 }
 
-impl<'v> PartialEq<()> for Value<'v> {
+impl PartialEq<()> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, _other: &()) -> bool {
@@ -119,7 +119,7 @@ impl<'v> PartialEq<()> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<bool> for Value<'v> {
+impl PartialEq<bool> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &bool) -> bool {
@@ -143,7 +143,7 @@ impl<'v> PartialEq<std::borrow::Cow<'v, str>> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<str> for Value<'v> {
+impl PartialEq<str> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &str) -> bool {
@@ -151,7 +151,7 @@ impl<'v> PartialEq<str> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<&str> for Value<'v> {
+impl PartialEq<&str> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &&str) -> bool {
@@ -159,7 +159,7 @@ impl<'v> PartialEq<&str> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<String> for Value<'v> {
+impl PartialEq<String> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &String) -> bool {
@@ -167,7 +167,7 @@ impl<'v> PartialEq<String> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<i8> for Value<'v> {
+impl PartialEq<i8> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &i8) -> bool {
@@ -175,7 +175,7 @@ impl<'v> PartialEq<i8> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<i16> for Value<'v> {
+impl PartialEq<i16> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &i16) -> bool {
@@ -183,7 +183,7 @@ impl<'v> PartialEq<i16> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<i32> for Value<'v> {
+impl PartialEq<i32> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &i32) -> bool {
@@ -191,7 +191,7 @@ impl<'v> PartialEq<i32> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<i64> for Value<'v> {
+impl PartialEq<i64> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &i64) -> bool {
@@ -199,7 +199,7 @@ impl<'v> PartialEq<i64> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<i128> for Value<'v> {
+impl PartialEq<i128> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &i128) -> bool {
@@ -207,7 +207,7 @@ impl<'v> PartialEq<i128> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<u8> for Value<'v> {
+impl PartialEq<u8> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &u8) -> bool {
@@ -215,7 +215,7 @@ impl<'v> PartialEq<u8> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<u16> for Value<'v> {
+impl PartialEq<u16> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &u16) -> bool {
@@ -223,7 +223,7 @@ impl<'v> PartialEq<u16> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<u32> for Value<'v> {
+impl PartialEq<u32> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &u32) -> bool {
@@ -231,7 +231,7 @@ impl<'v> PartialEq<u32> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<u64> for Value<'v> {
+impl PartialEq<u64> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &u64) -> bool {
@@ -239,7 +239,7 @@ impl<'v> PartialEq<u64> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<usize> for Value<'v> {
+impl PartialEq<usize> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &usize) -> bool {
@@ -247,7 +247,7 @@ impl<'v> PartialEq<usize> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<u128> for Value<'v> {
+impl PartialEq<u128> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &u128) -> bool {
@@ -255,7 +255,7 @@ impl<'v> PartialEq<u128> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<f32> for Value<'v> {
+impl PartialEq<f32> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &f32) -> bool {
@@ -263,7 +263,7 @@ impl<'v> PartialEq<f32> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<f64> for Value<'v> {
+impl PartialEq<f64> for Value<'_> {
     #[inline]
     #[must_use]
     fn eq(&self, other: &f64) -> bool {
@@ -291,11 +291,11 @@ where
     #[inline]
     #[must_use]
     fn eq(&self, other: &std::collections::HashMap<K, T, S>) -> bool {
-        self.as_object().map_or(false, |object| {
+        self.as_object().is_some_and(|object| {
             object.len() == other.len()
                 && other
                     .iter()
-                    .all(|(key, value)| object.get(key.as_ref()).map_or(false, |v| *v == *value))
+                    .all(|(key, value)| object.get(key.as_ref()).is_some_and(|v| *v == *value))
         })
     }
 }
