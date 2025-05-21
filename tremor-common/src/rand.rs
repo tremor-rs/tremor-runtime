@@ -27,7 +27,7 @@ pub fn octet_string(octets: usize, seed: u64) -> String {
     let mut rng = crate::rand::make_prng(seed);
     (0..octets).fold(String::new(), |mut o, _| {
         // ALLOW: if we can't allocate it's worse, we'd have the same problem with format
-        let _ = write!(o, "{:02x}", rng.gen::<u8>());
+        let _ = write!(o, "{:02x}", rng.random::<u8>());
         o
     })
 }

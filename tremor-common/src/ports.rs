@@ -86,7 +86,7 @@ impl From<String> for Port<'static> {
     }
 }
 
-impl<'port> Borrow<str> for Port<'port> {
+impl Borrow<str> for Port<'_> {
     fn borrow(&self) -> &str {
         match self {
             Port::In => "in",
@@ -98,26 +98,26 @@ impl<'port> Borrow<str> for Port<'port> {
         }
     }
 }
-impl<'port> PartialEq<str> for Port<'port> {
+impl PartialEq<str> for Port<'_> {
     fn eq(&self, other: &str) -> bool {
         let this: &str = self.borrow();
         this.eq(other)
     }
 }
 
-impl<'port> PartialEq<&str> for Port<'port> {
+impl PartialEq<&str> for Port<'_> {
     fn eq(&self, other: &&str) -> bool {
         self.eq(*other)
     }
 }
 
-impl<'port> PartialEq<Port<'port>> for &str {
+impl PartialEq<Port<'_>> for &str {
     fn eq(&self, other: &Port) -> bool {
         other.eq(self)
     }
 }
 
-impl<'port> std::fmt::Display for Port<'port> {
+impl std::fmt::Display for Port<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.borrow())
     }

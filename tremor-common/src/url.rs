@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::LazyLock};
 pub use url::ParseError;
 
-lazy_static! {
+static URL_SCHEME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     // ALLOW: we know this regex is valid
-    static ref URL_SCHEME_REGEX: Regex = Regex::new("^[A-Za-z-]+://").expect("Invalid Regex");
-}
+    Regex::new("^[A-Za-z-]+://").expect("Invalid Regex")
+});
 
 /// Default values for a URL
 pub trait Defaults {
