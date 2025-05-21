@@ -210,7 +210,7 @@ impl Separate {
 }
 
 impl Preprocessor for Separate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "separate"
     }
 

@@ -67,7 +67,7 @@ impl Postprocessor for Chunk {
         true
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "chunk"
     }
 

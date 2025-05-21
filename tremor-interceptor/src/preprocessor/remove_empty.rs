@@ -20,7 +20,7 @@ use super::prelude::*;
 pub(crate) struct RemoveEmpty {}
 
 impl Preprocessor for RemoveEmpty {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "remove-empty"
     }
     fn process(

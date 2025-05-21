@@ -60,7 +60,7 @@ use std::io::{self, Cursor, Read};
 #[derive(Clone, Default, Debug)]
 struct Gzip {}
 impl Preprocessor for Gzip {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "gzip"
     }
 
@@ -81,7 +81,7 @@ impl Preprocessor for Gzip {
 #[derive(Clone, Default, Debug)]
 struct Brotli {}
 impl Preprocessor for Brotli {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "br"
     }
 
@@ -101,7 +101,7 @@ impl Preprocessor for Brotli {
 #[derive(Clone, Default, Debug)]
 struct Zlib {}
 impl Preprocessor for Zlib {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "zlib"
     }
 
@@ -122,7 +122,7 @@ impl Preprocessor for Zlib {
 #[derive(Clone, Default, Debug)]
 struct Xz2 {}
 impl Preprocessor for Xz2 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "xz2"
     }
 
@@ -143,7 +143,7 @@ impl Preprocessor for Xz2 {
 #[derive(Clone, Default, Debug)]
 struct Snappy {}
 impl Preprocessor for Snappy {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "snappy"
     }
 
@@ -165,7 +165,7 @@ impl Preprocessor for Snappy {
 #[derive(Clone, Default, Debug)]
 struct Lz4 {}
 impl Preprocessor for Lz4 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "lz4"
     }
 
@@ -186,8 +186,8 @@ impl Preprocessor for Lz4 {
 #[derive(Clone, Debug, Default)]
 struct Zstd {}
 impl Preprocessor for Zstd {
-    fn name(&self) -> &str {
-        "ztd"
+    fn name(&self) -> &'static str {
+        "zstd"
     }
     fn process(
         &mut self,
@@ -203,7 +203,7 @@ impl Preprocessor for Zstd {
 #[derive(Clone, Default, Debug)]
 struct Fingerprinted {}
 impl Preprocessor for Fingerprinted {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "autodetect"
     }
 
@@ -292,7 +292,7 @@ impl Decompress {
     }
 }
 impl Preprocessor for Decompress {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "decompress"
     }
     fn process(

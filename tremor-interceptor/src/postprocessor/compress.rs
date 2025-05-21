@@ -64,8 +64,7 @@ use std::{
     io::{Cursor, Write},
     str::{self, FromStr},
 };
-use tremor_value::Value;
-use value_trait::prelude::*;
+use tremor_value::{prelude::ValueObjectAccessAsScalar as _, Value};
 
 #[derive(Debug, PartialEq)]
 enum Algorithm {
@@ -121,7 +120,10 @@ impl FromStr for Algorithm {
 }
 
 impl Algorithm {
-    pub fn into_postprocessor(self, config: Option<&Value>) -> Result<Box<dyn Stateless>, Error> {
+    pub fn into_postprocessor(
+        self,
+        config: Option<&Value<'_>>,
+    ) -> Result<Box<dyn Stateless>, Error> {
         if let Some(compression_level) = config.get_i64("level") {
             match self {
                 Algorithm::Xz2 => Ok(Xz2::with_config(compression_level)?),
@@ -147,7 +149,7 @@ impl Algorithm {
 #[derive(Default)]
 struct Gzip {}
 impl Stateless for Gzip {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "gzip"
     }
 
@@ -165,7 +167,7 @@ struct Brotli {
     params: brotli::enc::BrotliEncoderParams,
 }
 impl Stateless for Brotli {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "br"
     }
 
@@ -181,7 +183,7 @@ impl Stateless for Brotli {
 #[derive(Default)]
 struct Zlib {}
 impl Stateless for Zlib {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "zlib"
     }
 
@@ -218,7 +220,7 @@ impl Xz2 {
     }
 }
 impl Stateless for Xz2 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "xz2"
     }
 
@@ -240,7 +242,7 @@ impl Default for Xz2 {
 #[derive(Default)]
 struct Snappy {}
 impl Stateless for Snappy {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "snappy"
     }
 
@@ -277,7 +279,7 @@ impl Lz4 {
     }
 }
 impl Stateless for Lz4 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "lz4"
     }
 
@@ -325,7 +327,7 @@ impl Zstd {
     }
 }
 impl Stateless for Zstd {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "zstd"
     }
 
@@ -356,7 +358,7 @@ impl Compress {
     }
 }
 impl Stateless for Compress {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "compress"
     }
     fn process(&self, data: &[u8]) -> anyhow::Result<Vec<Vec<u8>>> {

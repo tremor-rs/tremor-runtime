@@ -23,7 +23,7 @@ pub(crate) struct LengthPrefixed {
     buffer: BytesMut,
 }
 impl Preprocessor for LengthPrefixed {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "length-prefixed"
     }
 

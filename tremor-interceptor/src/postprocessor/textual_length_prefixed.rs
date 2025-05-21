@@ -20,7 +20,7 @@ use std::io::Write;
 #[derive(Clone, Default)]
 pub(crate) struct TextualLengthPrefixed {}
 impl Stateless for TextualLengthPrefixed {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "textual-length-prefixed"
     }
 
