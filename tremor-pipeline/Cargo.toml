@@ -18,7 +18,7 @@ log = "0.4"
 lru = "0.12"
 petgraph = "0.6"
 regex = "1"
-rust-bert = { version = "0.21.0", optional = true }
+rust-bert = { version = "0.23.0", optional = true }
 serde = "1"
 serde_yaml = "0.9"
 simd-json = { version = "0.13", features = ["known-key"] }

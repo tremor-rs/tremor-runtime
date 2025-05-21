@@ -1,17 +1,17 @@
 [package]
-authors = ["The Tremor Team"]
 description = "Tremor CLI Tool"
-edition = "2021"
-license = "Apache-2.0"
 name = "tremor-cli"
-version = "0.13.0-rc.33"
-homepage = "https://www.tremor.rs"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+homepage.workspace = true
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
 
 [build-dependencies]
-lalrpop = "0.20"
+lalrpop = "0.22"
 matches = "0.1.10"
 
 [dev-dependencies]
@@ -22,46 +22,45 @@ matches = "0.1"
 pretty_assertions = "1.4"
 
 [dependencies]
-tokio = { version = "1.39", features = ["full"] }
-anyhow = "1"
+tokio.workspace = true
+anyhow.workspace = true
 clap = { version = "4", features = ["color", "derive"] }
 clap_complete = "4"
 difference = "2"
 env_logger = "0.11"
-futures = "0.3"
-halfbrown = "0.2"
+futures.workspace = true
+halfbrown.workspace = true
 http-types = "2"
-log = "0.4"
+log.workspace = true
 log4rs = "1"
-serde = "1"
-serde_yaml = "0.9"
+serde.workspace = true
+serde_yaml.workspace = true
 signal-hook = "0.3"
 signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
-simd-json = { version = "0.13", features = ["known-key"] }
-# We need to stay with 0.2 for now as there are reasons that can be named for the need to be able to
-# compile and run on operating systems that are a decade old. (insert apropriate ammount rage)
+simd-json.workspace = true # { version = "0.13", features = ["known-key"] }
 snmalloc-rs = { version = "0.3" }
 surf = { version = "=2.3.2", default-features = false, features = [
   "encoding",
   "h1-client-rustls",
   "middleware-logger",
 ] }
-tremor-api = { version = "0.13.0-rc.33", path = "../tremor-api" }
-tremor-codec = { version = "0.13.0-rc.33", path = "../tremor-codec" }
-tremor-interceptor = { version = "0.13.0-rc.33", path = "../tremor-interceptor" }
-tremor-common = { version = "0.13.0-rc.33", path = "../tremor-common" }
-tremor-pipeline = { version = "0.13.0-rc.33", path = "../tremor-pipeline" }
-tremor-runtime = { version = "0.13.0-rc.33", path = "../" }
-tremor-script = { version = "0.13.0-rc.33", path = "../tremor-script" }
-tremor-value = { version = "0.13.0-rc.33", path = "../tremor-value" }
-tremor-system = { version = "0.13.0-rc.33", path = "../tremor-system" }
-tremor-archive = { version = "0.13.0-rc.33", path = "../tremor-archive" }
+tremor-api.workspace = true
+tremor-codec.workspace = true
+tremor-interceptor.workspace = true
+tremor-common.workspace = true
+tremor-pipeline.workspace = true
+tremor-runtime.workspace = true
+tremor-script.workspace = true
+tremor-value.workspace = true
+tremor-system.workspace = true
+tremor-archive.workspace = true
 url = "2"
-error-chain = "0.12"
+error-chain.workspace = true
 globwalk = "0.9"
 port_scanner = "0.1"
 shell-words = "1"
-tch = { version = "0.13", optional = true }
+# needs to be compatible with rust-bert dependency
+tch = { version = "0.17", optional = true }
 termcolor = "1.4"
 
 [[bin]]

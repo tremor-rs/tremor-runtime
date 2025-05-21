@@ -78,19 +78,19 @@ pub enum Error {
     #[error("Failed to aquire read lock")]
     ReadLock,
     /// Tremor Common Error
-    #[error("Tremor Common Error")]
+    #[error("Tremor Common Error {0}")]
     Common(#[from] tremor_common::Error),
     /// Tremor Script Error
-    #[error("Tremor Script Error")]
+    #[error("Tremor Script Error {0}")]
     Script(#[from] tremor_script::errors::Error),
     /// IO Error
-    #[error("IO Error")]
+    #[error("IO Error {0}")]
     Io(#[from] std::io::Error),
     /// Serde Error
-    #[error("Serde Error")]
+    #[error("Serde Error {0}")]
     Serde(#[from] serde_json::Error),
     /// Simd JSON Error
-    #[error("Simd JSON Error")]
+    #[error("Simd JSON Error {0}")]
     SimdJson(#[from] simd_json::Error),
 }
 
