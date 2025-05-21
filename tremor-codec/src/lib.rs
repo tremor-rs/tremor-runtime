@@ -25,9 +25,10 @@
     clippy::mod_module_files
 )]
 
+/// codec errors
 pub mod errors;
 pub use crate::errors::Error;
-use crate::errors::{Kind as ErrorKind, Result};
+use crate::errors::Result;
 use std::fmt::{Debug, Display};
 use tremor_value::Value;
 mod codec {
@@ -55,7 +56,7 @@ pub use codec::*;
 
 mod prelude {
     pub use super::Codec;
-    pub use crate::errors::*;
+    pub use crate::errors::{Error, Result};
     pub use simd_json::prelude::*;
     pub use tremor_value::{Object, Value};
 }
@@ -63,11 +64,11 @@ mod prelude {
 /// Configuration, commonly used for codecs
 pub type Config = tremor_config::NameWithConfig;
 
-#[async_trait::async_trait]
 /// The codec trait, to encode and decode data
+#[async_trait::async_trait]
 pub trait Codec: Send + Sync {
     /// The canonical name for this codec
-    fn name(&self) -> &str;
+    fn name(&self) -> &'static str;
 
     /// supported mime types
     /// as <base>/<subtype>
@@ -75,7 +76,6 @@ pub trait Codec: Send + Sync {
     /// e.g. application/json
     ///
     /// The returned mime types should be unique to this codec
-
     fn mime_types(&self) -> Vec<&'static str> {
         vec![]
     }
@@ -140,7 +140,7 @@ pub fn resolve(config: &Config) -> Result<Box<dyn Codec>> {
         "tremor" => Ok(Box::<tremor::Tremor>::default()),
         "yaml" => Ok(Box::new(yaml::Yaml {})),
         "graphite-plaintext" => Ok(Box::new(graphite::PlaintextProtocol::default())),
-        s => Err(ErrorKind::CodecNotFound(s.into()).into()),
+        s => Err(Error::CodecNotFound(s.into())),
     }
 }
 

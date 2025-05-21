@@ -68,7 +68,7 @@ impl BInflux {
         fn write_str(w: &mut impl Write, s: &str) -> Result<()> {
             w.write_u16::<BigEndian>(
                 u16::try_from(s.len())
-                    .chain_err(|| ErrorKind::InvalidBInfluxData("string too long".into()))?,
+                    .map_err(|_| Error::InvalidBInfluxData("string too long".into()))?,
             )?;
             w.write_all(s.as_bytes())?;
             Ok(())
@@ -78,18 +78,18 @@ impl BInflux {
         if let Some(measurement) = v.get_str("measurement") {
             write_str(res, measurement)?;
         } else {
-            return Err(ErrorKind::InvalidBInfluxData("measurement missing".into()).into());
+            return Err(Error::InvalidBInfluxData("measurement missing".into()));
         }
 
         if let Some(timestamp) = v.get_u64("timestamp") {
             res.write_u64::<BigEndian>(timestamp)?;
         } else {
-            return Err(ErrorKind::InvalidBInfluxData("timestamp missing".into()).into());
+            return Err(Error::InvalidBInfluxData("timestamp missing".into()));
         }
         if let Some(tags) = v.get_object("tags") {
             res.write_u16::<BigEndian>(
                 u16::try_from(tags.len())
-                    .chain_err(|| ErrorKind::InvalidBInfluxData("too many tags".into()))?,
+                    .map_err(|_| Error::InvalidBInfluxData("too many tags".into()))?,
             )?;
 
             for (k, v) in tags {
@@ -105,7 +105,7 @@ impl BInflux {
         if let Some(fields) = v.get_object("fields") {
             res.write_u16::<BigEndian>(
                 u16::try_from(fields.len())
-                    .chain_err(|| ErrorKind::InvalidBInfluxData("too many fields".into()))?,
+                    .map_err(|_| Error::InvalidBInfluxData("too many fields".into()))?,
             )?;
             for (k, v) in fields {
                 write_str(res, k)?;
@@ -125,11 +125,10 @@ impl BInflux {
                     res.write_u8(TYPE_STRING)?;
                     write_str(res, v)?;
                 } else {
-                    return Err(ErrorKind::InvalidBInfluxData(format!(
+                    return Err(Error::InvalidBInfluxData(format!(
                         "Unknown type as influx line value: {:?}",
                         v.value_type()
-                    ))
-                    .into());
+                    )));
                 }
             }
         } else {
@@ -149,8 +148,8 @@ impl BInflux {
         let mut c = Cursor::new(data);
         let vsn = c.read_u16::<BigEndian>()?;
         if vsn != 0 {
-            return Err(ErrorKind::InvalidBInfluxData("invalid version".into()).into());
-        };
+            return Err(Error::InvalidBInfluxData("invalid version".into()));
+        }
         let measurement = read_string(&mut c)?;
         let timestamp = c.read_u64::<BigEndian>()?;
         let tag_count = c.read_u16::<BigEndian>()? as usize;
@@ -198,7 +197,7 @@ impl BInflux {
 
 #[async_trait::async_trait]
 impl Codec for BInflux {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "binflux"
     }
 

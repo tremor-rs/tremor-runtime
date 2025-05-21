@@ -27,7 +27,7 @@ pub struct MsgPack {}
 
 #[async_trait::async_trait]
 impl Codec for MsgPack {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "msgpack"
     }
 

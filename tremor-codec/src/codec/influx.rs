@@ -42,7 +42,7 @@ pub struct Influx {}
 
 #[async_trait::async_trait]
 impl Codec for Influx {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "influx"
     }
 
@@ -54,8 +54,9 @@ impl Codec for Influx {
     ) -> Result<Option<(Value<'input>, Value<'input>)>> {
         let s: &'input str = str::from_utf8(data)?;
         influx::decode::<'input, Value<'input>>(s, ingest_ns)
-            .map_err(|e| {
-                ErrorKind::InvalidInfluxData(String::from_utf8_lossy(data).to_string(), e).into()
+            .map_err(|e| Error::InvalidInfluxData {
+                line: String::from_utf8_lossy(data).to_string(),
+                source: e,
             })
             .map(|v| v.map(|v| (v, meta)))
     }

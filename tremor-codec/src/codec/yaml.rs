@@ -23,7 +23,7 @@ pub struct Yaml {}
 
 #[async_trait::async_trait]
 impl Codec for Yaml {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "yaml"
     }
 

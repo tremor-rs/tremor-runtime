@@ -118,32 +118,24 @@ where
 {
     /// encode structured data `sd` into `result`
     fn encode_sd(sd: &Value, result: &mut Vec<String>) -> Result<()> {
-        let sd = sd.as_object().ok_or_else(|| {
-            Error::from(ErrorKind::InvalidSyslogData(
-                "Invalid structured data: structured data not an object",
-            ))
-        })?;
+        let sd = sd.as_object().ok_or(Error::InvalidSyslogData(
+            "Invalid structured data: structured data not an object",
+        ))?;
         let mut elem = String::with_capacity(16);
         for (id, params) in sd {
             elem.push('[');
             elem.push_str(id);
-            let params = params.as_array().ok_or_else(|| {
-                Error::from(ErrorKind::InvalidSyslogData(
-                    "Invalid structured data: params not an array of objects",
-                ))
-            })?;
+            let params = params.as_array().ok_or(Error::InvalidSyslogData(
+                "Invalid structured data: params not an array of objects",
+            ))?;
             for key_value in params.iter() {
-                let kv_map = key_value.as_object().ok_or_else(|| {
-                    Error::from(ErrorKind::InvalidSyslogData(
-                        "Invalid structured data: param's key value pair not an object",
-                    ))
-                })?;
+                let kv_map = key_value.as_object().ok_or(Error::InvalidSyslogData(
+                    "Invalid structured data: param's key value pair not an object",
+                ))?;
                 for (k, v) in kv_map {
-                    let value = v.as_str().ok_or_else(|| {
-                        Error::from(ErrorKind::InvalidSyslogData(
-                            "Invalid structured data: param's key value pair not an object",
-                        ))
-                    })?;
+                    let value = v.as_str().ok_or(Error::InvalidSyslogData(
+                        "Invalid structured data: param's key value pair not an object",
+                    ))?;
                     elem.push(' ');
                     elem.push_str(k);
                     elem.push('=');
@@ -205,10 +197,10 @@ where
         let mut result = Vec::with_capacity(10); // reserving 3 slots for structured data
         let f = data
             .get_str("facility")
-            .ok_or_else(|| Error::from(ErrorKind::InvalidSyslogData("facility missing")))?;
+            .ok_or(Error::InvalidSyslogData("facility missing"))?;
         let s = data
             .get_str("severity")
-            .ok_or_else(|| Error::from(ErrorKind::InvalidSyslogData("severity missing")))?;
+            .ok_or(Error::InvalidSyslogData("severity missing"))?;
         result.push(format!(
             "<{}>{}",
             compose_pri(to_facility(f)?, to_severity(s)?),
@@ -254,7 +246,7 @@ impl<N> Codec for Syslog<N>
 where
     N: Now + 'static,
 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "syslog"
     }
 
@@ -339,7 +331,7 @@ where
             (Some(&_), _) => Err("Invalid protocol type"),
             (None, None) => Ok(Protocol::RFC5424(1_u32)),
         }
-        .map_err(ErrorKind::InvalidSyslogData)?;
+        .map_err(Error::InvalidSyslogData)?;
         let result = match protocol {
             Protocol::RFC3164 => self.encode_rfc3164(data)?,
             Protocol::RFC5424(version) => Self::encode_rfc5424(data, version)?,
@@ -376,7 +368,7 @@ fn to_severity(s: &str) -> Result<SyslogSeverity> {
         "notice" => Ok(SyslogSeverity::SEV_NOTICE),
         "info" => Ok(SyslogSeverity::SEV_INFO),
         "debug" => Ok(SyslogSeverity::SEV_DEBUG),
-        _ => Err(ErrorKind::InvalidSyslogData("invalid severity").into()),
+        _ => Err(Error::InvalidSyslogData("invalid severity")),
     }
 }
 
@@ -407,7 +399,7 @@ fn to_facility(s: &str) -> Result<SyslogFacility> {
         "local5" => Ok(SyslogFacility::LOG_LOCAL5),
         "local6" => Ok(SyslogFacility::LOG_LOCAL6),
         "local7" => Ok(SyslogFacility::LOG_LOCAL7),
-        _ => Err(ErrorKind::InvalidSyslogData("invalid facility").into()),
+        _ => Err(Error::InvalidSyslogData("invalid facility")),
     }
 }
 

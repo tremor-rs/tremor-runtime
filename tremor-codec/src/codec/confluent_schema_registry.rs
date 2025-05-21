@@ -107,7 +107,7 @@ impl SchemaResolver for RecordResolver<'_> {
 
 #[async_trait::async_trait()]
 impl Codec for Csr {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "confluent-schema-registry"
     }
 

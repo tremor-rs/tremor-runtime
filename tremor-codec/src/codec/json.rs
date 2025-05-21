@@ -82,7 +82,7 @@ pub(crate) fn from_config(config: Option<&Value>) -> Result<Box<dyn Codec>> {
 }
 #[async_trait::async_trait]
 impl<S: Sorting> Codec for Json<S> {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         if S::SORTED {
             "sorted-json"
         } else {

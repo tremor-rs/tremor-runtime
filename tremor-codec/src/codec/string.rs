@@ -25,7 +25,7 @@ pub struct String {}
 
 #[async_trait::async_trait]
 impl Codec for String {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "string"
     }
 

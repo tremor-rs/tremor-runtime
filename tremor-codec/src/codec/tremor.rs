@@ -139,7 +139,9 @@ impl Tremor {
             total += read;
             //ALLOW: `read` is the data we've already read so we know they exist
             data = unsafe { data.get_unchecked(read..) };
-            o.insert_nocheck(Cow::from(k), v);
+            unsafe {
+                o.insert_nocheck(Cow::from(k), v);
+            }
         }
         Ok((v, 1 + total))
     }
@@ -189,6 +191,10 @@ impl Tremor {
             StaticNode::Bool(true) => w.write_u8(Self::BOOL_TRUE)?,
             StaticNode::Bool(false) => w.write_u8(Self::BOOL_FALSE)?,
             StaticNode::Null => w.write_u8(Self::NULL)?,
+            #[cfg(feature = "128bit")]
+            StaticNode::I128(n) => w.write_i128::<E>(*n)?,
+            #[cfg(feature = "128bit")]
+            StaticNode::U128(n) => w.write_u128::<E>(*n)?,
         }
         Ok(())
     }
@@ -246,7 +252,7 @@ impl Tremor {
 
 #[async_trait::async_trait]
 impl Codec for Tremor {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "tremor"
     }
 

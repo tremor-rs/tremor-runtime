@@ -21,7 +21,7 @@ pub struct Null {}
 
 #[async_trait::async_trait]
 impl Codec for Null {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "null"
     }
 
