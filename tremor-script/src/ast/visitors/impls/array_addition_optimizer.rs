@@ -20,13 +20,13 @@ use tremor_value::Value;
 /// Optimizes array addition
 pub struct ArrayAdditionOptimizer {}
 
-impl<'script> DeployWalker<'script> for ArrayAdditionOptimizer {}
-impl<'script> QueryWalker<'script> for ArrayAdditionOptimizer {}
-impl<'script> ExprWalker<'script> for ArrayAdditionOptimizer {}
-impl<'script> ImutExprWalker<'script> for ArrayAdditionOptimizer {}
-impl<'script> DeployVisitor<'script> for ArrayAdditionOptimizer {}
-impl<'script> QueryVisitor<'script> for ArrayAdditionOptimizer {}
-impl<'script> ExprVisitor<'script> for ArrayAdditionOptimizer {}
+impl DeployWalker<'_> for ArrayAdditionOptimizer {}
+impl QueryWalker<'_> for ArrayAdditionOptimizer {}
+impl ExprWalker<'_> for ArrayAdditionOptimizer {}
+impl ImutExprWalker<'_> for ArrayAdditionOptimizer {}
+impl DeployVisitor<'_> for ArrayAdditionOptimizer {}
+impl QueryVisitor<'_> for ArrayAdditionOptimizer {}
+impl ExprVisitor<'_> for ArrayAdditionOptimizer {}
 
 impl<'script> ImutExprVisitor<'script> for ArrayAdditionOptimizer {
     fn leave_expr(&mut self, e: &mut ImutExpr<'script>) -> crate::Result<()> {

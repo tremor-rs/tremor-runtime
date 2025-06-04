@@ -43,13 +43,13 @@ pub struct Deploy<'script> {
     mid: Box<NodeMeta>,
 }
 
-impl<'script> BaseExpr for Deploy<'script> {
+impl BaseExpr for Deploy<'_> {
     fn meta(&self) -> &crate::NodeMeta {
         self.mid.meta()
     }
 }
 
-impl<'script> Deploy<'script> {
+impl Deploy<'_> {
     /// Provides a `GraphViz` dot file representation of the deployment graph
     #[must_use]
     #[allow(clippy::unused_self)]
@@ -71,7 +71,7 @@ pub enum DeployStmt<'script> {
     DeployFlowStmt(Box<DeployFlow<'script>>),
 }
 
-impl<'script> BaseRef for DeployStmt<'script> {
+impl BaseRef for DeployStmt<'_> {
     /// Returns the user provided `fqn` of this statement
     #[must_use]
     fn fqn(&self) -> String {
@@ -85,7 +85,7 @@ impl<'script> BaseRef for DeployStmt<'script> {
 }
 
 // #[cfg_attr(coverage, no_coverage)] // this is a simple passthrough
-impl<'script> BaseExpr for DeployStmt<'script> {
+impl BaseExpr for DeployStmt<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             DeployStmt::PipelineDefinition(s) => s.meta(),
@@ -114,7 +114,7 @@ pub struct ConnectorDefinition<'script> {
 }
 impl_expr!(ConnectorDefinition);
 
-impl<'script> ConnectorDefinition<'script> {
+impl ConnectorDefinition<'_> {
     // check with definition of `Connector` in tremor-runtime/src/config.rs
     /// param name for connector type
     pub const CODEC: &'static str = "codec";

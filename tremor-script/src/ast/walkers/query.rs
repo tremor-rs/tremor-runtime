@@ -71,13 +71,13 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         ImutExprWalker::walk_expr(self, &mut select.target)?;
         if let Some(w) = select.maybe_where.as_mut() {
             ImutExprWalker::walk_expr(self, w)?;
-        };
+        }
         if let Some(h) = select.maybe_having.as_mut() {
             ImutExprWalker::walk_expr(self, h)?;
-        };
+        }
         if let Some(g) = select.maybe_group_by.as_mut() {
             self.walk_group_by(g)?;
-        };
+        }
 
         for w in &mut select.windows {
             self.walk_window_name(w)?;

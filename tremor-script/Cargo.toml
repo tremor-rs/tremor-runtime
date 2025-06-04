@@ -64,7 +64,7 @@ lalrpop = "0.22"
 chrono-tz = "0.10"
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.6"
 float-cmp = "0.10"
 pretty_assertions = "1"
 proptest = "1"

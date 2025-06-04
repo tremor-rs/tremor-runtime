@@ -28,7 +28,7 @@ use super::{
 };
 use crate::{
     arena::{self, Arena},
-    errors::{already_defined_err, Error, Result},
+    errors::{already_defined_err, Error, ParserError, Result},
     impl_expr,
     lexer::{Lexer, Span},
     path::ModulePath,
@@ -68,7 +68,7 @@ pub enum ModuleStmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Script(ScriptDefinitionRaw<'script>),
 }
-impl<'script> BaseExpr for ModuleStmtRaw<'script> {
+impl BaseExpr for ModuleStmtRaw<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             ModuleStmtRaw::Flow(e) => e.meta(),
@@ -123,7 +123,7 @@ pub struct Content<'script> {
     pub functions: NamedEnteties<FnDefn<'script>>,
 }
 
-impl<'script> Debug for Content<'script> {
+impl Debug for Content<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ModuleContent")
             .field("connectors", &self.connectors.keys())
@@ -277,12 +277,15 @@ impl Module {
                 ModuleStmtRaw::Use(UseRaw { modules, mid: meta }) => {
                     for (module, alias) in modules {
                         match Manager::load_(&module, ids, precached) {
-                            Err(Error::CyclicUse { uses, .. }) => {
-                                return Err(Error::CyclicUse {
-                                    expr: meta.range,
-                                    inner: meta.range,
-                                    uses,
-                                });
+                            Err(Error::Parser(parser_err)) => {
+                                if let ParserError::CyclicUse { uses, .. } = *parser_err {
+                                    return Err(ParserError::CyclicUse {
+                                        expr: meta.range,
+                                        inner: meta.range,
+                                        uses,
+                                    }
+                                    .into());
+                                }
                             }
                             Err(e) => return Err(e),
                             Ok(mod_idx) => {
@@ -485,22 +488,6 @@ impl Manager {
         MODULES.write()?.path.add(path);
         Ok(())
     }
-    #[cfg(feature = "arena-delete")]
-    pub(crate) fn delete_arena_index(idx: arena::Index) -> Result<()> {
-        MODULES.write()?.delete_arena_index_(idx);
-        Ok(())
-    }
-    #[cfg(feature = "arena-delete")]
-    fn delete_arena_index_(&mut self, idx: arena::Index) {
-        self.modules.retain(|m| {
-            if m.arena_idx == idx {
-                eprintln!("[MODMANAGER] Deleting module {:?}", m.paths);
-                false
-            } else {
-                true
-            }
-        });
-    }
 
     /// shows modules
     #[must_use]
@@ -553,14 +540,14 @@ impl Manager {
 
             let path = &m.path;
 
-            let p = path
-                .resolve_id(node_id)
-                .ok_or_else(|| Error::ModuleNotFound {
-                    range: node_id.extent().expand_lines(2),
-                    loc: node_id.extent(),
+            let p = path.resolve_id(node_id).ok_or_else(|| {
+                Error::from(ParserError::ModuleNotFound {
+                    expr: node_id.extent().expand_lines(2),
+                    inner: node_id.extent(),
                     resolved_relative_file_path: node_id.fqn(),
                     expected: path.mounts.clone(),
-                })?;
+                })
+            })?;
 
             drop(m);
 
@@ -568,11 +555,12 @@ impl Manager {
         };
         let id = Id::from(src.as_bytes());
         if ids.iter().any(|(other, _)| &id == other) {
-            return Err(Error::CyclicUse {
+            return Err(ParserError::CyclicUse {
                 expr: Span::yolo(),
                 inner: Span::yolo(),
                 uses: ids.iter().map(|v| &v.1).cloned().collect(),
-            });
+            }
+            .into());
         }
         ids.push((id.clone(), path.to_string_lossy().to_string()));
 

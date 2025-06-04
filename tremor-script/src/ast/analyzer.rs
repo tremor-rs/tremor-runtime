@@ -50,7 +50,7 @@ impl<'script, Ex: Expression + 'script> Costly for PredicateClause<'script, Ex> 
     }
 }
 
-impl<'script> Costly for Pattern<'script> {
+impl Costly for Pattern<'_> {
     fn cost(&self) -> u64 {
         match self {
             Pattern::DoNotCare => Cost::FREE,
@@ -64,7 +64,7 @@ impl<'script> Costly for Pattern<'script> {
     }
 }
 
-impl<'script> Costly for PredicatePattern<'script> {
+impl Costly for PredicatePattern<'_> {
     fn cost(&self) -> u64 {
         match self {
             PredicatePattern::FieldPresent { .. } | PredicatePattern::FieldAbsent { .. } => {
@@ -83,13 +83,13 @@ impl<'script> Costly for PredicatePattern<'script> {
     }
 }
 
-impl<'script> Costly for RecordPattern<'script> {
+impl Costly for RecordPattern<'_> {
     fn cost(&self) -> u64 {
         self.fields.iter().map(|f| f.cost() + Cost::AVERAGE).sum()
     }
 }
 
-impl<'script> Costly for ArrayPredicatePattern<'script> {
+impl Costly for ArrayPredicatePattern<'_> {
     fn cost(&self) -> u64 {
         match self {
             ArrayPredicatePattern::Ignore => 1,
@@ -105,19 +105,19 @@ impl<'script> Costly for ArrayPredicatePattern<'script> {
 // We don't know how many elements will be there in the final array but a conservative approximation
 //  is that if there aer `n` different patterns the array it is looking at will have at least `n`
 // elements.
-impl<'script> Costly for ArrayPattern<'script> {
+impl Costly for ArrayPattern<'_> {
     fn cost(&self) -> u64 {
         let s: u64 = self.exprs.iter().map(Costly::cost).sum();
         s * (self.exprs.len() as u64)
     }
 }
 
-impl<'script> Costly for AssignPattern<'script> {
+impl Costly for AssignPattern<'_> {
     fn cost(&self) -> u64 {
         self.pattern.cost()
     }
 }
-impl<'script> Costly for TuplePattern<'script> {
+impl Costly for TuplePattern<'_> {
     fn cost(&self) -> u64 {
         self.exprs.iter().map(Costly::cost).sum()
     }

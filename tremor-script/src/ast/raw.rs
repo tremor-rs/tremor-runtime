@@ -20,6 +20,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::ast::optimizer::Optimizer;
 use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
+use crate::errors::{FunctionError, ParserError};
 use crate::{
     ast::{
         base_expr, query, upable::Upable, ArrayPattern, ArrayPredicatePattern, AssignPattern,
@@ -31,7 +32,7 @@ use crate::{
         Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
         UnaryOpKind,
     },
-    errors::{err_generic, error_generic, error_missing_effector, Error, Result},
+    errors::{err_generic, error_generic, error_missing_effector, Result},
     extractor::Extractor,
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
     prelude::*,
@@ -291,13 +292,13 @@ impl<'script> IdentRaw<'script> {
     }
 }
 
-impl<'script> std::fmt::Display for IdentRaw<'script> {
+impl std::fmt::Display for IdentRaw<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.id.fmt(f)
     }
 }
 
-impl<'script, 'str> PartialEq<&'str str> for IdentRaw<'script> {
+impl<'str> PartialEq<&'str str> for IdentRaw<'_> {
     fn eq(&self, other: &&'str str) -> bool {
         self.id == *other
     }
@@ -585,10 +586,11 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
             ExprRaw::Comprehension(c) => Expr::Comprehension(Box::new(c.up(helper)?)),
             ExprRaw::Drop { mid } => {
                 if !helper.can_emit {
-                    return Err(Error::InvalidDrop {
+                    return Err(ParserError::InvalidDrop {
                         expr: mid.range.expand_lines(2),
                         inner: mid.range,
-                    });
+                    }
+                    .into());
                 }
                 Expr::Drop { mid }
             }
@@ -611,7 +613,7 @@ pub struct FnDefnRaw<'script> {
 }
 impl_expr!(FnDefnRaw);
 
-impl<'script> FnDefnRaw<'script> {
+impl FnDefnRaw<'_> {
     pub(crate) fn doc(&self) -> FnDoc {
         FnDoc {
             name: self.name.to_string(),
@@ -694,7 +696,7 @@ pub struct MatchFnDefnRaw<'script> {
 }
 impl_expr!(MatchFnDefnRaw);
 
-impl<'script> MatchFnDefnRaw<'script> {
+impl MatchFnDefnRaw<'_> {
     pub(crate) fn doc(&self) -> FnDoc {
         FnDoc {
             name: self.name.to_string(),
@@ -931,11 +933,12 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
         let was_leaf = helper.possible_leaf;
         helper.possible_leaf = false;
         if !was_leaf {
-            return Err(Error::InvalidRecur {
+            return Err(ParserError::InvalidRecur {
                 expr: self.extent().expand_lines(2),
                 inner: self.extent(),
-            });
-        };
+            }
+            .into());
+        }
         let argc = helper.fn_argc;
         let arglen = self.exprs.len();
         if (helper.is_open && argc < arglen) || (!helper.is_open && argc != arglen) {
@@ -966,10 +969,11 @@ impl<'script> Upable<'script> for EmitExprRaw<'script> {
     type Target = EmitExpr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         if !helper.can_emit {
-            return Err(Error::InvalidEmit {
+            return Err(ParserError::InvalidEmit {
                 expr: self.extent().expand_lines(2),
                 inner: self.extent(),
-            });
+            }
+            .into());
         }
         Ok(EmitExpr {
             mid: self.mid,
@@ -1021,7 +1025,7 @@ where
             helper.end_shadow_var();
             if let Some(expr) = exprs.last_mut() {
                 expr.replace_last_shadow_use(*idx);
-            };
+            }
         }
 
         let span = self.mid.range;
@@ -1331,7 +1335,7 @@ where
         if let Some(expr) = exprs.last_mut() {
             expr.replace_last_shadow_use(key_idx);
             expr.replace_last_shadow_use(val_idx);
-        };
+        }
 
         // unregister them again
         helper.end_shadow_var();
@@ -1762,12 +1766,13 @@ impl<'script> Upable<'script> for SegmentElementRaw<'script> {
                     } else {
                         let expected = vec![ValueType::I64, ValueType::String];
                         let o = r.expand_lines(2);
-                        Err(Error::TypeConflict {
+                        Err(ParserError::TypeConflict {
                             expr: o,
                             inner: r,
                             got: other.value_type(),
                             expected,
-                        })
+                        }
+                        .into())
                     }
                 }
             },
@@ -1807,7 +1812,7 @@ impl<'script> From<IdentRaw<'script>> for SegmentRaw<'script> {
     }
 }
 
-impl<'script> SegmentRaw<'script> {
+impl SegmentRaw<'_> {
     pub fn from_usize(id: usize, mid: Box<NodeMeta>) -> Self {
         SegmentRaw::Element(Box::new(SegmentElementRaw {
             mid: mid.clone(),
@@ -2118,7 +2123,7 @@ where
 
     if !seen_default {
         helper.warn_with_scope(mid.range, &NO_DFLT, warning::Class::Behaviour);
-    };
+    }
 }
 
 impl<'script, Ex> Upable<'script> for MatchRaw<'script, Ex>
@@ -2311,13 +2316,14 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                     args,
                 })
             } else {
-                Err(Error::MissingFunction {
+                Err(FunctionError::MissingFunction {
                     expr: outer,
                     inner,
                     m: node_id.module,
                     f: node_id.id,
                     suggestion: None,
-                })
+                }
+                .into())
             }
         }
     }
@@ -2358,11 +2364,12 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
     type Target = InvokeAggr;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         if helper.is_in_aggr {
-            return Err(Error::AggrInAggr {
+            return Err(FunctionError::AggrInAggr {
                 inner: self.extent(),
                 expr: self.extent().expand_lines(2),
-            });
-        };
+            }
+            .into());
+        }
         helper.is_in_aggr = true;
         let invocable = helper
             .aggr_reg
@@ -2370,14 +2377,15 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             .map_err(|e| e.into_err(&self, &self, Some(helper.reg)))?
             .clone();
         if !invocable.valid_arity(self.args.len()) {
-            return Err(Error::BadArity {
+            return Err(FunctionError::BadArity {
                 inner: self.extent(),
                 expr: self.extent().expand_lines(2),
                 m: self.module.clone(),
                 f: self.fun.clone(),
                 a: invocable.arity(),
                 calling_a: self.args.len(),
-            });
+            }
+            .into());
         }
         if let Some((class, warning)) = invocable.warning() {
             helper.warn_with_scope(self.extent(), &warning, class);
@@ -2424,13 +2432,14 @@ impl<'script> Upable<'script> for TestExprRaw {
                 extractor: ex,
                 mid: self.mid,
             }),
-            Err(e) => Err(Error::InvalidExtractor {
+            Err(e) => Err(ParserError::InvalidExtractor {
                 expr: self.extent().expand_lines(2),
                 inner: self.extent(),
                 name: self.id,
                 pattern: self.test,
                 error: e.msg,
-            }),
+            }
+            .into()),
         }
     }
 }

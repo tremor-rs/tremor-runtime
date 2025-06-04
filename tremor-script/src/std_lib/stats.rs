@@ -169,7 +169,7 @@ impl TremorAggrFn for Min {
             |v| {
                 if self.0.is_none() || Some(v) < self.0 {
                     self.0 = Some(v);
-                };
+                }
                 Ok(())
             },
         )
@@ -213,7 +213,7 @@ impl TremorAggrFn for Max {
             |v| {
                 if self.0.is_none() || Some(v) > self.0 {
                     self.0 = Some(v);
-                };
+                }
                 Ok(())
             },
         )
@@ -477,7 +477,7 @@ impl TremorAggrFn for Dds {
             if !self.percentiles_set {
                 self.percentiles.clone_from(&other.percentiles);
                 self.percentiles_set = true;
-            };
+            }
 
             match (&mut self.sketch, &other.sketch) {
                 (Some(sketch), Some(other)) => {
@@ -636,7 +636,7 @@ impl TremorAggrFn for Hdr {
             if !self.percentiles_set {
                 self.percentiles.clone_from(&other.percentiles);
                 self.percentiles_set = true;
-            };
+            }
             self.high_bound = max(self.high_bound, other.high_bound);
             match (&mut self.histo, &other.histo) {
                 (Some(mine), Some(other)) => {

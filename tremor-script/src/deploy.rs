@@ -43,16 +43,20 @@ impl BaseExpr for Deploy {
     }
 }
 
-impl<'run, 'event, 'script> Deploy
-where
-    'script: 'event,
-    'event: 'run,
-{
+impl Deploy {
     /// Removes a deploy from the arena, freeing the memory and marking it valid for reause
     /// this function generally should not ever be used. It is a special case for the language
     /// server where we know that we really only parse the script to check for errors and
     /// warnings.
-    /// That's also why it's behind a feature falg
+    /// That's also why it's behind a feature flag
+    ///
+    /// # Errors
+    ///
+    /// if the arena could not be locked for writing
+    ///
+    /// # Safety
+    ///
+    /// This is not safe, don't use it unless you have to.
     #[cfg(feature = "arena-delete")]
     pub unsafe fn consume_and_free(self) -> Result<()> {
         let Deploy { aid, deploy, .. } = self;

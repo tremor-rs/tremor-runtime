@@ -112,7 +112,7 @@ impl Arena {
                 version: e.version,
             };
             #[cfg(feature = "arena-delete")]
-            eprintln!("[ARENA] Reclaimed arena index {}", idx);
+            eprintln!("[ARENA] Reclaimed arena index {idx}");
             idx
         } else {
             let idx = self.sources.len();
@@ -122,7 +122,7 @@ impl Arena {
             });
             let idx = Index { idx, version: 0 };
             #[cfg(feature = "arena-delete")]
-            eprintln!("[ARENA] Added arena index {}", idx);
+            eprintln!("[ARENA] Added arena index {idx}");
             idx
         }
     }
@@ -173,7 +173,15 @@ impl Arena {
     /// this function generally should not ever be used. It is a special case for the language
     /// server where we know that we really only parse the script to check for errors and
     /// warnings.
-    /// That's also why it's behind a feature falg
+    /// That's also why it's behind a feature flag
+    ///
+    /// # Errors
+    ///
+    /// when the arena cannot be locked for writing
+    ///
+    /// # Safety
+    ///
+    /// This is not safe, don't use it. You have been warned!
     #[cfg(feature = "arena-delete")]
     pub unsafe fn delte_index_this_is_really_unsafe_dont_use_it(id: Index) -> Result<()> {
         let mut a = ARENA.write()?;

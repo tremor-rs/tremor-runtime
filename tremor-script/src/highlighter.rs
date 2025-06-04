@@ -404,7 +404,7 @@ pub trait Highlighter {
                                 self.write_line_prefix(line_prefix, line, emit_linenos)?;
                                 writeln!(self.get_writer())?;
                             }
-                        };
+                        }
 
                         self.ensure_newline()?;
                         self.write_callout(callout, level, start_column, len)?;

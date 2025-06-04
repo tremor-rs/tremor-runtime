@@ -16,7 +16,7 @@ pub use crate::prelude::ValueType;
 use crate::{
     arena,
     ast::{self, BooleanBinOpKind},
-    errors, lexer,
+    lexer,
     pos::{self, Span},
     prelude::*,
 };
@@ -50,6 +50,9 @@ pub enum Error {
     /// Value
     #[error(transparent)]
     ValueError(#[from] tremor_value::Error),
+    /// Regex error
+    #[error(transparent)]
+    Regex(#[from] regex::Error),
     /// when parsing an int fails
     #[error(transparent)]
     ParseIntError(#[from] num::ParseIntError),
@@ -82,483 +85,37 @@ pub enum Error {
     // TODO: such an error should not exist one might argue
     #[error("{0}")]
     String(String),
-    /*
-     * ParserError
-     */
-    /// An unrecognized token
-    #[error("Found the token `{token}` but expected {}", choices(.expected))]
-    UnrecognizedToken {
-        location: Box<ErrorLocation>,
-        token: String,
-        expected: Vec<String>,
-    },
-    /// An unexpected extra token
-    #[error("Found an extra token: `{token}` that does not belong here")]
-    ExtraToken {
-        range: Span,
-        loc: Span,
-        token: String,
-    },
-    /// invalid token
-    #[error("Invalid token")]
-    InvalidToken { range: Span, loc: Span },
-    /// invalid preprocessor
-    #[error("Found the preprocessor directive `{directive}` but expected {}", choices(&["#!config"]))]
-    InvalidPP {
-        range: Span,
-        loc: Span,
-        directive: String,
-    },
-    /***
-     * Generic
-     */
-    #[error("{msg}")]
-    Generic {
+    /// Parser Errors
+    #[error(transparent)]
+    Parser(#[from] Box<ParserError>),
+    /// Lexer Errors
+    #[error(transparent)]
+    Lexer(#[from] Box<LexerError>),
+    /// Runtime Errors
+    #[error(transparent)]
+    Runtime(#[from] Box<RuntimeError>),
+    /// Function related Errors
+    #[error(transparent)]
+    Function(#[from] Box<FunctionError>),
+    /// tremor-query / pipeline related Errors
+    #[error(transparent)]
+    Query(#[from] Box<QueryError>),
+    /// Deploy / Troy related Errors
+    #[error(transparent)]
+    Deploy(#[from] Box<DeployError>),
+    /// Oopsie Doopsie! Unrecoverable Error that should not happen
+    #[error("Something went wrong and we're not sure what it was: {msg}")]
+    Oops {
+        /// Location of the oopsie
         expr: Span,
-        inner: Span,
+        /// Error id of the oopsie
+        id: u64,
+        /// Human readable message
         msg: String,
     },
-
-    #[error("Cyclic dependency detected: {}", .uses.join(" -> "))]
-    CyclicUse {
-        expr: Span,
-        inner: Span,
-        uses: Vec<String>,
-    },
-    #[error("Type error: Expected {expected}, found {found}")]
-    TypeError {
-        expr: Option<Span>,
-        inner: Option<Span>,
-        expected: ValueType,
-        found: ValueType,
-    },
-    #[error("No expressions were found in the script")]
-    EmptyScript,
-    #[error("The expression isn't constant and can't be evaluated at compile time")]
-    NotConstant { expr: Span, inner: Span },
-    #[error("Conflicting types, got {} but expected {}", t2s(*.got), choices(&.expected.iter().map(|v| t2s(*v).to_string()).collect::<Vec<String>>()))]
-    TypeConflict {
-        expr: Span,
-        inner: Span,
-        got: ValueType,
-        expected: Vec<ValueType>,
-    },
-    #[error("Something went wrong and we're not sure what it was: {msg}")]
-    Oops { expr: Span, id: u64, msg: String },
+    /// Something unspecified was not found *shrug*
     #[error("Something wasn't found, aka NoneError.")]
     NotFound,
-    /*
-     * Functions
-     */
-    #[error("Bad arity for function {m}::{f}/{a:?} but was called with {calling_a} arguments")]
-    BadArity {
-        expr: Span,
-        inner: Span,
-        m: String,
-        f: String,
-        a: RangeInclusive<usize>,
-        calling_a: usize,
-    },
-    #[error("Call to undefined module {m}")]
-    MissingModule {
-        outer: Span,
-        inner: Span,
-        m: String,
-        suggestion: Option<(usize, String)>,
-    },
-    #[error("Call to undefined function {}::{f}", .m.join("::"))]
-    MissingFunction {
-        expr: Span,
-        inner: Span,
-        m: Vec<String>,
-        f: String,
-        suggestion: Option<(usize, String)>,
-    },
-    #[error("Aggregates can not be called inside of aggregates")]
-    AggrInAggr { expr: Span, inner: Span },
-    #[error("Bad type passed to function {m}::{f}/{a}")]
-    BadType {
-        expr: Span,
-        inner: Span,
-        m: String,
-        f: String,
-        a: usize,
-    },
-    #[error("Runtime error in function {m}::{f}/{a}: {c}")]
-    RuntimeError {
-        expr: Span,
-        inner: Span,
-        m: String,
-        f: String,
-        a: usize,
-        c: String,
-    },
-    #[error("Can not recur from this location")]
-    InvalidRecur { expr: Span, inner: Span },
-    #[error("Recursion limit reached")]
-    RecursionLimit { expr: Span, inner: Span },
-    /*
-     * Lexer, Preprocessor and Parser
-     */
-    #[error("It looks like you forgot to terminate an extractor with a closing '|'")]
-    UnterminatedExtractor {
-        expr: Span,
-        inner: Span,
-        extractor: UnfinishedToken,
-    },
-    #[error("It looks like you forgot to terminate a string with a closing '\"'")]
-    UnterminatedStringLiteral {
-        expr: Span,
-        inner: Span,
-        string: UnfinishedToken,
-    },
-    #[error("It looks like you forgot to terminate a here doc with with a closing '\"\"\"'")]
-    UnterminatedHereDoc {
-        expr: Span,
-        inner: Span,
-        string: UnfinishedToken,
-    },
-    #[error("It looks like you have characters tailing the here doc opening, it needs to be followed by a newline")]
-    TailingHereDoc {
-        expr: Span,
-        inner: Span,
-        hd: UnfinishedToken,
-        ch: char,
-    },
-    #[error("It looks like you forgot to terminate a string interpolation with a closing '}}'")]
-    UnterminatedInterpolation {
-        expr: Span,
-        inner: Span,
-        string_with_interpolation: UnfinishedToken,
-    },
-    #[error("You have an interpolation without content.")]
-    EmptyInterpolation {
-        expr: Span,
-        inner: Span,
-        string_with_interpolation: UnfinishedToken,
-    },
-    #[error("It looks like you forgot to terminate an ident with a closing '`'")]
-    UnterminatedIdentLiteral {
-        expr: Span,
-        inner: Span,
-        ident: UnfinishedToken,
-    },
-    #[error("An unexpected character '{found}' was found")]
-    UnexpectedCharacter {
-        expr: Span,
-        inner: Span,
-        token: UnfinishedToken,
-        found: char,
-    },
-    #[error("An unexpected escape code '{found}' was found")]
-    UnexpectedEscapeCode {
-        expr: Span,
-        inner: Span,
-        token: UnfinishedToken,
-        found: char,
-    },
-    #[error("An invalid UTF8 escape sequence was found")]
-    InvalidUtf8Sequence {
-        expr: Span,
-        inner: Span,
-        token: UnfinishedToken,
-    },
-    #[error("An invalid hexadecimal")]
-    InvalidHexLiteral {
-        expr: Span,
-        inner: Span,
-        token: UnfinishedToken,
-    },
-    #[error("An invalid integer literal")]
-    InvalidIntLiteral {
-        expr: Span,
-        inner: Span,
-        token: UnfinishedToken,
-    },
-    #[error("An invalid float literal")]
-    InvalidFloatLiteral {
-        expr: Span,
-        inner: Span,
-        token: UnfinishedToken,
-    },
-    #[error("An unexpected end of stream was found")]
-    UnexpectedEndOfStream { loc: Span },
-    /*
-     * Preprocessor
-     */
-    #[error("Module `{}` not found or not readable error in module path: {}",
-                resolved_relative_file_path.trim(),
-                expected.iter().fold(String::new(), |mut output, x|
-                {
-                    // ALLOW: if we can't allocate it's worse, we'd have the same problem with format
-                    let _ = write!(output, "\n                         - {x}");
-                    output
-
-            }))]
-    ModuleNotFound {
-        range: Span,
-        loc: Span,
-        resolved_relative_file_path: String,
-        expected: Vec<String>,
-    },
-    /*
-     * Parser
-     */
-    #[error("Parser user error: {pos}")]
-    ParserError { pos: String },
-    /*
-     * Resolve / Assign path walking
-     */
-    #[error("Unknown local variable: `{name}`")]
-    UnknownLocal {
-        outer: Span,
-        inner: Span,
-        name: String,
-    },
-    #[error("Trying to access a non existing local key `{key}`")]
-    BadAccessInLocal {
-        expr: Span,
-        inner: Span,
-        key: String,
-        options: Vec<String>,
-    },
-    #[error("Trying to access a non existing global key `{key}`")]
-    BadAccessInGlobal {
-        expr: Span,
-        inner: Span,
-        key: String,
-        options: Vec<String>,
-    },
-    #[error("Trying to access a non existing event key `{key}`")]
-    BadAccessInEvent {
-        expr: Span,
-        inner: Span,
-        key: String,
-        options: Vec<String>,
-    },
-    #[error("Trying to access a non existing state key `{key}`")]
-    BadAccessInState {
-        expr: Span,
-        inner: Span,
-        key: String,
-        options: Vec<String>,
-    },
-    #[error("Bad array index, got `{idx}` but expected an index in the range 0:{len}")]
-    BadArrayIndex {
-        expr: Span,
-        inner: Span,
-        idx: Value<'static>,
-        len: usize,
-    },
-    #[error("A range's end cannot be smaller than its start, {start_idx}:{end_idx} is invalid")]
-    DecreasingRange {
-        expr: Span,
-        inner: Span,
-        start_idx: usize,
-        end_idx: usize,
-    },
-    #[error("Array index out of bounds, got {} but expected {}",
-                        if r.start == r.end {
-                            format!("index {}", r.start)
-                        } else {
-                            format!("index range {}:{}", r.start, r.end)
-                        },
-                        if r.start == r.end {
-                            format!("an index in the range 0:{len}")
-                        } else {
-                            format!("a subrange of 0:{len}")
-                        })]
-    ArrayOutOfRange {
-        expr: Span,
-        inner: Span,
-        r: RangeExclusive<usize>,
-        len: usize,
-    },
-    #[error("It is not supported to assign value into an array")]
-    AssignIntoArray { expr: Span, inner: Span },
-    #[error("You are trying to assign to a value that isn't valid")]
-    InvalidAssign { expr: Span, inner: Span },
-    #[error("Can't define a const here")]
-    InvalidConst { expr: Span, inner: Span },
-    #[error("Can't define a function here")]
-    InvalidFn { expr: Span, inner: Span },
-    #[error("Can't define the constant `{name}` twice")]
-    DoubleConst {
-        expr: Span,
-        inner: Span,
-        name: String,
-    },
-    #[error("Can't define the stream `{name}` twice")]
-    DoubleStream {
-        expr: Span,
-        inner: Span,
-        name: String,
-    },
-    #[error("Can't create the pipeline `{name}` twice")]
-    DoublePipelineCreate {
-        expr: Span,
-        inner: Span,
-        name: String,
-    },
-    #[error("Can't assign to a constant expression")]
-    AssignToConst { expr: Span, inner: Span },
-    /*
-     * Emit & Drop
-     */
-    #[error("Can not emit from this location")]
-    InvalidEmit { expr: Span, inner: Span },
-    #[error("Can not drop from this location")]
-    InvalidDrop { expr: Span, inner: Span },
-    #[error("The expression can be read as a binary expression, please put the value you want to emit in parentheses.")]
-    BinaryEmit { expr: Span, inner: Span },
-    #[error("The expression can be read as a binary expression, please put the value you want to drop in parentheses.")]
-    BinaryDrop { expr: Span, inner: Span },
-    /*
-     * Operators
-     */
-    #[error("The unary operation `{op}` is not defined for the type `{}`", t2s(*.val))]
-    InvalidUnary {
-        expr: Span,
-        inner: Span,
-        op: ast::UnaryOpKind,
-        val: ValueType,
-    },
-    #[error("The binary operation `{op}` is not defined for the type `{}` and `{}`", t2s(*.left), t2s(*.right))]
-    InvalidBinary {
-        expr: Span,
-        inner: Span,
-        op: ast::BinOpKind,
-        left: ValueType,
-        right: ValueType,
-    },
-    #[error("The binary operation `{op}` must have a non zero RHS")]
-    DivisionByZero {
-        expr: Span,
-        inner: Span,
-        op: ast::BinOpKind,
-    },
-    #[error("The binary operation `{op}` caused an over- or underflow")]
-    Overflow {
-        expr: Span,
-        inner: Span,
-        op: ast::BinOpKind,
-    },
-    #[error("The binary operation `{op}` is not defined for the type `{}` and `{}`", t2s(*.left), .right.map_or_else(|| "<not executed>", t2s))]
-    InvalidBinaryBoolean {
-        expr: Span,
-        inner: Span,
-        op: ast::BooleanBinOpKind,
-        left: ValueType,
-        right: Option<ValueType>,
-    },
-    #[error("RHS value is larger than or equal to the number of bits in LHS value")]
-    InvalidBitshift { expr: Span, inner: Span },
-    /*
-     * match
-     */
-    #[error("Invalid tilde predicate pattern: {error}")]
-    InvalidExtractor {
-        expr: Span,
-        inner: Span,
-        name: String,
-        pattern: String,
-        error: String,
-    },
-    #[error("A match expression executed but no clause matched")]
-    NoClauseHit { expr: Span },
-    #[error("The clause is missing a body")]
-    MissingEffectors { expr: Span, inner: Span },
-    /*
-     * Patch
-     */
-    #[error("The key that is supposed to be written to already exists: {key}")]
-    PatchKeyExists {
-        expr: Span,
-        inner: Span,
-        key: String,
-    },
-    #[error("The key that is supposed to be updated does not exists: {key}")]
-    UpdateKeyMissing {
-        expr: Span,
-        inner: Span,
-        key: String,
-    },
-    #[error("Merge can only be performed on keys that either do not exist or are records but the key '{key}' has the type {}", t2s(*.val))]
-    MergeTypeConflict {
-        expr: Span,
-        inner: Span,
-        key: String,
-        val: ValueType,
-    },
-    /*
-     * Query stream definitions
-     */
-    #[error("Stream used in `from` or `into` is not defined: {name}/{port}")]
-    QueryStreamNotDefined {
-        stmt: Span,
-        inner: Span,
-        name: String,
-        port: String,
-    },
-    #[error("Local variables are not allowed here")]
-    NoLocalsAllowed { stmt: Span, inner: Span },
-    #[error("Constants are not allowed here")]
-    NoConstsAllowed { stmt: Span, inner: Span },
-    #[error("References to `event` or `$` are not allowed in this context")]
-    NoEventReferencesAllowed { stmt: Span, inner: Span },
-    #[error("Failed to initialize window constant")]
-    CantSetWindowConst,
-    #[error("Failed to initialize group constant")]
-    CantSetGroupConst,
-    #[error("Failed to initialize args constant")]
-    CantSetArgsConst,
-    #[error("Name `{name}` is reserved for built-in nodes, please use another name.")]
-    QueryNodeReservedName { stmt: Span, name: String },
-    #[error("Name `{name}` is already in use for another node, please use another name.")]
-    QueryNodeDuplicateName { stmt: Span, name: String },
-    #[error("Query `{subq_name}` does not have port `{port_name}`")]
-    PipelineUnknownPort {
-        stmt: Span,
-        inner: Span,
-        subq_name: String,
-        port_name: String,
-    },
-    /*
-     * Troy statements
-     */
-    /// Deploy artefact not found
-    #[error("Artefact `{name}` is not defined or not found, the following are defined: {}", .options.join(", "))]
-    DeployArtefactNotDefined {
-        /// error location
-        location: Box<ErrorLocation>,
-        /// name of the references artefact
-        name: String,
-        /// options
-        options: Vec<String>,
-    },
-    // user provided with parameter that has no corresponding argument in the definition
-    #[error("`with` parameter \"{param_name}\" does not correspond to an argument in the target definition \"{definition_name}\"")]
-    WithParamNoArg {
-        stmt: Span,
-        inner: Span,
-        param_name: String,
-        definition_name: String,
-        available_args: Vec<String>,
-    },
-    #[error("Argument `{name}` is required, but no defaults are provided in the definition and no final values in the instance")]
-    DeployRequiredArgDoesNotResolve {
-        stmt: Span,
-        inner: Span,
-        name: String,
-    },
-    #[error("Invalid `with` parameter \"{param}\" in definition of {definition}.")]
-    InvalidDefinitionalWithParam {
-        stmt: Span,
-        inner: Span,
-        definition: String,
-        param: String,
-        available_params: &'static [&'static str],
-    },
 }
 
 impl From<Error> for std::io::Error {
@@ -616,17 +173,782 @@ impl PartialEq for Error {
     }
 }
 
-type ParserError<'screw_lalrpop> =
-    lalrpop_util::ParseError<pos::Location, lexer::Token<'screw_lalrpop>, errors::Error>;
-
 impl From<TryTypeError> for Error {
     fn from(e: TryTypeError) -> Self {
-        Error::TypeError {
+        Error::Parser(Box::new(ParserError::TypeError {
             expr: None,
             inner: None,
             expected: e.expected,
             found: e.got,
-        }
+        }))
+    }
+}
+
+/// Parser Errors
+#[derive(Debug, thiserror::Error)]
+pub enum ParserError {
+    /// Generic Parser Error
+    #[error("{msg}")]
+    Generic {
+        /// extended / context location of the error
+        expr: Span,
+        /// exact / narrow location of the error
+        inner: Span,
+        /// generic error message
+        msg: String,
+    },
+
+    /// cyclic use
+    #[error("Cyclic dependency detected: {}", .uses.join(" -> "))]
+    CyclicUse {
+        /// extended / context location of the error
+        expr: Span,
+        /// exact / narrow location of the error
+        inner: Span,
+        /// the available uses
+        uses: Vec<String>,
+    },
+    /// type error
+    #[error("Type error: Expected {expected}, found {found}")]
+    TypeError {
+        /// extended / context location of the error
+        expr: Option<Span>,
+        /// exact / narrow location of the error
+        inner: Option<Span>,
+        /// expected type
+        expected: ValueType,
+        /// found type
+        found: ValueType,
+    },
+    /// the given expression is not a constant
+    #[error("The expression isn't constant and can't be evaluated at compile time")]
+    NotConstant {
+        /// extended / context location of the error
+        expr: Span,
+        /// exact / narrow location of the error
+        inner: Span,
+    },
+    /// type conflict
+    #[error("Conflicting types, got {} but expected {}", t2s(*.got), choices(&.expected.iter().map(|v| t2s(*v).to_string()).collect::<Vec<String>>()))]
+    TypeConflict {
+        /// extended / context location of the error
+        expr: Span,
+        /// exact / narrow location of the error
+        inner: Span,
+        /// actual type
+        got: ValueType,
+        /// list of expected possible types
+        expected: Vec<ValueType>,
+    },
+    /// Invalid Recur usage
+    #[error("Can not recur from this location")]
+    InvalidRecur {
+        /// extended / context location of the error
+        expr: Span,
+        /// extended / context location of the error
+        inner: Span,
+    },
+    /// module not found
+    #[error("Module `{}` not found or not readable error in module path: {}",
+                resolved_relative_file_path.trim(),
+                expected.iter().fold(String::new(), |mut output, x|
+                {
+                    // ALLOW: if we can't allocate it's worse, we'd have the same problem with format
+                    let _ = write!(output, "\n                         - {x}");
+                    output
+
+            }))]
+    ModuleNotFound {
+        /// extended / context location of the error
+        expr: Span,
+
+        /// extended / context location of the error
+        inner: Span,
+        /// resolved file path - might not exist
+        resolved_relative_file_path: String,
+        /// expected
+        expected: Vec<String>,
+    },
+    /// invalid usage of emit
+    #[error("Can not emit from this location")]
+    InvalidEmit {
+        /// extended / context location of the error
+        expr: Span,
+        /// extended / context location of the error
+        inner: Span,
+    },
+    /// invalid usage of drop
+    #[error("Can not drop from this location")]
+    InvalidDrop {
+        /// extended / context location of the error
+        expr: Span,
+        /// extended / context location of the error
+        inner: Span,
+    },
+    /// invalid extractor
+    #[error("Invalid tilde predicate pattern: {error}")]
+    InvalidExtractor {
+        /// extended / context location of the error
+        expr: Span,
+        /// extended / context location of the error
+        inner: Span,
+        /// name
+        name: String,
+        /// pattern
+        pattern: String,
+        /// error
+        error: String,
+    },
+    /// effectors are missing
+    #[error("The clause is missing a body")]
+    MissingEffectors {
+        /// extended / context location of the error
+        expr: Span,
+        /// extended / context location of the error
+        inner: Span,
+    },
+}
+
+impl From<ParserError> for Error {
+    fn from(value: ParserError) -> Self {
+        Error::Parser(Box::new(value))
+    }
+}
+
+/// Lexer Errors
+#[derive(Debug, thiserror::Error)]
+pub enum LexerError {
+    /// An unrecognized token
+    #[error("Found the token `{token}` but expected {}", choices(.expected))]
+    UnrecognizedToken {
+        /// Error location
+        location: ErrorLocation,
+        /// found token
+        token: String,
+        /// possible tokens for the given location
+        expected: Vec<String>,
+    },
+    /// An unexpected extra token
+    #[error("Found an extra token: `{token}` that does not belong here")]
+    ExtraToken {
+        /// Error location
+        location: ErrorLocation,
+        /// extra token
+        token: String,
+    },
+    /// invalid token
+    #[error("Invalid token")]
+    InvalidToken {
+        /// Error location
+        location: ErrorLocation,
+    },
+    /// invalid preprocessor
+    #[error("Found the preprocessor directive `{directive}` but expected {}", choices(&["#!config"]))]
+    InvalidPP {
+        /// Error location
+        location: ErrorLocation,
+        /// invalid preprocessor directive
+        directive: String,
+    },
+    /// unerminated extractor
+    #[error("It looks like you forgot to terminate an extractor with a closing '|'")]
+    UnterminatedExtractor {
+        /// Error location
+        location: ErrorLocation,
+        /// unterminated extractor token
+        extractor: UnfinishedToken,
+    },
+    /// unterminated string
+    #[error("It looks like you forgot to terminate a string with a closing '\"'")]
+    UnterminatedStringLiteral {
+        /// Error location
+        location: ErrorLocation,
+        /// unterminated string token
+        string: UnfinishedToken,
+    },
+    /// unterminated heredoc
+    #[error("It looks like you forgot to terminate a here doc with with a closing '\"\"\"'")]
+    UnterminatedHereDoc {
+        /// Error location
+        location: ErrorLocation,
+        /// unterminated heredoc token
+        string: UnfinishedToken,
+    },
+    /// tailing heredoc
+    #[error("It looks like you have characters tailing the here doc opening, it needs to be followed by a newline")]
+    TailingHereDoc {
+        /// Error location
+        location: ErrorLocation,
+        /// unterminated heredoc token
+        hd: UnfinishedToken,
+        /// some character
+        ch: char,
+    },
+    /// unterminated interpolation
+    #[error("It looks like you forgot to terminate a string interpolation with a closing '}}'")]
+    UnterminatedInterpolation {
+        /// Error location
+        location: ErrorLocation,
+        /// interpolation token
+        string_with_interpolation: UnfinishedToken,
+    },
+    /// empty interpolation
+    #[error("You have an interpolation without content.")]
+    EmptyInterpolation {
+        /// Error location
+        location: ErrorLocation,
+        /// token
+        string_with_interpolation: UnfinishedToken,
+    },
+    /// unterminated ident
+    #[error("It looks like you forgot to terminate an ident with a closing '`'")]
+    UnterminatedIdentLiteral {
+        /// Error location
+        location: ErrorLocation,
+        /// unterminated ident
+        ident: UnfinishedToken,
+    },
+    /// unexpected character
+    #[error("An unexpected character '{found}' was found")]
+    UnexpectedCharacter {
+        /// Error location
+        location: ErrorLocation,
+        /// token with bad character
+        token: UnfinishedToken,
+        /// unexpected character
+        found: char,
+    },
+    /// invalid escape code
+    #[error("An unexpected escape code '{found}' was found")]
+    UnexpectedEscapeCode {
+        /// Error location
+        location: ErrorLocation,
+        /// token
+        token: UnfinishedToken,
+        /// unexpected escape code
+        found: char,
+    },
+    /// invalid utf8
+    #[error("An invalid UTF8 escape sequence was found")]
+    InvalidUtf8Sequence {
+        /// Error location
+        location: ErrorLocation,
+        /// invalid utf8 token
+        token: UnfinishedToken,
+    },
+    /// invalid hex int
+    #[error("An invalid hexadecimal")]
+    InvalidHexLiteral {
+        /// Error location
+        location: ErrorLocation,
+        /// invalid hex token
+        token: UnfinishedToken,
+    },
+    /// invalid literal int
+    #[error("An invalid integer literal")]
+    InvalidIntLiteral {
+        /// Error location
+        location: ErrorLocation,
+        /// invalid int token
+        token: UnfinishedToken,
+    },
+    /// invalid literal float
+    #[error("An invalid float literal")]
+    InvalidFloatLiteral {
+        /// Error location
+        location: ErrorLocation,
+        /// invalid float token
+        token: UnfinishedToken,
+    },
+    /// EOS
+    #[error("An unexpected end of stream was found")]
+    UnexpectedEndOfStream {
+        /// Error location
+        location: ErrorLocation,
+    },
+
+    /// Unspecified lexer Error
+    #[error("Lexer error: {pos}")]
+    Lexer {
+        /// human readable position
+        pos: String,
+    },
+}
+
+impl From<LexerError> for Error {
+    fn from(value: LexerError) -> Self {
+        Error::Lexer(Box::new(value))
+    }
+}
+
+/// Error related to function definition and usage
+#[derive(Debug, thiserror::Error)]
+pub enum FunctionError {
+    /// Bad arity
+    #[error("Bad arity for function {m}::{f}/{a:?} but was called with {calling_a} arguments")]
+    BadArity {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// module
+        m: String,
+        /// function
+        f: String,
+        /// definition arity
+        a: RangeInclusive<usize>,
+        /// arity of the call-site
+        calling_a: usize,
+    },
+    /// module missing/undefined
+    #[error("Call to undefined module {m}")]
+    MissingModule {
+        /// wider context location of the error
+        outer: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// module
+        m: String,
+        /// suggested module names
+        suggestion: Option<(usize, String)>,
+    },
+    /// function missing/undefined
+    #[error("Call to undefined function {}::{f}", .m.join("::"))]
+    MissingFunction {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// module
+        m: Vec<String>,
+        /// function
+        f: String,
+        /// suggested function names
+        suggestion: Option<(usize, String)>,
+    },
+    /// aggregate used inside aggregate
+    #[error("Aggregates can not be called inside of aggregates")]
+    AggrInAggr {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+    },
+    /// bad argument type
+    #[error("Bad type passed to function {m}::{f}/{a}")]
+    BadType {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// module
+        m: String,
+        /// function
+        f: String,
+        /// arity
+        a: usize,
+    },
+}
+
+impl From<FunctionError> for Error {
+    fn from(value: FunctionError) -> Self {
+        Error::Function(Box::new(value))
+    }
+}
+
+/// Errors raised from the tremor-script interpreter
+#[derive(Debug, thiserror::Error)]
+pub enum RuntimeError {
+    /// runtime error during function execution
+    #[error("Runtime error in function {m}::{f}/{a}: {c}")]
+    RuntimeError {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// module
+        m: String,
+        /// function
+        f: String,
+        /// arity
+        a: usize,
+        /// error
+        c: String,
+    },
+    /// recursion limit reached
+    #[error("Recursion limit reached")]
+    RecursionLimit {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+    },
+    /// unknown local variable/binding
+    #[error("Unknown local variable: `{name}`")]
+    UnknownLocal {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// name
+        name: String,
+    },
+    /// bad access into a local variable
+    #[error("Trying to access a non existing local key `{key}`")]
+    BadAccessInLocal {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// access key
+        key: String,
+        /// possible existing keys
+        options: Vec<String>,
+    },
+    /// bad access into a global variable
+    #[error("Trying to access a non existing global key `{key}`")]
+    BadAccessInGlobal {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// access key
+        key: String,
+        /// possibly existing keys
+        options: Vec<String>,
+    },
+    /// bad access into event
+    #[error("Trying to access a non existing event key `{key}`")]
+    BadAccessInEvent {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// access key
+        key: String,
+        /// possible existing keys
+        options: Vec<String>,
+    },
+    #[error("Trying to access a non existing state key `{key}`")]
+    /// bad access into state
+    BadAccessInState {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// access key
+        key: String,
+        /// possible existing keys
+        options: Vec<String>,
+    },
+    /// bad array index
+    #[error("Bad array index, got `{idx}` but expected an index in the range 0:{len}")]
+    BadArrayIndex {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// array index
+        idx: Value<'static>,
+        /// actual array length
+        len: usize,
+    },
+    /// decreasing range
+    #[error("A range's end cannot be smaller than its start, {start_idx}:{end_idx} is invalid")]
+    DecreasingRange {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// range start index
+        start_idx: usize,
+        /// range end index
+        end_idx: usize,
+    },
+    /// assigning a value into an array
+    #[error("It is not supported to assign value into an array")]
+    AssignIntoArray {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+    },
+    /// cannot assign to this value
+    #[error("You are trying to assign to a value that isn't valid")]
+    InvalidAssign {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+    },
+    /// Cannot assign to a const (more than once upon definition)
+    #[error("Can't assign to a constant expression")]
+    AssignToConst {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+    },
+    /// invalid unary operation
+    #[error("The unary operation `{op}` is not defined for the type `{}`", t2s(*.val))]
+    InvalidUnary {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// operator
+        op: ast::UnaryOpKind,
+        /// value type
+        val: ValueType,
+    },
+    /// invalid binary operator
+    #[error("The binary operation `{op}` is not defined for the type `{}` and `{}`", t2s(*.left), t2s(*.right))]
+    InvalidBinary {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// operator
+        op: ast::BinOpKind,
+        /// lhs value type
+        left: ValueType,
+        /// rhs value type
+        right: ValueType,
+    },
+    /// division by zero
+    #[error("The binary operation `{op}` must have a non zero RHS")]
+    DivisionByZero {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// operator
+        op: ast::BinOpKind,
+    },
+    /// integer overflow or underflow
+    #[error("The binary operation `{op}` caused an over- or underflow")]
+    Overflow {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// operator
+        op: ast::BinOpKind,
+    },
+    /// invalid binary operator
+    #[error("The binary operation `{op}` is not defined for the type `{}` and `{}`", t2s(*.left), .right.map_or_else(|| "<not executed>", t2s))]
+    InvalidBinaryBoolean {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// operator
+        op: ast::BooleanBinOpKind,
+        /// lhs type
+        left: ValueType,
+        /// rhs type
+        right: Option<ValueType>,
+    },
+    /// invalid bitshift
+    #[error("RHS value is larger than or equal to the number of bits in LHS value")]
+    InvalidBitshift {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+    },
+    /// no match clause was executed
+    #[error("A match expression executed but no clause matched")]
+    NoClauseHit {
+        /// wider context location of the error
+        expr: Span,
+    },
+    /// key used in patch already exists
+    #[error("The key that is supposed to be written to already exists: {key}")]
+    PatchKeyExists {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// key to patch
+        key: String,
+    },
+    #[error("The key that is supposed to be updated does not exists: {key}")]
+    /// key to update is missing
+    UpdateKeyMissing {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// missing key
+        key: String,
+    },
+    /// type conflict in merge
+    #[error("Merge can only be performed on keys that either do not exist or are records but the key '{key}' has the type {}", t2s(*.val))]
+    MergeTypeConflict {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// key to be merged
+        key: String,
+        /// type
+        val: ValueType,
+    },
+    /// Array index out of bounds
+    #[error("Array index out of bounds, got {} but expected {}",
+        if r.start == r.end {
+            format!("index {}", r.start)
+        } else {
+            format!("index range {}:{}", r.start, r.end)
+        },
+        if r.start == r.end {
+            format!("an index in the range 0:{len}")
+        } else {
+            format!("a subrange of 0:{len}")
+        })]
+    ArrayOutOfRange {
+        /// wider context location of the error
+        expr: Span,
+        /// more specific location of the error
+        inner: Span,
+        /// array index-range
+        r: RangeExclusive<usize>,
+        /// actual length of the array
+        len: usize,
+    },
+}
+
+impl From<RuntimeError> for Error {
+    fn from(value: RuntimeError) -> Self {
+        Error::Runtime(Box::new(value))
+    }
+}
+
+/// Tremor-query / pipeline definition errors
+#[derive(Debug, thiserror::Error)]
+pub enum QueryError {
+    /// Queyr stream not defined
+    #[error("Stream used in `from` or `into` is not defined: {name}/{port}")]
+    QueryStreamNotDefined {
+        /// error location
+        location: ErrorLocation,
+        /// name of the stream
+        name: String,
+        /// port of the stream
+        port: String,
+    },
+    /// no locals allowerd here
+    #[error("Local variables are not allowed here")]
+    NoLocalsAllowed {
+        /// error location
+        location: ErrorLocation,
+    },
+    /// no consts allowed here
+    #[error("Constants are not allowed here")]
+    NoConstsAllowed {
+        /// error location
+        location: ErrorLocation,
+    },
+    /// No references to `event` allowed here
+    #[error("References to `event` or `$` are not allowed in this context")]
+    NoEventReferencesAllowed {
+        /// error location
+        location: ErrorLocation,
+    },
+    /// failed to initialize window constant
+    #[error("Failed to initialize window constant")]
+    CantSetWindowConst,
+    /// failed to initialize group constant
+    #[error("Failed to initialize group constant")]
+    CantSetGroupConst,
+    /// failed to initialize args constant
+    #[error("Failed to initialize args constant")]
+    CantSetArgsConst,
+    /// given name is reserved
+    #[error("Name `{name}` is reserved for built-in nodes, please use another name.")]
+    QueryNodeReservedName {
+        /// error location
+        location: ErrorLocation,
+        /// reserved name
+        name: String,
+    },
+    /// Name is already in use
+    #[error("Name `{name}` is already in use for another node, please use another name.")]
+    QueryNodeDuplicateName {
+        /// error location
+        location: ErrorLocation,
+        /// duplicate name
+        name: String,
+    },
+    /// pipeline port is not known / defined
+    #[error("Query `{subq_name}` does not have port `{port_name}`")]
+    PipelineUnknownPort {
+        /// error location
+        location: ErrorLocation,
+        /// subquery name
+        subq_name: String,
+        /// port name
+        port_name: String,
+    },
+    /// stream already defined
+    #[error("Can't define the stream `{name}` twice")]
+    DoubleStream {
+        /// error location
+        location: ErrorLocation,
+        /// already defined name
+        name: String,
+    },
+}
+
+impl From<QueryError> for Error {
+    fn from(value: QueryError) -> Self {
+        Error::Query(Box::new(value))
+    }
+}
+
+/// Troy / tremor-deploy errors
+#[derive(Debug, thiserror::Error)]
+pub enum DeployError {
+    /// Deploy artefact not found
+    #[error("Artefact `{name}` is not defined or not found, the following are defined: {}", .options.join(", "))]
+    DeployArtefactNotDefined {
+        /// error location
+        location: ErrorLocation,
+        /// name of the references artefact
+        name: String,
+        /// options
+        options: Vec<String>,
+    },
+    /// user provided with parameter that has no corresponding argument in the definition
+    #[error("`with` parameter \"{param_name}\" does not correspond to an argument in the target definition \"{definition_name}\"")]
+    WithParamNoArg {
+        /// error location
+        location: ErrorLocation,
+        /// param name
+        param_name: String,
+        /// param definition name
+        definition_name: String,
+        /// available arguments
+        available_args: Vec<String>,
+    },
+    /// with param invalid
+    #[error("Invalid `with` parameter \"{param}\" in definition of {definition}.")]
+    InvalidDefinitionalWithParam {
+        /// error location
+        location: ErrorLocation,
+        /// defined param
+        definition: String,
+        /// provided param
+        param: String,
+        /// available arguments
+        available_params: &'static [&'static str],
+    },
+}
+
+impl From<DeployError> for Error {
+    fn from(value: DeployError) -> Self {
+        Error::Deploy(Box::new(value))
     }
 }
 
@@ -646,16 +968,20 @@ where
 {
     type Output = Self;
     fn add_span(self, outer: &O, inner: &I) -> Self {
-        match self {
-            Error::TypeError {
-                expected, found, ..
-            } => Error::TypeError {
-                expr: Some(outer.extent()),
-                inner: Some(inner.extent()),
-                expected,
-                found,
-            },
-            _ => self,
+        if let Error::Parser(parser_error) = &self {
+            match **parser_error {
+                ParserError::TypeError {
+                    expected, found, ..
+                } => Error::Parser(Box::new(ParserError::TypeError {
+                    expr: Some(outer.extent()),
+                    inner: Some(inner.extent()),
+                    expected,
+                    found,
+                })),
+                _ => self,
+            }
+        } else {
+            self
         }
     }
 }
@@ -671,17 +997,20 @@ where
     }
 }
 
-impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
-    fn from(error: ParserError<'screw_lalrpop>) -> Self {
+type LalrPopError<'screw_lalrpop> =
+    lalrpop_util::ParseError<pos::Location, lexer::Token<'screw_lalrpop>, Error>;
+
+impl<'screw_lalrpop> From<LalrPopError<'screw_lalrpop>> for Error {
+    fn from(error: LalrPopError<'screw_lalrpop>) -> Self {
         match error {
             LalrpopError::UnrecognizedToken {
                 token: (start, token, end),
                 expected,
-            } => Error::UnrecognizedToken {
-                location: Box::new(ErrorLocation {
+            } => Error::Lexer(Box::new(LexerError::UnrecognizedToken {
+                location: ErrorLocation {
                     expr: (start.move_up_lines(2), end.move_down_lines(2)).into(),
                     inner: (start, end).into(),
-                }),
+                },
                 token: token.to_string(),
                 expected: expected
                     .into_iter()
@@ -696,25 +1025,29 @@ impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
                         ),
                     })
                     .collect(),
-            },
+            })),
             LalrpopError::ExtraToken {
                 token: (start, token, end),
-            } => Error::ExtraToken {
-                range: (start.move_up_lines(2), end.move_down_lines(2)).into(),
-                loc: (start, end).into(),
+            } => Error::Lexer(Box::new(LexerError::ExtraToken {
+                location: ErrorLocation {
+                    expr: (start.move_up_lines(2), end.move_down_lines(2)).into(),
+                    inner: (start, end).into(),
+                },
                 token: token.to_string(),
-            },
+            })),
             LalrpopError::InvalidToken { location: start } => {
                 let mut end = start;
                 end.shift(' ');
-                Error::InvalidToken {
-                    range: (start.move_up_lines(2), end.move_down_lines(2)).into(),
-                    loc: (start, end).into(),
-                }
+                Error::Lexer(Box::new(LexerError::InvalidToken {
+                    location: ErrorLocation {
+                        expr: (start.move_up_lines(2), end.move_down_lines(2)).into(),
+                        inner: (start, end).into(),
+                    },
+                }))
             }
-            _ => Error::ParserError {
+            _ => Error::Lexer(Box::new(LexerError::Lexer {
                 pos: format!("{error:?}"),
-            },
+            })),
         }
     }
 }
@@ -726,6 +1059,24 @@ pub struct ErrorLocation {
     pub expr: Span,
     /// More narrow location
     pub inner: Span,
+}
+
+impl From<&Span> for ErrorLocation {
+    fn from(value: &Span) -> Self {
+        Self {
+            expr: value.expand_lines(2),
+            inner: *value,
+        }
+    }
+}
+
+impl From<Span> for ErrorLocation {
+    fn from(value: Span) -> Self {
+        Self {
+            expr: value.expand_lines(2),
+            inner: value,
+        }
+    }
 }
 
 // We need this since we call objects records
@@ -781,320 +1132,249 @@ impl UnfinishedToken {
 }
 
 impl Error {
-    pub(crate) fn aid(&self) -> arena::Index {
-        self.expr().map(|loc| loc.expr.aid()).unwrap_or_default()
-    }
+    //pub(crate) fn aid(&self) -> arena::Index {
+    //    self.expr().map(|loc| loc.expr.aid()).unwrap_or_default()
+    //}
     #[allow(clippy::too_many_lines)]
     pub(crate) fn expr(&self) -> Option<ErrorLocation> {
         match self {
-            Self::NoClauseHit { expr: outer }
-            | Self::UnexpectedEndOfStream { loc: outer }
-            | Self::Oops { expr: outer, .. }
-            | Self::QueryNodeDuplicateName { stmt: outer, .. }
-            | Self::QueryNodeReservedName { stmt: outer, .. } => Some(ErrorLocation {
-                expr: outer.expand_lines(2),
-                inner: *outer,
-            }),
-            Self::AggrInAggr { expr: outer, inner }
-            | Self::ArrayOutOfRange {
-                expr: outer, inner, ..
-            }
-            | Self::AssignIntoArray { expr: outer, inner }
-            | Self::AssignToConst { expr: outer, inner }
-            | Self::BadAccessInEvent {
-                expr: outer, inner, ..
-            }
-            | Self::BadAccessInGlobal {
-                expr: outer, inner, ..
-            }
-            | Self::BadAccessInLocal {
-                expr: outer, inner, ..
-            }
-            | Self::BadAccessInState {
-                expr: outer, inner, ..
-            }
-            | Self::BadArity {
-                expr: outer, inner, ..
-            }
-            | Self::BadArrayIndex {
-                expr: outer, inner, ..
-            }
-            | Self::BadType {
-                expr: outer, inner, ..
-            }
-            | Self::BinaryDrop { expr: outer, inner }
-            | Self::BinaryEmit { expr: outer, inner }
-            | Self::DecreasingRange {
-                expr: outer, inner, ..
-            }
-            | Self::WithParamNoArg {
-                stmt: outer, inner, ..
-            }
-            | Self::DeployRequiredArgDoesNotResolve {
-                stmt: outer, inner, ..
-            }
-            | Self::DoubleConst {
-                expr: outer, inner, ..
-            }
-            | Self::DoublePipelineCreate {
-                expr: outer, inner, ..
-            }
-            | Self::DoubleStream {
-                expr: outer, inner, ..
-            }
-            | Self::EmptyInterpolation {
-                expr: outer, inner, ..
-            }
-            | Self::ExtraToken {
-                range: outer,
-                loc: inner,
-                ..
-            }
-            | Self::Generic {
-                expr: outer, inner, ..
-            }
-            | Self::InvalidAssign { expr: outer, inner }
-            | Self::InvalidBinary {
-                expr: outer, inner, ..
-            }
-            | Self::DivisionByZero {
-                expr: outer, inner, ..
-            }
-            | Self::Overflow {
-                expr: outer, inner, ..
-            }
-            | Self::InvalidBinaryBoolean {
-                expr: outer, inner, ..
-            }
-            | Self::InvalidBitshift { expr: outer, inner }
-            | Self::InvalidConst { expr: outer, inner }
-            | Self::InvalidDrop { expr: outer, inner }
-            | Self::InvalidEmit { expr: outer, inner }
-            | Self::InvalidExtractor {
-                expr: outer, inner, ..
-            }
-            | Self::InvalidFloatLiteral {
-                expr: outer, inner, ..
-            }
-            | Self::InvalidFn { expr: outer, inner }
-            | Self::InvalidHexLiteral {
-                expr: outer, inner, ..
-            }
-            | Self::InvalidIntLiteral {
-                expr: outer, inner, ..
-            }
-            | Self::InvalidPP {
-                range: outer,
-                loc: inner,
-                ..
-            }
-            | Self::InvalidRecur { expr: outer, inner }
-            | Self::InvalidToken {
-                range: outer,
-                loc: inner,
-            }
-            | Self::InvalidUnary {
-                expr: outer, inner, ..
-            }
-            | Self::InvalidUtf8Sequence {
-                expr: outer, inner, ..
-            }
-            | Self::MergeTypeConflict {
-                expr: outer, inner, ..
-            }
-            | Self::MissingEffectors { expr: outer, inner }
-            | Self::MissingFunction {
-                expr: outer, inner, ..
-            }
-            | Self::MissingModule { outer, inner, .. }
-            | Self::ModuleNotFound {
-                range: outer,
-                loc: inner,
-                ..
-            }
-            | Self::NoConstsAllowed { stmt: outer, inner }
-            | Self::NoEventReferencesAllowed { stmt: outer, inner }
-            | Self::NoLocalsAllowed { stmt: outer, inner }
-            | Self::NotConstant { expr: outer, inner }
-            | Self::PatchKeyExists {
-                expr: outer, inner, ..
-            }
-            | Self::PipelineUnknownPort {
-                stmt: outer, inner, ..
-            }
-            | Self::QueryStreamNotDefined {
-                stmt: outer, inner, ..
-            }
-            | Self::RecursionLimit { expr: outer, inner }
-            | Self::RuntimeError {
-                expr: outer, inner, ..
-            }
-            | Self::TailingHereDoc {
-                expr: outer, inner, ..
-            }
-            | Self::TypeConflict {
-                expr: outer, inner, ..
-            }
-            | Self::UnexpectedCharacter {
-                expr: outer, inner, ..
-            }
-            | Self::UnexpectedEscapeCode {
-                expr: outer, inner, ..
-            }
-            | Self::UnterminatedExtractor {
-                expr: outer, inner, ..
-            }
-            | Self::UnterminatedHereDoc {
-                expr: outer, inner, ..
-            }
-            | Self::UnterminatedIdentLiteral {
-                expr: outer, inner, ..
-            }
-            | Self::UnterminatedInterpolation {
-                expr: outer, inner, ..
-            }
-            | Self::UnterminatedStringLiteral {
-                expr: outer, inner, ..
-            }
-            | Self::UnknownLocal { outer, inner, .. }
-            | Self::CyclicUse {
-                expr: outer, inner, ..
-            }
-            | Self::InvalidDefinitionalWithParam {
-                stmt: outer, inner, ..
-            }
-            | Self::UpdateKeyMissing {
-                expr: outer, inner, ..
-            } => Some(ErrorLocation {
-                expr: *outer,
-                inner: *inner,
-            }),
-
-            Self::UnrecognizedToken { location, .. }
-            | Self::DeployArtefactNotDefined { location, .. } => Some(*location.clone()),
-
-            Self::TypeError {
-                expr: outer, inner, ..
-            } => outer
-                .zip(*inner)
-                .map(|(expr, inner)| ErrorLocation { expr, inner }),
-            // Special cases
-            Self::EmptyScript
-            | Self::AccessError(_)
-            | Self::CantSetArgsConst
-            | Self::CantSetGroupConst
-            | Self::CantSetWindowConst
-            | Self::CodecError(_)
-            | Self::Common(_)
-            | Self::Grok(_)
-            | Self::Io(_)
-            | Self::JsonError(_)
-            | Self::NotFound
-            | Self::ParseIntError(_)
-            | Self::ParserError { .. }
-            | Self::Url(_)
-            | Self::Poison(_)
-            | Self::NoObjectError(_)
-            | Self::Utf8Error(_)
-            | Self::FromUtf8Error(_)
-            | Self::InvalidHostname(_)
-            | Self::FileNotFound(_)
-            | Self::String(_)
-            | Self::ValueError(_) => None,
+            Self::Runtime(runtime_err) => match **runtime_err {
+                RuntimeError::NoClauseHit { expr } => Some(ErrorLocation::from(&expr)),
+                RuntimeError::RuntimeError { expr, inner, .. }
+                | RuntimeError::RecursionLimit { expr, inner }
+                | RuntimeError::UnknownLocal { expr, inner, .. }
+                | RuntimeError::BadAccessInLocal { expr, inner, .. }
+                | RuntimeError::BadAccessInGlobal { expr, inner, .. }
+                | RuntimeError::BadAccessInEvent { expr, inner, .. }
+                | RuntimeError::BadAccessInState { expr, inner, .. }
+                | RuntimeError::BadArrayIndex { expr, inner, .. }
+                | RuntimeError::DecreasingRange { expr, inner, .. }
+                | RuntimeError::AssignIntoArray { expr, inner }
+                | RuntimeError::InvalidAssign { expr, inner }
+                | RuntimeError::AssignToConst { expr, inner }
+                | RuntimeError::InvalidUnary { expr, inner, .. }
+                | RuntimeError::InvalidBinary { expr, inner, .. }
+                | RuntimeError::DivisionByZero { expr, inner, .. }
+                | RuntimeError::Overflow { expr, inner, .. }
+                | RuntimeError::InvalidBinaryBoolean { expr, inner, .. }
+                | RuntimeError::InvalidBitshift { expr, inner }
+                | RuntimeError::PatchKeyExists { expr, inner, .. }
+                | RuntimeError::UpdateKeyMissing { expr, inner, .. }
+                | RuntimeError::ArrayOutOfRange { expr, inner, .. }
+                | RuntimeError::MergeTypeConflict { expr, inner, .. } => {
+                    Some(ErrorLocation { expr, inner })
+                }
+            },
+            Self::Lexer(lexer_err) => match &**lexer_err {
+                LexerError::UnrecognizedToken { location, .. }
+                | LexerError::ExtraToken { location, .. }
+                | LexerError::InvalidToken { location }
+                | LexerError::InvalidPP { location, .. }
+                | LexerError::UnterminatedExtractor { location, .. }
+                | LexerError::UnterminatedStringLiteral { location, .. }
+                | LexerError::UnterminatedHereDoc { location, .. }
+                | LexerError::TailingHereDoc { location, .. }
+                | LexerError::UnterminatedInterpolation { location, .. }
+                | LexerError::EmptyInterpolation { location, .. }
+                | LexerError::UnterminatedIdentLiteral { location, .. }
+                | LexerError::UnexpectedCharacter { location, .. }
+                | LexerError::UnexpectedEscapeCode { location, .. }
+                | LexerError::InvalidUtf8Sequence { location, .. }
+                | LexerError::InvalidHexLiteral { location, .. }
+                | LexerError::InvalidIntLiteral { location, .. }
+                | LexerError::InvalidFloatLiteral { location, .. }
+                | LexerError::UnexpectedEndOfStream { location } => Some(location.clone()),
+                LexerError::Lexer { .. } => None,
+            },
+            Self::Oops { expr: outer, .. } => Some(ErrorLocation::from(outer)),
+            Self::Query(query_err) => match &**query_err {
+                QueryError::QueryStreamNotDefined { location, .. }
+                | QueryError::NoLocalsAllowed { location }
+                | QueryError::NoConstsAllowed { location }
+                | QueryError::NoEventReferencesAllowed { location }
+                | QueryError::QueryNodeReservedName { location, .. }
+                | QueryError::QueryNodeDuplicateName { location, .. }
+                | QueryError::DoubleStream { location, .. }
+                | QueryError::PipelineUnknownPort { location, .. } => Some(location.clone()),
+                QueryError::CantSetWindowConst
+                | QueryError::CantSetGroupConst
+                | QueryError::CantSetArgsConst => None,
+            },
+            Self::Function(function_err) => match **function_err {
+                FunctionError::BadArity { expr, inner, .. }
+                | FunctionError::MissingModule {
+                    outer: expr, inner, ..
+                }
+                | FunctionError::MissingFunction { expr, inner, .. }
+                | FunctionError::AggrInAggr { expr, inner }
+                | FunctionError::BadType { expr, inner, .. } => Some(ErrorLocation { expr, inner }),
+            },
+            Self::Parser(parser_err) => match **parser_err {
+                ParserError::Generic { expr, inner, .. }
+                | ParserError::CyclicUse { expr, inner, .. }
+                | ParserError::NotConstant { expr, inner }
+                | ParserError::TypeConflict { expr, inner, .. }
+                | ParserError::InvalidRecur { expr, inner }
+                | ParserError::ModuleNotFound { expr, inner, .. }
+                | ParserError::InvalidEmit { expr, inner }
+                | ParserError::InvalidDrop { expr, inner }
+                | ParserError::InvalidExtractor { expr, inner, .. }
+                | ParserError::MissingEffectors { expr, inner } => {
+                    Some(ErrorLocation { expr, inner })
+                }
+                ParserError::TypeError { expr, inner, .. } => expr
+                    .zip(inner)
+                    .map(|(expr, inner)| ErrorLocation { expr, inner }),
+            },
+            Self::Deploy(deploy_err) => match &**deploy_err {
+                DeployError::InvalidDefinitionalWithParam { location, .. }
+                | DeployError::WithParamNoArg { location, .. }
+                | DeployError::DeployArtefactNotDefined { location, .. } => Some(location.clone()),
+            },
+            Error::Url(_)
+            | Error::Poison(_)
+            | Error::Grok(_)
+            | Error::Regex(_)
+            | Error::Io(_)
+            | Error::JsonError(_)
+            | Error::ValueError(_)
+            | Error::ParseIntError(_)
+            | Error::Utf8Error(_)
+            | Error::FromUtf8Error(_)
+            | Error::NoObjectError(_)
+            | Error::AccessError(_)
+            | Error::CodecError(_)
+            | Error::Common(_)
+            | Error::InvalidHostname(_)
+            | Error::FileNotFound(_)
+            | Error::String(_)
+            | Error::NotFound => None,
         }
     }
+
     pub(crate) fn token(&self) -> Option<UnfinishedToken> {
         match self {
-            Self::UnterminatedExtractor {
-                extractor: token, ..
-            }
-            | Self::UnterminatedStringLiteral { string: token, .. }
-            | Self::UnterminatedInterpolation {
-                string_with_interpolation: token,
-                ..
-            }
-            | Self::EmptyInterpolation {
-                string_with_interpolation: token,
-                ..
-            }
-            | Self::UnterminatedIdentLiteral { ident: token, .. }
-            | Self::UnterminatedHereDoc { string: token, .. }
-            | Self::TailingHereDoc { hd: token, .. }
-            | Self::InvalidUtf8Sequence { token, .. }
-            | Self::UnexpectedCharacter { token, .. }
-            | Self::InvalidHexLiteral { token, .. }
-            | Self::InvalidIntLiteral { token, .. }
-            | Self::InvalidFloatLiteral { token, .. }
-            | Self::UnexpectedEscapeCode { token, .. } => Some(token.clone()),
+            Self::Lexer(lexer_err) => match &**lexer_err {
+                LexerError::UnterminatedExtractor {
+                    extractor: token, ..
+                }
+                | LexerError::UnterminatedStringLiteral { string: token, .. }
+                | LexerError::UnterminatedInterpolation {
+                    string_with_interpolation: token,
+                    ..
+                }
+                | LexerError::EmptyInterpolation {
+                    string_with_interpolation: token,
+                    ..
+                }
+                | LexerError::UnterminatedIdentLiteral { ident: token, .. }
+                | LexerError::UnterminatedHereDoc { string: token, .. }
+                | LexerError::TailingHereDoc { hd: token, .. }
+                | LexerError::InvalidUtf8Sequence { token, .. }
+                | LexerError::UnexpectedCharacter { token, .. }
+                | LexerError::InvalidHexLiteral { token, .. }
+                | LexerError::InvalidIntLiteral { token, .. }
+                | LexerError::InvalidFloatLiteral { token, .. }
+                | LexerError::UnexpectedEscapeCode { token, .. } => Some(token.clone()),
+                _ => None,
+            },
+
             _ => None,
         }
     }
 
     pub(crate) fn hint(&self) -> Option<String> {
         match self {
-            Self::UnrecognizedToken{location, token, ..} if token.is_empty() && location.inner.start().absolute() == location.expr.start().absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
-            Self::UnrecognizedToken{token, ..} if token == "##" => Some(format!("`{token}` is as doc comment, it needs to be followed by a statement, did you want to use `#` here?")),
-            Self::UnrecognizedToken{token, ..} if token == "default" || token == "case" => Some("You might have a trailing `;` in the prior statement".into()),
-            Self::UnrecognizedToken{token, expected, .. } if token == "\"" && expected.contains(&("`<ident>`".to_string())) => Some("Did you mean to quote an ident? If so use ` (a back tick) not \" (a quote).".into()),
-            Self::UnrecognizedToken{token, expected, ..} if !matches!(lexer::ident_to_token(token), lexer::Token::Ident(_, _)) && expected.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use '{token}' as an ident, consider quoting it as `{token}` to make it an identifier.")),
-            Self::UnrecognizedToken{token, expected, ..} if token == "-" && expected.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
-            Self::UnrecognizedToken{token, expected, ..} => {
-                match best_hint(token, expected, 3) {
-                    Some((_d, o)) if o == r#"`"`"# || o == r#"`"""`"#  => Some("Did you mean to use a string?".to_string()),
-                    Some((_d, o)) if o != r#"`"`"# && o != r#"`"""`"# => Some(format!("Did you mean to use {o}?")),
+            Self::Lexer(lexer_err) =>
+                match &**lexer_err {
+                    LexerError::UnrecognizedToken{location, token, ..} if token.is_empty() && location.inner.start().absolute() == location.expr.start().absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
+                    LexerError::UnrecognizedToken{token, ..} if token == "##" => Some(format!("`{token}` is as doc comment, it needs to be followed by a statement, did you want to use `#` here?")),
+                    LexerError::UnrecognizedToken{token, ..} if token == "default" || token == "case" => Some("You might have a trailing `;` in the prior statement".into()),
+                    LexerError::UnrecognizedToken{token, expected, .. } if token == "\"" && expected.contains(&("`<ident>`".to_string())) => Some("Did you mean to quote an ident? If so use ` (a back tick) not \" (a quote).".into()),
+                    LexerError::UnrecognizedToken{token, expected, ..} if !matches!(lexer::ident_to_token(token), lexer::Token::Ident(_, _)) && expected.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use '{token}' as an ident, consider quoting it as `{token}` to make it an identifier.")),
+                    LexerError::UnrecognizedToken{token, expected, ..} if token == "-" && expected.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
+                    LexerError::UnrecognizedToken{token, expected, ..} => {
+                        match best_hint(token, expected, 3) {
+                            Some((_d, o)) if o == r#"`"`"# || o == r#"`"""`"#  => Some("Did you mean to use a string?".to_string()),
+                            Some((_d, o)) if o != r#"`"`"# && o != r#"`"""`"# => Some(format!("Did you mean to use {o}?")),
+                            _ => None
+                        }
+                    }
+                    LexerError::UnterminatedInterpolation { .. } | LexerError::EmptyInterpolation { .. } => {
+                        Some("Did you mean to write a literal '#{'? Escape it as '\\#{'.".to_string())
+                    }
                     _ => None
-                }
-            }
-            Self::UnterminatedInterpolation {..} | Self::EmptyInterpolation {..} => {
-                Some("Did you mean to write a literal '#{'? Escape it as '\\#{'.".to_string())
-            }
-            Self::BadAccessInLocal { key, ..} if key == "nil" => {
-                Some("Did you mean null?".to_owned())
-            }
-
-            Self::BadAccessInLocal { key, options, .. } => {
-                let mut options = options.clone();
-                options.push("event".to_owned());
-                options.push("true".to_owned());
-                options.push("false".to_owned());
-                options.push("null".to_owned());
-                match best_hint(key, &options, 2) {
-                    Some((_d, o)) => Some(format!("Did you mean to use `{o}`?")),
-                    _ => None
-                }
-            }
-
-            Self::BadAccessInEvent { key, options, .. } | Self::BadAccessInGlobal { key, options, .. } => {
-                match best_hint(key, options, 2) {
-                    Some((_d, o)) => Some(format!("Did you mean to use `{o}`?")),
-                    _ => None
-                }
-            }
-            Self::TypeConflict { got: ValueType::F64, expected, .. } => match expected.as_slice() {
-                [ValueType::I64] => Some(
-                    "You can use math::trunc() and related functions to ensure numbers are integers."
-                        .to_owned(),
-                ),
-                _ => None
-            },
-            Self::MissingModule { m, ..} if m == "object" => Some("Did you mean to use the `record` module".into()),
-            Self::MissingModule { suggestion: Some((_, suggestion)), .. } | Self::MissingFunction { suggestion: Some((_, suggestion)), .. } => Some(format!("Did you mean `{suggestion}`?")),
-
-            Self::NoEventReferencesAllowed { .. } => Some("Here you operate in the whole window, not a single event. You need to wrap this reference in an aggregate function (e.g. aggr::win::last(...)) or use it in the group by clause of this query.".to_owned()),
-
-            Self::NoClauseHit { .. } => Some("Consider adding a `case _ => null` clause at the end of your match or validate full coverage beforehand.".into()),
+                },
             Self::Oops { id, .. } => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{id}")),
+            Self::Runtime(runtime_err) => {
+                match &**runtime_err {
+                    RuntimeError::BadAccessInLocal { key, ..} if key == "nil" => {
+                        Some("Did you mean null?".to_owned())
+                    }
 
-            Self::InvalidDefinitionalWithParam { available_params, .. } => if available_params.is_empty() {
-                Some(String::from("Definition does not allow any `with` parameters"))
-            } else {
-                Some(format!("Available parameters are: {}", available_params.join(", ")))
+                    RuntimeError::BadAccessInLocal { key, options, .. } => {
+                        let mut options = options.clone();
+                        options.push("event".to_owned());
+                        options.push("true".to_owned());
+                        options.push("false".to_owned());
+                        options.push("null".to_owned());
+                        match best_hint(key, &options, 2) {
+                            Some((_d, o)) => Some(format!("Did you mean to use `{o}`?")),
+                            _ => None
+                        }
+                    }
+
+                    RuntimeError::BadAccessInEvent { key, options, .. } | RuntimeError::BadAccessInGlobal { key, options, .. } => {
+                        match best_hint(key, options, 2) {
+                            Some((_d, o)) => Some(format!("Did you mean to use `{o}`?")),
+                            _ => None
+                        }
+                    }
+                    RuntimeError::NoClauseHit { .. } => Some("Consider adding a `case _ => null` clause at the end of your match or validate full coverage beforehand.".into()),
+                    _ => None
+                }
             },
-            Self::WithParamNoArg { definition_name, available_args, .. } => if available_args.is_empty() {
-                Some(format!("The definition of \"{definition_name}\" does not expose any args. Remove this `with`."))
-            } else {
-                Some(format!("Available args are: {}", available_args.join(", ")))
-            }
+            Self::Parser(parser_err) => {
+                match &**parser_err {
+                    ParserError::TypeConflict { got: ValueType::F64, expected, .. } => match expected.as_slice() {
+                        [ValueType::I64] => Some(
+                            "You can use math::trunc() and related functions to ensure numbers are integers."
+                                .to_owned(),
+                        ),
+                        _ => None
+                    },
+                    _ => None
+                }
+            },
+            Self::Function(function_err) => {
+                match &**function_err {
+                    FunctionError::MissingModule { m, ..} if m == "object" => Some("Did you mean to use the `record` module".into()),
+                    FunctionError::MissingModule { suggestion: Some((_, suggestion)), .. } | FunctionError::MissingFunction { suggestion: Some((_, suggestion)), .. } => Some(format!("Did you mean `{suggestion}`?")),
+                    _ => None
+                }
+            },
+            Self::Query(query_err) => {
+                match &**query_err {
+                    QueryError::NoEventReferencesAllowed { .. } => Some("Here you operate in the whole window, not a single event. You need to wrap this reference in an aggregate function (e.g. aggr::win::last(...)) or use it in the group by clause of this query.".to_owned()),
+                    _ => None
+                }
+            },
+            Self::Deploy(deploy_err) => {
+                match &**deploy_err {
+                    DeployError::InvalidDefinitionalWithParam { available_params, .. } => if available_params.is_empty() {
+                        Some(String::from("Definition does not allow any `with` parameters"))
+                    } else {
+                        Some(format!("Available parameters are: {}", available_params.join(", ")))
+                    },
+                    DeployError::WithParamNoArg { definition_name, available_args, .. } => if available_args.is_empty() {
+                        Some(format!("The definition of \"{definition_name}\" does not expose any args. Remove this `with`."))
+                    } else {
+                        Some(format!("Available args are: {}", available_args.join(", ")))
+                    },
+
+                DeployError::DeployArtefactNotDefined{ .. } => None
+                }
+            },
             _ => None,
         }
     }
@@ -1223,12 +1503,15 @@ where
     // Subqueries store unmangled `name` in `meta`
     // Use `name` from `meta` if it exists.
     let name = inner.meta().name().map_or(name, std::convert::Into::into);
-    Error::QueryStreamNotDefined {
-        stmt: stmt.extent(),
-        inner: inner.extent(),
+    QueryError::QueryStreamNotDefined {
+        location: ErrorLocation {
+            expr: stmt.extent(),
+            inner: inner.extent(),
+        },
         name,
         port,
     }
+    .into()
 }
 
 /// Creates a query stream duplicate name error
@@ -1238,25 +1521,14 @@ pub fn query_stream_duplicate_name_err<S: Ranged, I: BaseExpr + Ranged>(
     name: String,
 ) -> Error {
     let name = inner.meta().name().map_or(name, std::convert::Into::into);
-    Error::DoubleStream {
-        expr: stmt.extent(),
-        inner: inner.extent(),
+    QueryError::DoubleStream {
+        location: ErrorLocation {
+            expr: stmt.extent(),
+            inner: inner.extent(),
+        },
         name,
     }
-}
-
-/// Creates a pipeline stmt duplicate name error
-pub fn pipeline_stmt_duplicate_name_err<S: Ranged, I: BaseExpr + Ranged>(
-    stmt: &S,
-    inner: &I,
-    name: String,
-) -> Error {
-    let name = inner.meta().name().map_or(name, std::convert::Into::into);
-    Error::DoublePipelineCreate {
-        expr: stmt.extent(),
-        inner: inner.extent(),
-        name,
-    }
+    .into()
 }
 
 /// Creates a pipeline unknown port error
@@ -1270,30 +1542,35 @@ pub fn pipeline_unknown_port_err<S: Ranged, I: BaseExpr + Ranged>(
         .meta()
         .name()
         .map_or(subq_name, std::convert::Into::into);
-    Error::PipelineUnknownPort {
-        stmt: stmt.extent(),
-        inner: inner.extent(),
+    QueryError::PipelineUnknownPort {
+        location: ErrorLocation {
+            expr: stmt.extent(),
+            inner: inner.extent(),
+        },
         subq_name,
         port_name,
     }
+    .into()
 }
 
 /// Creates a query node reserved name error
 pub fn query_node_reserved_name_err<S: BaseExpr + Ranged>(stmt: &S, name: String) -> Error {
     let name = stmt.meta().name().map_or(name, std::convert::Into::into);
-    Error::QueryNodeReservedName {
-        stmt: stmt.extent(),
+    QueryError::QueryNodeReservedName {
+        location: ErrorLocation::from(&stmt.extent()),
         name,
     }
+    .into()
 }
 
 /// Creates a query node duplicate name error
 pub fn query_node_duplicate_name_err<S: BaseExpr + Ranged>(stmt: &S, name: String) -> Error {
     let name = stmt.meta().name().map_or(name, std::convert::Into::into);
-    Error::QueryNodeDuplicateName {
-        stmt: stmt.extent(),
+    QueryError::QueryNodeDuplicateName {
+        location: ErrorLocation::from(&stmt.extent()),
         name,
     }
+    .into()
 }
 
 /// Creates a guard not bool error
@@ -1328,11 +1605,12 @@ pub fn err_generic<T, O: Ranged, I: Ranged, S: ToString>(
 
 /// A generic Error
 pub fn error_generic<O: Ranged, I: Ranged, S: ToString>(outer: &O, inner: &I, error: &S) -> Error {
-    Error::Generic {
+    ParserError::Generic {
         expr: outer.extent(),
         inner: inner.extent(),
         msg: error.to_string(),
     }
+    .into()
 }
 
 pub(crate) fn err_invalid_fold<O: Ranged, I: Ranged, Op: Display, T>(
@@ -1349,13 +1627,14 @@ pub(crate) fn error_invalid_bool_op<O: Ranged, I: Ranged>(
     left: ValueType,
     right: Option<ValueType>,
 ) -> Error {
-    Error::InvalidBinaryBoolean {
+    RuntimeError::InvalidBinaryBoolean {
         expr: outer.extent(),
         inner: inner.extent(),
         op,
         left,
         right,
     }
+    .into()
 }
 pub(crate) fn error_type_conflict_mult<T, O: Ranged, I: Ranged>(
     outer: &O,
@@ -1372,29 +1651,36 @@ pub(crate) fn err_type_conflict_mult<O: Ranged, I: Ranged>(
     got: ValueType,
     expected: Vec<ValueType>,
 ) -> Error {
-    Error::TypeConflict {
+    ParserError::TypeConflict {
         expr: outer.extent(),
         inner: inner.extent(),
         got,
         expected,
     }
+    .into()
 }
 
 pub(crate) fn error_no_locals<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
-    Err(Error::NoLocalsAllowed {
-        stmt: outer.extent(),
-        inner: inner.extent(),
-    })
+    Err(QueryError::NoLocalsAllowed {
+        location: ErrorLocation {
+            expr: outer.extent(),
+            inner: inner.extent(),
+        },
+    }
+    .into())
 }
 
 pub(crate) fn error_event_ref_not_allowed<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
 ) -> Result<T> {
-    Err(Error::NoEventReferencesAllowed {
-        stmt: outer.extent(),
-        inner: inner.extent(),
-    })
+    Err(QueryError::NoEventReferencesAllowed {
+        location: ErrorLocation {
+            expr: outer.extent(),
+            inner: inner.extent(),
+        },
+    }
+    .into())
 }
 
 pub(crate) fn error_need_obj<T, O: Ranged, I: Ranged>(
@@ -1469,12 +1755,13 @@ pub(crate) fn err_invalid_unary<O: Ranged, I: Ranged>(
     op: ast::UnaryOpKind,
     val: &Value,
 ) -> Error {
-    Error::InvalidUnary {
+    RuntimeError::InvalidUnary {
         expr: outer.extent(),
         inner: inner.extent(),
         op,
         val: val.value_type(),
     }
+    .into()
 }
 
 pub(crate) fn error_invalid_binary<T, O: Ranged, I: Ranged>(
@@ -1484,48 +1771,53 @@ pub(crate) fn error_invalid_binary<T, O: Ranged, I: Ranged>(
     left: &Value,
     right: &Value,
 ) -> Result<T> {
-    Err(Error::InvalidBinary {
+    Err(RuntimeError::InvalidBinary {
         expr: outer.extent(),
         inner: inner.extent(),
         op,
         left: left.value_type(),
         right: right.value_type(),
-    })
+    }
+    .into())
 }
 pub(crate) fn error_division_by_zero<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     op: ast::BinOpKind,
 ) -> Result<T> {
-    Err(Error::DivisionByZero {
+    Err(RuntimeError::DivisionByZero {
         expr: outer.extent(),
         inner: inner.extent(),
         op,
-    })
+    }
+    .into())
 }
 pub(crate) fn error_overflow<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     op: ast::BinOpKind,
 ) -> Result<T> {
-    Err(Error::Overflow {
+    Err(RuntimeError::Overflow {
         expr: outer.extent(),
         inner: inner.extent(),
         op,
-    })
+    }
+    .into())
 }
 
 pub(crate) fn error_invalid_bitshift<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
-    Err(Error::InvalidBitshift {
+    Err(RuntimeError::InvalidBitshift {
         expr: outer.extent(),
         inner: inner.extent(),
-    })
+    }
+    .into())
 }
 
 pub(crate) fn error_no_clause_hit<T, O: Ranged>(outer: &O) -> Result<T> {
-    Err(Error::NoClauseHit {
+    Err(RuntimeError::NoClauseHit {
         expr: outer.extent(),
-    })
+    }
+    .into())
 }
 
 pub(crate) fn error_oops<T, O: Ranged, S: ToString + ?Sized>(
@@ -1553,11 +1845,12 @@ pub(crate) fn error_patch_key_exists<T, O: Ranged, I: Ranged>(
     inner: &I,
     key: String,
 ) -> Result<T> {
-    Err(Error::PatchKeyExists {
+    Err(RuntimeError::PatchKeyExists {
         expr: outer.extent(),
         inner: inner.extent(),
         key,
-    })
+    }
+    .into())
 }
 
 pub(crate) fn error_patch_update_key_missing<T, O: Ranged, I: Ranged>(
@@ -1565,18 +1858,20 @@ pub(crate) fn error_patch_update_key_missing<T, O: Ranged, I: Ranged>(
     inner: &I,
     key: String,
 ) -> Result<T> {
-    Err(Error::UpdateKeyMissing {
+    Err(RuntimeError::UpdateKeyMissing {
         expr: outer.extent(),
         inner: inner.extent(),
         key,
-    })
+    }
+    .into())
 }
 
 pub(crate) fn error_missing_effector<O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Error {
-    Error::MissingEffectors {
+    ParserError::MissingEffectors {
         expr: outer.extent(),
         inner: inner.extent(),
     }
+    .into()
 }
 pub(crate) fn error_patch_merge_type_conflict<T, O: Ranged, I: Ranged>(
     outer: &O,
@@ -1584,35 +1879,39 @@ pub(crate) fn error_patch_merge_type_conflict<T, O: Ranged, I: Ranged>(
     key: String,
     val: &Value,
 ) -> Result<T> {
-    Err(Error::MergeTypeConflict {
+    Err(RuntimeError::MergeTypeConflict {
         expr: outer.extent(),
         inner: inner.extent(),
         key,
         val: val.value_type(),
-    })
+    }
+    .into())
 }
 
 pub(crate) fn error_assign_array<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
-    Err(Error::AssignIntoArray {
+    Err(RuntimeError::AssignIntoArray {
         expr: outer.extent(),
         inner: inner.extent(),
-    })
+    }
+    .into())
 }
 pub(crate) fn error_invalid_assign_target<T, O: Ranged>(outer: &O) -> Result<T> {
     let inner: Span = outer.extent();
 
-    Err(Error::InvalidAssign {
+    Err(RuntimeError::InvalidAssign {
         expr: inner.expand_lines(2),
         inner,
-    })
+    }
+    .into())
 }
 pub(crate) fn error_assign_to_const<T, O: Ranged>(outer: &O) -> Result<T> {
     let inner: Span = outer.extent();
 
-    Err(Error::AssignToConst {
+    Err(RuntimeError::AssignToConst {
         expr: inner.expand_lines(2),
         inner,
-    })
+    }
+    .into())
 }
 pub(crate) fn error_array_out_of_bound<T, O: Ranged, I: Ranged>(
     outer: &O,
@@ -1631,12 +1930,13 @@ pub(crate) fn error_array_out_of_bound<T, O: Ranged, I: Ranged>(
         | ast::Path::State(_)
         | ast::Path::Reserved(_)
         | ast::Path::Local(_)
-        | ast::Path::Expr(_) => Error::ArrayOutOfRange {
+        | ast::Path::Expr(_) => RuntimeError::ArrayOutOfRange {
             expr,
             inner: inner.extent(),
             r,
             len,
-        },
+        }
+        .into(),
     })
 }
 
@@ -1655,12 +1955,13 @@ pub(crate) fn error_bad_array_index<T, O: Ranged, I: Ranged>(
         | ast::Path::Event(_)
         | ast::Path::Meta(_)
         | ast::Path::Local(_)
-        | ast::Path::Expr(_) => Error::BadArrayIndex {
+        | ast::Path::Expr(_) => RuntimeError::BadArrayIndex {
             expr,
             inner: inner.extent(),
             idx,
             len,
-        },
+        }
+        .into(),
     })
 }
 pub(crate) fn error_decreasing_range<T, O: Ranged, I: Ranged>(
@@ -1677,12 +1978,13 @@ pub(crate) fn error_decreasing_range<T, O: Ranged, I: Ranged>(
         | ast::Path::State(_)
         | ast::Path::Reserved(_)
         | ast::Path::Local(_)
-        | ast::Path::Expr(_) => Error::DecreasingRange {
+        | ast::Path::Expr(_) => RuntimeError::DecreasingRange {
             expr,
             inner: inner.extent(),
             start_idx,
             end_idx,
-        },
+        }
+        .into(),
     })
 }
 
@@ -1697,11 +1999,12 @@ pub(crate) fn error_bad_key<T, O: Ranged, I: Ranged>(
 }
 
 pub(crate) fn unknown_local<O: Ranged, I: BaseExpr>(outer: &O, inner: &I) -> Error {
-    Error::UnknownLocal {
-        outer: outer.extent(),
+    RuntimeError::UnknownLocal {
+        expr: outer.extent(),
         inner: inner.extent(),
         name: inner.name_dflt().to_string(),
     }
+    .into()
 }
 
 pub(crate) fn error_bad_key_err<O: Ranged, I: Ranged>(
@@ -1714,32 +2017,33 @@ pub(crate) fn error_bad_key_err<O: Ranged, I: Ranged>(
     let expr: Span = outer.extent();
     match path {
         ast::Path::Reserved(_) | ast::Path::Local(_) | ast::Path::Expr(_) => {
-            Error::BadAccessInLocal {
+            RuntimeError::BadAccessInLocal {
                 expr,
                 inner: inner.extent(),
                 key,
                 options,
             }
         }
-        ast::Path::Meta(_p) => Error::BadAccessInGlobal {
+        ast::Path::Meta(_p) => RuntimeError::BadAccessInGlobal {
             expr,
             inner: inner.extent(),
             key,
             options,
         },
-        ast::Path::Event(_p) => Error::BadAccessInEvent {
+        ast::Path::Event(_p) => RuntimeError::BadAccessInEvent {
             expr,
             inner: inner.extent(),
             key,
             options,
         },
-        ast::Path::State(_p) => Error::BadAccessInState {
+        ast::Path::State(_p) => RuntimeError::BadAccessInState {
             expr,
             inner: inner.extent(),
             key,
             options,
         },
     }
+    .into()
 }
 
 pub(crate) fn unexpected_character<O: Ranged, I: Ranged>(
@@ -1748,12 +2052,15 @@ pub(crate) fn unexpected_character<O: Ranged, I: Ranged>(
     tkn: UnfinishedToken,
     ch: char,
 ) -> Error {
-    Error::UnexpectedCharacter {
-        expr: outer.extent(),
-        inner: inner.extent(),
+    LexerError::UnexpectedCharacter {
+        location: ErrorLocation {
+            expr: outer.extent(),
+            inner: inner.extent(),
+        },
         token: tkn,
         found: ch,
     }
+    .into()
 }
 
 #[cfg(test)]
@@ -1766,14 +2073,20 @@ mod test {
             expected: ValueType::Object,
             got: ValueType::String,
         });
-        matches!(
-            r,
-            Error::TypeError {
-                expr: None,
-                inner: None,
-                expected: ValueType::Object,
-                found: ValueType::String
+        if let Error::Parser(parser_err) = r {
+            match *parser_err {
+                ParserError::TypeError {
+                    expr: None,
+                    inner: None,
+                    expected: ValueType::Object,
+                    found: ValueType::String,
+                } => {}
+                other => {
+                    panic!("Expected TypeError, got {other:?}");
+                }
             }
-        );
+        } else {
+            panic!("Expected TypeError, got {r:?}");
+        }
     }
 }

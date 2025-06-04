@@ -389,7 +389,7 @@ impl<'event> ValueAndMeta<'event> {
     }
 }
 
-impl<'event> Default for ValueAndMeta<'event> {
+impl Default for ValueAndMeta<'_> {
     fn default() -> Self {
         ValueAndMeta {
             v: Value::object(),

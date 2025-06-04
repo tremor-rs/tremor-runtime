@@ -57,7 +57,7 @@ impl TremorFn for StringFormat {
                     '\\' => if let Some((_, c)) = iter.next() {
                         if c != '{' && c != '}' {
                             out.push('\\');
-                        };
+                        }
                         out.push(c);
                     } else {
                         return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("bad escape sequence at {pos}")});
@@ -69,7 +69,7 @@ impl TremorFn for StringFormat {
                                 out.push_str(s);
                             } else {
                                 out.push_str(arg.encode().as_str());
-                            };
+                            }
                         } else {
                              return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the arguments passed to the format function are less than the `{{}}` specifiers in the format string. The placeholder at {pos} can not be filled")});
                         },

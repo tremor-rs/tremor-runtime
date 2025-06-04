@@ -93,7 +93,7 @@ impl<'script> QueryRaw<'script> {
                     }
                 }
                 _ => {}
-            };
+            }
             config.insert(k.to_string(), v);
         }
         if from.is_empty() {
@@ -229,7 +229,7 @@ pub struct PipelineDefinitionRaw<'script> {
 }
 impl_expr!(PipelineDefinitionRaw);
 
-impl<'script> PipelineDefinitionRaw<'script> {
+impl PipelineDefinitionRaw<'_> {
     const STREAM_PORT_CONFILCT: &'static str = "Streams cannot share names with from/into ports";
     fn dflt_in_ports<'ident>(&self) -> Vec<Ident<'ident>> {
         vec![Ident {
@@ -527,27 +527,27 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
 
         if helper.has_locals() {
             return error_no_locals(&self.mid.range, &target);
-        };
+        }
 
         let maybe_having = self.maybe_having.up(helper)?;
         if helper.has_locals() {
             if let Some(definitely) = maybe_having {
                 return error_no_locals(&self.mid.range, &definitely);
             }
-        };
+        }
 
         let maybe_where = self.maybe_where.up(helper)?;
         if helper.has_locals() {
             if let Some(definitely) = maybe_where {
                 return error_no_locals(&self.mid.range, &definitely);
             }
-        };
+        }
         let maybe_group_by = self.maybe_group_by.up(helper)?;
         if helper.has_locals() {
             if let Some(definitely) = maybe_group_by {
                 return error_no_locals(&self.mid.range, &definitely);
             }
-        };
+        }
 
         // check if target has references to event that are not inside an aggregate function.
         // if so, we need to clone the event and keep it around to evaluate those expressions
@@ -688,7 +688,7 @@ pub struct DefinitionalArgsRaw<'script> {
     pub(crate) mid: Box<NodeMeta>,
 }
 
-impl<'script> DefinitionalArgsRaw<'script> {
+impl DefinitionalArgsRaw<'_> {
     /// no args
     pub(crate) fn none(mid: Box<NodeMeta>) -> Self {
         Self {
@@ -715,7 +715,7 @@ pub struct DefinitionalArgsWithRaw<'script> {
     pub with: WithExprsRaw<'script>,
 }
 
-impl<'script> DefinitionalArgsWithRaw<'script> {
+impl DefinitionalArgsWithRaw<'_> {
     /// no args
     pub(crate) fn none(mid: Box<NodeMeta>) -> Self {
         Self {
@@ -746,7 +746,7 @@ pub struct CreationalWithRaw<'script> {
     pub with: WithExprsRaw<'script>,
 }
 
-impl<'script> CreationalWithRaw<'script> {
+impl CreationalWithRaw<'_> {
     /// empty with
     pub(crate) fn none(mid: Box<NodeMeta>) -> Self {
         Self {

@@ -36,7 +36,7 @@ pub fn load(registry: &mut Registry) {
             Ok(Value::from(_input.keys().map(|k| Value::from(k.to_string())).collect::<Vec<_>>()))
         }))
         .insert(tremor_const_fn! (record|values(_context, _input: Object) {
-            Ok(Value::from(_input.values().cloned().map(Value::from).collect::<Vec<_>>()))
+            Ok(Value::from(_input.values().cloned().collect::<Vec<_>>()))
 
         }))
         .insert(tremor_const_fn! (record|to_array(_context, _input: Object) {

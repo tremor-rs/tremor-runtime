@@ -53,7 +53,7 @@ pub enum Result<'result> {
     Err(Error),
 }
 
-impl<'result> From<bool> for Result<'result> {
+impl From<bool> for Result<'_> {
     fn from(b: bool) -> Self {
         if b {
             Result::MatchNull
@@ -149,6 +149,12 @@ impl fmt::Display for Error {
     }
 }
 
+impl<T: std::error::Error> From<T> for Error {
+    fn from(x: T) -> Self {
+        Self { msg: x.to_string() }
+    }
+}
+
 impl Extractor {
     pub fn cost(&self) -> u64 {
         match self {
@@ -193,7 +199,7 @@ impl Extractor {
     }
     /// This is affected only if we use == comparisons
     pub fn is_exclusive_to(&self, value: &Value) -> bool {
-        value.as_str().map_or(true, |s| {
+        value.as_str().is_none_or(|s| {
             match self {
                 // If the glob pattern does not match the string we compare to,
                 // we know that the two are exclusive
@@ -230,7 +236,7 @@ impl Extractor {
                 Extractor::Datetime {
                     format,
                     has_timezone,
-                } => crate::datetime::_parse(s, format, *has_timezone).is_err(),
+                } => crate::datetime::parse(s, format, *has_timezone).is_err(),
             }
         })
     }
@@ -318,12 +324,6 @@ fn is_prefix(rule_text: &str) -> bool {
 
 fn is_suffix(rule_text: &str) -> bool {
     Regex::new(r"^\*[^*?]+$").is_ok_and(|re| re.is_match(rule_text))
-}
-
-impl<T: std::error::Error> From<T> for Error {
-    fn from(x: T) -> Self {
-        Self { msg: x.to_string() }
-    }
 }
 
 impl PartialEq<Extractor> for Extractor {

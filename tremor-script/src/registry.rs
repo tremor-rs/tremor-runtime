@@ -17,7 +17,7 @@ pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
 use crate::{
     ast::{base_expr::Ranged, warning},
-    errors::{best_hint, Error, Result},
+    errors::{best_hint, Error, Result, RuntimeError},
     tremor_fn,
     utils::hostname as get_hostname,
     EventContext, Value,
@@ -272,33 +272,36 @@ impl FunctionError {
         let outer = outer.extent();
         let inner = inner.extent();
         match self {
-            Self::BadArity { mfa, calling_a } => Error::BadArity {
+            Self::BadArity { mfa, calling_a } => crate::errors::FunctionError::BadArity {
                 expr: outer,
                 inner,
                 m: mfa.m,
                 f: mfa.f,
                 a: mfa.a..=mfa.a,
                 calling_a,
-            },
-            Self::RuntimeError { mfa, error } => Error::RuntimeError {
+            }
+            .into(),
+            Self::RuntimeError { mfa, error } => RuntimeError::RuntimeError {
                 expr: outer,
                 inner,
                 m: mfa.m,
                 f: mfa.f,
                 a: mfa.a,
                 c: error,
-            },
+            }
+            .into(),
             Self::MissingModule { m } => {
                 let suggestion = registry.and_then(|registry| {
                     let modules: Vec<String> = registry.functions.keys().cloned().collect();
                     best_hint(&m, &modules, 2)
                 });
-                Error::MissingModule {
+                crate::errors::FunctionError::MissingModule {
                     outer,
                     inner,
                     m,
                     suggestion,
                 }
+                .into()
             }
             Self::MissingFunction { m, f } => {
                 let suggestion = registry.and_then(|registry| {
@@ -307,22 +310,24 @@ impl FunctionError {
                         best_hint(&m, &functions, 2)
                     })
                 });
-                Error::MissingFunction {
+                crate::errors::FunctionError::MissingFunction {
                     expr: outer,
                     inner,
                     m: vec![m],
                     f,
                     suggestion,
                 }
+                .into()
             }
-            Self::BadType { mfa } => Error::BadType {
+            Self::BadType { mfa } => crate::errors::FunctionError::BadType {
                 expr: outer,
                 inner,
                 m: mfa.m,
                 f: mfa.f,
                 a: mfa.a,
-            },
-            Self::RecursionLimit => Error::RecursionLimit { expr: outer, inner }.into(),
+            }
+            .into(),
+            Self::RecursionLimit => RuntimeError::RecursionLimit { expr: outer, inner }.into(),
             Self::Error(e) => *e,
         }
     }
@@ -976,7 +981,7 @@ impl Aggr {
 pub use tests::fun;
 #[cfg(test)]
 mod tests {
-    use crate::pos::Span;
+    use crate::{errors::RuntimeError, pos::Span};
 
     use super::*;
     use simd_json::prelude::*;
@@ -1035,7 +1040,9 @@ mod tests {
         );
         assert!(
             FunctionError::Error(Box::new(Error::NotFound))
-                != FunctionError::Error(Box::new(Error::EmptyScript))
+                != FunctionError::Error(Box::new(
+                    RuntimeError::NoClauseHit { expr: Span::yolo() }.into()
+                ))
         );
     }
 

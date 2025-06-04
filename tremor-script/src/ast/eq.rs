@@ -62,7 +62,7 @@ where
     }
 }
 
-impl<'script> AstEq for ImutExpr<'script> {
+impl AstEq for ImutExpr<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         use ImutExpr::{
             Binary, Bytes, Comprehension, Invoke, Invoke1, Invoke2, Invoke3, InvokeAggr, List,
@@ -99,7 +99,7 @@ impl<'script> AstEq for ImutExpr<'script> {
     }
 }
 
-impl<'script> AstEq for BytesPart<'script> {
+impl AstEq for BytesPart<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.data_type == other.data_type
             && self.endianess == other.endianess
@@ -108,43 +108,43 @@ impl<'script> AstEq for BytesPart<'script> {
     }
 }
 
-impl<'script> AstEq for Bytes<'script> {
+impl AstEq for Bytes<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.value.ast_eq(&other.value)
     }
 }
 
-impl<'script> AstEq for Field<'script> {
+impl AstEq for Field<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.name.ast_eq(&other.name) && self.value.ast_eq(&other.value)
     }
 }
 
-impl<'script> AstEq for Record<'script> {
+impl AstEq for Record<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.fields.ast_eq(&other.fields)
     }
 }
 
-impl<'script> AstEq for List<'script> {
+impl AstEq for List<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.exprs.ast_eq(&other.exprs)
     }
 }
 
-impl<'script> AstEq for Literal<'script> {
+impl AstEq for Literal<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
 
-impl<'script> AstEq for StringLit<'script> {
+impl AstEq for StringLit<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.elements.ast_eq(&other.elements)
     }
 }
 
-impl<'script> AstEq for StrLitElement<'script> {
+impl AstEq for StrLitElement<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Expr(e1), Self::Expr(e2)) => e1.ast_eq(e2),
@@ -153,7 +153,7 @@ impl<'script> AstEq for StrLitElement<'script> {
     }
 }
 
-impl<'script> AstEq for Invoke<'script> {
+impl AstEq for Invoke<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.node_id.ast_eq(&other.node_id)
             && self.invocable.ast_eq(&other.invocable)
@@ -167,7 +167,7 @@ impl AstEq for NodeId {
     }
 }
 
-impl<'script> AstEq for Invocable<'script> {
+impl AstEq for Invocable<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Intrinsic(wrapper1), Self::Intrinsic(wrapper2)) => wrapper1.ast_eq(wrapper2),
@@ -177,7 +177,7 @@ impl<'script> AstEq for Invocable<'script> {
     }
 }
 
-impl<'script> AstEq for Recur<'script> {
+impl AstEq for Recur<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.argc == other.argc && self.open == other.open && self.exprs.ast_eq(&other.exprs)
     }
@@ -195,7 +195,7 @@ impl AstEq for TestExpr {
     }
 }
 
-impl<'script> AstEq for ClausePreCondition<'script> {
+impl AstEq for ClausePreCondition<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.path.ast_eq(&other.path)
     }
@@ -267,9 +267,9 @@ where
     }
 }
 // #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::default_case
-impl<'script, Ex> AstEq for DefaultCase<Ex>
+impl<Ex> AstEq for DefaultCase<Ex>
 where
-    Ex: Expression + AstEq + 'script,
+    Ex: Expression + AstEq,
 {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -312,14 +312,14 @@ where
     }
 }
 
-impl<'script> AstEq for Patch<'script> {
+impl AstEq for Patch<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.target.ast_eq(&other.target) && self.operations.ast_eq(&other.operations)
     }
 }
 
 // #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::patch_operation
-impl<'script> AstEq for PatchOperation<'script> {
+impl AstEq for PatchOperation<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
@@ -388,7 +388,7 @@ impl<'script> AstEq for PatchOperation<'script> {
     }
 }
 
-impl<'script> AstEq for Merge<'script> {
+impl AstEq for Merge<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.target.ast_eq(&other.target) && self.expr.ast_eq(&other.expr)
     }
@@ -418,7 +418,7 @@ where
     }
 }
 
-impl<'script> AstEq for Pattern<'script> {
+impl AstEq for Pattern<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Record(r1), Self::Record(r2)) => r1.ast_eq(r2),
@@ -432,7 +432,7 @@ impl<'script> AstEq for Pattern<'script> {
 }
 
 // #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::predicate_pattern
-impl<'script> AstEq for PredicatePattern<'script> {
+impl AstEq for PredicatePattern<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         use PredicatePattern::{ArrayPatternEq, Bin, RecordPatternEq, TildeEq};
         match (self, other) {
@@ -485,13 +485,13 @@ impl<'script> AstEq for PredicatePattern<'script> {
     }
 }
 
-impl<'script> AstEq for RecordPattern<'script> {
+impl AstEq for RecordPattern<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.fields.ast_eq(&other.fields)
     }
 }
 
-impl<'script> AstEq for ArrayPredicatePattern<'script> {
+impl AstEq for ArrayPredicatePattern<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Expr(e1), Self::Expr(e2)) => e1.ast_eq(e2),
@@ -502,25 +502,25 @@ impl<'script> AstEq for ArrayPredicatePattern<'script> {
     }
 }
 
-impl<'script> AstEq for ArrayPattern<'script> {
+impl AstEq for ArrayPattern<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.exprs.ast_eq(&other.exprs)
     }
 }
 
-impl<'script> AstEq for AssignPattern<'script> {
+impl AstEq for AssignPattern<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.id == other.id && self.idx == other.idx && self.pattern.ast_eq(other.pattern.as_ref())
     }
 }
 
-impl<'script> AstEq for TuplePattern<'script> {
+impl AstEq for TuplePattern<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.open == other.open && self.exprs.ast_eq(&other.exprs)
     }
 }
 
-impl<'script> AstEq for Path<'script> {
+impl AstEq for Path<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Local(l1), Self::Local(l2)) => l1.ast_eq(l2),
@@ -534,7 +534,7 @@ impl<'script> AstEq for Path<'script> {
     }
 }
 
-impl<'script> AstEq for ExprPath<'script> {
+impl AstEq for ExprPath<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.expr.ast_eq(&other.expr) && self.segments.ast_eq(&other.segments)
     }
@@ -555,7 +555,7 @@ impl<'script> AstEq<ImutExpr<'script>> for Path<'script> {
     }
 }
 // #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::segment
-impl<'script> AstEq for Segment<'script> {
+impl AstEq for Segment<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Id { key: k1, .. }, Self::Id { key: k2, .. }) => k1 == k2,
@@ -582,19 +582,19 @@ impl<'script> AstEq for Segment<'script> {
     }
 }
 
-impl<'script> AstEq for LocalPath<'script> {
+impl AstEq for LocalPath<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.idx == other.idx && self.segments.ast_eq(&other.segments)
     }
 }
 
-impl<'script> AstEq for MetadataPath<'script> {
+impl AstEq for MetadataPath<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.segments.ast_eq(&other.segments)
     }
 }
 // #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::reserved_path
-impl<'script> AstEq for ReservedPath<'script> {
+impl AstEq for ReservedPath<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Args { segments: s1, .. }, Self::Args { segments: s2, .. })
@@ -607,31 +607,31 @@ impl<'script> AstEq for ReservedPath<'script> {
     }
 }
 
-impl<'script> AstEq for EventPath<'script> {
+impl AstEq for EventPath<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.segments.ast_eq(&other.segments)
     }
 }
 
-impl<'script> AstEq for StatePath<'script> {
+impl AstEq for StatePath<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.segments.ast_eq(&other.segments)
     }
 }
 
-impl<'script> AstEq for BinExpr<'script> {
+impl AstEq for BinExpr<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.kind == other.kind && self.lhs.ast_eq(&other.lhs) && self.rhs.ast_eq(&other.rhs)
     }
 }
 
-impl<'script> AstEq for UnaryExpr<'script> {
+impl AstEq for UnaryExpr<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.kind == other.kind && self.expr.ast_eq(&other.expr)
     }
 }
 
-impl<'script> AstEq for CustomFn<'script> {
+impl AstEq for CustomFn<'_> {
     fn ast_eq(&self, other: &Self) -> bool {
         // TODO: add body handling
         self.name == other.name
