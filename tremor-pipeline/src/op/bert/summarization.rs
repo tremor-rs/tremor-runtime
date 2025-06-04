@@ -52,11 +52,11 @@ op!(SummerizationFactory(_uid, node) {
                 model: Mutex::new(model)
             }))
         } else {
-            Err(ErrorKind::BadOpConfig("Could not instantiate this BERT summarization operator.".to_string()).into())
+            Err(Error::BadOpConfig("Could not instantiate this BERT summarization operator.".to_string()))
         }
 
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+        Err(Error::MissingOpConfig(node.id.clone()))
     }
 });
 
@@ -71,7 +71,7 @@ impl Operator for Summerization {
         event.data.rent_mut(|data| -> Result<()> {
             let (v, m) = data.parts_mut();
             if let Some(s) = v.as_str() {
-                let mut summary = self.model.lock()?.summarize(&[s]);
+                let mut summary = self.model.lock()?.summarize(&[s])?;
                 if let Some(s) = summary.pop() {
                     m.try_insert("summary", s);
                 }

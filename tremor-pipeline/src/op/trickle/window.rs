@@ -206,7 +206,10 @@ impl GroupWindow {
         mut can_remove: bool,
     ) -> Result<bool> {
         // determin what to do with the event
-        let window_event = stry!(self.window.on_event(data, ctx.ingest_ns, ctx.origin_uri));
+        let window_event =
+            stry!(self
+                .window
+                .on_event(data, ctx.ingest_ns, ctx.origin_uri.as_ref()));
 
         // if it should be included in the current window include it
         if window_event.include {
@@ -215,7 +218,7 @@ impl GroupWindow {
                 // window data
                 if had_data {
                     stry!(self.merge(ctx, prev));
-                };
+                }
             } else {
                 // We are a root level window so we accumulate the event data
                 stry!(self.accumulate(ctx, consts, data));
@@ -281,7 +284,7 @@ impl GroupWindow {
             if let Some((had_data, prev)) = prev {
                 if had_data {
                     stry!(self.merge(ctx, prev));
-                };
+                }
             } else {
                 stry!(self.accumulate(ctx, consts, data));
             }
@@ -354,7 +357,7 @@ impl Group {
             };
             if let Some(port_and_event) = stry!(execute_select_and_having(&ctx, &env, data)) {
                 events.push(port_and_event);
-            };
+            }
             Ok(true)
         }
     }
@@ -367,7 +370,7 @@ pub trait Trait: std::fmt::Debug {
         &mut self,
         data: &mut ValueAndMeta,
         ingest_ns: u64,
-        origin_uri: &Option<EventOriginUri>,
+        origin_uri: Option<&EventOriginUri>,
     ) -> Result<Actions>;
     /// handle a tick with the current time in nanoseconds as `ns` argument
     fn on_tick(&mut self, _ns: u64) -> Result<Actions> {
@@ -418,7 +421,7 @@ impl Trait for Impl {
         &mut self,
         data: &mut ValueAndMeta,
         ingest_ns: u64,
-        origin_uri: &Option<EventOriginUri>,
+        origin_uri: Option<&EventOriginUri>,
     ) -> Result<Actions> {
         match self {
             Self::Time(w) => w.on_event(data, ingest_ns, origin_uri),
@@ -489,7 +492,7 @@ impl Trait for No {
         &mut self,
         _data: &mut ValueAndMeta,
         _ingest_ns: u64,
-        _origin_uri: &Option<EventOriginUri>,
+        _origin_uri: Option<&EventOriginUri>,
     ) -> Result<Actions> {
         Ok(Actions::all_true())
     }
@@ -563,9 +566,9 @@ impl Trait for TumblingOnState {
         &mut self,
         data: &mut ValueAndMeta,
         ingest_ns: u64,
-        origin_uri: &Option<EventOriginUri>,
+        origin_uri: Option<&EventOriginUri>,
     ) -> Result<Actions> {
-        let context = EventContext::new(ingest_ns, origin_uri.as_ref());
+        let context = EventContext::new(ingest_ns, origin_uri);
         let (unwind_event, event_meta) = data.parts_mut();
         let value = stry!(self.script.run(
             &context,
@@ -674,14 +677,14 @@ impl Trait for TumblingOnTime {
         &mut self,
         data: &mut ValueAndMeta,
         ingest_ns: u64,
-        origin_uri: &Option<EventOriginUri>,
+        origin_uri: Option<&EventOriginUri>,
     ) -> Result<Actions> {
         let time = stry!(self
             .script
             .as_ref()
             .and_then(|script| script.script.as_ref())
             .map(|script| {
-                let context = EventContext::new(ingest_ns, origin_uri.as_ref());
+                let context = EventContext::new(ingest_ns, origin_uri);
                 let (unwind_event, event_meta) = data.parts();
                 let value = stry!(script.run_imut(
                     &context,
@@ -748,14 +751,14 @@ impl Trait for TumblingOnNumber {
         &mut self,
         data: &mut ValueAndMeta,
         ingest_ns: u64,
-        origin_uri: &Option<EventOriginUri>,
+        origin_uri: Option<&EventOriginUri>,
     ) -> Result<Actions> {
         let count = stry!(self
             .script
             .as_ref()
             .and_then(|script| script.script.as_ref())
             .map_or(Ok(1), |script| {
-                let context = EventContext::new(ingest_ns, origin_uri.as_ref());
+                let context = EventContext::new(ingest_ns, origin_uri);
                 let (unwind_event, event_meta) = data.parts();
                 let value = stry!(script.run_imut(
                     &context,

@@ -91,7 +91,7 @@ if let Some(map) = &node.config {
         event_id_gen: idgen,
     }))
 } else {
-    Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+    Err(Error::MissingOpConfig(node.id.clone()))
 
 }});
 
@@ -131,14 +131,14 @@ impl Operator for Batch {
                         }
                     });
                     a.push(e);
-                };
+                }
                 Ok(())
             },
         )?;
         self.len += 1;
         if self.len == 1 {
             self.first_ns = ingest_ns;
-        };
+        }
         let flush = match self.max_delay_ns {
             Some(t) if ingest_ns - self.first_ns > t => true,
             _ => self.len == self.config.count,

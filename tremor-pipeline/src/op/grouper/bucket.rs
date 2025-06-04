@@ -93,7 +93,7 @@ op!(BucketGrouperFactory(_uid, node) {
             buckets: HashMap::new(),
         }))
     } else {
-        Err(ErrorKind::ExtraOpConfig(node.id.clone()).into())
+        Err(Error::ExtraOpConfig(node.id.clone()))
     }
 });
 /// Single bucket specification
@@ -249,7 +249,7 @@ mod test {
             .on_event(operator_id, &Port::In, &mut state, event1.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("data");
         assert!(r.events.is_empty());
         assert_eq!(port, "err");
         assert_eq!(e, event1);
@@ -266,7 +266,7 @@ mod test {
             .on_event(operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("data");
         assert!(r.events.is_empty());
         assert_eq!(port, "out");
         assert_eq!(e, event2);
@@ -275,7 +275,7 @@ mod test {
             .on_event(operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("data");
         assert!(r.events.is_empty());
         assert_eq!(port, "out");
         assert_eq!(e, event2);
@@ -284,7 +284,7 @@ mod test {
             .on_event(operator_id, &Port::In, &mut state, event2.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("data");
         assert!(r.events.is_empty());
         assert_eq!(port, "overflow");
         assert_eq!(e, event2);
@@ -300,14 +300,14 @@ mod test {
             .on_event(operator_id, &Port::In, &mut state, event3.clone())
             .expect("could not run pipeline");
 
-        let (port, e) = r.events.pop().ok_or("no data")?;
+        let (port, e) = r.events.pop().expect("data");
         assert!(r.events.is_empty());
         assert_eq!(port, "out");
         assert_eq!(e, event3);
 
         let mut m = op.metrics(&Object::with_hasher(ObjectHasher::default()), 0)?;
-        let overflow = m.pop().ok_or("no data")?;
-        let pass = m.pop().ok_or("no data")?;
+        let overflow = m.pop().expect("data");
+        let pass = m.pop().expect("data");
         assert!(m.is_empty());
         assert_eq!(overflow["tags"]["action"], "overflow");
         assert_eq!(overflow["fields"]["count"], 1);

@@ -31,10 +31,9 @@ extern crate log;
 #[macro_use]
 extern crate serde;
 
-use crate::errors::{ErrorKind, Result};
+use crate::errors::{Error, Result};
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
-use lazy_static::lazy_static;
 use petgraph::graph;
 use std::borrow::Borrow;
 use std::fmt;
@@ -120,10 +119,11 @@ impl MetricsMsg {
 /// Sender for metrics
 pub type MetricsSender = Sender<MetricsMsg>;
 
-lazy_static! {
-    /// TODO do we want to change this number or can we make it configurable?
-    pub static ref METRICS_CHANNEL: MetricsChannel = MetricsChannel::new(128);
-}
+/// metrics channel
+pub static METRICS_CHANNEL: std::sync::LazyLock<MetricsChannel> = std::sync::LazyLock::new(|| {
+    // TODO: do we want to change this number or can we make it configurable?
+    MetricsChannel::new(128)
+});
 
 pub(crate) fn common_cow(s: &str) -> beef::Cow<'static, str> {
     macro_rules! cows {
@@ -193,9 +193,12 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
         #[cfg(feature = "bert")]
         ["bert", "summarization"] => SummerizationFactory::new_boxed(),
         [namespace, name] => {
-            return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
+            return Err(Error::UnknownOp(
+                (*namespace).to_string(),
+                (*name).to_string(),
+            ));
         }
-        _ => return Err(ErrorKind::UnknownNamespace(node.op_type.clone()).into()),
+        _ => return Err(Error::UnknownNamespace(node.op_type.clone())),
     };
     Ok(factory)
 }

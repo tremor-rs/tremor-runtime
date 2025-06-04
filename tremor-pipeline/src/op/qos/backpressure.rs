@@ -73,8 +73,7 @@ pub struct Config {
     /// Defines the behaviour of the backpressure operator.
     ///
     /// - `discard`: messages are discared
-    /// - `pause`: it acts as a circuit breaker but
-    ///    does let the messages pass
+    /// - `pause`: it acts as a circuit breaker but does let the messages pass
     #[serde(default)]
     pub method: Method,
 }
@@ -140,7 +139,7 @@ op!(BackpressureFactory(_uid, node) {
         let config: Config = Config::new(map)?;
         Ok(Box::new(Backpressure::from(config)))
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+        Err(Error::MissingOpConfig(node.id.clone()))
     }
 });
 

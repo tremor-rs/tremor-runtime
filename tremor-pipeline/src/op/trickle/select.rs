@@ -104,7 +104,7 @@ pub(crate) fn execute_select_and_having(
     let result = value.into_owned();
     let having = stry!(run_guard(
         ctx.select,
-        &ctx.select.maybe_having,
+        ctx.select.maybe_having.as_ref(),
         ctx.opts,
         env,
         &result,
@@ -209,11 +209,11 @@ impl Operator for Select {
 
             // Before any select processing, we filter by where clause
             //
-            let guard = &select.maybe_where;
+            let guard = select.maybe_where.as_ref();
             let e = env(&ctx, consts.run(), *recursion_limit);
             if !run_guard(select, guard, opts, &e, data, meta, &locals)? {
                 return Ok(Res::None);
-            };
+            }
 
             let mut inner = select.meta();
             let group_values = if let Some(group_by) = &select.maybe_group_by {
@@ -230,7 +230,7 @@ impl Operator for Select {
 
                 let e = env(&ctx, consts.run(), *recursion_limit);
                 let value = stry!(select.target.run(opts, &e, data, &NULL, meta, &locals));
-                let h_guard = run_guard(select, &select.maybe_having, opts, &e, &value, meta, &locals);
+                let h_guard = run_guard(select, select.maybe_having.as_ref(), opts, &e, &value, meta, &locals);
                 return if stry!(h_guard) {
                     *data = value.into_owned();
                     Ok(Res::Event)
@@ -421,7 +421,7 @@ impl Operator for Select {
 
 fn run_guard(
     select: &ast::Select,
-    guard: &Option<ImutExpr>,
+    guard: Option<&ImutExpr>,
     opts: ExecOpts,
     env: &Env,
     data: &Value,

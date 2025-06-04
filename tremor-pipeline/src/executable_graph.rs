@@ -13,11 +13,8 @@
 // limitations under the License.
 
 use crate::{
-    common_cow,
-    errors::Result,
-    errors::{Error, ErrorKind},
-    metrics::value_count,
-    ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
+    common_cow, errors::Error, errors::Result, metrics::value_count, ExecPortIndexMap, MetricsMsg,
+    MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, NodeKind, Operator};
 use halfbrown::HashMap;
@@ -441,10 +438,10 @@ impl ExecutableGraph {
             self.last_metrics = event.ingest_ns;
         }
         let input = *stry!(self.inputs.get(&stream_name).ok_or_else(|| {
-            Error::from(ErrorKind::InvalidInputStreamName(
-                stream_name.to_string(),
-                self.id.clone(),
-            ))
+            Error::InvalidInputStreamName {
+                stream_name: stream_name.to_string(),
+                pipeline: self.id.clone(),
+            }
         }));
         self.stack.push((input, stream_name, event));
         self.run(returns)
@@ -491,7 +488,7 @@ impl ExecutableGraph {
                         self.insights.push((idx, insight));
                     }
                     self.enqueue_events(idx, events);
-                };
+                }
             }
             Ok(!self.stack.is_empty())
         } else {
@@ -511,8 +508,8 @@ impl ExecutableGraph {
                         payload: value.into(),
                         origin_uri: None,
                     }) {
-                        error!("Failed to send metrics: {}", e);
-                    };
+                        error!("Failed to send metrics: {e}");
+                    }
                 }
             }
 
@@ -521,8 +518,8 @@ impl ExecutableGraph {
                     payload: value.into(),
                     origin_uri: None,
                 }) {
-                    error!("Failed to send metrics: {}", e);
-                };
+                    error!("Failed to send metrics: {e}");
+                }
             }
         }
     }
@@ -714,50 +711,49 @@ mod test {
         }
     }
 
-    fn test_metrics(mut metrics: Vec<MetricsMsg>, n: u64) -> Result<()> {
+    fn test_metrics(mut metrics: Vec<MetricsMsg>, n: u64) {
         // out/in
-        let this = metrics.pop().ok_or("no value")?;
+        let this = metrics.pop().expect("a value");
         let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").get_str("node"), Some("out"));
         assert_eq!(data.get("tags").get_str("port"), Some("in"));
 
         // all-2/out
-        let this = metrics.pop().ok_or("no value")?;
+        let this = metrics.pop().expect("a value");
         let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").get_str("node"), Some("all-2"));
         assert_eq!(data.get("tags").get_str("port"), Some("out"));
 
         // all-2/in
-        let this = metrics.pop().ok_or("no value")?;
+        let this = metrics.pop().expect("a value");
         let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").get_str("node"), Some("all-2"));
         assert_eq!(data.get("tags").get_str("port"), Some("in"));
 
         // all-1/out
-        let this = metrics.pop().ok_or("no value")?;
+        let this = metrics.pop().expect("a value");
         let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").get_str("node"), Some("all-1"));
         assert_eq!(data.get("tags").get_str("port"), Some("out"));
 
         // all-1/in
-        let this = metrics.pop().ok_or("no value")?;
+        let this = metrics.pop().expect("a value");
         let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").get_str("node"), Some("all-1"));
         assert_eq!(data.get("tags").get_str("port"), Some("in"));
 
         // out/in
-        let this = metrics.pop().ok_or("no value")?;
+        let this = metrics.pop().expect("a value");
         let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").get_str("node"), Some("in"));
         assert_eq!(data.get("tags").get_str("port"), Some("out"));
         assert!(metrics.is_empty());
-        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -835,7 +831,7 @@ mod test {
         while let Ok(m) = rx.try_recv() {
             metrics.push(m);
         }
-        test_metrics(metrics, 1)?;
+        test_metrics(metrics, 1);
 
         // Test with two events
         let e = Event::default();
@@ -859,7 +855,7 @@ mod test {
         while let Ok(m) = rx.try_recv() {
             metrics.push(m);
         }
-        test_metrics(metrics, 3)?;
+        test_metrics(metrics, 3);
         Ok(())
     }
 

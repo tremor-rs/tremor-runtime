@@ -83,12 +83,12 @@ if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
     if config.outputs.is_empty() {
         error!("No outputs supplied for round robin operators");
-        return Err(ErrorKind::MissingOpConfig(node.id.clone()).into());
-    };
+        return Err(Error::MissingOpConfig(node.id.clone()));
+    }
     // convert backoff to ns
     Ok(Box::new(RoundRobin::from(config)))
 } else {
-    Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+    Err(Error::MissingOpConfig(node.id.clone()))
 
 }});
 
@@ -175,7 +175,7 @@ impl Operator for RoundRobin {
             error!("Failed to trigger circuit breaker");
         } else if insight.cb.is_cb() {
             insight.cb = CbAction::None;
-        };
+        }
     }
 }
 
