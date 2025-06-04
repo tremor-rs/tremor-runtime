@@ -256,7 +256,7 @@ impl Event {
                 .suffix()
                 .value()
                 .as_array()
-                .map_or(true, Vec::is_empty)
+                .is_none_or(Vec::is_empty)
     }
 
     /// Extracts the `$correlation` metadata into a `Vec` of `Option<Value<'static>>`.
@@ -312,6 +312,8 @@ pub struct ValueMetaIter<'value> {
     idx: usize,
 }
 
+type ValueMetaRef<'v> = (&'v Value<'v>, &'v Value<'v>);
+
 impl<'value> ValueMetaIter<'value> {
     fn extract_batched_value_meta(
         batched_value: &'value Value<'value>,
@@ -328,8 +330,8 @@ impl<'value> ValueMetaIter<'value> {
     pub fn split_last(
         &mut self,
     ) -> Option<(
-        (&'value Value<'value>, &'value Value<'value>),
-        impl Iterator<Item = (&'value Value<'value>, &'value Value<'value>)>,
+        ValueMetaRef<'value>,
+        impl Iterator<Item = ValueMetaRef<'value>>,
     )> {
         if self.event.is_batch {
             self.event
@@ -1020,15 +1022,18 @@ mod test {
             let mut e = Object::with_capacity_and_hasher(7, ObjectHasher::default());
             let mut data = Object::with_capacity_and_hasher(2, ObjectHasher::default());
             let (value, meta) = other.into_parts();
-            data.insert_nocheck("value".into(), value);
-            data.insert_nocheck("meta".into(), meta);
-            e.insert_nocheck("data".into(), Value::from(data));
-            e.insert_nocheck("ingest_ns".into(), 1.into());
-            // kind is always null on events
-            e.insert_nocheck("kind".into(), Value::null());
-            e.insert_nocheck("is_batch".into(), false.into());
+
+            unsafe {
+                data.insert_nocheck("value".into(), value);
+                data.insert_nocheck("meta".into(), meta);
+                e.insert_nocheck("data".into(), Value::from(data));
+                e.insert_nocheck("ingest_ns".into(), 1.into());
+                // kind is always null on events
+                e.insert_nocheck("kind".into(), Value::null());
+                e.insert_nocheck("is_batch".into(), false.into());
+            }
             a.push(Value::from(e));
-        };
+        }
         Ok(())
     }
     #[test]

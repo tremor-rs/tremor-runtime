@@ -10,7 +10,7 @@ version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-either = { version = "1.13", default-features = false }
+either = { version = "1.15", default-features = false }
 log.workspace = true
 serde.workspace = true
 simd-json.workspace = true
