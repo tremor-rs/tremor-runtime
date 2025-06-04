@@ -73,22 +73,20 @@ tokio = { version = "1.44", features = ["full"] }
 url = { version = "2", default-features = false, features = ["serde"] }
 value-trait = { version = "0.11", features = ["custom-types"] }
 
-tremor-api = { path = "tremor-api", version = "0.13.0-rc.33" }
-tremor-archive = { path = "tremor-archive", version = "0.13.0-rc.33" }
-tremor-codec = { path = "tremor-codec", version = "0.13.0-rc.33", features = [
-  "128bit",
-] }
-tremor-common = { path = "tremor-common", version = "0.13.0-rc.33" }
-tremor-config = { path = "tremor-config", version = "0.13.0-rc.33" }
-tremor-connectors = { path = "tremor-connectors", version = "0.13.0-rc.33", default-features = false }
+tremor-api = { path = "tremor-api" }
+tremor-archive = { path = "tremor-archive" }
+tremor-codec = { path = "tremor-codec", features = ["128bit"] }
+tremor-common = { path = "tremor-common" }
+tremor-config = { path = "tremor-config" }
+tremor-connectors = { path = "tremor-connectors", default-features = false }
 
-tremor-influx = { path = "tremor-influx", version = "0.13.0-rc.33" }
-tremor-interceptor = { path = "tremor-interceptor", version = "0.13.0-rc.33" }
-tremor-pipeline = { path = "tremor-pipeline", version = "0.13.0-rc.33" }
-tremor-runtime = { path = ".", version = "0.13.0-rc.33" }
-tremor-script = { path = "tremor-script", version = "0.13.0-rc.33" }
-tremor-system = { path = "tremor-system", version = "0.13.0-rc.33" }
-tremor-value = { path = "tremor-value", version = "0.13.0-rc.33" }
+tremor-influx = { path = "tremor-influx" }
+tremor-interceptor = { path = "tremor-interceptor" }
+tremor-pipeline = { path = "tremor-pipeline" }
+tremor-runtime = { path = "." }
+tremor-script = { path = "tremor-script" }
+tremor-system = { path = "tremor-system" }
+tremor-value = { path = "tremor-value" }
 
 
 [dependencies]
@@ -96,10 +94,10 @@ tremor-codec.workspace = true
 tremor-common.workspace = true
 tremor-config.workspace = true
 tremor-connectors.workspace = true
-tremor-connectors-aws = { path = "tremor-connectors-aws", version = "0.13.0-rc.33", optional = true }
-tremor-connectors-azure = { path = "tremor-connectors-azure", version = "0.13.0-rc.33", optional = true }
-tremor-connectors-gcp = { path = "tremor-connectors-gcp", version = "0.13.0-rc.33", optional = true }
-tremor-connectors-otel = { path = "tremor-connectors-otel", version = "0.13.0-rc.33", optional = true }
+tremor-connectors-aws = { path = "tremor-connectors-aws", optional = true }
+tremor-connectors-azure = { path = "tremor-connectors-azure", optional = true }
+tremor-connectors-gcp = { path = "tremor-connectors-gcp", optional = true }
+tremor-connectors-otel = { path = "tremor-connectors-otel", optional = true }
 tremor-influx.workspace = true
 tremor-interceptor.workspace = true
 tremor-pipeline.workspace = true

@@ -21,7 +21,7 @@ use aws_sdk_s3::{
     config::{Credentials, Region},
     Client, Config,
 };
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng};
 use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
@@ -32,7 +32,7 @@ use testcontainers::{ContainerAsync, ImageExt};
 use tremor_connectors_test_helpers::free_port::find_free_tcp_port;
 
 const IMAGE: &str = "minio/minio";
-const VERSION: &str = "RELEASE.2023-01-12T02-06-16Z";
+const VERSION: &str = "RELEASE.2025-05-24T17-08-30Z";
 
 const MINIO_ROOT_USER: &str = "tremor";
 const MINIO_ROOT_PASSWORD: &str = "snot_badger";
@@ -100,7 +100,7 @@ fn random_bucket_name(prefix: &str) -> String {
     format!(
         "{}-{}",
         prefix,
-        rand::thread_rng()
+        rand::rng()
             .sample_iter(Alphanumeric)
             .map(char::from)
             .filter(char::is_ascii_lowercase)

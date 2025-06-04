@@ -1,48 +1,50 @@
 [package]
 name = "tremor-connectors-aws"
-version = "0.13.0-rc.33"
-edition = "2021"
-license = "Apache-2.0"
-homepage = "https://www.tremor.rs"
-authors = ["The Tremor Team"]
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-connectors = { path = "../tremor-connectors", version = "0.13.0-rc.33", default-features = false }
-tremor-connectors-object-storage = { path = "../tremor-connectors-object-storage", version = "0.13.0-rc.33" }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.33" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.33" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.33" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.33" }
+tremor-common.workspace = true
+tremor-connectors.workspace = true
+tremor-connectors-object-storage = { path = "../tremor-connectors-object-storage" }
+tremor-system.workspace = true
+tremor-value.workspace = true
+tremor-config.workspace = true
 
 async-trait = { version = "0.1", default-features = false }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-anyhow = { version = "1", default-features = false }
+serde.workspace = true
+anyhow.workspace = true
 async-channel = { version = "2", default-features = false }
-thiserror = { version = "1", default-features = false }
-tokio = { version = "1.39", default-features = false }
-log = { version = "0.4", default-features = false }
-simd-json = { version = "0.13", default-features = false }
-value-trait = { version = "0.8", default-features = false }
+thiserror.workspace = true
+tokio.workspace = true
+log.workspace = true
+simd-json.workspace = true
+value-trait.workspace = true
 
 aws-sdk-s3 = { version = "1", default-features = false, features = [
-    "behavior-version-latest",
-    "sigv4a",
-    "rustls",
-    "rt-tokio",
+  "behavior-version-latest",
+  "sigv4a",
+  "rustls",
+  "rt-tokio",
 ] }
 aws-types = { version = "1", default-features = false }
 aws-config = { version = "1", default-features = false }
 aws-credential-types = { version = "1", default-features = false }
 
 [dev-dependencies]
-rand = { version = "0.8", default-features = false }
-testcontainers = { version = "0.23", default-features = false }
-serial_test = { version = "3.0", default-features = false }
 bytes = { version = "1.6", default-features = true }
-tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.33" }
-testcontainers-modules = { version = "0.11.1", features = ["localstack"] }
+env_logger = { version = "0.11", default-features = true }
+rand = { version = "0.9", default-features = false }
+serial_test = { version = "3.0", default-features = false }
+testcontainers = { version = "0.24", default-features = false }
+testcontainers-modules = { version = "0.12", features = ["localstack"] }
+tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers" }
 
 [features]
 integration-harness = []

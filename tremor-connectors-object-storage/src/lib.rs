@@ -444,7 +444,7 @@ where
                         .start_upload(&new_object_id, event, ctx)
                         .await?,
                 );
-            };
+            }
 
             // At this point we defo have a healthy upload
             // accumulate event payload for the current upload
