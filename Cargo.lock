@@ -984,29 +984,22 @@ dependencies = [
 
 [[package]]
 name = "azure_core"
-version = "0.20.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34ce3de4b65b1ee2667c81d1fc692949049502a4cf9c38118d811d6d79a7eaef"
+checksum = "0f5e6bcc9dfd4587f3132818b6922b9157f00a4df7fd7bf76395ddf37f58983d"
 dependencies = [
+ "async-lock 3.4.0",
  "async-trait",
- "base64 0.22.1",
  "bytes",
- "dyn-clone",
  "futures",
- "getrandom 0.2.16",
- "http-types",
- "once_cell",
- "paste",
  "pin-project",
- "rand 0.8.5",
- "reqwest 0.12.15",
  "rustc_version 0.4.1",
  "serde",
  "serde_json",
- "time 0.3.41",
+ "tokio",
  "tracing",
- "url",
- "uuid",
+ "typespec",
+ "typespec_client_core",
 ]
 
 [[package]]
@@ -5523,6 +5516,7 @@ dependencies = [
  "pin-project-lite 0.2.16",
  "quinn",
  "rustls 0.23.26",
+ "rustls-native-certs 0.8.1",
  "rustls-pemfile 2.2.0",
  "rustls-pki-types",
  "serde",
@@ -7917,7 +7911,7 @@ dependencies = [
  "reqwest 0.12.15",
  "serde",
  "serde_json",
- "simd-json 0.13.11",
+ "simd-json 0.15.1",
  "tokio",
  "tremor-common",
  "tremor-config",
@@ -8360,6 +8354,43 @@ name = "typenum"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
+
+[[package]]
+name = "typespec"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2cb5cb7292822e6d81f385ce512e0a5936a8c93cb194d2ff41477dfd8d1e21f"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
+name = "typespec_client_core"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a543a33b2bd2b918a6f487522d4df324c194cc3e9ea89871a202dd237713a61"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "dyn-clone",
+ "futures",
+ "getrandom 0.2.16",
+ "pin-project",
+ "rand 0.8.5",
+ "reqwest 0.12.15",
+ "serde",
+ "serde_json",
+ "time 0.3.41",
+ "tokio",
+ "tracing",
+ "typespec",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "unarray"

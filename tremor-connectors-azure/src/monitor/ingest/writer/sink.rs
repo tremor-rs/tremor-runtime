@@ -22,6 +22,7 @@ use std::{
     time::Duration,
 };
 
+use azure_core::http::{new_http_client, HttpClient};
 use log::error;
 use tremor_config::NameWithConfig;
 
@@ -44,7 +45,7 @@ use tremor_script::EventOriginUri;
 
 pub(crate) struct AmiSink {
     request_counter: u64,
-    client: Option<Arc<dyn azure_core::HttpClient>>,
+    client: Option<Arc<dyn HttpClient>>,
     config: Config,
     response_tx: Sender<SourceReply>,
     reply_tx: ReplySender,
@@ -104,7 +105,7 @@ fn json_serializer() -> anyhow::Result<EventSerializer> {
 #[async_trait::async_trait]
 impl Sink for AmiSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> anyhow::Result<bool> {
-        let azure_client = azure_core::new_http_client();
+        let azure_client = new_http_client();
         self.client = Some(azure_client);
 
         Ok(true)

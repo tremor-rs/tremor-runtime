@@ -262,7 +262,7 @@ pub(crate) mod test {
             None => {
                 return Err(anyhow::anyhow!("Rust hates you, pesky human"));
             }
-        };
+        }
 
         assert!(azure_oauth.is_token_expired());
 
