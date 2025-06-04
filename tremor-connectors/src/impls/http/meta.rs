@@ -36,7 +36,7 @@ impl<'v> HeaderValueValue<'v> {
     }
 }
 
-impl<'v> Iterator for HeaderValueValue<'v> {
+impl Iterator for HeaderValueValue<'_> {
     type Item = HeaderValue;
 
     fn next(&mut self) -> Option<Self::Item> {

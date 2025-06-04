@@ -162,7 +162,6 @@ impl Harness {
     /// # Errors
     ///  - If the connector could not be started
     ///  - If the sink could not be connected
-
     pub async fn start(&self) -> anyhow::Result<()> {
         // start the connector
         let (tx, mut rx) = bounded(1);

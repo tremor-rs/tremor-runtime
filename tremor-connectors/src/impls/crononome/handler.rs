@@ -185,11 +185,8 @@ impl<I> TemporalPriorityQueue<I> {
                 Some(Reverse(x)) => {
                     let event = x.at.timestamp();
                     if event <= now {
-                        match self.q.pop() {
-                            Some(Reverse(x)) => {
-                                sched.push(x);
-                            }
-                            None => continue, // should never occur in practice
+                        if let Some(Reverse(x)) = self.q.pop() {
+                            sched.push(x);
                         }
                     } else {
                         break;

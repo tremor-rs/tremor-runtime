@@ -49,7 +49,6 @@ enum Error {
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
-
 pub(crate) struct Config {
     /// list of brokers forming a cluster. 1 is enough
     brokers: Vec<String>,
@@ -284,7 +283,7 @@ impl Sink for KafkaProducerSink {
                 info!("{ctx} Dropping old producer. Losing {in_flight_msgs} in-flight messages not yet sent to brokers.");
             }
             drop(old_producer);
-        };
+        }
 
         let (tx, mut rx) = channel(qsize());
         let (metrics_tx, metrics_rx) = broadcast(1);
@@ -336,8 +335,8 @@ impl Sink for KafkaProducerSink {
             loop {
                 match metrics_rx.try_recv() {
                     Ok(payload) => vec.push(payload),
-                    Err(TryRecvError::Lagged(_)) => continue, // try again
-                    Err(_) => break,                          // on all other errors, stop
+                    Err(TryRecvError::Lagged(_)) => {} // try again
+                    Err(_) => break,                   // on all other errors, stop
                 }
             }
             vec
@@ -374,7 +373,7 @@ async fn wait_for_delivery(
     if let Some(cb) = cb {
         if reply_tx.send(cb).is_err() {
             error!("{ctx} Error sending insight for kafka record delivery");
-        };
+        }
     }
     Ok(())
 }

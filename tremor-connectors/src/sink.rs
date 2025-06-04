@@ -1029,7 +1029,7 @@ where
                                         send_contraflow(&self.pipelines, &self.ctx, cf);
                                     }
                                 }
-                            };
+                            }
                         }
                         sink::Msg::Signal { signal } => {
                             // special treatment

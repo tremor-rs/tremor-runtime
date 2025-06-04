@@ -248,7 +248,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
     }
 }
 
-impl<'v> Command<'v> {
+impl Command<'_> {
     fn op_name(&self) -> &'static str {
         match self {
             Command::Get { .. } => "get",
@@ -421,7 +421,7 @@ impl KvSink {
             Ok(Value::const_null())
         }
     }
-    async fn encode<'v>(&mut self, v: &Value<'v>) -> anyhow::Result<Vec<u8>> {
+    async fn encode(&mut self, v: &Value<'_>) -> anyhow::Result<Vec<u8>> {
         Ok(self.codec.encode(v, &Value::const_null()).await?)
     }
     async fn execute<'v>(

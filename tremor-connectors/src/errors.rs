@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//NOTE: error_chain
-
 use std::time::Duration;
 
 use tokio::task::JoinError;

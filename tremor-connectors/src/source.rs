@@ -142,9 +142,9 @@ pub trait Source: Send {
         vec![]
     }
 
-    ///////////////////////////
-    /// lifecycle callbacks ///
-    ///////////////////////////
+    // //////////////////////////
+    // // lifecycle callbacks ///
+    // //////////////////////////
 
     /// called when the source is started. This happens only once in the whole source lifecycle, before any other callbacks
     async fn on_start(&mut self, _ctx: &SourceContext) -> anyhow::Result<()> {
@@ -422,7 +422,7 @@ impl Streams {
         Ok(match self.states.entry(stream_id) {
             Entry::Occupied(e) => e.into_mut(),
             Entry::Vacant(e) => {
-                debug!("{} starting stream {}", ctx, stream_id);
+                debug!("{ctx} starting stream {stream_id}");
                 let state = Self::build_stream(
                     self.uid,
                     stream_id,
@@ -711,7 +711,7 @@ where
                     }
                 }
             }
-        };
+        }
         Control::Continue
     }
 
@@ -1214,12 +1214,12 @@ where
             if ctrl == Control::Terminate {
                 debug!("{} Terminating source task...", self.ctx);
                 return Ok(());
-            };
+            }
         }
     }
 }
 
-/// source manager functions moved out
+// source manager functions moved out
 
 /// build any number of `Event`s from a given Source Transport Unit (`data`)
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector

@@ -76,7 +76,7 @@ impl Default for PauseBehaviour {
 }
 */
 
-/// Codec name and configuration
+// Codec name and configuration
 
 /// Connector configuration - only the parts applicable to all connectors
 /// Specific parts are catched in the `config` map.

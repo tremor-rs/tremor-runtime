@@ -83,7 +83,7 @@ struct RetryWithBackoff {
 impl RetryWithBackoff {
     fn new(start_interval: u64, growth_rate: f64, max_retries: u64, randomized: bool) -> Self {
         let random = if randomized {
-            Some(SmallRng::from_entropy())
+            Some(SmallRng::from_os_rng())
         } else {
             None
         };
@@ -113,7 +113,7 @@ impl ReconnectStrategy for RetryWithBackoff {
                     } else {
                         growth_interval..=interval
                     };
-                    prng.gen_range(range)
+                    prng.random_range(range)
                 } else {
                     growth_interval
                 }

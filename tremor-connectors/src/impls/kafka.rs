@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_markdown, rustdoc::invalid_codeblock_attributes)]
 //! The Kafka connectors [`kafka_consumer`](#kafka_consumer) and [`kafka_producer`](#kafka_producer) provide integration with [Apache Kafka](https://kafka.apache.org/) and compatible
 //! products such as [Confluent Kafka](https://www.confluent.io/) and [Redpanda](https://redpanda.com/). Consuming from Kafka and producing to Kafka are handled by two separate connectors.
 //!

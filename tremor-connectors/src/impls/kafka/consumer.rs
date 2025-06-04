@@ -221,11 +221,10 @@ pub(crate) struct Config {
     /// Possible values:
     /// - `performance`: automatically commits offsets every 5s. This pre-canned setting is tuned for maximum performance and throughput at the cost of possibl message loss.
     /// - `transactional`: only stores the message offset if the event has been handled successfully,
-    ///        reset the offset to any failed message, this will possibly replay already handled messages.
-    ///        The default `commit_interval` (in nanoseconds) is equivalent to `5 seconds`, it can be configured.
-    ///        If set to `0`, every message will be committed immediately, this will lead to lots of traffic towards the group-coordinator, use with care!
-    ///        DANGER: This will possible replay failed messages infinitely with persistent errors (e.g. wrong message format),
-    ///                but it offers at-least-once processing guarantee from end-to-end.
+    ///   reset the offset to any failed message, this will possibly replay already handled messages.
+    ///   The default `commit_interval` (in nanoseconds) is equivalent to `5 seconds`, it can be configured.
+    ///   If set to `0`, every message will be committed immediately, this will lead to lots of traffic towards the group-coordinator, use with care!
+    ///   DANGER: This will possible replay failed messages infinitely with persistent errors (e.g. wrong message format), but it offers at-least-once processing guarantee from end-to-end.
     ///
     ///   Example:
     ///
@@ -237,7 +236,9 @@ pub(crate) struct Config {
     ///
     /// - `custom`: Configure the connector yourself as you like, by providing your own set of `rdkafka_options`. You should know what you are doing when using this.
     ///
-    ///   Example: ```json
+    ///   Example:
+    ///
+    ///   ```json
     ///   "custom": {
     ///     "rdkafka_options": {
     ///         "enable.auto.commit": false
@@ -362,7 +363,7 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
                     // we can safely ignore errors here as they will happen after the first connector
                     // as we only have &self here, we cannot switch out the connector
                     trace!("{} Error sending to connect channel: {e}", &self.ctx);
-                };
+                }
                 info!(
                     "{} Partitions Assigned: {}",
                     &self.ctx,
@@ -429,7 +430,7 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
                 self.on_connection_lost();
             }
             Err(e) => warn!("{} Error while committing offsets: {}", &self.ctx, e),
-        };
+        }
     }
 }
 type TremorConsumerContext = TremorRDKafkaContext<SourceContext>;
@@ -615,12 +616,12 @@ impl Source for KafkaConsumerSource {
         info!("{} Subscribing to: {:?}", &ctx, topics);
 
         match consumer.subscribe(&topics) {
-            Ok(()) => info!("{} Subscription initiated...", &ctx),
+            Ok(()) => info!("{ctx} Subscription initiated..."),
             Err(e) => {
-                error!("{} Error subscribing: {}", ctx, e);
+                error!("{ctx} Error subscribing: {e}");
                 return Err(e.into());
             }
-        };
+        }
         let arc_consumer = Arc::new(consumer);
         let task_consumer = arc_consumer.clone();
         self.consumer = Some(arc_consumer);
@@ -839,8 +840,8 @@ impl Source for KafkaConsumerSource {
             loop {
                 match metrics_rx.try_recv() {
                     Ok(payload) => vec.push(payload),
-                    Err(TryRecvError::Lagged(_)) => continue, // try again, this is expected
-                    Err(_) => break,                          // on all other errors, stop
+                    Err(TryRecvError::Lagged(_)) => {} // try again, this is expected
+                    Err(_) => break,                   // on all other errors, stop
                 }
             }
             vec
@@ -940,10 +941,7 @@ async fn consumer_task(
             None => {
                 // handle kafka being done
                 // this shouldn't happen
-                warn!(
-                    "{} Consumer is done consuming. Initiating reconnect...",
-                    source_ctx
-                );
+                warn!("{source_ctx} Consumer is done consuming. Initiating reconnect...",);
                 if let Some(tx) = connect_result_channel.take() {
                     if !tx.is_closed() {
                         source_ctx.swallow_err(

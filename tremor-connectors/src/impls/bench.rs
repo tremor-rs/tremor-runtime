@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_markdown, rustdoc::invalid_codeblock_attributes)]
 //! :::info
 //!
 //! This connector is not intended for production use, but for testing the Tremor runtime itself. To enable it pass `--debug-connectors` to tremor.
@@ -289,7 +289,7 @@ impl ConnectorBuilder for Builder {
             XzDecoder::new(source_data_file).read_to_end(&mut data)?;
         } else {
             source_data_file.read_to_end(&mut data)?;
-        };
+        }
         let origin_uri = EventOriginUri {
             scheme: "tremor-blaster".to_string(),
             host: crate::utils::hostname(),
@@ -539,7 +539,7 @@ impl Sink for Blackhole {
                         self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
                     } else {
                         error!("{ctx} failed to encode");
-                    };
+                    }
                     self.count += 1;
                     self.buf.clear();
                     self.delivered.record(delta_ns)?;
@@ -558,12 +558,12 @@ impl Sink for Blackhole {
                     self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
                 } else {
                     error!("{ctx} failed to encode");
-                };
+                }
                 self.count += 1;
                 self.buf.clear();
                 self.delivered.record(delta_ns)?;
                 self.finish(ctx)?;
-            };
+            }
         }
 
         Ok(SinkReply::default())
@@ -591,7 +591,7 @@ impl Sink for Blackhole {
                 self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
             } else {
                 error!("{ctx} failed to encode");
-            };
+            }
             self.count += 1;
             self.buf.clear();
             self.delivered.record(delta_ns)?;

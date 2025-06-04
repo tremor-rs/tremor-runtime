@@ -48,8 +48,9 @@
 //! sub command to find out more
 //! :::
 
+use std::sync::LazyLock;
+
 use crate::{sink::prelude::*, source::prelude::*};
-use lazy_static::lazy_static;
 use tokio::{
     io::{stderr, stdin, stdout, AsyncReadExt, AsyncWriteExt, Stderr, Stdout},
     sync::broadcast::{channel as broadcast, error::RecvError, Receiver},
@@ -58,30 +59,28 @@ use tremor_common::ports::{Port, IN};
 use tremor_system::event::DEFAULT_STREAM_ID;
 const INPUT_SIZE_BYTES: usize = 8192;
 
-lazy_static! {
-    pub(crate) static ref STDIN: Receiver<Vec<u8>> = {
-        // This gets initialized only once - the first time a stdio connector
-        // is created, after that we simply clone the channel.
-        let (tx, rx) = broadcast(qsize());
-        // We user overflow so that non collected messages can be removed
-        // is this what we want? for STDIO it should be good enough
-        tokio::task::spawn(async move {
-            let mut stream = stdin();
-            let mut buffer = [0_u8; INPUT_SIZE_BYTES];
-            while let Ok(len) = stream.read(&mut buffer).await {
-                if len == 0 {
-                    info!("STDIN done reading.");
-                    break;
-                    // ALLOW: we get len from read
-                } else if let Err(e) = tx.send(buffer[0..len].to_vec()) {
-                    error!("STDIN error: {}", e);
-                    break;
-                }
+pub(crate) static STDIN: LazyLock<Receiver<Vec<u8>>> = LazyLock::new(|| {
+    // This gets initialized only once - the first time a stdio connector
+    // is created, after that we simply clone the channel.
+    let (tx, rx) = broadcast(qsize());
+    // We user overflow so that non collected messages can be removed
+    // is this what we want? for STDIO it should be good enough
+    tokio::task::spawn(async move {
+        let mut stream = stdin();
+        let mut buffer = [0_u8; INPUT_SIZE_BYTES];
+        while let Ok(len) = stream.read(&mut buffer).await {
+            if len == 0 {
+                info!("STDIN done reading.");
+                break;
+                // ALLOW: we get len from read
+            } else if let Err(e) = tx.send(buffer[0..len].to_vec()) {
+                error!("STDIN error: {e}");
+                break;
             }
-        });
-        rx
-    };
-}
+        }
+    });
+    rx
+});
 
 /// connector handling 1 std stream (stdout, stderr or stdin)
 pub(crate) struct StdStreamConnector {}
@@ -150,7 +149,7 @@ impl Source for StdStreamSource {
                             codec_overwrite: None,
                         }
                     }
-                    Err(RecvError::Lagged(_)) => continue, // retry, this is expected
+                    Err(RecvError::Lagged(_)) => {} // retry, this is expected
                     Err(RecvError::Closed) => {
                         // receive error from broadcast channel
                         // either the stream is done (in case of a pipe)

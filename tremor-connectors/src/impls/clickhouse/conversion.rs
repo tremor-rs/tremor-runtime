@@ -58,7 +58,7 @@ pub(super) fn convert_value(
             // We don't check that all elements of the array have the same type.
             // Instead, we check that every element can be converted to the expected
             // array type.
-            wrap_getter_error(context, ValueAsContainer::as_array)?
+            wrap_getter_error(context, ValueAsArray::as_array)?
                 .iter()
                 .map(|value| convert_value(column_name, value, expected_inner_type))
                 .collect::<Result<Vec<_>, _>>()

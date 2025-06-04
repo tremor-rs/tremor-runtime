@@ -131,7 +131,7 @@ impl ChannelSourceRuntime {
                         ctx.swallow_err(tx.send(sc_data).await, "Error Sending StreamFail Message");
                         break;
                     }
-                };
+                }
                 let sc_data = timeout(Self::READ_TIMEOUT_MS, reader.read(stream)).await;
 
                 let sc_data = match sc_data {
@@ -158,7 +158,7 @@ impl ChannelSourceRuntime {
 
                 if tx.send(sc_data).await.is_err() || last {
                     break;
-                };
+                }
             }
 
             if reader.on_done(stream).await == StreamDone::ConnectorClosed {

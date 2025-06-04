@@ -266,7 +266,7 @@ impl Source for UnixSocketSource {
                         runtime.register_stream_reader(stream_id, &ctx, reader);
                     }
                     Ok(Err(e)) => return Err(e.into()),
-                    Err(_) => continue,
+                    Err(_) => {}
                 };
             }
             Ok(())

@@ -86,7 +86,7 @@ async fn tcp_server_pause_resume() -> anyhow::Result<()> {
         Some(
             format!(
                 "{}{}",
-                data.split('\n').last().unwrap_or_default(),
+                data.split('\n').next_back().unwrap_or_default(),
                 data2.split('\n').next().unwrap_or_default()
             )
             .as_str()

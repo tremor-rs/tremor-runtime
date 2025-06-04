@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(rustdoc::invalid_codeblock_attributes)]
 //! The [`tcp_server`](#tcp_server) and [`tcp_client`](#tcp_client) connectors allow TCP-based clients and servers to be integrated with tremor.
 //!
 //! ## `tcp_server`

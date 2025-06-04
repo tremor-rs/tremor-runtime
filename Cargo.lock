@@ -718,7 +718,7 @@ dependencies = [
  "http 0.2.12",
  "http 1.3.1",
  "http-body 0.4.6",
- "lru",
+ "lru 0.12.5",
  "once_cell",
  "percent-encoding",
  "regex-lite",
@@ -1831,6 +1831,29 @@ dependencies = [
  "regex",
  "serde",
  "serde_derive",
+ "serde_json",
+ "tinytemplate",
+ "walkdir",
+]
+
+[[package]]
+name = "criterion"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bf7af66b0989381bd0be551bd7cc91912a655a58c6918420c9527b1fd8b4679"
+dependencies = [
+ "anes",
+ "cast",
+ "ciborium",
+ "clap",
+ "criterion-plot",
+ "itertools 0.13.0",
+ "num-traits",
+ "oorandom",
+ "plotters",
+ "rayon",
+ "regex",
+ "serde",
  "serde_json",
  "tinytemplate",
  "walkdir",
@@ -3722,6 +3745,15 @@ dependencies = [
 
 [[package]]
 name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -4099,6 +4131,15 @@ name = "lru"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
+dependencies = [
+ "hashbrown 0.15.3",
+]
+
+[[package]]
+name = "lru"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f8cc7106155f10bdf99a6f379688f543ad6596a415375b36a59a054ceda1198"
 dependencies = [
  "hashbrown 0.15.3",
 ]
@@ -4687,6 +4728,18 @@ checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
 dependencies = [
  "fixedbitset 0.5.7",
  "indexmap 2.9.0",
+]
+
+[[package]]
+name = "petgraph"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a98c6720655620a521dcc722d0ad66cd8afd5d86e34a89ef691c50b7b24de06"
+dependencies = [
+ "fixedbitset 0.5.7",
+ "hashbrown 0.15.3",
+ "indexmap 2.9.0",
+ "serde",
 ]
 
 [[package]]
@@ -5769,19 +5822,6 @@ dependencies = [
 
 [[package]]
 name = "rustls-native-certs"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5bfb394eeed242e909609f56089eecfe5fda225042e8b171791b9c95f5931e5"
-dependencies = [
- "openssl-probe",
- "rustls-pemfile 2.2.0",
- "rustls-pki-types",
- "schannel",
- "security-framework 2.11.1",
-]
-
-[[package]]
-name = "rustls-native-certs"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcff2dd52b58a8d98a70243663a0d234c4e2b79235637849d15913394a247d3"
@@ -6376,11 +6416,9 @@ version = "0.13.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0228a564470f81724e30996bbc2b171713b37b15254a6440c7e2d5449b95691"
 dependencies = [
- "ahash",
  "getrandom 0.2.16",
  "halfbrown 0.2.5",
  "lexical-core 1.0.5",
- "once_cell",
  "ref-cast",
  "serde",
  "serde_json",
@@ -7603,7 +7641,7 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_complete",
- "criterion",
+ "criterion 0.6.0",
  "difference",
  "env_logger",
  "error-chain",
@@ -7729,7 +7767,7 @@ dependencies = [
  "file-mode",
  "futures",
  "gouth",
- "halfbrown 0.2.5",
+ "halfbrown 0.3.0",
  "hdrhistogram",
  "hostname 0.4.1",
  "http 1.3.1",
@@ -7744,24 +7782,24 @@ dependencies = [
  "mime",
  "proptest",
  "qwal",
- "rand 0.8.5",
+ "rand 0.9.1",
  "rdkafka",
  "rdkafka-sys",
  "rustls 0.23.26",
- "rustls-native-certs 0.7.3",
+ "rustls-native-certs 0.8.1",
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_yaml",
  "serenity",
  "serial_test",
- "simd-json 0.13.11",
- "simd-json-derive 0.13.0",
+ "simd-json 0.15.1",
+ "simd-json-derive 0.16.0",
  "sled",
  "socket2 0.5.9",
  "tempfile",
  "test-case",
  "testcontainers",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
  "tide",
  "tokio",
  "tokio-rustls 0.26.2",
@@ -7779,7 +7817,7 @@ dependencies = [
  "trust-dns-resolver",
  "url",
  "uuid",
- "value-trait 0.8.1",
+ "value-trait 0.11.0",
  "xz2",
 ]
 
@@ -7936,7 +7974,7 @@ dependencies = [
 name = "tremor-influx"
 version = "0.13.0-rc.33"
 dependencies = [
- "criterion",
+ "criterion 0.5.1",
  "lexical",
  "pretty_assertions",
  "simd-json 0.15.1",
@@ -7998,24 +8036,23 @@ name = "tremor-pipeline"
 version = "0.13.0-rc.33"
 dependencies = [
  "beef",
- "criterion",
- "error-chain",
+ "criterion 0.6.0",
  "fenster",
- "halfbrown 0.2.5",
+ "halfbrown 0.3.0",
  "indexmap 2.9.0",
- "lazy_static",
  "log",
- "lru",
- "petgraph 0.6.5",
- "rand 0.8.5",
+ "lru 0.14.0",
+ "petgraph 0.8.1",
+ "rand 0.9.1",
  "regex",
  "rust-bert",
  "serde",
  "serde_yaml",
- "simd-json 0.13.11",
- "simd-json-derive 0.13.0",
+ "simd-json 0.15.1",
+ "simd-json-derive 0.16.0",
  "sled",
  "tempfile",
+ "thiserror 2.0.12",
  "tokio",
  "tremor-common",
  "tremor-config",
@@ -8023,7 +8060,7 @@ dependencies = [
  "tremor-system",
  "tremor-value",
  "url",
- "value-trait 0.8.1",
+ "value-trait 0.11.0",
  "xz2",
 ]
 
@@ -8082,7 +8119,7 @@ dependencies = [
  "chrono-tz 0.10.3",
  "cidr-utils",
  "codespan",
- "criterion",
+ "criterion 0.6.0",
  "dissect",
  "distance",
  "downcast-rs",

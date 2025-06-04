@@ -85,7 +85,7 @@ impl ConnectorBuilder for Builder {
         // TODO: do we really need to make the port required when we have a default defined on the URL?
         if config.url.port().is_none() {
             return Err(error_connector_def(id, Self::MISSING_PORT).into());
-        };
+        }
 
         let (tls_connector, tls_domain) = match config.tls.as_ref() {
             Some(Either::Right(true)) => (

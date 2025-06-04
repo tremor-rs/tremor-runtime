@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(rustdoc::invalid_codeblock_attributes)]
 //! The `wal` connector provides a write-ahead log implementation for use with transactional streams
 //! to deliver guaranteed delivery between a source and a downstream connected target system.
 //!
@@ -96,18 +97,28 @@ struct WalSource {
     wal: Arc<Mutex<qwal::Wal>>,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum WalError {
+    #[error(transparent)]
+    Json(#[from] simd_json::Error),
+    #[error(transparent)]
+    SimdJsonDerive(#[from] simd_json_derive::de::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
+
 struct Payload(Event);
 
 impl qwal::Entry for Payload {
     type Output = Event;
-    type Error = simd_json::Error;
+    type Error = WalError;
 
     fn serialize(self) -> std::result::Result<Vec<u8>, Self::Error> {
         Ok(self.0.json_vec()?)
     }
 
     fn deserialize(mut data: Vec<u8>) -> std::result::Result<Self::Output, Self::Error> {
-        Event::from_slice(&mut data)
+        Ok(Event::from_slice(&mut data)?)
     }
 }
 

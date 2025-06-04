@@ -273,8 +273,8 @@ impl Source for HttpServerSource {
                 );
 
                 loop {
-                    let (tcp_stream, _remote_addr) = listener.accept().await?;
-                    info!("{ctx} Accepted connection from {:?}", _remote_addr);
+                    let (tcp_stream, remote_addr) = listener.accept().await?;
+                    info!("{ctx} Accepted connection from {remote_addr:?}");
 
                     let io = TokioIo::new(tcp_stream);
 
@@ -331,7 +331,7 @@ impl Source for HttpServerSource {
         // store request context so we can respond to this request
         if self.inflight.insert(request_id, response_channel).is_some() {
             error!("{ctx} Request id collision: {request_id}");
-        };
+        }
         Ok(if data.is_empty() {
             // NOTE GET, HEAD ...
             SourceReply::Structured {
@@ -439,7 +439,6 @@ impl Sink for HttpServerSink {
                             warn!(
                                 "{ctx} No request context found for `request_id`: {rid}. Dropping response."
                             );
-                            continue;
                         }
                     }
                     Entry::Occupied(mut o) => {
@@ -477,7 +476,6 @@ impl Sink for HttpServerSink {
                                     k.insert(response);
                                 } else {
                                     warn!("{ctx} No request context found for Request id: {rid}. Dropping response.");
-                                    continue;
                                 }
                             }
                             Entry::Occupied(mut o) => {
@@ -514,7 +512,6 @@ impl Sink for HttpServerSink {
                                         k.insert(response);
                                     } else {
                                         warn!("{ctx} No request context found for Request id: {rid}. Dropping response.");
-                                        continue;
                                     }
                                 }
                                 Entry::Occupied(mut o) => {
@@ -727,7 +724,7 @@ async fn handle_request(
     req: Request<Incoming>,
 ) -> http::Result<Response<StreamingBody>> {
     // NOTE We wrap and crap as tide doesn't report donated route handler's errors
-    let result = _handle_request(&mut context, req).await;
+    let result = handle_request_inner(&mut context, req).await;
     match result {
         Ok(response) => Ok(response),
         Err(e) => {
@@ -744,7 +741,7 @@ async fn handle_request(
     }
 }
 
-async fn _handle_request(
+async fn handle_request_inner(
     context: &mut HttpServerState,
     req: Request<Incoming>,
 ) -> anyhow::Result<Response<StreamingBody>> {
