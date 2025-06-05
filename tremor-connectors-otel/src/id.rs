@@ -22,7 +22,7 @@ use tremor_value::prelude::*;
 
 pub(crate) fn random_span_id_bytes(ingest_ns_seed: u64) -> Vec<u8> {
     let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
-    let span_id: Vec<u8> = (0..8).map(|_| rng.gen_range(0_u8..=255_u8)).collect();
+    let span_id: Vec<u8> = (0..8).map(|_| rng.random_range(0_u8..=255_u8)).collect();
     span_id
 }
 
@@ -43,7 +43,7 @@ pub(crate) fn random_span_id_value(ingest_ns_seed: u64) -> Value<'static> {
 
 pub(crate) fn random_trace_id_bytes(ingest_ns_seed: u64) -> Vec<u8> {
     let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
-    let span_id: Vec<u8> = (0..16).map(|_| rng.gen_range(0_u8..=255_u8)).collect();
+    let span_id: Vec<u8> = (0..16).map(|_| rng.random_range(0_u8..=255_u8)).collect();
     span_id
 }
 

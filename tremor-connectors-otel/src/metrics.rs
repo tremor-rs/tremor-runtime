@@ -84,7 +84,7 @@ pub(crate) fn double_exemplars_to_json(data: Vec<Exemplar>) -> Value<'static> {
                 for (k, v) in labels.drain() {
                     attributes.insert(k, v);
                 }
-            };
+            }
 
             let mut r = literal!({
                 "span_id": id::hex_id_to_json(&exemplar.span_id),
@@ -100,7 +100,7 @@ pub(crate) fn double_exemplars_to_json(data: Vec<Exemplar>) -> Value<'static> {
                     r.try_insert("value", v);
                 }
                 None => (),
-            };
+            }
             r
         })
         .collect()
@@ -220,7 +220,7 @@ pub(crate) fn double_data_points_to_json(pb: Vec<NumberDataPoint>) -> Value<'sta
                 for (k, v) in labels.drain() {
                     attributes.insert(k, v);
                 }
-            };
+            }
             let mut r = literal!({
                 "start_time_unix_nano": data.start_time_unix_nano,
                 "time_unix_nano": data.time_unix_nano,
@@ -235,7 +235,7 @@ pub(crate) fn double_data_points_to_json(pb: Vec<NumberDataPoint>) -> Value<'sta
                     r.try_insert("value", v);
                 }
                 None => (),
-            };
+            }
             r
         })
         .collect()
@@ -280,7 +280,7 @@ pub(crate) fn double_histo_data_points_to_json(pb: Vec<HistogramDataPoint>) -> V
                 for (k, v) in labels.drain() {
                     attributes.insert(k, v);
                 }
-            };
+            }
             literal!({
                 "start_time_unix_nano": point.start_time_unix_nano,
                 "time_unix_nano": point.time_unix_nano,
@@ -343,7 +343,7 @@ pub(crate) fn double_summary_data_points_to_json(pb: Vec<SummaryDataPoint>) -> V
                 for (k, v) in labels.drain() {
                     attributes.insert(k, v);
                 }
-            };
+            }
             literal!({
                 "start_time_unix_nano": point.start_time_unix_nano,
                 "time_unix_nano": point.time_unix_nano,
@@ -626,7 +626,7 @@ pub(crate) fn resource_metrics_to_json(request: ExportMetricsServiceRequest) -> 
             let mut base = literal!({ "instrumentation_library_metrics": ill,  "schema_url": metric.schema_url });
             if let Some(r) = metric.resource {
                 base.try_insert("resource", resource::resource_to_json(r));
-            };
+            }
             base
         })
         .collect();

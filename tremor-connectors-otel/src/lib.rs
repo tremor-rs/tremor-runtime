@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(rustdoc::invalid_codeblock_attributes)]
 //! This connector adds support for the [CNCF OpenTelemetry](https://opentelemetry.io/) specification
 //! allowing tremor to expose `OpenTelemetry` capable endpoints and to act as an `OpenTelemetry` client.
 //!
