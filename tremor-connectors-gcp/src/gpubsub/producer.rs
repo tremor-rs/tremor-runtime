@@ -17,8 +17,9 @@ use crate::{
     gpubsub::default_request_timeout,
     utils::{AuthInterceptor, TokenSrc},
 };
-use googapis::google::pubsub::v1::{
-    publisher_client::PublisherClient, PublishRequest, PubsubMessage,
+use gcloud_sdk::{
+    google::pubsub::v1::{publisher_client::PublisherClient, PublishRequest, PubsubMessage},
+    tonic,
 };
 use serde::Deserialize;
 use std::{collections::HashMap, time::Duration};
@@ -129,7 +130,7 @@ impl Sink for GpubSink {
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.config.url.scheme() == "https" {
             let tls_config = ClientTlsConfig::new()
-                .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
+                .ca_certificate(Certificate::from_pem(gcloud_sdk::CERTIFICATES))
                 .domain_name(self.hostname.clone());
 
             channel = channel.tls_config(tls_config)?;
@@ -194,7 +195,7 @@ impl Sink for GpubSink {
         .await
         {
             if let Err(error) = inner_result {
-                log::error!("{ctx} Failed to publish a message: {}", error);
+                log::error!("{ctx} Failed to publish a message: {error}");
 
                 if matches!(
                     error.code(),

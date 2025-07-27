@@ -78,19 +78,19 @@ pub enum Error {
     #[error("Failed to aquire read lock")]
     ReadLock,
     /// Tremor Common Error
-    #[error("Tremor Common Error")]
+    #[error("Tremor Common Error {0}")]
     Common(#[from] tremor_common::Error),
     /// Tremor Script Error
-    #[error("Tremor Script Error")]
+    #[error("Tremor Script Error {0}")]
     Script(#[from] tremor_script::errors::Error),
     /// IO Error
-    #[error("IO Error")]
+    #[error("IO Error {0}")]
     Io(#[from] std::io::Error),
     /// Serde Error
-    #[error("Serde Error")]
+    #[error("Serde Error {0}")]
     Serde(#[from] serde_json::Error),
     /// Simd JSON Error
-    #[error("Simd JSON Error")]
+    #[error("Simd JSON Error {0}")]
     SimdJson(#[from] simd_json::Error),
 }
 
@@ -290,7 +290,7 @@ pub(crate) async fn build_archive_from_source<W: AsyncWrite + Unpin + Send>(
         .await?;
 
     let mut header = Header::new_gnu();
-    header.set_size(src.as_bytes().len() as u64);
+    header.set_size(src.len() as u64);
     header.set_cksum();
     ar.append_data(&mut header, "main.troy", src.as_bytes())
         .await?;
@@ -307,7 +307,7 @@ pub(crate) async fn build_archive_from_source<W: AsyncWrite + Unpin + Send>(
                 let mut file: PathBuf = p.module().iter().collect();
                 file.push(p.id());
                 let mut header = Header::new_gnu();
-                header.set_size(src.as_bytes().len() as u64);
+                header.set_size(src.len() as u64);
                 header.set_cksum();
                 debug!("Adding module {paths:?} with id {id} as file {file:?} to archive");
                 ar.append_data(&mut header, file, src.as_bytes()).await?;

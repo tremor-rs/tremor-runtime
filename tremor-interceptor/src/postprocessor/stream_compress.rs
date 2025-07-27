@@ -64,7 +64,7 @@ use std::{
     sync::Arc,
     vec,
 };
-use tremor_value::Value;
+use tremor_value::{prelude::ValueObjectAccessAsScalar, Value};
 use value_trait::prelude::*;
 
 #[derive(Debug, PartialEq)]
@@ -171,7 +171,7 @@ impl Postprocessor for Compress {
     fn is_streaming(&self) -> bool {
         true
     }
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "compress"
     }
     fn process(
@@ -279,7 +279,7 @@ impl Postprocessor for Xz2 {
     fn is_streaming(&self) -> bool {
         true
     }
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "streaming-xz2"
     }
 
@@ -320,7 +320,7 @@ impl Postprocessor for Xz2 {
         if let Some(encoder) = self.encoder.take() {
             let mut w = encoder.finish()?;
             w.flush()?;
-        };
+        }
 
         let mut out = Vec::new();
         if let Some(mut reader) = self.reader.take() {
@@ -402,7 +402,7 @@ impl Postprocessor for Zstd {
     fn is_streaming(&self) -> bool {
         true
     }
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "streaming-zstd"
     }
 

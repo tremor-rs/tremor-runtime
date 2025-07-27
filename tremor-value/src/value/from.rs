@@ -17,7 +17,7 @@ use beef::Cow;
 use simd_json::{BorrowedValue, OwnedValue, StaticNode};
 use tremor_common::ports::Port;
 
-impl<'value> From<OwnedValue> for Value<'value> {
+impl From<OwnedValue> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(b: OwnedValue) -> Self {
@@ -43,7 +43,7 @@ impl<'value> From<BorrowedValue<'value>> for Value<'value> {
     }
 }
 
-impl<'value> From<StaticNode> for Value<'value> {
+impl From<StaticNode> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(s: StaticNode) -> Self {
@@ -86,7 +86,7 @@ impl<'value> From<beef::Cow<'value, str>> for Value<'value> {
     }
 }
 
-impl<'value> From<String> for Value<'value> {
+impl From<String> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(s: String) -> Self {
@@ -95,14 +95,14 @@ impl<'value> From<String> for Value<'value> {
 }
 
 /********* atoms **********/
-impl<'value> From<bool> for Value<'value> {
+impl From<bool> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(b: bool) -> Self {
         Value::Static(StaticNode::Bool(b))
     }
 }
-impl<'value> From<()> for Value<'value> {
+impl From<()> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(_b: ()) -> Self {
@@ -111,7 +111,7 @@ impl<'value> From<()> for Value<'value> {
 }
 
 /********* i_ **********/
-impl<'value> From<i8> for Value<'value> {
+impl From<i8> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(i: i8) -> Self {
@@ -119,7 +119,7 @@ impl<'value> From<i8> for Value<'value> {
     }
 }
 
-impl<'value> From<i16> for Value<'value> {
+impl From<i16> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(i: i16) -> Self {
@@ -127,7 +127,7 @@ impl<'value> From<i16> for Value<'value> {
     }
 }
 
-impl<'value> From<i32> for Value<'value> {
+impl From<i32> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(i: i32) -> Self {
@@ -135,7 +135,7 @@ impl<'value> From<i32> for Value<'value> {
     }
 }
 
-impl<'value> From<i64> for Value<'value> {
+impl From<i64> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(i: i64) -> Self {
@@ -143,8 +143,17 @@ impl<'value> From<i64> for Value<'value> {
     }
 }
 
+#[cfg(feature = "128bit")]
+impl From<i128> for Value<'_> {
+    #[inline]
+    #[must_use]
+    fn from(i: i128) -> Self {
+        Self::Static(StaticNode::I128(i))
+    }
+}
+
 /********* u_ **********/
-impl<'value> From<u8> for Value<'value> {
+impl From<u8> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(i: u8) -> Self {
@@ -152,7 +161,7 @@ impl<'value> From<u8> for Value<'value> {
     }
 }
 
-impl<'value> From<u16> for Value<'value> {
+impl From<u16> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(i: u16) -> Self {
@@ -160,7 +169,7 @@ impl<'value> From<u16> for Value<'value> {
     }
 }
 
-impl<'value> From<u32> for Value<'value> {
+impl From<u32> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(i: u32) -> Self {
@@ -168,7 +177,7 @@ impl<'value> From<u32> for Value<'value> {
     }
 }
 
-impl<'value> From<u64> for Value<'value> {
+impl From<u64> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(i: u64) -> Self {
@@ -176,7 +185,7 @@ impl<'value> From<u64> for Value<'value> {
     }
 }
 
-impl<'value> From<usize> for Value<'value> {
+impl From<usize> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(i: usize) -> Self {
@@ -184,8 +193,17 @@ impl<'value> From<usize> for Value<'value> {
     }
 }
 
+#[cfg(feature = "128bit")]
+impl From<u128> for Value<'_> {
+    #[inline]
+    #[must_use]
+    fn from(i: u128) -> Self {
+        Self::Static(StaticNode::U128(i))
+    }
+}
+
 /********* f_ **********/
-impl<'value> From<f32> for Value<'value> {
+impl From<f32> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(f: f32) -> Self {
@@ -193,7 +211,7 @@ impl<'value> From<f32> for Value<'value> {
     }
 }
 
-impl<'value> From<f64> for Value<'value> {
+impl From<f64> for Value<'_> {
     #[inline]
     #[must_use]
     fn from(f: f64) -> Self {

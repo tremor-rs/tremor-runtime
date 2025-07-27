@@ -100,6 +100,12 @@ pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
                 value: Some(Inner::IntValue(v)),
             }
         }
+        Value::Static(StaticNode::I128(v)) => AnyValue {
+            value: i64::try_from(*v).ok().map(Inner::IntValue),
+        },
+        Value::Static(StaticNode::U128(v)) => AnyValue {
+            value: i64::try_from(*v).ok().map(Inner::IntValue),
+        },
         Value::Static(StaticNode::F64(v)) => AnyValue {
             value: Some(Inner::DoubleValue(*v)),
         },

@@ -16,14 +16,14 @@ use super::{BinOpKind, Invoke, InvokeAggr, InvokeAggrFn, UnaryOpKind};
 use crate::ast::BooleanBinOpKind;
 use std::fmt;
 
-impl<'script> fmt::Debug for InvokeAggrFn<'script> {
+impl fmt::Debug for InvokeAggrFn<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "fn(aggr) {}::{}", self.module, self.fun)
     }
 }
 
 /// custom impl becauyse field `invocable` does not implement `PartialEq`
-impl<'script> PartialEq for InvokeAggrFn<'script> {
+impl PartialEq for InvokeAggrFn<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.fun == other.fun && self.args == other.args
     }
@@ -93,13 +93,13 @@ impl fmt::Display for UnaryOpKind {
 }
 
 /// custom implementation because field `invocable` is not `PartialEq`
-impl<'script> PartialEq for Invoke<'script> {
+impl PartialEq for Invoke<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.mid == other.mid && self.node_id == other.node_id && self.args == other.args
     }
 }
 
-impl<'script> fmt::Debug for Invoke<'script> {
+impl fmt::Debug for Invoke<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct(&format!("fn {}", self.node_id.fqn()))
             .field("mid", &self.mid)

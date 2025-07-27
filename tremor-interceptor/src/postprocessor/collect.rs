@@ -56,7 +56,7 @@ impl Trait for Postprocessor {
         true
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "collect"
     }
 

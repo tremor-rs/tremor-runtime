@@ -57,7 +57,8 @@ use crate::prelude::*;
 use apache_avro::{
     schema::{ArraySchema, MapSchema, Name},
     types::Value as AvroValue,
-    Codec as Compression, Decimal, Duration, Reader, Schema, Writer,
+    Bzip2Settings, Codec as Compression, Decimal, Duration, Reader, Schema, Writer, XzSettings,
+    ZstandardSettings,
 };
 use schema_registry_converter::avro_common::AvroSchema;
 use serde::Deserialize;
@@ -81,9 +82,9 @@ impl Avro {
         let compression = match config.get_str("compression") {
             Some("deflate") => Compression::Deflate,
             Some("snappy") => Compression::Snappy,
-            Some("zstd") => Compression::Zstandard,
-            Some("bzip2") => Compression::Bzip2,
-            Some("xz") => Compression::Xz,
+            Some("zstd") => Compression::Zstandard(ZstandardSettings::default()),
+            Some("bzip2") => Compression::Bzip2(Bzip2Settings::default()),
+            Some("xz") => Compression::Xz(XzSettings::default()),
             None | Some("none") => Compression::Null,
             Some(c) => return Err(format!("Unknown compression codec: {c}").into()),
         };
@@ -106,9 +107,9 @@ impl Avro {
         }
     }
 
-    async fn write_value<'a, 'v>(
+    async fn write_value<'a>(
         &self,
-        data: &'a Value<'v>,
+        data: &'a Value<'_>,
         writer: &mut Writer<'a, Vec<u8>>,
     ) -> Result<()> {
         let v = value_to_avro(data, writer.schema(), &self.registry).await?;
@@ -123,7 +124,7 @@ pub(crate) enum SchemaWrapper<'a> {
     Ref(&'a Schema),
 }
 
-impl<'a> SchemaWrapper<'a> {
+impl SchemaWrapper<'_> {
     fn schema(&self) -> &Schema {
         match self {
             SchemaWrapper::Schema(s) => &s.parsed,
@@ -143,8 +144,8 @@ impl SchemaResolver for AvroRegistry {
     }
 }
 
-pub(crate) async fn array_value_to_avro<'v, R>(
-    data: &[Value<'v>],
+pub(crate) async fn array_value_to_avro<R>(
+    data: &[Value<'_>],
     schema: &ArraySchema,
     resolver: &R,
 ) -> Result<AvroValue>
@@ -159,8 +160,8 @@ where
     Ok(AvroValue::Array(res))
 }
 
-pub(crate) async fn map_value_to_avro<'v, R>(
-    data: &Object<'v>,
+pub(crate) async fn map_value_to_avro<R>(
+    data: &Object<'_>,
     schema: &MapSchema,
     resolver: &R,
 ) -> Result<AvroValue>
@@ -236,7 +237,6 @@ where
                         f.name.clone(),
                         value_to_avro(&val, &f.schema, resolver).await?,
                     ));
-                    continue;
                 } else if d.is_none() && f.is_nullable() {
                     res.push((f.name.clone(), AvroValue::Null));
                 } else if let Some(d) = d {
@@ -351,7 +351,7 @@ pub(crate) fn avro_to_value(val: AvroValue) -> Result<Value<'static>> {
 
 #[async_trait::async_trait]
 impl Codec for Avro {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "avro"
     }
 

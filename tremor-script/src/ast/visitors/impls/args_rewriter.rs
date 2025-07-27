@@ -44,18 +44,13 @@ impl<'script, 'registry, 'meta> ArgsRewriter<'script, 'registry, 'meta> {
     }
 }
 
-impl<'script, 'registry, 'meta> ImutExprWalker<'script>
-    for ArgsRewriter<'script, 'registry, 'meta>
-{
-}
+impl<'script> ImutExprWalker<'script> for ArgsRewriter<'script, '_, '_> {}
 
-impl<'script, 'registry, 'meta> ExprWalker<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
-impl<'script, 'registry, 'meta> QueryWalker<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
-impl<'script, 'registry, 'meta> DeployWalker<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
+impl<'script> ExprWalker<'script> for ArgsRewriter<'script, '_, '_> {}
+impl<'script> QueryWalker<'script> for ArgsRewriter<'script, '_, '_> {}
+impl<'script> DeployWalker<'script> for ArgsRewriter<'script, '_, '_> {}
 
-impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
-    for ArgsRewriter<'script, 'registry, 'meta>
-{
+impl<'script> ImutExprVisitor<'script> for ArgsRewriter<'script, '_, '_> {
     fn visit_path(&mut self, path: &mut Path<'script>) -> Result<VisitRes> {
         if let Path::Reserved(ReservedPath::Args { segments, mid }) = path {
             let var = self.helper.register_shadow_from_mid(mid);
@@ -72,6 +67,99 @@ impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
     }
 }
 
-impl<'script, 'registry, 'meta> ExprVisitor<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
-impl<'script, 'registry, 'meta> QueryVisitor<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
-impl<'script, 'registry, 'meta> DeployVisitor<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
+impl<'script> ExprVisitor<'script> for ArgsRewriter<'script, '_, '_> {
+    fn visit_expr(&mut self, _e: &mut Expr<'script>) -> Result<VisitRes> {
+        Ok(VisitRes::Walk)
+    }
+
+    fn leave_expr(&mut self, _e: &mut Expr<'script>) -> Result<()> {
+        Ok(())
+    }
+
+    fn visit_fn_defn(&mut self, _e: &mut FnDefn<'script>) -> Result<VisitRes> {
+        Ok(VisitRes::Walk)
+    }
+
+    fn leave_fn_defn(&mut self, _e: &mut FnDefn<'script>) -> Result<()> {
+        Ok(())
+    }
+
+    fn visit_comprehension(
+        &mut self,
+        _comp: &mut Comprehension<'script, Expr<'script>>,
+    ) -> Result<VisitRes> {
+        Ok(VisitRes::Walk)
+    }
+
+    fn leave_comprehension(
+        &mut self,
+        _comp: &mut Comprehension<'script, Expr<'script>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn visit_emit(&mut self, _emit: &mut EmitExpr<'script>) -> Result<VisitRes> {
+        Ok(VisitRes::Walk)
+    }
+
+    fn leave_emit(&mut self, _emit: &mut EmitExpr<'script>) -> Result<()> {
+        Ok(())
+    }
+
+    fn visit_ifelse(&mut self, _mifelse: &mut IfElse<'script, Expr<'script>>) -> Result<VisitRes> {
+        Ok(VisitRes::Walk)
+    }
+
+    fn leave_ifelse(&mut self, _mifelse: &mut IfElse<'script, Expr<'script>>) -> Result<()> {
+        Ok(())
+    }
+
+    fn visit_default_case(
+        &mut self,
+        _mdefault: &mut DefaultCase<Expr<'script>>,
+    ) -> Result<VisitRes> {
+        Ok(VisitRes::Walk)
+    }
+
+    fn leave_default_case(&mut self, _mdefault: &mut DefaultCase<Expr<'script>>) -> Result<()> {
+        Ok(())
+    }
+
+    fn visit_mmatch(&mut self, _mmatch: &mut Match<'script, Expr<'script>>) -> Result<VisitRes> {
+        Ok(VisitRes::Walk)
+    }
+
+    fn leave_mmatch(&mut self, _mmatch: &mut Match<'script, Expr<'script>>) -> Result<()> {
+        Ok(())
+    }
+
+    fn visit_clause_group(
+        &mut self,
+        _group: &mut ClauseGroup<'script, Expr<'script>>,
+    ) -> Result<VisitRes> {
+        Ok(VisitRes::Walk)
+    }
+
+    fn leave_clause_group(
+        &mut self,
+        _group: &mut ClauseGroup<'script, Expr<'script>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn visit_predicate_clause(
+        &mut self,
+        _predicate: &mut PredicateClause<'script, Expr<'script>>,
+    ) -> Result<VisitRes> {
+        Ok(VisitRes::Walk)
+    }
+
+    fn leave_predicate_clause(
+        &mut self,
+        _predicate: &mut PredicateClause<'script, Expr<'script>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+}
+impl<'script> QueryVisitor<'script> for ArgsRewriter<'script, '_, '_> {}
+impl<'script> DeployVisitor<'script> for ArgsRewriter<'script, '_, '_> {}

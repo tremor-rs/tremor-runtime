@@ -127,11 +127,11 @@ impl DnsSink {
             source_is_connected,
         }
     }
-    async fn query<'event>(
+    async fn query(
         &self,
         name: &str,
         record_type: Option<RecordType>,
-        correlation: Option<&Value<'event>>,
+        correlation: Option<&Value<'_>>,
     ) -> anyhow::Result<EventPayload> {
         // check if we have a resolver
         let resolver = self.resolver.as_ref().ok_or(Error::NoResolvers)?;

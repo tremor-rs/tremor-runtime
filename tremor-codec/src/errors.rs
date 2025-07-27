@@ -12,19 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//NOTE: error_chain
-#![allow(deprecated, missing_docs, clippy::large_enum_variant)]
-
-use error_chain::error_chain;
 use value_trait::prelude::*;
-
-pub type Kind = ErrorKind;
-
-impl From<TryTypeError> for Error {
-    fn from(e: TryTypeError) -> Self {
-        ErrorKind::TypeError(e.expected, e.got).into()
-    }
-}
 
 #[cfg(test)]
 impl PartialEq for Error {
@@ -34,96 +22,139 @@ impl PartialEq for Error {
     }
 }
 
-// TODO: This is a workaround for the fact that `error_chain` does not have sync send errors,
-// this is a temporary solution until we can replace `error_chain` with `anyhow`
-unsafe impl Sync for Error {}
-unsafe impl Send for Error {}
+/// A [`std::result::Result`] with an [`Error`] as err variant.
+pub type Result<T> = std::result::Result<T, Error>;
 
-error_chain! {
-    foreign_links {
-        CsvError(csv::Error);
-        DateTimeParseError(chrono::ParseError);
-        FromUtf8Error(std::string::FromUtf8Error);
-        InfluxEncoderError(tremor_influx::EncoderError);
-        Io(std::io::Error);
-        JsonAccessError(value_trait::AccessError);
-        JsonError(simd_json::Error);
-        MsgPackDecoderError(rmp_serde::decode::Error);
-        MsgPackEncoderError(rmp_serde::encode::Error);
-        ReqwestError(reqwest::Error);
-        InvalidHeaderName(reqwest::header::InvalidHeaderName);
-        TryFromIntError(std::num::TryFromIntError);
-        ValueError(tremor_value::Error);
-        Utf8Error(std::str::Utf8Error);
-        YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
-        Uuid(uuid::Error);
-        Lexical(lexical::Error);
-        SimdUtf8(simdutf8::basic::Utf8Error);
-        TremorCodec(crate::codec::tremor::Error);
-        AvroError(apache_avro::Error);
-        UrlParseError(tremor_common::url::ParseError);
-        SRCError(schema_registry_converter::error::SRCError);
-    }
+/// Tremor Codec Error
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    // wrappers for foreign errors
+    /// Error during CSV decoding/encoding
+    #[error(transparent)]
+    Csv(#[from] csv::Error),
+    /// Error parsing a datetime string
+    #[error(transparent)]
+    DateTimeParse(#[from] chrono::ParseError),
+    /// Error encoding as influx
+    #[error(transparent)]
+    InfluxEncoder(#[from] tremor_influx::EncoderError),
+    /// IO Error. See [`std::io::Error`]
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    /// Error accessing a tremor value
+    #[error(transparent)]
+    JsonAccess(#[from] value_trait::AccessError),
+    /// JSON encoding/decoding error
+    #[error(transparent)]
+    Json(#[from] simd_json::Error),
+    /// Error decoding data as msgpack
+    #[error(transparent)]
+    MsgPackDecode(#[from] rmp_serde::decode::Error),
+    /// Error encoding value as msgpack
+    #[error(transparent)]
+    MsgPackEncode(#[from] rmp_serde::encode::Error),
+    /// Error converting from an int type
+    #[error(transparent)]
+    TryFromInt(#[from] std::num::TryFromIntError),
+    /// JSON error
+    #[error(transparent)]
+    Value(#[from] tremor_value::Error),
+    /// Invalid UTF8
+    #[error(transparent)]
+    Utf8(#[from] std::str::Utf8Error),
+    /// Invalid YAML
+    #[error("Error during YAML parsing: {0}")]
+    YamlError(#[from] serde_yaml::Error),
+    /// Error working with UUIDs
+    #[error(transparent)]
+    Uuid(#[from] uuid::Error),
+    /// Error parsing ints or floats
+    #[error(transparent)]
+    Lexical(#[from] lexical::Error),
+    /// Error decoding UTF8
+    #[error(transparent)]
+    SimdUtf8(#[from] simdutf8::basic::Utf8Error),
+    #[error(transparent)]
+    /// Invalid Tremor codec
+    TremorCodec(#[from] crate::codec::tremor::Error),
+    #[error(transparent)]
+    /// Error handling avro
+    AvroError(#[from] apache_avro::Error),
+    #[error(transparent)]
+    /// Error parsing a URL
+    UrlParseError(#[from] tremor_common::url::ParseError),
+    /// Schema Registry Converter Error
+    #[error(transparent)]
+    SRCError(#[from] schema_registry_converter::error::SRCError),
+    /// generic str error for using:
+    ///
+    /// ```rust
+    /// use tremor_codec::errors::Result;
+    /// fn foo() -> Result<()> {
+    ///     return Err("foo".into());
+    /// }
+    /// ```
+    #[error("{0}")]
+    Str(String),
 
-    errors {
-        TypeError(expected: ValueType, found: ValueType) {
-            description("Type error")
-                display("Type error: Expected {}, found {}", expected, found)
-        }
+    // our own errors
+    /// Unexpected Type
+    #[error("Type error: Expected {expected}, found {found}")]
+    TypeError {
+        /// Expected value type
+        expected: ValueType,
+        /// found value type
+        found: ValueType,
+    },
 
-        CodecNotFound(name: String) {
-            description("Codec not found")
-                display("Codec \"{}\" not found.", name)
-        }
+    /// Codec not found
+    #[error("Codec \"{0}\" not found.")]
+    CodecNotFound(String),
+    /// Value is not CSV serializable
+    #[error("The value {0} cannot be serialized to CSV. Expected an array.")]
+    NotCSVSerializableValue(String),
+    /// Invalid statsd metric
+    #[error("Invalid statsd metric")]
+    InvalidStatsD,
+    /// Invalid graphite plaintext
+    #[error("Invalid graphite plaintext protocol metric")]
+    InvalidGraphitePlaintext,
+    /// Invalid dogstatsd
+    #[error("Invalid dogstatsd metric")]
+    InvalidDogStatsD,
+    /// Invalid influx data
+    #[error("Invalid Influx Line Protocol data: {source}\n{line}")]
+    InvalidInfluxData {
+        /// invalid influx data
+        line: String,
+        /// underlying error
+        source: tremor_influx::DecoderError,
+    },
+    /// Invalid binflux data
+    #[error("Invalid BInflux Line Protocol data: {0}")]
+    InvalidBInfluxData(String),
+    /// Invalid syslog data
+    #[error("Invalid Syslog Protocol data: {0}")]
+    InvalidSyslogData(&'static str),
+}
 
-        NotCSVSerializableValue(value: String) {
-            description("The value cannot be serialized to CSV. Expected an array.")
-            display("The value {} cannot be serialized to CSV. Expected an array.", value)
-        }
-
-        InvalidStatsD {
-            description("Invalid statsd metric")
-                display("Invalid statsd metric")
-        }
-
-        InvalidGraphitePlaintext {
-            description("Invalid graphite plaintext protocol metric")
-                display("Invalid graphite plaintext protocol metric")
-        }
-
-        InvalidDogStatsD {
-            description("Invalid dogstatsd metric")
-                display("Invalid dogstatsd metric")
-        }
-        InvalidInfluxData(s: String, e: tremor_influx::DecoderError) {
-            description("Invalid Influx Line Protocol data")
-                display("Invalid Influx Line Protocol data: {}\n{}", e, s)
-        }
-        InvalidBInfluxData(s: String) {
-            description("Invalid BInflux Line Protocol data")
-                display("Invalid BInflux Line Protocol data: {}", s)
-        }
-        InvalidSyslogData(s: &'static str) {
-            description("Invalid Syslog Protocol data")
-                display("Invalid Syslog Protocol data: {}", s)
+impl From<TryTypeError> for Error {
+    fn from(e: TryTypeError) -> Self {
+        Self::TypeError {
+            expected: e.expected,
+            found: e.got,
         }
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
+impl From<&str> for Error {
+    fn from(value: &str) -> Self {
+        Self::Str(value.to_string())
+    }
+}
 
-    #[test]
-    fn test_type_error() {
-        let r = Error::from(TryTypeError {
-            expected: ValueType::Object,
-            got: ValueType::String,
-        })
-        .0;
-        matches!(
-            r,
-            ErrorKind::TypeError(ValueType::Object, ValueType::String)
-        );
+impl From<String> for Error {
+    fn from(value: String) -> Self {
+        Self::Str(value)
     }
 }

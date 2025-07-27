@@ -32,8 +32,8 @@ impl OnlyMutState {
     }
 }
 
-impl<'script> ExprWalker<'script> for OnlyMutState {}
-impl<'script> ImutExprWalker<'script> for OnlyMutState {}
+impl ExprWalker<'_> for OnlyMutState {}
+impl ImutExprWalker<'_> for OnlyMutState {}
 
 impl<'script> ExprVisitor<'script> for OnlyMutState {
     fn visit_expr(&mut self, e: &mut Expr<'script>) -> Result<VisitRes> {
@@ -43,7 +43,7 @@ impl<'script> ExprVisitor<'script> for OnlyMutState {
         Ok(VisitRes::Walk)
     }
 }
-impl<'script> ImutExprVisitor<'script> for OnlyMutState {}
+impl ImutExprVisitor<'_> for OnlyMutState {}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct NoEventAccess {}
@@ -56,10 +56,10 @@ impl NoEventAccess {
     }
 }
 
-impl<'script> ExprWalker<'script> for NoEventAccess {}
-impl<'script> ImutExprWalker<'script> for NoEventAccess {}
+impl ExprWalker<'_> for NoEventAccess {}
+impl ImutExprWalker<'_> for NoEventAccess {}
 
-impl<'script> ExprVisitor<'script> for NoEventAccess {}
+impl ExprVisitor<'_> for NoEventAccess {}
 impl<'script> ImutExprVisitor<'script> for NoEventAccess {
     fn visit_path(&mut self, p: &mut Path<'script>) -> Result<VisitRes> {
         match p {

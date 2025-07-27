@@ -58,7 +58,7 @@ pub type Config = tremor_config::NameWithConfig;
 /// Postprocessor trait
 pub trait Postprocessor: Send {
     /// Canonical name of the postprocessor
-    fn name(&self) -> &str;
+    fn name(&self) -> &'static str;
     /// process data
     ///
     /// # Errors
@@ -88,7 +88,7 @@ pub trait Postprocessor: Send {
 /// and `finish` is implemented as a passthrough to `process`.
 pub trait Stateless: Send + Sync {
     /// Canonical name of the postprocessor
-    fn name(&self) -> &str;
+    fn name(&self) -> &'static str;
     /// process data
     ///
     /// # Errors
@@ -101,7 +101,7 @@ impl<T> Postprocessor for T
 where
     T: Stateless,
 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         self.name()
     }
 
@@ -130,7 +130,6 @@ where
 /// # Errors
 ///
 ///   * Errors if the postprocessor is not known
-
 pub fn lookup_with_config(config: &Config) -> anyhow::Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
         "chunk" => Ok(Box::new(chunk::Chunk::from_config(config.config.as_ref())?)),
@@ -323,7 +322,7 @@ mod test {
     struct Reverse {}
 
     impl Stateless for Reverse {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "reverse"
         }
 
@@ -341,7 +340,7 @@ mod test {
         fn is_streaming(&self) -> bool {
             false
         }
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "nah-proc"
         }
 
@@ -367,7 +366,7 @@ mod test {
             false
         }
 
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "reverse"
         }
 

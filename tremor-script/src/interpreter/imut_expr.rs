@@ -18,11 +18,10 @@ use crate::{
         InvokeAggr, Literal, LocalPath, Match, Merge, Patch, Path, Recur, ReservedPath, Segment,
         UnaryExpr,
     },
-    errors::Kind as ErrorKind,
     errors::{
         err_invalid_fold, error_bad_key, error_decreasing_range, error_invalid_bool_op,
         error_invalid_unary, error_need_obj, error_need_str, error_no_clause_hit, error_oops,
-        error_oops_err, Result,
+        error_oops_err, ParserError, Result, RuntimeError,
     },
     interpreter::{
         exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
@@ -31,7 +30,7 @@ use crate::{
     lexer::Span,
     prelude::*,
     registry::{TremorAggrFnWrapper, RECUR_REF},
-    stry,
+    stry, Error,
 };
 use crate::{
     ast::{ArrayAppend, BinOpKind, BooleanBinExpr, BooleanBinOpKind, ComprehensionFoldOp},
@@ -89,14 +88,16 @@ impl<'script> ImutExpr<'script> {
     #[inline]
     pub fn try_as_lit(&self) -> Result<&Value<'script>> {
         self.as_lit().ok_or_else(|| {
-            ErrorKind::NotConstant(self.extent(), self.extent().expand_lines(2)).into()
+            Error::from(ParserError::NotConstant {
+                inner: self.extent(),
+                expr: self.extent().expand_lines(2),
+            })
         })
     }
 
     /// Evaluates the expression to a string.
     /// # Errors
     /// if the resulting value can not be represented as a str or the evaluation fails
-
     #[inline]
     pub fn eval_to_string<'event>(
         &self,
@@ -298,7 +299,14 @@ impl<'script> ImutExpr<'script> {
 
             for e in cases {
                 if stry!(test_guard(
-                    self, opts, env, event, state, meta, local, &e.guard
+                    self,
+                    opts,
+                    env,
+                    event,
+                    state,
+                    meta,
+                    local,
+                    e.guard.as_ref()
                 )) {
                     let l = &e.last_expr;
                     let v = stry!(Self::execute_effectors(
@@ -335,7 +343,14 @@ impl<'script> ImutExpr<'script> {
 
             for e in cases {
                 if stry!(test_guard(
-                    self, opts, env, event, state, meta, local, &e.guard
+                    self,
+                    opts,
+                    env,
+                    event,
+                    state,
+                    meta,
+                    local,
+                    e.guard.as_ref()
                 )) {
                     let l = &e.last_expr;
                     if let ImutExpr::Record(r) = l {
@@ -432,7 +447,14 @@ impl<'script> ImutExpr<'script> {
 
             for e in cases {
                 if stry!(test_guard(
-                    self, opts, env, event, state, meta, local, &e.guard
+                    self,
+                    opts,
+                    env,
+                    event,
+                    state,
+                    meta,
+                    local,
+                    e.guard.as_ref()
                 )) {
                     let l = &e.last_expr;
                     let v = stry!(Self::execute_effectors(
@@ -551,7 +573,7 @@ impl<'script> ImutExpr<'script> {
             macro_rules! execute {
                 ($predicate:ident) => {{
                     let p = &$predicate.pattern;
-                    let g = &$predicate.guard;
+                    let g = ($predicate.guard).as_ref();
                     if stry!(test_predicate_expr(
                         expr, opts, env, event, state, meta, local, &target, p, g,
                     )) {
@@ -607,7 +629,7 @@ impl<'script> ImutExpr<'script> {
                 ClauseGroup::Single { pattern, .. } => {
                     execute!(pattern);
                 }
-            };
+            }
         }
 
         match &expr.default {
@@ -655,13 +677,13 @@ impl<'script> ImutExpr<'script> {
     {
         let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
         let lval = lhs.try_as_bool().map_err(|e| {
-            ErrorKind::InvalidBinaryBoolean(
-                expr.extent(),
-                expr.lhs.extent(),
-                expr.kind,
-                e.got,
-                None,
-            )
+            Error::from(RuntimeError::InvalidBinaryBoolean {
+                expr: expr.extent(),
+                inner: expr.lhs.extent(),
+                op: expr.kind,
+                left: e.got,
+                right: None,
+            })
         })?;
 
         match expr.kind {
@@ -669,13 +691,13 @@ impl<'script> ImutExpr<'script> {
             BooleanBinOpKind::Or => {
                 let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
                 let rval = rhs.try_as_bool().map_err(|e| {
-                    ErrorKind::InvalidBinaryBoolean(
-                        expr.extent(),
-                        expr.rhs.extent(),
-                        expr.kind,
-                        ValueType::Bool,
-                        Some(e.got),
-                    )
+                    Error::from(RuntimeError::InvalidBinaryBoolean {
+                        expr: expr.extent(),
+                        inner: expr.rhs.extent(),
+                        op: expr.kind,
+                        left: ValueType::Bool,
+                        right: Some(e.got),
+                    })
                 })?;
 
                 Ok(static_bool!(lval || rval))
@@ -684,13 +706,13 @@ impl<'script> ImutExpr<'script> {
             BooleanBinOpKind::And => {
                 let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
                 let rval = rhs.try_as_bool().map_err(|e| {
-                    ErrorKind::InvalidBinaryBoolean(
-                        expr.extent(),
-                        expr.rhs.extent(),
-                        expr.kind,
-                        ValueType::Bool,
-                        Some(e.got),
-                    )
+                    Error::from(RuntimeError::InvalidBinaryBoolean {
+                        expr: expr.extent(),
+                        inner: expr.rhs.extent(),
+                        op: expr.kind,
+                        left: ValueType::Bool,
+                        right: Some(e.got),
+                    })
                 })?;
 
                 Ok(static_bool!(lval && rval))
@@ -698,13 +720,13 @@ impl<'script> ImutExpr<'script> {
             BooleanBinOpKind::Xor => {
                 let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
                 let rval = rhs.try_as_bool().map_err(|e| {
-                    ErrorKind::InvalidBinaryBoolean(
-                        expr.extent(),
-                        expr.rhs.extent(),
-                        expr.kind,
-                        ValueType::Bool,
-                        Some(e.got),
-                    )
+                    Error::from(RuntimeError::InvalidBinaryBoolean {
+                        expr: expr.extent(),
+                        inner: expr.rhs.extent(),
+                        op: expr.kind,
+                        left: ValueType::Bool,
+                        right: Some(e.got),
+                    })
                 })?;
 
                 Ok(static_bool!(lval ^ rval))

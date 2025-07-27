@@ -316,7 +316,7 @@ impl Source for FileSource {
         } else {
             self.reader = Some(Box::new(read_file.try_clone().await?));
             self.underlying_file = Some(read_file);
-        };
+        }
         Ok(true)
     }
     async fn pull_data(

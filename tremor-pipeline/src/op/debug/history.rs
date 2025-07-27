@@ -64,7 +64,7 @@ if let Some(map) = &node.config {
         config,
     }))
 } else {
-    Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
+    Err(Error::MissingOpConfig(node.id.clone()))
 
 }});
 
@@ -107,7 +107,7 @@ impl Operator for History {
                         );
                     }
                 }
-            };
+            }
         });
 
         Ok(event.into())
@@ -148,7 +148,7 @@ impl Operator for History {
                         );
                     }
                 }
-            };
+            }
         });
         Ok(EventAndInsights::default())
     }

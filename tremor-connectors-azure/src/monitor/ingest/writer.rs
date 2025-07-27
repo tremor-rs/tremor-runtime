@@ -17,9 +17,9 @@ use std::sync::Arc;
 
 use crate::auth::Config as AuthConfig;
 use crate::rest::RequestId;
-use azure_core::Body;
-use azure_core::Method;
+use azure_core::http::{Body, Method, Request, Url};
 use serde::Deserialize;
+
 use source::AmiSource;
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -92,7 +92,7 @@ impl tremor_config::Impl for Config {}
 
 struct RequestBuilder {
     id: RequestId,
-    rest_endpoint: azure_core::Url,
+    rest_endpoint: Url,
     auth_token: Option<String>,
     data: Vec<Vec<u8>>,
 }
@@ -111,7 +111,7 @@ impl RequestBuilder {
             stream = config.stream,
             api_version = config.api_version
         );
-        let azure_core_url = azure_core::Url::parse(&rest_endpoint)?;
+        let azure_core_url = Url::parse(&rest_endpoint)?;
 
         Ok(Self {
             id,
@@ -142,9 +142,9 @@ impl RequestBuilder {
         }
     }
 
-    fn take_request(&mut self) -> azure_core::Request {
+    fn take_request(&mut self) -> Request {
         let endpoint = self.rest_endpoint.clone();
-        let mut request = azure_core::Request::new(endpoint, Method::Post);
+        let mut request = Request::new(endpoint, Method::Post);
         request.insert_header("content-type", "application/json");
         if let Some(auth_token) = &self.auth_token {
             request.insert_header("authorization", format!("Bearer {auth_token}"));

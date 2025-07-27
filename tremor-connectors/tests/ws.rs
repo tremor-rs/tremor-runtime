@@ -1,5 +1,4 @@
-// Copyright 2022, The Tremor Team
-//
+// Copyright 2022, The Tremor Tearead
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -134,19 +133,15 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
 
     #[cfg(feature = "flaky-test")]
     fn ping(&mut self) -> Result<()> {
-        self.client
-            .write_message(Message::Ping(vec![1, 2, 3, 4]))
-            .chain_err(|| "Failed to send ping to ws server")
+        Ok(self.client.send(Message::Ping(vec![1, 2, 3, 4]))?)
     }
     #[cfg(feature = "flaky-test")]
     fn pong(&mut self) -> Result<()> {
-        self.client
-            .write_message(Message::Pong(vec![5, 6, 7, 8]))
-            .chain_err(|| "Failed to send pong to ws server")
+        Ok(self.client.send(Message::Pong(vec![5, 6, 7, 8]))?)
     }
     #[cfg(feature = "flaky-test")]
     fn recv(&mut self) -> Result<Message> {
-        self.client.read_message().map_err(Error::from)
+        Ok(self.client.read()?)
     }
 
     fn send(&mut self, data: &str) -> Result<()> {
@@ -627,7 +622,7 @@ async fn server_control_frames() -> Result<()> {
       }
     });
 
-    let harness = Harness::new("test", "ws_server", &defn).await?;
+    let mut harness = Harness::new("test", &ws::server::Builder::default(), &defn).await?;
 
     harness.start().await?;
     harness.wait_for_connected().await?;
@@ -638,10 +633,7 @@ async fn server_control_frames() -> Result<()> {
         match TestClient::new(url.as_str()) {
             Err(e) => {
                 if start.elapsed() > timeout {
-                    return Err(format!(
-                        "Timeout waiting for the ws server to start listening: {e}."
-                    )
-                    .into());
+                    bail!("Timeout waiting for the ws server to start listening: {e}.");
                 }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
@@ -673,7 +665,7 @@ async fn server_control_frames() -> Result<()> {
         .is_ok());
 
     // check close
-    c1.close().await?;
+    c1.close()?;
     // expect a close frame as response
     let close = c1.recv()?;
     assert_eq!(
@@ -687,13 +679,18 @@ async fn server_control_frames() -> Result<()> {
     harness.signal_tick_to_sink().await?;
 
     // this should fail, as the server should close the connection
-    assert!(matches!(
-        c1.recv(),
-        Err(Error(
-            crate::errors::ErrorKind::WsError(async_tungstenite::Error::ConnectionClosed),
-            _
-        ))
-    ));
+    let recv_err = c1.recv();
+    if let Err(e) = recv_err {
+        assert!(
+            matches!(
+                e.downcast_ref::<tokio_tungstenite::tungstenite::Error>(),
+                Some(tokio_tungstenite::tungstenite::Error::ConnectionClosed)
+            ),
+            "Expected a ConnectionClosed error, git {e:?}"
+        );
+    } else {
+        panic!("Expected a ConnectionClosed error, got {recv_err:?}");
+    }
     // expect no response and no event, the stream should have been closed though
     assert!(harness
         .out()?

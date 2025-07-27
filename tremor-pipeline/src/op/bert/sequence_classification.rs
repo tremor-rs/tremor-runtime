@@ -15,6 +15,7 @@
 use crate::op::prelude::*;
 use rust_bert::resources::{LocalResource, RemoteResource};
 use rust_bert::{
+    pipelines::common::ModelResource,
     pipelines::sequence_classification::{
         SequenceClassificationConfig, SequenceClassificationModel,
     },
@@ -27,6 +28,7 @@ use url::Url;
 
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
+#[allow(clippy::struct_field_names)]
 struct Config {
     #[serde(default = "dflt_config")]
     config_file: String,
@@ -74,12 +76,11 @@ fn get_resource(resource: &str) -> Result<Resource> {
         }))
     } else {
         let remote_url = Url::parse(resource)?;
-        let err: Error = ErrorKind::BadOpConfig("Invalid URL".to_string()).into();
         let name = remote_url
             .path_segments()
             .and_then(std::iter::Iterator::last)
             .and_then(|l| l.split('.').next())
-            .ok_or(err)?;
+            .ok_or_else(|| Error::BadOpConfig("Invalid URL".to_string()))?;
         Ok(Box::new(RemoteResource::from_pretrained((name, resource))))
     }
 }
@@ -90,7 +91,7 @@ op!(SequenceClassificationFactory(_uid, node) {
     let config = Config::new(&config_map)?;
     let sc_config = SequenceClassificationConfig {
         config_resource: get_resource(config.config_file.as_str())?,
-        model_resource: get_resource(config.model_file.as_str())?,
+        model_resource: ModelResource::Torch(get_resource(config.model_file.as_str())?),
         vocab_resource: get_resource(config.vocabulary_file.as_str())?,
         ..Default::default()
     };
@@ -100,7 +101,7 @@ op!(SequenceClassificationFactory(_uid, node) {
             model: Mutex::new(model)
         }))
     } else {
-        Err(ErrorKind::BadOpConfig("Could not instantiate this BERT sequence classification operator.".to_string()).into())
+        Err(Error::BadOpConfig("Could not instantiate this BERT sequence classification operator.".to_string()))
     }
 });
 
@@ -115,7 +116,7 @@ impl Operator for SequenceClassification {
         event.data.rent_mut(|data| -> Result<()> {
             let (v, m) = data.parts_mut();
             if let Some(s) = v.as_str() {
-                let labels = self.model.lock()?.predict(&[s]);
+                let labels = self.model.lock()?.predict([s]);
                 let mut label_meta = Value::object_with_capacity(labels.len());
                 for label in labels {
                     label_meta.try_insert(label.text, label.score);

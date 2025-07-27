@@ -615,7 +615,6 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-
     fn walk_string_element(&mut self, element: &mut StrLitElement<'script>) -> Result<()> {
         stop!(
             self.visit_string_element(element),

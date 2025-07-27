@@ -16,9 +16,12 @@ use super::meta;
 use crate::gcl::writer::Config;
 use crate::utils::AuthInterceptor;
 use crate::utils::ChannelFactory;
-use googapis::google::logging::v2::{
-    log_entry::Payload, logging_service_v2_client::LoggingServiceV2Client, LogEntry,
-    WriteLogEntriesRequest,
+use gcloud_sdk::{
+    google::logging::v2::{
+        log_entry::Payload, logging_service_v2_client::LoggingServiceV2Client, LogEntry,
+        WriteLogEntriesRequest,
+    },
+    prost_types, tonic,
 };
 use log::{error, info};
 use std::{collections::BTreeMap, time::Duration};
@@ -41,7 +44,7 @@ pub(crate) struct TonicChannelFactory;
 impl ChannelFactory<Channel> for TonicChannelFactory {
     async fn make_channel(&self, connect_timeout: Duration) -> anyhow::Result<Channel> {
         let tls_config = ClientTlsConfig::new()
-            .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
+            .ca_certificate(Certificate::from_pem(gcloud_sdk::CERTIFICATES))
             .domain_name("logging.googleapis.com");
 
         Ok(Channel::from_static("https://logging.googleapis.com")
@@ -55,8 +58,8 @@ impl ChannelFactory<Channel> for TonicChannelFactory {
 pub(crate) struct GclSink<TChannel>
 where
     TChannel: tonic::codegen::Service<
-            http::Request<tonic::body::BoxBody>,
-            Response = http::Response<tonic::transport::Body>,
+            http::Request<tonic::body::Body>,
+            Response = http::Response<tonic::body::Body>,
         > + Clone,
 {
     client: Option<LoggingServiceV2Client<InterceptedService<TChannel, AuthInterceptor>>>,
@@ -81,6 +84,14 @@ pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value, T
         },
         #[allow(clippy::cast_precision_loss)]
         Value::Static(StaticNode::U64(v)) => prost_types::Value {
+            kind: Some(Kind::NumberValue(*v as f64)),
+        },
+        #[allow(clippy::cast_precision_loss)]
+        Value::Static(StaticNode::I128(v)) => prost_types::Value {
+            kind: Some(Kind::NumberValue(*v as f64)),
+        },
+        #[allow(clippy::cast_precision_loss)]
+        Value::Static(StaticNode::U128(v)) => prost_types::Value {
             kind: Some(Kind::NumberValue(*v as f64)),
         },
         Value::Static(StaticNode::F64(v)) => prost_types::Value {
@@ -119,7 +130,6 @@ pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value, T
 /// Converts a json object to a protobuf struct
 /// # Errors
 /// It errors if the value is not an object or the content of the object is not convertible to a protobuf struct
-
 fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Struct, TryTypeError> {
     use prost_types::value::Kind;
 
@@ -157,14 +167,15 @@ fn value_to_log_entry(
         span_id: meta::span_id(meta),
         trace_sampled: meta::trace_sampled(meta)?,
         source_location: meta::source_location(meta),
+        split: None,
         payload: Some(Payload::JsonPayload(value_to_prost_struct(data)?)),
     })
 }
 
 impl<
         TChannel: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::transport::Body>,
+                http::Request<tonic::body::Body>,
+                Response = http::Response<tonic::body::Body>,
                 Error = TChannelError,
             > + Send
             + Clone,
@@ -190,8 +201,8 @@ impl<
 #[async_trait::async_trait]
 impl<
         TChannel: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::transport::Body>,
+                http::Request<tonic::body::Body>,
+                Response = http::Response<tonic::body::Body>,
                 Error = TChannelError,
             > + Send
             + Clone
@@ -252,7 +263,7 @@ where
             .await?;
 
             if let Err(error) = log_entries_response {
-                error!("Failed to write a log entries: {}", error);
+                error!("Failed to write a log entries: {error}");
 
                 if matches!(
                     error.code(),

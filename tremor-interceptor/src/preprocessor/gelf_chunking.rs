@@ -54,7 +54,7 @@
 
 use super::prelude::*;
 use log::{error, warn};
-use rand::RngCore;
+use rand::prelude::*;
 use std::collections::{hash_map::Entry, HashMap};
 
 const FIVE_SEC: u64 = 5_000_000_000;
@@ -97,8 +97,9 @@ fn decode_gelf(bin: &[u8]) -> Result<GelfSegment, Error> {
         // WELF magic header - Wayfair uncompressed GELF
         [0x1f, 0x3c, ref rest @ ..] => {
             // we would allow up to 255 chunks
+            let mut rng = rand::rng();
             Ok(GelfSegment {
-                id: rand::rngs::OsRng.next_u64(),
+                id: rng.next_u64(),
                 seq: 0,
                 count: 1,
                 data: rest.to_vec(),
@@ -137,7 +138,7 @@ fn decode_gelf(bin: &[u8]) -> Result<GelfSegment, Error> {
 }
 
 impl Preprocessor for GelfChunking {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "gelf"
     }
 
@@ -186,7 +187,7 @@ impl GelfChunking {
                                 idx, m.count, key, bytes
                             );
                             return None;
-                        };
+                        }
                         if m.stored == m.count {
                             let m = o.remove();
                             assemble(key, m)
@@ -212,11 +213,10 @@ impl GelfChunking {
                         *d = Some(msg.data);
                     } else {
                         warn!(
-                            "Discarding out of range chunk {}/{} for {} ({} bytes)",
-                            idx, count, key, bytes
+                            "Discarding out of range chunk {idx}/{count} for {key} ({bytes} bytes)"
                         );
                         return None;
-                    };
+                    }
                     if m.stored == m.count {
                         assemble(key, m)
                     } else {
@@ -235,11 +235,11 @@ impl GelfChunking {
                         *d = Some(msg.data);
                     } else {
                         warn!(
-                            "Discarding out of range chunk {}/{} for {} ({} bytes)",
-                            idx, m.count, key, bytes
+                            "Discarding out of range chunk {idx}/{} for {key} ({bytes} bytes)",
+                            m.count
                         );
                         return None;
-                    };
+                    }
                     if m.stored == m.count {
                         let m = o.remove();
                         assemble(key, m)
@@ -262,7 +262,7 @@ fn assemble(key: u64, m: GelfMsgs) -> Option<Vec<u8>> {
         if let Some(mut v) = v {
             result.append(&mut v);
         } else {
-            error!("Missing segment in GELF chunks for {}", key);
+            error!("Missing segment in GELF chunks for {key}");
             return None;
         }
     }

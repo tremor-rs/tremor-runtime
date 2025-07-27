@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(rustdoc::invalid_codeblock_attributes)]
 //! The [`ws_server`](#ws_server) and [`ws_client`](#ws_client) connectors provide support for the `WebSocket` protocol specification.
 //!
 //! Tremor can expose a client or server connection.
@@ -287,7 +288,7 @@ where
                 let mut meta = self.meta.clone();
                 if is_binary {
                     meta.insert("binary", Value::const_true())?;
-                };
+                }
                 Ok(SourceReply::Data {
                     origin_uri: self.origin_uri.clone(),
                     stream: Some(stream),
@@ -372,7 +373,7 @@ where
                 let message = std::str::from_utf8(&chunk)?;
                 let message = Message::Text(message.to_string());
                 self.sink.send(message).await?;
-            };
+            }
         }
         Ok(())
     }

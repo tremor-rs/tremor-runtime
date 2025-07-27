@@ -210,7 +210,7 @@ fn replace_last_shadow_use() {
         matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
     } else {
         unreachable!()
-    };
+    }
 
     // Search Tree
     let mut tree = BTreeMap::new();
@@ -227,7 +227,7 @@ fn replace_last_shadow_use() {
         matches!(rest[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
     } else {
         unreachable!()
-    };
+    }
 
     // Combined
     let g1 = ClauseGroup::Simple {
@@ -248,12 +248,12 @@ fn replace_last_shadow_use() {
             matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
         } else {
             unreachable!()
-        };
+        }
         if let ClauseGroup::Simple { patterns, .. } = &groups[1] {
             matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
         } else {
             unreachable!()
-        };
+        }
     } else {
         unreachable!()
     }
@@ -268,7 +268,7 @@ fn replace_last_shadow_use() {
         matches!(pattern.last_expr, Expr::AssignMoveLocal { idx: 42, .. });
     } else {
         unreachable!()
-    };
+    }
 }
 
 #[test]

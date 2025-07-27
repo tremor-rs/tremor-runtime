@@ -164,7 +164,7 @@ pub(crate) fn resource_logs_to_json(
                 literal!({ "instrumentation_library_logs": ill, "schema_url": log.schema_url});
             if let Some(r) = log.resource {
                 base.try_insert("resource", resource::resource_to_json(r));
-            };
+            }
             Ok(base)
         })
         .collect::<Result<Vec<_>, Error>>()?;

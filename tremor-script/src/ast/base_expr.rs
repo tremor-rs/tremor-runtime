@@ -161,7 +161,7 @@ impl Ranged for (Location, Location) {
 }
 
 // This is a simple accessor
-impl<'script> BaseExpr for ImutExpr<'script> {
+impl BaseExpr for ImutExpr<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             ImutExpr::Binary(e) => e.meta(),
@@ -190,7 +190,7 @@ impl<'script> BaseExpr for ImutExpr<'script> {
 }
 
 // This is a simple accessor
-impl<'script> BaseExpr for Expr<'script> {
+impl BaseExpr for Expr<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             Expr::Assign { mid, .. }
@@ -206,7 +206,7 @@ impl<'script> BaseExpr for Expr<'script> {
 }
 
 // This is a simple accessor
-impl<'script> BaseExpr for PathRaw<'script> {
+impl BaseExpr for PathRaw<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             PathRaw::Local(e) => e.meta(),
@@ -221,7 +221,7 @@ impl<'script> BaseExpr for PathRaw<'script> {
 }
 
 // This is a simple accessor
-impl<'script> BaseExpr for Path<'script> {
+impl BaseExpr for Path<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             Path::Local(e) => e.meta(),
@@ -235,7 +235,7 @@ impl<'script> BaseExpr for Path<'script> {
 }
 
 // This is a simple accessor
-impl<'script> BaseExpr for Segment<'script> {
+impl BaseExpr for Segment<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             Self::Id { mid, .. }
@@ -248,7 +248,7 @@ impl<'script> BaseExpr for Segment<'script> {
 }
 
 // This is a simple accessor
-impl<'script> BaseExpr for ImutExprRaw<'script> {
+impl BaseExpr for ImutExprRaw<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             ImutExprRaw::Binary(e) => &e.mid,
@@ -272,7 +272,7 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
 }
 
 // This is a simple accessor
-impl<'script> BaseExpr for GroupBy<'script> {
+impl BaseExpr for GroupBy<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             GroupBy::Expr { mid, .. } | GroupBy::Set { mid, .. } | GroupBy::Each { mid, .. } => mid,
@@ -280,7 +280,7 @@ impl<'script> BaseExpr for GroupBy<'script> {
     }
 }
 
-impl<'script> BaseExpr for ReservedPathRaw<'script> {
+impl BaseExpr for ReservedPathRaw<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             ReservedPathRaw::Args { mid, .. }
@@ -290,7 +290,7 @@ impl<'script> BaseExpr for ReservedPathRaw<'script> {
     }
 }
 
-impl<'script> BaseExpr for TopLevelExprRaw<'script> {
+impl BaseExpr for TopLevelExprRaw<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             TopLevelExprRaw::Const(c) => c.meta(),
@@ -301,7 +301,7 @@ impl<'script> BaseExpr for TopLevelExprRaw<'script> {
     }
 }
 
-impl<'script> BaseExpr for ExprRaw<'script> {
+impl BaseExpr for ExprRaw<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             ExprRaw::Drop { mid, .. } => mid,
@@ -314,7 +314,7 @@ impl<'script> BaseExpr for ExprRaw<'script> {
     }
 }
 
-impl<'script> BaseExpr for AnyFnRaw<'script> {
+impl BaseExpr for AnyFnRaw<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             AnyFnRaw::Match(m) => m.meta(),
@@ -323,7 +323,7 @@ impl<'script> BaseExpr for AnyFnRaw<'script> {
     }
 }
 
-impl<'script> BaseExpr for StmtRaw<'script> {
+impl BaseExpr for StmtRaw<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             StmtRaw::OperatorCreate(s) => s.meta(),

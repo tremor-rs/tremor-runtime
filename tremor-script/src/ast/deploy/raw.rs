@@ -20,6 +20,7 @@ use super::{
     DeployFlow, FlowDefinition, Value,
 };
 use crate::ast::optimizer::Optimizer;
+use crate::errors::{DeployError, ErrorLocation};
 use crate::{
     ast::{
         base_expr::Ranged,
@@ -33,7 +34,7 @@ use crate::{
         raw::{IdentRaw, UseRaw},
         Deploy, DeployStmt, Helper, NodeMeta, Script, Upable,
     },
-    errors::{Kind as ErrorKind, Result},
+    errors::Result,
     impl_expr, AggrType, EventContext, Return,
 };
 use beef::Cow;
@@ -161,13 +162,12 @@ impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
             let key: &str = ident.id.as_ref();
             if !ConnectorDefinition::AVAILABLE_PARAMS.contains(&key) {
                 let range = ident.mid.range;
-                return Err(ErrorKind::InvalidDefinitionalWithParam(
-                    range.expand_lines(2),
-                    range,
-                    format!("connector \"{}\"", self.id),
-                    ident.id.to_string(),
-                    &ConnectorDefinition::AVAILABLE_PARAMS,
-                )
+                return Err(DeployError::InvalidDefinitionalWithParam {
+                    location: range.into(),
+                    definition: format!("connector \"{}\"", self.id),
+                    param: ident.id.to_string(),
+                    available_params: &ConnectorDefinition::AVAILABLE_PARAMS,
+                }
                 .into());
             }
         }
@@ -275,7 +275,7 @@ pub struct FlowDefinitionRaw<'script> {
     pub(crate) mid: Box<NodeMeta>,
 }
 
-impl<'script> FlowDefinitionRaw<'script> {
+impl FlowDefinitionRaw<'_> {
     fn doc(&self) -> FlowDoc {
         FlowDoc {
             name: self.id.clone(),
@@ -381,20 +381,20 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     type Target = CreateStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let target = self.target.clone();
-        let outer = self.extent();
-        let inner = self.id.extent();
 
         let defn = match self.kind {
             CreateKind::Connector => {
                 if let Some(artefact) = helper.get(&target)? {
                     CreateTargetDefinition::Connector(artefact)
                 } else {
-                    return Err(ErrorKind::DeployArtefactNotDefined(
-                        outer,
-                        inner,
-                        target.to_string(),
-                        vec![],
-                    )
+                    return Err(DeployError::DeployArtefactNotDefined {
+                        location: ErrorLocation {
+                            expr: self.extent(),
+                            inner: self.id.extent(),
+                        },
+                        name: target.to_string(),
+                        options: vec![],
+                    }
                     .into());
                 }
             }
@@ -402,12 +402,14 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                 if let Some(artefact) = helper.get(&target)? {
                     CreateTargetDefinition::Pipeline(Box::new(artefact))
                 } else {
-                    return Err(ErrorKind::DeployArtefactNotDefined(
-                        outer,
-                        inner,
-                        target.to_string(),
-                        vec![],
-                    )
+                    return Err(DeployError::DeployArtefactNotDefined {
+                        location: ErrorLocation {
+                            expr: self.extent(),
+                            inner: self.id.extent(),
+                        },
+                        name: target.to_string(),
+                        options: vec![],
+                    }
                     .into());
                 }
             }
@@ -423,13 +425,12 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                     .iter()
                     .map(|(ident, _)| ident.id.to_string())
                     .collect::<Vec<String>>();
-                return Err(ErrorKind::WithParamNoArg(
-                    range.expand_lines(2),
-                    range,
-                    ident.id.to_string(),
-                    self.id.id.to_string(),
+                return Err(DeployError::WithParamNoArg {
+                    location: range.into(),
+                    param_name: ident.id.to_string(),
+                    definition_name: self.id.id.to_string(),
                     available_args,
-                )
+                }
                 .into());
             }
         }
@@ -474,12 +475,14 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
                 .keys()
                 .map(ToString::to_string)
                 .collect();
-            return Err(ErrorKind::DeployArtefactNotDefined(
-                self.extent(),
-                self.id.extent(),
-                target.to_string(),
-                defined_flows,
-            )
+            return Err(DeployError::DeployArtefactNotDefined {
+                location: ErrorLocation {
+                    expr: self.extent(),
+                    inner: self.id.extent(),
+                },
+                name: target.to_string(),
+                options: defined_flows,
+            }
             .into());
         };
         let upped_params = self.params.up(helper)?;

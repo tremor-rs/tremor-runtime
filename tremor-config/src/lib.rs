@@ -71,7 +71,7 @@ impl<'v> serde::Deserialize<'v> for NameWithConfig {
     }
 }
 
-impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
+impl TryFrom<&Value<'_>> for NameWithConfig {
     type Error = Error;
 
     fn try_from(value: &Value) -> Result<Self, Error> {

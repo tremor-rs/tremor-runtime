@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(rustdoc::invalid_codeblock_attributes)]
 //! The `http` connector provides integration against the HTTP protocol suite.
 //!
 //! ## Configuration

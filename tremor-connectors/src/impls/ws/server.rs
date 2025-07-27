@@ -314,7 +314,7 @@ impl Connector for WsServer {
                         }
                     }
                     Ok(Err(e)) => return Err(e.into()),
-                    Err(_) => continue,
+                    Err(_) => {}
                 };
             }
             Ok(())

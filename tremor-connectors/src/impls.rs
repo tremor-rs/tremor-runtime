@@ -12,71 +12,86 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// benchmarking connector
 #[cfg(feature = "bench")]
+/// benchmarking connector
 pub mod bench;
-/// connector for checking guaranteed delivery and circuit breaker logic
+
 #[cfg(feature = "circut-breaker")]
+/// connector for checking guaranteed delivery and circuit breaker logic
 pub mod cb;
-/// Exit Connector
+
 #[cfg(feature = "exit")]
+/// Exit Connector
 pub mod exit;
 
-/// Clickhouse connector
 #[cfg(feature = "clickhouse")]
+/// Clickhouse connector
 pub mod clickhouse;
-/// Crononome
+
 #[cfg(feature = "crononome")]
+/// Crononome
 pub mod crononome;
-/// Discord connector
+
 #[cfg(feature = "discord")]
+/// Discord connector
 pub mod discord;
-/// DNS
+
 #[cfg(feature = "dns")]
+/// DNS
 pub mod dns;
-/// Elasticsearch Connector
+
 #[cfg(feature = "elasticsearch")]
+/// Elasticsearch Connector
 pub mod elastic;
 
-/// file connector implementation
 #[cfg(feature = "file")]
+/// file connector implementation
 pub mod file;
-/// HTTP
+
 #[cfg(feature = "http")]
+/// HTTP
 pub mod http;
-/// Kafka consumer and producer
+
 #[cfg(feature = "kafka")]
+/// Kafka consumer and producer
 pub mod kafka;
-/// KV
+
 #[cfg(feature = "kv")]
+/// KV
 pub mod kv;
-/// Home of the famous metrics collector
+
 #[cfg(feature = "metrics")]
+/// Home of the famous metrics collector
 pub mod metrics;
-/// Metronome
+
 #[cfg(feature = "metronome")]
+/// Metronome
 pub mod metronome;
-/// Never send any events and swallow all events it receives into the void.
+
 #[cfg(feature = "null")]
+/// Never send any events and swallow all events it receives into the void.
 pub mod null;
 
-/// `WebSockets`
 #[cfg(feature = "websocket")]
+/// `WebSockets`
 pub mod ws;
 
-/// std streams connector (stdout, stderr, stdin)
 #[cfg(feature = "stdio")]
+/// std streams connector (stdout, stderr, stdin)
 pub mod stdio;
-/// tcp server and client connector impls
+
 #[cfg(feature = "tcp")]
+/// tcp server and client connector impls
 pub mod tcp;
 
-/// udp connector impls
 #[cfg(feature = "udp")]
+/// udp connector impls
 pub mod udp;
-/// Unix Domain socket impls
+
 #[cfg(all(unix, feature = "unix-socket"))]
+/// Unix Domain socket impls
 pub mod unix_socket;
-/// Write Ahead Log
+
 #[cfg(feature = "wal")]
+/// Write Ahead Log
 pub mod wal;

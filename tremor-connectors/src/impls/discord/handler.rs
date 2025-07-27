@@ -48,12 +48,12 @@ impl Handler {
         let event: Value<'static> = match to_value(msg) {
             Ok(v) => v,
             Err(e) => {
-                error!("Failed to decode event: {}", e);
+                error!("Failed to decode event: {e}");
                 return;
             }
         };
         if let Err(e) = self.tx.send(event).await {
-            error!("Failed to forward event: {}", e);
+            error!("Failed to forward event: {e}");
         }
     }
 }
@@ -370,7 +370,7 @@ async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
                     let mut current_member = match guild.member(&ctx, user).await {
                         Ok(current_member) => current_member,
                         Err(e) => {
-                            error!("Member error: {}", e);
+                            error!("Member error: {e}");
                             continue;
                         }
                     };
@@ -380,7 +380,7 @@ async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
                             .filter_map(|v| as_snowflake(v).map(RoleId))
                             .collect();
                         if let Err(e) = current_member.remove_roles(&ctx, &to_remove).await {
-                            error!("Role removal error: {}", e);
+                            error!("Role removal error: {e}");
                         };
                     }
 
@@ -390,7 +390,7 @@ async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
                             .filter_map(|v| as_snowflake(v).map(RoleId))
                             .collect();
                         if let Err(e) = current_member.add_roles(&ctx, &to_roles).await {
-                            error!("Role add error: {}", e);
+                            error!("Role add error: {e}");
                         };
                     }
                     let r = guild
@@ -406,8 +406,8 @@ async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
                         })
                         .await;
                     if let Err(e) = r {
-                        error!("Mute/Deafen error: {}", e);
-                    };
+                        error!("Mute/Deafen error: {e}");
+                    }
                 }
             }
         }
@@ -424,7 +424,7 @@ async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
                     let message = match channel.message(&ctx, message_id).await {
                         Ok(message) => message,
                         Err(e) => {
-                            error!("Message error: {}", e);
+                            error!("Message error: {e}");
                             continue;
                         }
                     };
@@ -432,7 +432,7 @@ async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
                     if let Some(reactions) = reply.get("add_reactions").and_then(to_reactions) {
                         for r in reactions {
                             if let Err(e) = message.react(&ctx, r).await {
-                                error!("Message reaction error: {}", e);
+                                error!("Message reaction error: {e}");
                             };
                         }
                     }
@@ -445,17 +445,17 @@ async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
                         // Normal content
                         if let Some(content) = reply.get_str("content") {
                             m.content(content);
-                        };
+                        }
                         // Reference to another message
                         if let Some(reference_message) = get_snowflake(reply, "reference_message") {
                             let reference_channel = get_snowflake(reply, "reference_channel")
                                 .map_or(channel, ChannelId);
                             m.reference_message((reference_channel, MessageId(reference_message)));
-                        };
+                        }
 
                         if let Some(tts) = reply.get_bool("tts") {
                             m.tts(tts);
-                        };
+                        }
 
                         if let Some(embed) = reply.get("embed") {
                             m.embed(|e| {
@@ -463,24 +463,24 @@ async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
                                     e.author(|a| {
                                         if let Some(icon_url) = author.get_str("icon_url") {
                                             a.icon_url(icon_url);
-                                        };
+                                        }
                                         if let Some(name) = author.get_str("name") {
                                             a.name(name);
-                                        };
+                                        }
                                         if let Some(url) = author.get_str("url") {
                                             a.url(url);
-                                        };
+                                        }
 
                                         a
                                     });
-                                };
+                                }
 
                                 if let Some(colour) = embed.get_u64("colour") {
                                     e.colour(colour);
-                                };
+                                }
                                 if let Some(description) = embed.get_str("description") {
                                     e.description(description);
-                                };
+                                }
 
                                 if let Some(fields) = embed.get_array("fields") {
                                     e.fields(fields.iter().filter_map(|v| {
@@ -489,38 +489,38 @@ async fn reply_loop(mut rx: Receiver<Value<'static>>, ctx: Context) {
                                         let inline = v.get_bool("inline").unwrap_or_default();
                                         Some((name, value, inline))
                                     }));
-                                };
+                                }
                                 if let Some(footer) = embed.get("footer") {
                                     e.footer(|f| {
                                         if let Some(text) = footer.as_str() {
                                             f.text(text);
-                                        };
+                                        }
                                         if let Some(text) = footer.get_str("text") {
                                             f.text(text);
-                                        };
+                                        }
                                         if let Some(icon_url) = footer.get_str("icon_url") {
                                             f.icon_url(icon_url);
-                                        };
+                                        }
 
                                         f
                                     });
-                                };
+                                }
 
                                 e
                             });
-                        };
+                        }
 
                         if let Some(reactions) = reply.get("reactions").and_then(to_reactions) {
                             m.reactions(reactions);
-                        };
+                        }
 
                         m
                     })
                     .await
                 {
-                    error!("Discord send error: {}", e);
+                    error!("Discord send error: {e}");
                 };
-            };
+            }
         }
     }
 }

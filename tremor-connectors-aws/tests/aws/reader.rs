@@ -82,6 +82,7 @@ async fn connector_s3_no_credentials() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_no_region() -> anyhow::Result<()> {
+    let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-region");
 
     let (_container, http_port) = spawn_docker().await;
@@ -142,6 +143,7 @@ async fn connector_s3_no_bucket() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(s3)]
 async fn connector_s3_reader() -> anyhow::Result<()> {
+    let _ = env_logger::try_init();
     static SMALL_FILE: [u8; 256] = [b'A'; 256];
     static HUGE_FILE: [u8; 4096] = [b'Z'; 4096];
     let bucket_name = random_bucket_name("tremor");
@@ -223,8 +225,8 @@ async fn connector_s3_reader() -> anyhow::Result<()> {
     }
 
     let (out, err) = harness.stop().await?;
-    assert!(out.is_empty());
-    assert!(err.is_empty());
+    assert!(out.is_empty(), "Expected nothing in OUT, got: {out:?}");
+    assert!(err.is_empty(), "Expected nothing in ERR, got {err:?}");
 
     Ok(())
 }

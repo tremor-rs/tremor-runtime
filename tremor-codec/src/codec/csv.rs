@@ -45,7 +45,7 @@ pub struct Csv {}
 
 #[async_trait::async_trait]
 impl Codec for Csv {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "csv"
     }
 
@@ -94,10 +94,10 @@ impl Codec for Csv {
             return Ok(result);
         }
 
-        Err(
-            crate::errors::ErrorKind::NotCSVSerializableValue(format!("{:?}", data.value_type()))
-                .into(),
-        )
+        Err(crate::errors::Error::NotCSVSerializableValue(format!(
+            "{:?}",
+            data.value_type()
+        )))
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {

@@ -63,7 +63,6 @@ impl EventPayload {
     ///   drop(e);
     ///   println!("v: {}", v)
     /// ```
-
     #[must_use]
     pub fn suffix(&self) -> &ValueAndMeta {
         &self.data
@@ -319,7 +318,7 @@ impl simd_json_derive::Serialize for EventPayload {
 }
 
 impl<'input> simd_json_derive::Deserialize<'input> for EventPayload {
-    fn from_tape(tape: &mut simd_json_derive::Tape<'input>) -> simd_json::Result<Self>
+    fn from_tape(tape: &mut simd_json_derive::Tape<'input>) -> simd_json_derive::de::Result<Self>
     where
         Self: Sized + 'input,
     {
@@ -390,7 +389,7 @@ impl<'event> ValueAndMeta<'event> {
     }
 }
 
-impl<'event> Default for ValueAndMeta<'event> {
+impl Default for ValueAndMeta<'_> {
     fn default() -> Self {
         ValueAndMeta {
             v: Value::object(),

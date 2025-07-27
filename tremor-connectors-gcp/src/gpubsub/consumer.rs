@@ -17,9 +17,12 @@ use crate::{
     utils::{AuthInterceptor, TokenSrc},
 };
 use futures::StreamExt;
-use googapis::google::pubsub::v1::{
-    subscriber_client::SubscriberClient, GetSubscriptionRequest, PubsubMessage, ReceivedMessage,
-    StreamingPullRequest,
+use gcloud_sdk::{
+    google::pubsub::v1::{
+        subscriber_client::SubscriberClient, GetSubscriptionRequest, PubsubMessage,
+        ReceivedMessage, StreamingPullRequest,
+    },
+    tonic,
 };
 use log::{debug, info};
 use serde::Deserialize;
@@ -297,7 +300,7 @@ impl Source for GSubSource {
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.url.scheme() == "https" {
             let tls_config = ClientTlsConfig::new()
-                .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
+                .ca_certificate(Certificate::from_pem(gcloud_sdk::CERTIFICATES))
                 .domain_name(
                     self.url
                         .host_str()

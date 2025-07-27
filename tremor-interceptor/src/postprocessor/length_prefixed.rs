@@ -23,7 +23,7 @@ use super::Stateless;
 #[derive(Clone, Default)]
 pub(crate) struct LengthPrefixed {}
 impl Stateless for LengthPrefixed {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "length-prefix"
     }
 

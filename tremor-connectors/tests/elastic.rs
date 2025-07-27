@@ -704,6 +704,8 @@ async fn elastic_routing() -> anyhow::Result<()> {
         .routing("2")
         .send()
         .await?;
+    let body = res.text().await?;
+    dbg!(&body);
     assert_eq!(
         literal!({
             "_index": index,
@@ -719,7 +721,7 @@ async fn elastic_routing() -> anyhow::Result<()> {
                 "field3": []
             }
         }),
-        &res.json::<simd_json::OwnedValue>().await?
+        simd_json::to_owned_value(&mut body.into_bytes())?
     );
 
     let res = elastic

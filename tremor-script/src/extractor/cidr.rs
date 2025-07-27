@@ -152,7 +152,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
         return Some(IpCidr::V4(
             Ipv4Cidr::new(Ipv4Addr::new(0, 0, 0, a), 32).ok()?,
         ));
-    };
+    }
 
     //// B
     let mut b: u8 = 0;
@@ -171,7 +171,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
         let ipv4_addr = Ipv4Addr::new(a, 0, 0, b);
         let ipv4_cidr = Ipv4Cidr::new(ipv4_addr, 32).ok();
         return Some(IpCidr::V4(ipv4_cidr?));
-    };
+    }
 
     //// C
     let mut c: u8 = 0;
@@ -190,7 +190,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
         return Some(IpCidr::V4(
             Ipv4Cidr::new(Ipv4Addr::new(a, b, 0, c), 32).ok()?,
         ));
-    };
+    }
 
     //// D
     let mut d: u8 = 0;
@@ -223,14 +223,20 @@ fn cidr_to_value(x: IpCidr) -> Result<'static> {
             // prefix
             let prefix = y.first_address().octets();
             let mask = y.mask().octets();
-            r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
-            r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
+            // SAFETY: we know the keys are unique
+            unsafe {
+                r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
+                r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
+            }
         }
         IpCidr::V6(y) => {
             let prefix = y.first_address().segments();
             let mask = y.mask().segments();
-            r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
-            r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
+            // SAFETY: we know the keys are unique
+            unsafe {
+                r.insert_nocheck("prefix".into(), literal!(prefix.to_vec()));
+                r.insert_nocheck("mask".into(), literal!(mask.to_vec()));
+            }
         }
     }
     Result::Match(Value::from(Object::from(r)))

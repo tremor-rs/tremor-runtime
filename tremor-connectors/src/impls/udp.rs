@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_markdown, rustdoc::invalid_codeblock_attributes)]
 //! The [`udp_server`](#udp_server) and [`udp_client`](#udp_client) connectors allow UDP based datagram clients and servers to be integrated with tremor.
 //!
 //! ## `udp_server`

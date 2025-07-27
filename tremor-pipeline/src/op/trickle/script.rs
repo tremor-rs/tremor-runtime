@@ -69,7 +69,7 @@ impl Operator for Script {
                 mem::swap(&mut o, unwind_event);
                 if let Some(error) = unwind_event.as_object_mut() {
                     error.insert("event".into(), o);
-                };
+                }
 
                 return Some(ERR);
             };
@@ -87,7 +87,7 @@ impl Operator for Script {
                     mem::swap(&mut o, unwind_event);
                     if let Some(error) = unwind_event.as_object_mut() {
                         error.insert("event".into(), o);
-                    };
+                    }
                     Some(ERR)
                 }
             }

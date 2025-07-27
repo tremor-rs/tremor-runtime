@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(rustdoc::invalid_codeblock_attributes)]
 //! The metronome connector generates a periodic flow of events at a configured interval.
 //!
 //! The connector is particularly useful when using transient or persistent state via the

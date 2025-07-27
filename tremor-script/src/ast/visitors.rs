@@ -77,9 +77,9 @@ mod tests {
     struct Find42Visitor {
         found: usize,
     }
-    impl<'script> ImutExprWalker<'script> for Find42Visitor {}
-    impl<'script> ExprWalker<'script> for Find42Visitor {}
-    impl<'script> ExprVisitor<'script> for Find42Visitor {}
+    impl ImutExprWalker<'_> for Find42Visitor {}
+    impl ExprWalker<'_> for Find42Visitor {}
+    impl ExprVisitor<'_> for Find42Visitor {}
     impl<'script> ImutExprVisitor<'script> for Find42Visitor {
         fn visit_literal(&mut self, literal: &mut Literal<'script>) -> Result<VisitRes> {
             if let Some(42) = literal.value.as_u64() {

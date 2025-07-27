@@ -19,7 +19,7 @@ use tremor_common::base64;
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Base64 {}
 impl Preprocessor for Base64 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "base64"
     }
 
@@ -34,9 +34,9 @@ impl Preprocessor for Base64 {
 }
 
 #[cfg(test)]
-
 mod test {
     use crate::postprocessor::{self, Postprocessor};
+    use tremor_value::ValueBuilder as _;
 
     #[test]
     fn name() {

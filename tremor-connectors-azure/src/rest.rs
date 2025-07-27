@@ -13,9 +13,8 @@
 // limitations under the License.
 
 use anyhow::{Error, Result};
-use azure_core::headers::Headers;
-use azure_core::Request;
-use azure_core::Response;
+use azure_core::http::headers::Headers;
+use azure_core::http::{Request, Response};
 use beef::Cow;
 use bytes::Bytes;
 use simd_json::ObjectHasher;
@@ -131,7 +130,7 @@ pub(crate) async fn extract_response_meta(
     let data = data.to_vec();
 
     let mut meta = ResponseMeta::default();
-    meta.status = status as u16;
+    meta.status = u16::from(status);
     meta.headers = headers.clone();
     meta.content_length = data.len();
 
@@ -143,9 +142,7 @@ mod tests {
     use std::pin::Pin;
 
     use super::*;
-    use azure_core::Method;
-    use azure_core::Request;
-    use azure_core::StatusCode;
+    use azure_core::http::{headers::Headers, Method, Request, StatusCode};
     use futures::Stream;
     use url::Url;
 
@@ -193,7 +190,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_response_meta() -> anyhow::Result<()> {
-        let mut headers = azure_core::headers::Headers::new();
+        let mut headers = Headers::new();
         headers.insert("content-type", "application/json");
         headers.insert("content-length", "10");
         let data = r#""snot""#;

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(rustdoc::invalid_codeblock_attributes)]
 //! The crononome connector generates a periodic flow of events at a configured periodicity
 //! based on the modern Gregorian calendar system.
 //!

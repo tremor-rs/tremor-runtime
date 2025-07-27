@@ -15,16 +15,16 @@
 use crate::prelude::*;
 use crate::registry::{mfa, FResult, FunctionError, TremorFn};
 use crate::tremor_fn;
-use rand::distributions::Alphanumeric;
+use rand::distr::Alphanumeric;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 
 // TODO see if we can cache the RNG here across function calls (or at least
 // at the thread level, like via rand::thread_rng()
 //
-// also, `rng.gen_range()` calls here are optimized for a single sample from
+// also, `rng.random_range()` calls here are optimized for a single sample from
 // the range. we will be sampling a lot during a typical use case, so swap it
 // for a distribution based sampling (if we can cache the distribution):
-// https://docs.rs/rand/0.7.0/rand/trait.Rng.html#method.gen_range
+// https://docs.rs/rand/0.7.0/rand/trait.Rng.html#method.random_range
 #[derive(Clone, Debug, Default)]
 struct RandomInteger {}
 impl TremorFn for RandomInteger {
@@ -41,7 +41,7 @@ impl TremorFn for RandomInteger {
                 if let (Some(low), Some(high)) = (low.as_i64(), high.as_i64()) {
                     if low < high {
                         // random integer between low and high (not including high)
-                        Ok(Value::from(rng.gen_range(low..high)))
+                        Ok(Value::from(rng.random_range(low..high)))
                     } else {
                         Err(FunctionError::RuntimeError {
                                 mfa: this_mfa(),
@@ -58,7 +58,7 @@ impl TremorFn for RandomInteger {
                     || Err(FunctionError::BadType { mfa: this_mfa() }),
                     |input| {
                         if input == 0 {
-                            // avoid panic in gen_range
+                            // avoid panic in random_range
                             Err(FunctionError::RuntimeError {
                                 mfa: this_mfa(),
                                 error: "Invalid arguments. Single argument value must be > 0."
@@ -66,13 +66,13 @@ impl TremorFn for RandomInteger {
                             })
                         } else {
                             // random integer between 0 and input (not including input)
-                            Ok(Value::from(rng.gen_range(0..input)))
+                            Ok(Value::from(rng.random_range(0..input)))
                         }
                     },
                 )
             }
             [] => Ok(Value::from(
-                rng.gen::<i64>(), // random integer
+                rng.random::<i64>(), // random integer
             )),
             _ => Err(FunctionError::BadArity {
                 mfa: this_mfa(),
@@ -107,7 +107,7 @@ impl TremorFn for RandomFloat {
                 if let (Some(low), Some(high)) = (low.cast_f64(), high.cast_f64()) {
                     if low < high {
                         // random integer between low and high (not including high)
-                        Ok(Value::from(rng.gen_range(low..high)))
+                        Ok(Value::from(rng.random_range(low..high)))
                     } else {
                         Err(FunctionError::RuntimeError {
                                 mfa: this_mfa(),
@@ -124,7 +124,7 @@ impl TremorFn for RandomFloat {
                     || Err(FunctionError::BadType { mfa: this_mfa() }),
                     |input| {
                         if input <= 0.0 {
-                            // avoid panic in gen_range
+                            // avoid panic in random_range
                             Err(FunctionError::RuntimeError {
                                 mfa: this_mfa(),
                                 error: "Invalid arguments. Single argument value must be > 0.0."
@@ -132,13 +132,13 @@ impl TremorFn for RandomFloat {
                             })
                         } else {
                             // random integer between 0 and input (not including input)
-                            Ok(Value::from(rng.gen_range(0.0..input)))
+                            Ok(Value::from(rng.random_range(0.0..input)))
                         }
                     },
                 )
             }
             [] => Ok(Value::from(
-                rng.gen::<f64>(), // random integer
+                rng.random::<f64>(), // random integer
             )),
             _ => Err(FunctionError::BadArity {
                 mfa: this_mfa(),
@@ -163,7 +163,7 @@ pub fn load(registry: &mut Registry) {
         .insert(tremor_fn! (random|bool(_context) {
             Ok(Value::from(
                 SmallRng::seed_from_u64(_context.ingest_ns())
-                    .gen::<bool>()
+                    .random::<bool>()
             ))
         }))
         // TODO support specifying range of characters as a second (optional) arg

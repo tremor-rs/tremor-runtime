@@ -23,7 +23,7 @@ pub(crate) struct TextualLengthPrefixed {
     buffer: BytesMut,
 }
 impl Preprocessor for TextualLengthPrefixed {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "textual-length-prefixed"
     }
 

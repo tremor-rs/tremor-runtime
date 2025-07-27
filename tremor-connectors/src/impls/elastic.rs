@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_markdown, rustdoc::invalid_codeblock_attributes)]
 //! The `elastic` connector integrates `ElasticSearch` and compatible systems with tremor.
 //!
 //! Tested with `ElasticSearch` `v6` and `v7` and `OpenSearch` `v1.3.1`
@@ -628,10 +628,7 @@ impl StructuredSink for ElasticSink {
                 .await?;
             let json = res.json::<StaticValue>().await?.into_value();
             let cluster_name = json.get_str("cluster_name").unwrap_or("").to_string();
-            info!(
-                "{} Connected to Elasticsearch cluster: {} via node: {}",
-                ctx, cluster_name, node
-            );
+            info!("{ctx} Connected to Elasticsearch cluster: {cluster_name} via node: {node}",);
             let es_client = ElasticClient::new(client, node.clone(), cluster_name);
             clients.push(es_client);
         }
@@ -775,7 +772,7 @@ async fn handle_response(
     let payload_iter = event.value_iter();
     if let Some(items) = response
         .get_mut("items")
-        .and_then(ValueAsMutContainer::as_array_mut)
+        .and_then(ValueAsMutArray::as_array_mut)
     {
         for ((mut item, correlation), payload) in items
             .drain(..)

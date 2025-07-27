@@ -317,7 +317,7 @@ impl Source for TcpServerSource {
                         error!("{ctx} Error Accepting: {e}");
                         return Err(e.into());
                     }
-                    Err(_) => continue, // timeout accepting
+                    Err(_) => {} // timeout accepting
                 };
             }
             debug!("{accept_ctx} stopped accepting connections.");

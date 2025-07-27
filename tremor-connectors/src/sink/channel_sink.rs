@@ -306,7 +306,7 @@ where
                 match sinkdata {
                     Err(_) => {
                         // timeout, just continue
-                        continue;
+                        {};
                     }
                     Ok(Some(SinkData {
                         data,

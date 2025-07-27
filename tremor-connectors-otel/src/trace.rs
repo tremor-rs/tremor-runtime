@@ -255,7 +255,7 @@ pub(crate) fn resource_spans_to_json(request: ExportTraceServiceRequest) -> Valu
                 literal!({ "instrumentation_library_spans": ill, "schema_url": span.schema_url });
             if let Some(r) = span.resource {
                 base.try_insert("resource", resource::resource_to_json(r));
-            };
+            }
             base
         })
         .collect();

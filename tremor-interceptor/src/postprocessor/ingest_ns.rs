@@ -26,7 +26,7 @@ impl Postprocessor for IngestNs {
     fn is_streaming(&self) -> bool {
         false
     }
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "attach-ingress-ts"
     }
 

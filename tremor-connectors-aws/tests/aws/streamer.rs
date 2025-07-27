@@ -18,7 +18,7 @@ use crate::{
 };
 use aws_sdk_s3::Client;
 use bytes::Buf;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng};
 use serial_test::serial;
 use std::io::Read;
 use std::time::Duration;
@@ -451,7 +451,7 @@ fn large_batched_event() -> (Event, Vec<u8>) {
 }
 
 fn random_alphanum_string(str_size: usize) -> String {
-    rand::thread_rng()
+    rand::rng()
         .sample_iter(&Alphanumeric)
         .take(str_size)
         .map(char::from)

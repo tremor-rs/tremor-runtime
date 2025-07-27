@@ -75,7 +75,7 @@ pub enum Stmt<'script> {
 }
 
 // #[cfg_attr(coverage, no_coverage)] // this is a simple passthrough
-impl<'script> BaseExpr for Stmt<'script> {
+impl BaseExpr for Stmt<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             Stmt::WindowDefinition(s) => s.meta(),
@@ -110,7 +110,7 @@ pub struct SelectStmt<'script> {
     pub locals: usize,
 }
 // #[cfg_attr(coverage, no_coverage)] // this is a simple passthrough
-impl<'script> BaseExpr for SelectStmt<'script> {
+impl BaseExpr for SelectStmt<'_> {
     fn meta(&self) -> &NodeMeta {
         self.stmt.meta()
     }
@@ -317,7 +317,7 @@ pub struct PipelineCreate<'script> {
     /// local alias
     pub alias: String,
 }
-impl<'script> BaseExpr for PipelineCreate<'script> {
+impl BaseExpr for PipelineCreate<'_> {
     fn meta(&self) -> &NodeMeta {
         &self.mid
     }
@@ -352,7 +352,7 @@ pub struct WindowDefinition<'script> {
 }
 impl_expr!(WindowDefinition);
 
-impl<'script> WindowDefinition<'script> {
+impl WindowDefinition<'_> {
     /// `emit_empty_windows` setting
     pub const EMIT_EMPTY_WINDOWS: &'static str = "emit_empty_windows";
     /// `max_groups` setting
@@ -652,7 +652,7 @@ impl<'script> Stmt<'script> {
             Stmt::OperatorCreate(d) => d.params.substitute_args(args, helper)?,
             Stmt::ScriptCreate(d) => d.params.substitute_args(args, helper)?,
             Stmt::PipelineCreate(d) => d.params.substitute_args(args, helper)?,
-        };
+        }
         Ok(self)
     }
 }

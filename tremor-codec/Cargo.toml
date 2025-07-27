@@ -1,62 +1,60 @@
 [package]
-authors = ["The Tremor Team"]
 name = "tremor-codec"
-edition = "2021"
-description = "Tremor Script Interpreter"
-documentation = "https://docs.rs/tremor-script"
-license = "Apache-2.0"
+description = "Tremor Codec definition and Codec implementations"
+documentation = "https://docs.rs/tremor-codec"
 readme = "README.md"
-repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.33"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
 
 
 [dependencies]
-tremor-value = { version = "0.13.0-rc.33", path = "../tremor-value" }
-tremor-common = { version = "0.13.0-rc.33", path = "../tremor-common" }
-tremor-config = { version = "0.13.0-rc.33", path = "../tremor-config" }
-tokio = { version = "1.39", features = ["full"] }
+async-recursion = "1"
 async-trait = "0.1"
-error-chain = "0.12"
-futures = "0.3"
-simd-json-derive = "0.13"
-value-trait = "0.8"
-beef = "0.5"
+beef.workspace = true
 byteorder = "1.5"
+chrono = "0.4"
+error-chain.workspace = true
+futures.workspace = true
+lexical = "7"
 itoa = "1"
 ryu = "1"
-lexical = "7"
-simdutf8 = "0.1"
-chrono = "0.4"
-uuid = { version = "1.9", features = ["v4"] }
-async-recursion = "1"
-
 schema_registry_converter = { version = "4.2", default-features = false, features = [
-    "futures",
-    "rustls_tls",
-    "avro",
-    "easy",
+  "futures",
+  "rustls_tls",
+  "avro",
+  "easy",
 ] }
+simd-json-derive.workspace = true
+simdutf8 = "0.1"
+tremor-value.workspace = true
+tremor-common.workspace = true
+tremor-config.workspace = true
+tokio.workspace = true
+uuid = { version = "1.9", features = ["v4"] }
+value-trait.workspace = true
 
 # codecs
-reqwest = { version = "0.12", default-features = false, features = [
-    "rustls-tls",
-    "rustls-tls-native-roots",
+apache-avro = { version = "0.18", features = [
+  "snappy",
+  "bzip",
+  "xz",
+  "zstandard",
 ] }
-csv = "1.2"
-tremor-influx = { version = "0.13.0-rc.33", path = "../tremor-influx" }
-simd-json = "0.13"
-apache-avro = { version = "0.17", features = [
-    "snappy",
-    "bzip",
-    "xz",
-    "zstandard",
-] }
-#
-serde = "1"
+csv = "1.3"
 rmp-serde = "1.2"
+serde.workspace = true
+serde_yaml.workspace = true
+simd-json.workspace = true
 syslog_loose = "0.21"
-serde_yaml = "0.9"
+thiserror.workspace = true
+tremor-influx.workspace = true
 
 [dev-dependencies]
 proptest = "1.5"
 test-case = "3"
+
+[features]
+128bit = ["tremor-value/128bit"]

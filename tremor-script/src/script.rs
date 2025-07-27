@@ -75,6 +75,14 @@ impl Script {
     /// server where we know that we really only parse the script to check for errors and
     /// warnings.
     /// That's also why it's behind a feature falg
+    ///
+    /// # Errors
+    ///
+    /// if the arena cannot be locked for writing
+    ///
+    /// # Safety
+    ///
+    /// This is not safe and will slowly poison you upon usage.
     #[cfg(feature = "arena-delete")]
     pub unsafe fn consume_and_free(self) -> Result<()> {
         let Script { aid, script, .. } = self;

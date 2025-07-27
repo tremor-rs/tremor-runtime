@@ -16,6 +16,7 @@
 
 use super::*;
 use proptest::prelude::*;
+use std::fmt::Write as _;
 
 macro_rules! lex_ok {
     ($src:expr, $($span:expr => $token:expr,)*) => {{
@@ -476,7 +477,7 @@ fn test_test_literal_format_bug_regression() {
         .filter_map(Result::ok)
         .collect::<Vec<TokenSpan>>()
     {
-        res.push_str(&format!("{}", b.value));
+        let _ = write!(res, "{}", b.value);
     }
     assert_eq!(snot, res);
 }

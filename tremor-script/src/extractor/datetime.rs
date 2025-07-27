@@ -50,7 +50,7 @@ pub(crate) fn execute(
     format: &str,
     has_timezone: bool,
 ) -> Result<'static> {
-    crate::datetime::_parse(s, format, has_timezone).map_or(Result::NoMatch, |d| {
+    crate::datetime::parse(s, format, has_timezone).map_or(Result::NoMatch, |d| {
         if result_needed {
             Result::Match(Value::from(d))
         } else {

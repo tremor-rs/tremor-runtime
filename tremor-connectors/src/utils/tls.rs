@@ -19,22 +19,21 @@ use rustls::{ClientConfig, RootCertStore, ServerConfig};
 use rustls_native_certs::load_native_certs;
 use rustls_pemfile::{pkcs8_private_keys, rsa_private_keys, Item};
 use std::io::{self, BufReader};
+use std::sync::LazyLock;
 use std::{path::PathBuf, sync::Arc};
 use tokio_rustls::TlsConnector;
 
-lazy_static::lazy_static! {
-    static ref SYSTEM_ROOT_CERTS: RootCertStore = {
-        let mut roots = RootCertStore::empty();
-        // ALLOW: this is expected to panic if we cannot load system certificates
-        for cert in load_native_certs().expect("Unable to load system TLS certificates.") {
-            roots
-                .add(cert)
-                // ALLOW: this is expected to panic if we cannot load system certificates
-                .expect("Unable to add root TLS certificate to RootCertStore");
-        }
+static SYSTEM_ROOT_CERTS: LazyLock<RootCertStore> = LazyLock::new(|| {
+    let mut roots = RootCertStore::empty();
+    // ALLOW: this is expected to panic if we cannot load system certificates
+    for cert in load_native_certs().expect("Unable to load system TLS certificates.") {
         roots
-    };
-}
+            .add(cert)
+            // ALLOW: this is expected to panic if we cannot load system certificates
+            .expect("Unable to add root TLS certificate to RootCertStore");
+    }
+    roots
+});
 
 /// TLS Server Configuration
 #[derive(Debug, Clone, Deserialize)]
@@ -137,7 +136,6 @@ impl TLSClientConfig {
     ///
     /// # Errors
     /// if the cafile is invalid
-
     pub fn to_client_connector(&self) -> Result<TlsConnector, Error> {
         let tls_config = self.to_client_config()?;
         Ok(TlsConnector::from(Arc::new(tls_config)))
@@ -207,10 +205,7 @@ fn load_certs<'x>(path: &PathBuf) -> Result<Vec<CertificateDer<'x>>, Error> {
     let mut reader = BufReader::new(certfile);
 
     let certs = rustls_pemfile::certs(&mut reader)
-        .map_while(|cert| match cert {
-            Ok(cert) => Some(cert),
-            Err(_e) => None,
-        })
+        .map_while(std::result::Result::ok)
         .collect::<Vec<CertificateDer>>();
 
     if certs.is_empty() {

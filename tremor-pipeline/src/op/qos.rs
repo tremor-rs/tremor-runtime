@@ -34,5 +34,5 @@ fn is_error_insight(insight: &Event, timeout: u64) -> bool {
     meta.get("error").is_some()
         || insight.cb == CbAction::Fail
         || insight.cb == CbAction::Trigger
-        || meta.get_u64("time").map_or(false, |v| v > timeout)
+        || meta.get_u64("time").is_some_and(|v| v > timeout)
 }

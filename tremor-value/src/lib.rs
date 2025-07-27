@@ -9,10 +9,6 @@
 #![deny(missing_docs)]
 // We might want to revisit inline_always
 #![allow(clippy::module_name_repetitions, clippy::inline_always)]
-// TODO: remove this when https://github.com/rust-lang/rust-clippy/issues/9076 is fixed
-#![allow(clippy::trait_duplication_in_bounds)]
-// TODO: remove this when https://github.com/rust-lang/rust-clippy/issues/8772 is fixed
-#![allow(clippy::type_repetition_in_bounds)]
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,7 +58,7 @@ use simd_json_derive::{Deserialize, Serialize, Tape};
 /// Maximum size for a vector object
 pub const VEC_LIMIT_UPPER: usize = 32;
 
-impl<'value> Serialize for Value<'value> {
+impl Serialize for Value<'_> {
     fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
     where
         W: std::io::Write,
@@ -81,16 +77,18 @@ impl<'value> ValueIntoString for Value<'value> {
         }
     }
 }
-impl<'value> ValueIntoContainer for Value<'value> {
+impl<'value> ValueIntoArray for Value<'value> {
     type Array = Vec<Value<'value>>;
-    type Object = Object<'value>;
     fn into_array(self) -> Option<Vec<Value<'value>>> {
         match self {
             Self::Array(a) => Some(a),
             _ => None,
         }
     }
+}
 
+impl<'value> ValueIntoObject for Value<'value> {
+    type Object = Object<'value>;
     fn into_object(self) -> Option<Object<'value>> {
         match self {
             Self::Object(o) => Some(*o),
@@ -101,7 +99,7 @@ impl<'value> ValueIntoContainer for Value<'value> {
 
 struct ValueDeser<'input, 'tape>(&'tape mut Tape<'input>);
 
-impl<'input, 'tape> ValueDeser<'input, 'tape> {
+impl<'input> ValueDeser<'input, '_> {
     #[inline(always)]
     fn parse(&mut self) -> simd_json::Result<Value<'input>> {
         match self.0.next() {
@@ -140,7 +138,8 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
             // ALLOW: we know the values will be OK
             if let Node::String(key) = self.0.next().unwrap() {
                 // ALLOW: we know it will parse correctly
-                res.insert_nocheck(key.into(), self.parse().unwrap());
+                // ALLOW: we know the values are distinct
+                unsafe { res.insert_nocheck(key.into(), self.parse().unwrap()) };
             } else {
                 // ALLOW: We check against this in tape
                 unreachable!();
@@ -151,11 +150,11 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
 }
 
 impl<'input> Deserialize<'input> for Value<'input> {
-    fn from_tape(tape: &mut crate::Tape<'input>) -> simd_json::Result<Self>
+    fn from_tape(tape: &mut crate::Tape<'input>) -> simd_json_derive::de::Result<Self>
     where
         Self: Sized + 'input,
     {
-        ValueDeser(tape).parse()
+        ValueDeser(tape).parse().map_err(std::convert::Into::into)
     }
 }
 

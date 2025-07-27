@@ -34,7 +34,7 @@ impl IsConstFn {
     }
 }
 
-impl<'script> walkers::imut_expr::Walker<'script> for IsConstFn {}
+impl walkers::imut_expr::Walker<'_> for IsConstFn {}
 impl<'script> visitors::imut_expr::Visitor<'script> for IsConstFn {
     fn visit_invoke(&mut self, invoke: &mut Invoke<'script>) -> Result<VisitRes> {
         self.is_const |= invoke.invocable.is_const();
@@ -42,5 +42,5 @@ impl<'script> visitors::imut_expr::Visitor<'script> for IsConstFn {
     }
 }
 
-impl<'script> walkers::expr::Walker<'script> for IsConstFn {}
-impl<'script> visitors::expr::Visitor<'script> for IsConstFn {}
+impl walkers::expr::Walker<'_> for IsConstFn {}
+impl visitors::expr::Visitor<'_> for IsConstFn {}

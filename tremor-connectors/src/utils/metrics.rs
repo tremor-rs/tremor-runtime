@@ -154,9 +154,12 @@ pub(crate) fn make_event_count_metrics_payload(
     connector_id: &alias::Connector,
 ) -> EventPayload {
     let mut tags = Object::with_capacity_and_hasher(2, ObjectHasher::default());
-    tags.insert_nocheck(FLOW, Value::from(connector_id.flow_alias().to_string()));
-    tags.insert_nocheck(CONNECTOR, connector_id.to_string().into());
-    tags.insert_nocheck(PORT, port.into());
+    // SAFETY we know these fields don't exist in our freshly created object
+    unsafe {
+        tags.insert_nocheck(FLOW, Value::from(connector_id.flow_alias().to_string()));
+        tags.insert_nocheck(CONNECTOR, connector_id.to_string().into());
+        tags.insert_nocheck(PORT, port.into());
+    }
 
     let value = value_count(CONNECTOR_EVENTS, tags, count, timestamp);
     // full metrics payload

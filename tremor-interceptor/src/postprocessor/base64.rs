@@ -20,7 +20,7 @@ use tremor_common::base64;
 #[derive(Default)]
 pub(crate) struct Base64 {}
 impl Stateless for Base64 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "base64"
     }
 

@@ -14,7 +14,7 @@
 
 use crate::{
     common_cow,
-    errors::{Error, ErrorKind, Result},
+    errors::{Error, GraphError, Result, SubGraphError},
     op::{
         self,
         identity::PassthroughFactory,
@@ -34,7 +34,6 @@ use petgraph::{
     Graph,
 };
 use rand::Rng;
-use std::iter;
 use std::{
     borrow::Borrow,
     collections::{BTreeSet, HashSet},
@@ -105,7 +104,7 @@ fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
 pub(crate) fn window_defn_to_impl(d: &WindowDefinition<'static>) -> Result<window::Impl> {
     use op::trickle::window::{TumblingOnNumber, TumblingOnTime};
     match &d.kind {
-        WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
+        WindowKind::Sliding => Err(Error::Msg("Sliding windows are not yet implemented")),
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
             let with = d.params.render()?;
@@ -129,13 +128,13 @@ pub(crate) fn window_defn_to_impl(d: &WindowDefinition<'static>) -> Result<windo
                 (None, None, Some(state)) => {
                     script.and_then(|w| w.script.as_ref())
                     .map_or_else(
-                        || Err(Error::from("Script is required for `state` type windows")),
+                        || Err(Error::Msg("Script is required for `state` type windows")),
                         |script| Ok(window::Impl::from(TumblingOnState::from_stmt(state.clone_static(), max_groups, script.clone(), d.tick_script.clone()))))
                 },
-                (None, None, None) => Err(Error::from(
+                (None, None, None) => Err(Error::Msg(
                     "Bad window configuration, either `size`, `interval`, or `state` is required.",
                 )),
-                _ => Err(Error::from(
+                _ => Err(Error::Msg(
                     "Bad window configuration, only one of `size`, `interval`, or `state` is allowed.",
                 )),
             }
@@ -432,8 +431,9 @@ impl Query {
                         return Err(query_node_duplicate_name_err(o, o.id.clone()).into());
                     }
 
-                    let mut defn: OperatorDefinition =
-                        helper.get(&o.target)?.ok_or("operator not found")?;
+                    let mut defn: OperatorDefinition = helper
+                        .get(&o.target)?
+                        .ok_or(Error::Msg("operator not found"))?;
 
                     defn.params.ingest_creational_with(&o.params)?;
 
@@ -493,7 +493,7 @@ impl Query {
 
                     nodes_by_name.insert(common_cow(&o.id), id);
                 }
-            };
+            }
         }
 
         // Link graph edges
@@ -525,39 +525,50 @@ impl Query {
             let mut old_index_to_new_index = HashMap::new();
 
             for (old_idx, mut node) in ig.graph.graph.into_iter().enumerate() {
-                let new_idx = if let NodeKind::Output(port) = &node.kind {
-                    let port: &str = port.borrow();
-                    node.config.kind = NodeKind::Operator;
-                    let new_idx = pipe_graph.add_node(node.config);
-                    let to_id = ig.into_map.get(port).ok_or(format!(
-                        "invalid sub graph bad output port {}, availabile: {:?}",
-                        port,
-                        ig.into_map.keys().collect::<Vec<_>>()
-                    ))?;
-                    let con = Connection {
-                        from: "out".into(),
-                        to: "in".into(),
+                let new_idx =
+                    if let NodeKind::Output(port) = &node.kind {
+                        let port: &str = port.borrow();
+                        node.config.kind = NodeKind::Operator;
+                        let new_idx = pipe_graph.add_node(node.config);
+                        let to_id = ig.into_map.get(port).ok_or(Error::from(
+                            SubGraphError::BadOutputPort {
+                                port: port.to_string(),
+                                available: ig
+                                    .into_map
+                                    .keys()
+                                    .map(ToString::to_string)
+                                    .collect::<Vec<_>>(),
+                            },
+                        ))?;
+                        let con = Connection {
+                            from: "out".into(),
+                            to: "in".into(),
+                        };
+                        pipe_graph.add_edge(new_idx, *to_id, con);
+                        new_idx
+                    } else if let NodeKind::Input = &node.kind {
+                        node.config.kind = NodeKind::Operator;
+                        let port = node.id;
+                        let new_idx = pipe_graph.add_node(node.config);
+                        let from_id = ig.from_map.get(&port).ok_or(Error::from(
+                            SubGraphError::BadInputPort {
+                                port,
+                                available: ig
+                                    .from_map
+                                    .keys()
+                                    .map(ToString::to_string)
+                                    .collect::<Vec<_>>(),
+                            },
+                        ))?;
+                        let con = Connection {
+                            from: "out".into(),
+                            to: "in".into(),
+                        };
+                        pipe_graph.add_edge(*from_id, new_idx, con);
+                        new_idx
+                    } else {
+                        pipe_graph.add_node(node.config)
                     };
-                    pipe_graph.add_edge(new_idx, *to_id, con);
-                    new_idx
-                } else if let NodeKind::Input { .. } = &node.kind {
-                    node.config.kind = NodeKind::Operator;
-                    let port = node.id;
-                    let new_idx = pipe_graph.add_node(node.config);
-                    let from_id = ig.from_map.get(&port).ok_or(format!(
-                        "invalid sub graph bad input port {}, availabile: {:?}",
-                        port,
-                        ig.from_map.keys().collect::<Vec<_>>()
-                    ))?;
-                    let con = Connection {
-                        from: "out".into(),
-                        to: "in".into(),
-                    };
-                    pipe_graph.add_edge(*from_id, new_idx, con);
-                    new_idx
-                } else {
-                    pipe_graph.add_node(node.config)
-                };
                 old_index_to_new_index.insert(old_idx, new_idx);
             }
 
@@ -565,12 +576,12 @@ impl Query {
                 let from_id = old_index_to_new_index
                     .get(&from_id)
                     .copied()
-                    .ok_or("invalid graph unknown from_id")?;
+                    .ok_or(Error::Msg("invalid graph unknown from_id"))?;
                 for (to_id, to_port) in tos {
                     let to_id = old_index_to_new_index
                         .get(&to_id)
                         .copied()
-                        .ok_or("invalid graph unknown to_id")?;
+                        .ok_or(Error::Msg("invalid graph unknown to_id"))?;
                     let con = Connection {
                         from: from_port.clone(),
                         to: to_port,
@@ -615,7 +626,7 @@ impl Query {
 
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
-            Err(ErrorKind::CyclicGraphError(format!("{dot}")).into())
+            Err(Error::CyclicGraphError(format!("{dot}")))
         } else {
             let mut i2pos = HashMap::new();
             let mut graph = Vec::new();
@@ -626,9 +637,7 @@ impl Query {
             for (i, nx) in pipe_graph.node_indices().enumerate() {
                 let op = pipe_graph
                     .node_weight(nx)
-                    .ok_or_else(|| {
-                        Error::from(format!("Invalid pipeline can't find node {:?}", &nx))
-                    })
+                    .ok_or_else(|| Error::NodeNotFound(nx.index()))
                     .and_then(|node| {
                         node.to_op(idgen.next_id(), supported_operators, &mut helper)
                     })?;
@@ -646,14 +655,19 @@ impl Query {
 
             let mut port_indexes: ExecPortIndexMap = HashMap::new();
             for idx in pipe_graph.edge_indices() {
-                let (from, to) = pipe_graph.edge_endpoints(idx).ok_or("invalid edge")?;
-                let ports = pipe_graph.edge_weight(idx).cloned().ok_or("invalid edge")?;
+                let (from, to) = pipe_graph
+                    .edge_endpoints(idx)
+                    .ok_or(Error::from(GraphError::InvalidEdge(idx.index())))?;
+                let ports = pipe_graph
+                    .edge_weight(idx)
+                    .cloned()
+                    .ok_or(Error::from(GraphError::InvalidEdge(idx.index())))?;
                 let from = *i2pos
                     .get(&from)
-                    .ok_or_else(|| Error::from("Invalid graph - failed to build connections"))?;
+                    .ok_or_else(|| Error::from(GraphError::InvalidFromNode(from.index())))?;
                 let to = *i2pos
                     .get(&to)
-                    .ok_or_else(|| Error::from("Invalid graph - failed to build connections"))?;
+                    .ok_or_else(|| Error::from(GraphError::InvalidToNode(to.index())))?;
                 let from = (from, ports.from);
                 let to = (to, ports.to);
                 if let Some(connections) = port_indexes.get_mut(&from) {
@@ -673,7 +687,7 @@ impl Query {
                 {
                     let v = *i2pos
                         .get(&idx)
-                        .ok_or_else(|| Error::from("Invalid graph - failed to build inputs"))?;
+                        .ok_or_else(|| Error::from(GraphError::InvalidInput(id.clone())))?;
                     inputs.insert(id.clone().into(), v);
                 }
             }
@@ -688,7 +702,7 @@ impl Query {
                 {
                     let v = *i2pos
                         .get(&idx)
-                        .ok_or_else(|| Error::from("Invalid graph - failed to build outputs"))?;
+                        .ok_or_else(|| Error::from(GraphError::InvalidOutput(id.clone())))?;
                     outputs.insert(id.clone().into(), v);
                 }
             }
@@ -696,9 +710,7 @@ impl Query {
             let states = State::new(graph.iter().map(op::Operator::initial_state).collect());
 
             Ok(ExecutableGraph {
-                metrics: iter::repeat(NodeMetrics::default())
-                    .take(graph.len())
-                    .collect(),
+                metrics: std::iter::repeat_n(NodeMetrics::default(), graph.len()).collect(),
                 stack: Vec::with_capacity(graph.len()),
                 id: pipeline_id.to_string(), // TODO make configurable
                 last_metrics: 0,
@@ -751,8 +763,8 @@ fn node_to_dot(_g: &Graph<NodeConfig, Connection>, (_, c): (NodeIndex, &NodeConf
 }
 
 fn prefix_for(s: &PipelineCreate) -> String {
-    let rand_id1: u64 = rand::thread_rng().gen();
-    let rand_id2: u64 = rand::thread_rng().gen();
+    let rand_id1: u64 = rand::rng().random();
+    let rand_id2: u64 = rand::rng().random();
     format!("pipeline-{}-{rand_id1}-{rand_id2}", s.alias)
 }
 fn from_name(prefix: &str, port: &str) -> String {
@@ -784,10 +796,7 @@ fn select(
                     helper
                         .get::<WindowDefinition>(&w.id)?
                         .ok_or_else(|| {
-                            Error::from(ErrorKind::BadOpConfig(format!(
-                                "Unknown window: {} available",
-                                &w.id,
-                            )))
+                            Error::BadOpConfig(format!("Unknown window: {} available", &w.id,))
                         })
                         .and_then(|mut imp| {
                             Optimizer::new(helper).walk_window_defn(&mut imp)?;
@@ -876,7 +885,7 @@ mod test {
         let g = q.to_executable_graph(&mut idgen)?;
         assert!(g.inputs.contains_key("in/test_in"));
         assert_eq!(idgen.next_id().id(), first.id() + g.graph.len() as u64 + 1);
-        let out = g.graph.get(4).ok_or("no data")?;
+        let out = g.graph.get(4).expect("data");
         assert_eq!(out.id, "out/test_out");
         assert_eq!(out.kind, NodeKind::Output("test_out".into()));
         Ok(())

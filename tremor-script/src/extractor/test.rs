@@ -34,7 +34,7 @@ fn test_reg_extractor() {
             );
         }
         _ => unreachable!(),
-    };
+    }
 }
 #[test]
 fn test_re_extractor() {
@@ -49,7 +49,7 @@ fn test_re_extractor() {
             );
         }
         _ => unreachable!(),
-    };
+    }
 }
 #[test]
 fn test_kv_extractor() {
@@ -65,7 +65,7 @@ fn test_kv_extractor() {
             );
         }
         _ => unreachable!(),
-    };
+    }
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn test_json_extractor() {
             );
         }
         _ => unreachable!(),
-    };
+    }
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn test_glob_extractor() {
             );
         }
         _ => unreachable!(),
-    };
+    }
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn test_base64_extractor() {
             );
         }
         _ => unreachable!(),
-    };
+    }
 }
 
 #[test]

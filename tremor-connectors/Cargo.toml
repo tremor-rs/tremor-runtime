@@ -1,90 +1,91 @@
 [package]
 name = "tremor-connectors"
-version = "0.13.0-rc.33"
-edition = "2021"
-license = "Apache-2.0"
-homepage = "https://www.tremor.rs"
-authors = ["The Tremor Team"]
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.33" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.33" }
-tremor-codec = { path = "../tremor-codec", version = "0.13.0-rc.33" }
-tremor-pipeline = { path = "../tremor-pipeline", version = "0.13.0-rc.33" }
-tremor-script = { path = "../tremor-script", version = "0.13.0-rc.33" }
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.33" }
-tremor-interceptor = { path = "../tremor-interceptor", version = "0.13.0-rc.33" }
-tremor-system = { path = "../tremor-system", version = "0.13.0-rc.33" }
-tokio = { version = "1.39", default-features = false }
-beef = { version = "0.5", default-features = false }
-value-trait = { version = "0.8", default-features = false }
-futures = { version = "0.3.30", default-features = false, features = ["std"] }
-halfbrown = { version = "0.2", default-features = false }
-simd-json = { version = "0.13", default-features = false }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-url = { version = "2.5", default-features = false }
+anyhow.workspace = true
+tremor-common.workspace = true
+tremor-config.workspace = true
+tremor-codec.workspace = true
+tremor-pipeline.workspace = true
+tremor-script.workspace = true
+tremor-value.workspace = true
+tremor-interceptor.workspace = true
+tremor-system.workspace = true
+tokio.workspace = true
+beef.workspace = true
+value-trait.workspace = true
+futures.workspace = true
+halfbrown.workspace = true
+simd-json.workspace = true
+serde.workspace = true
+url.workspace = true
 async-trait = { version = "0.1", default-features = false }
-log = { version = "0.4", features = ["kv_unstable"] }
+log.workspace = true
 tokio-stream = { version = "0.1", default-features = false }
 bimap = { version = "0.6", default-features = false, features = [
-    "serde",
-    "std",
+  "serde",
+  "std",
 ] }
 hostname = { version = "0.4", default-features = false }
-thiserror = { version = "1.0", default-features = false }
-anyhow = { version = "1.0", default-features = true }
+thiserror.workspace = true
 event-listener = { version = "5", default-features = false }
 lazy_static = { version = "1", default-features = false }
 either = { version = "1.13", default-features = false, features = ["serde"] }
-rand = { version = "0.8.5", default-features = false }
+rand.workspace = true
 
 # shared
-simd-json-derive = { version = "0.13", optional = true, default-features = false }
+simd-json-derive = { workspace = true, optional = true }
 uuid = { version = "1.9", optional = true, default-features = false, features = [
-    "v4",
+  "v4",
 ] }
 hyper = { version = "1.3.1", optional = true, default-features = false, features = [
-    "server",
-    "http1",
-    "http2",
+  "server",
+  "http1",
+  "http2",
 ] }
 hyper-util = { version = "0.1.6", optional = true, default-features = false, features = [
-    "http1",
-    "http2",
-    "client",
-    "client-legacy",
-    "tokio",
-    "server-auto",
+  "http1",
+  "http2",
+  "client",
+  "client-legacy",
+  "tokio",
+  "server-auto",
 ] }
 gouth = { version = "0.2", optional = true, default-features = true }
 
 
 # tls
 tokio-rustls = { version = "0.26", optional = true, default-features = false }
-rustls = { version = "0.23.18", optional = true, default-features = false }
-rustls-pemfile = { version = "2.1.2", optional = true, default-features = false }
-rustls-native-certs = { version = "0.7", optional = true, default-features = false }
+rustls = { version = "0.23", optional = true, default-features = false }
+rustls-pemfile = { version = "2.1", optional = true, default-features = false }
+rustls-native-certs = { version = "0.8", optional = true, default-features = false }
 
 # dns
 trust-dns-resolver = { version = "0.23", optional = true, default-features = false, features = [
-    "tokio-runtime",
-    "system-config",
+  "tokio-runtime",
+  "system-config",
 ] }
 
 # elasticsearch
 elasticsearch = { version = "=8.5.0-alpha.1", optional = true, default-features = false, features = [
-    "rustls-tls",
+  "rustls-tls",
 ] }
 
 # http
 http = { version = "1.1", optional = true, default-features = false }
 hyper-rustls = { version = "0.27", optional = true, default-features = false, features = [
-    "rustls-native-certs",
-    "http1",
-    "http2",
-    "ring",
+  "rustls-native-certs",
+  "http1",
+  "http2",
+  "ring",
 ] }
 http-body-util = { version = "0.1", optional = true, default-features = false }
 mime = { version = "0.3", optional = true, default-features = false }
@@ -94,42 +95,42 @@ async-stream = { version = "0.3", optional = true, default-features = false }
 
 # kafka
 rdkafka = { version = "0.36", optional = true, features = [
-    "cmake-build",
-    "libz-static",
-    "tokio",
+  "cmake-build",
+  "libz-static",
+  "tokio",
 ], default-features = false }
 rdkafka-sys = { version = "4.6", optional = true, features = [
-    "cmake-build",
-    "libz-static",
+  "cmake-build",
+  "libz-static",
 ], default-features = false }
 indexmap = { version = "2", optional = true, default-features = false }
 
 # websockets
 tokio-tungstenite = { version = "0.23", optional = true, default-features = false, features = [
-    "handshake",
+  "handshake",
 ] }
 
 # discord
 serenity = { version = "0.11", optional = true, default-features = false, features = [
-    "client",
-    "gateway",
-    "rustls_backend",
-    "model",
-    "cache",
+  "client",
+  "gateway",
+  "rustls_backend",
+  "model",
+  "cache",
 ] }
 
 # file
 file-mode = { version = "0.1", optional = true, default-features = false }
 async-compression = { version = "0.4", optional = true, default-features = false, features = [
-    "xz",
-    "tokio",
+  "xz",
+  "tokio",
 ] }
 
 # kv
 sled = { version = "0.34", optional = true, default-features = false }
 
 qwal = { version = "0.1.0", optional = true, default-features = false, features = [
-    "tokio",
+  "tokio",
 ] } # wal
 
 # bench
@@ -139,8 +140,8 @@ xz2 = { version = "0.1", optional = true, default-features = false }
 
 # clickhouse
 clickhouse-rs = { version = "1.1.0-alpha.1", optional = true, default-features = false, features = [
-    "tokio_io",
-    "tls",
+  "tokio_io",
+  "tls",
 ] }
 # Clickhouse chrono-tz is out of date so we ringfence it here. Hopefully a new version will be released soon...
 clickhouse-chrono-tz = { package = "chrono-tz", version = "0.8", optional = true, default-features = false }
@@ -163,35 +164,35 @@ http-types = "2.0"
 bytes = "1.6"
 tempfile = { version = "3.8", default-features = false }
 env_logger = "0.11"
-tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers", version = "0.13.0-rc.33" }
+tremor-connectors-test-helpers = { path = "../tremor-connectors-test-helpers" }
 tide = { version = "0.16", default-features = false } # TODO remove tide from TestHttpServer
 tokio = { version = "1.39", default-features = false, features = [
-    "full",
-    "test-util",
+  "full",
+  "test-util",
 ] }
 
 [features]
 default = [
-    "dns",
-    "elasticsearch",
-    "http",
-    "kafka",
-    "websocket",
-    "discord",
-    "file",
-    "kv",
-    "wal",
-    "clickhouse",
-    "crononome",
-    "stdio",
-    "metronome",
-    "null",
-    "metrics",
-    "tcp",
-    "udp",
-    "unix-socket",
-    "dev",
-    "integration-harness-local",
+  "dns",
+  "elasticsearch",
+  "http",
+  "kafka",
+  "websocket",
+  "discord",
+  "file",
+  "kv",
+  "wal",
+  "clickhouse",
+  "crononome",
+  "stdio",
+  "metronome",
+  "null",
+  "metrics",
+  "tcp",
+  "udp",
+  "unix-socket",
+  "dev",
+  "integration-harness-local",
 ]
 
 128bit = ["tremor-value/128bit"]
@@ -201,31 +202,31 @@ socket = ["dep:socket2"]
 dev = ["circut-breaker", "exit", "bench"]
 
 tls = [
-    "dep:hyper",
-    "dep:rustls-native-certs",
-    "dep:rustls-pemfile",
-    "dep:rustls",
-    "dep:tokio-rustls",
+  "dep:hyper",
+  "dep:rustls-native-certs",
+  "dep:rustls-pemfile",
+  "dep:rustls",
+  "dep:tokio-rustls",
 ]
 
 dns = ["dep:trust-dns-resolver"]
 elasticsearch = ["dep:elasticsearch", "dep:serde_yaml", "tls", "http"]
 http = [
-    "dep:base64",
-    "dep:dashmap",
-    "dep:gouth",
-    "dep:http",
-    "dep:http-body-util",
-    "dep:hyper-rustls",
-    "dep:hyper-util",
-    "dep:hyper",
-    "dep:mime",
-    "dep:async-stream",
-    "hyper/http1",
-    "hyper/http2",
-    "tls",
-    "mime",
-    "socket",
+  "dep:base64",
+  "dep:dashmap",
+  "dep:gouth",
+  "dep:http",
+  "dep:http-body-util",
+  "dep:hyper-rustls",
+  "dep:hyper-util",
+  "dep:hyper",
+  "dep:mime",
+  "dep:async-stream",
+  "hyper/http1",
+  "hyper/http2",
+  "tls",
+  "mime",
+  "socket",
 ]
 
 kafka = ["dep:rdkafka", "dep:rdkafka-sys", "dep:indexmap"]
@@ -248,25 +249,25 @@ udp = ["socket"]
 unix-socket = ["socket", "dep:file-mode"]
 
 integration-harness = [
-    "integration-harness-docker",
-    "integration-harness-local",
+  "integration-harness-docker",
+  "integration-harness-local",
 ]
 integration-harness-docker = [
-    "integration-tests-clickhouse",
-    "integration-tests-elasticsearch",
-    "integration-tests-kafka",
+  "integration-tests-clickhouse",
+  "integration-tests-elasticsearch",
+  "integration-tests-kafka",
 ]
 integration-harness-local = [
-    "integration-tests-bench",
-    "integration-tests-crononome",
-    "integration-tests-file",
-    "integration-tests-http",
-    "integration-tests-metronome",
-    "integration-tests-tcp",
-    "integration-tests-udp",
-    "integration-tests-unix-socket",
-    "integration-tests-wal",
-    "integration-tests-websocket",
+  "integration-tests-bench",
+  "integration-tests-crononome",
+  "integration-tests-file",
+  "integration-tests-http",
+  "integration-tests-metronome",
+  "integration-tests-tcp",
+  "integration-tests-udp",
+  "integration-tests-unix-socket",
+  "integration-tests-wal",
+  "integration-tests-websocket",
 ]
 
 # enable flaky tests

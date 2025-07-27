@@ -632,7 +632,6 @@ where
                         },
                     )
                 }));
-                continue;
             }
             // Next segment is an index: index into `current`, if it's an array
             Segment::Idx { idx, .. } => {
@@ -670,7 +669,7 @@ where
                     }
                     subrange = array.get(start..end);
                     continue;
-                };
+                }
                 return error_need_arr(outer, segment, current.value_type());
             }
             // Next segment is an index range: index into `current`, if it's an array
@@ -687,7 +686,7 @@ where
                     }
                     subrange = array.get(start..end);
                     continue;
-                };
+                }
                 return error_need_arr(outer, segment, current.value_type());
             }
             // Next segment is an expression: run `expr` to know which key it signifies at runtime
@@ -701,7 +700,7 @@ where
                             current = v;
                             subrange = None;
                             continue;
-                        };
+                        }
                         let key = id.to_string();
                         let options = o.keys().map(ToString::to_string).collect();
                         return error_bad_key(outer, segment, path, key, options);
@@ -719,7 +718,7 @@ where
                             current = v;
                             subrange = None;
                             continue;
-                        };
+                        }
                         let r = idx..idx;
                         let l = array.len();
                         return error_array_out_of_bound(outer, segment, path, r, l);
@@ -924,7 +923,7 @@ fn patch_value<'event>(
                 if obj.contains_key(&cow) {
                     let key = cow.to_string();
                     return error_patch_key_exists(patch_expr, mid, key);
-                };
+                }
                 obj.insert(cow, value);
             }
             Update {
@@ -992,7 +991,7 @@ fn patch_value<'event>(
                 if !obj.contains_key(&cow) {
                     let default_value = stry!(expr.run(opts, env, event, state, meta, local));
                     obj.insert(cow, default_value.into_owned());
-                };
+                }
             }
             DefaultRecord { expr: inner, mid } => {
                 let default_value = stry!(inner.run(opts, env, event, state, meta, local));
@@ -1030,7 +1029,7 @@ fn test_guard<Expr>(
     state: &Value<'static>,
     meta: &Value,
     local: &LocalStack,
-    guard: &Option<ImutExpr>,
+    guard: Option<&ImutExpr>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
@@ -1040,7 +1039,7 @@ where
         |guard| {
             let test = stry!(guard.run(opts, env, event, state, meta, local));
             test.as_bool()
-                .map_or_else(|| error_guard_not_bool(outer, guard, &test), Result::Ok)
+                .map_or_else(|| error_guard_not_bool(outer, *guard, &test), Result::Ok)
         },
     )
 }
@@ -1057,7 +1056,7 @@ pub(crate) fn test_predicate_expr<Expr>(
     local: &LocalStack,
     target: &Value,
     pattern: &Pattern,
-    guard: &Option<ImutExpr>,
+    guard: Option<&ImutExpr>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
@@ -1216,7 +1215,7 @@ where
                     if let Some(v) = known_key.map_lookup(record) {
                         if opts.result_needed {
                             known_key.insert(&mut acc, v.clone())?;
-                        };
+                        }
                     } else {
                         return Ok(None);
                     }
@@ -1237,7 +1236,7 @@ where
                     {
                         if opts.result_needed {
                             known_key.insert(&mut acc, x)?;
-                        };
+                        }
                     } else {
                         return Ok(None);
                     }
@@ -1266,7 +1265,7 @@ where
                         )) {
                             if opts.result_needed {
                                 known_key.insert(&mut acc, m)?;
-                            };
+                            }
                         } else {
                             return Ok(None);
                         }
@@ -1285,7 +1284,7 @@ where
                         )) {
                             if opts.result_needed {
                                 known_key.insert(&mut acc, r)?;
-                            };
+                            }
                         } else {
                             return Ok(None);
                         }
@@ -1304,7 +1303,7 @@ where
                         )) {
                             if opts.result_needed {
                                 known_key.insert(&mut acc, r)?;
-                            };
+                            }
                         } else {
                             return Ok(None);
                         }
@@ -1401,7 +1400,7 @@ where
                                 } else {
                                     // if we don't need the results, we can abort here as we have a match
                                     break 'inner_rec;
-                                };
+                                }
                             }
                         }
                     }
@@ -1481,7 +1480,7 @@ where
                     )) {
                         if opts.result_needed {
                             acc.push(r);
-                        };
+                        }
                     } else {
                         return Ok(None);
                     }

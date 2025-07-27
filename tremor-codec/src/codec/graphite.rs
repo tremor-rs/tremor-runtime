@@ -60,7 +60,7 @@ pub struct PlaintextProtocol {
 
 #[async_trait::async_trait]
 impl Codec for PlaintextProtocol {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "graphite-plaintext"
     }
 
@@ -88,21 +88,19 @@ impl Codec for PlaintextProtocol {
 fn encode_plaintext(value: &Value, r: &mut impl Write) -> Result<()> {
     let metric = value
         .get_str("metric")
-        .ok_or(ErrorKind::InvalidGraphitePlaintext)?;
-    let val = value
-        .get("value")
-        .ok_or(ErrorKind::InvalidGraphitePlaintext)?;
+        .ok_or(Error::InvalidGraphitePlaintext)?;
+    let val = value.get("value").ok_or(Error::InvalidGraphitePlaintext)?;
 
     let ts = value
         .get("timestamp")
-        .ok_or(ErrorKind::InvalidGraphitePlaintext)?;
+        .ok_or(Error::InvalidGraphitePlaintext)?;
 
     if !val.is_number() {
-        return Err(ErrorKind::InvalidGraphitePlaintext.into());
-    };
+        return Err(Error::InvalidGraphitePlaintext);
+    }
 
     // Truncate to seconds resolution for graphite
-    let ts = ts.as_u64().ok_or(ErrorKind::InvalidGraphitePlaintext)? / 1_000_000_000;
+    let ts = ts.as_u64().ok_or(Error::InvalidGraphitePlaintext)? / 1_000_000_000;
     let ts = ts.to_string();
 
     r.write_all(metric.as_bytes())?;
@@ -121,11 +119,11 @@ fn decode_plaintext(data: &[u8], ingest_ns: u64) -> Result<Value> {
 
     let (metric, data) = data
         .split_once(' ')
-        .ok_or_else(|| Error::from(ErrorKind::InvalidGraphitePlaintext))?;
+        .ok_or(Error::InvalidGraphitePlaintext)?;
 
     let (v, ts) = data
         .split_once(' ')
-        .ok_or_else(|| Error::from(ErrorKind::InvalidGraphitePlaintext))?;
+        .ok_or(Error::InvalidGraphitePlaintext)?;
 
     let value = if v.contains('.') {
         lexical::parse::<f64, _>(v)
@@ -141,18 +139,21 @@ fn decode_plaintext(data: &[u8], ingest_ns: u64) -> Result<Value> {
             .map_err(Error::from)?
     };
 
-    m.insert_nocheck("metric".into(), Value::from(metric));
+    // ALLOW: metric, timestamp and value keys are all unique
+    unsafe {
+        m.insert_nocheck("metric".into(), Value::from(metric));
 
-    if "-1" == ts {
-        // We are using tremor's ingest_ns, so this is always ns resolution
-        m.insert("timestamp".into(), Value::from(ingest_ns));
-    } else {
-        let ts = lexical::parse::<u64, _>(ts)?;
-        let ts = ts * 1_000_000_000; // from seconds ( graphite ) to nanoseconds which is normative in tremor
-        m.insert("timestamp".into(), Value::from(ts));
+        if "-1" == ts {
+            // We are using tremor's ingest_ns, so this is always ns resolution
+            m.insert_nocheck("timestamp".into(), Value::from(ingest_ns));
+        } else {
+            let ts = lexical::parse::<u64, _>(ts)?;
+            let ts = ts * 1_000_000_000; // from seconds ( graphite ) to nanoseconds which is normative in tremor
+            m.insert_nocheck("timestamp".into(), Value::from(ts));
+        }
+
+        m.insert_nocheck("value".into(), value);
     }
-
-    m.insert("value".into(), value);
     Ok(Value::from(m))
 }
 

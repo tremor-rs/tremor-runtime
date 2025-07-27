@@ -125,7 +125,7 @@ impl<'script> Expr<'script> {
             macro_rules! execute {
                 ($predicate:ident) => {{
                     let pat = &$predicate.pattern;
-                    let grd = &$predicate.guard;
+                    let grd = ($predicate.guard).as_ref();
                     if stry!(test_predicate_expr(
                         expr, opts, env, event, state, meta, local, &target, pat, grd,
                     )) {
@@ -184,7 +184,7 @@ impl<'script> Expr<'script> {
                         }
                     }
                 }
-            };
+            }
         }
         match &expr.default {
             DefaultCase::None => error_no_clause_hit(self),
@@ -211,7 +211,7 @@ impl<'script> Expr<'script> {
     ) -> Result<Cont<'run, 'event>> {
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
         let p = &expr.if_clause.pattern;
-        let g = &expr.if_clause.guard;
+        let g = expr.if_clause.guard.as_ref();
         let p = test_predicate_expr(expr, opts, env, event, state, meta, local, &target, p, g);
         if stry!(p) {
             let e = &expr.if_clause.exprs;
@@ -251,7 +251,14 @@ impl<'script> Expr<'script> {
 
             for e in cases {
                 if stry!(test_guard(
-                    self, opts, env, event, state, meta, local, &e.guard
+                    self,
+                    opts,
+                    env,
+                    event,
+                    state,
+                    meta,
+                    local,
+                    e.guard.as_ref()
                 )) {
                     let es = &e.exprs;
                     let l = &e.last_expr;
@@ -291,7 +298,14 @@ impl<'script> Expr<'script> {
 
             for e in cases {
                 if stry!(test_guard(
-                    self, opts, env, event, state, meta, local, &e.guard
+                    self,
+                    opts,
+                    env,
+                    event,
+                    state,
+                    meta,
+                    local,
+                    e.guard.as_ref()
                 )) {
                     let l = &e.last_expr;
                     if let Expr::Imut(ImutExpr::Record(r)) = l {
@@ -405,7 +419,14 @@ impl<'script> Expr<'script> {
 
             for e in cases {
                 if stry!(test_guard(
-                    self, opts, env, event, state, meta, local, &e.guard
+                    self,
+                    opts,
+                    env,
+                    event,
+                    state,
+                    meta,
+                    local,
+                    e.guard.as_ref()
                 )) {
                     let es = &e.exprs;
                     let l = &e.last_expr;
@@ -729,7 +750,7 @@ impl<'script> Expr<'script> {
                         // makes no sense!
                         return Ok(Cont::Drop);
                     }
-                };
+                }
                 Ok(Cont::Cont(r))
             }
         }

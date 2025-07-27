@@ -47,13 +47,14 @@ pub use self::helper::Helper;
 pub use self::node_id::{BaseRef, NodeId};
 use self::visitors::ConstFolder;
 use self::walkers::ImutExprWalker;
+use crate::errors::ParserError;
 use crate::{
     arena,
     ast::{
         eq::AstEq,
         raw::{BytesDataType, Endian},
     },
-    errors::{err_generic, error_no_locals, Kind as ErrorKind, Result},
+    errors::{err_generic, error_no_locals, Result},
     extractor::Extractor,
     impl_expr, impl_expr_ex, impl_expr_no_lt,
     interpreter::{Cont, Env, LocalStack},
@@ -188,7 +189,7 @@ pub struct BytesPart<'script> {
 }
 impl_expr!(BytesPart);
 
-impl<'script> BytesPart<'script> {
+impl BytesPart<'_> {
     pub(crate) fn is_lit(&self) -> bool {
         self.data.is_lit()
     }
@@ -263,8 +264,6 @@ impl<'script> Consts<'script> {
         }
     }
 }
-
-/// don't use
 
 /// A tremor script instance
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -420,7 +419,7 @@ impl<'script> Ident<'script> {
 }
 impl_expr!(Ident);
 
-impl<'script> std::fmt::Display for Ident<'script> {
+impl std::fmt::Display for Ident<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.id)
     }
@@ -462,7 +461,7 @@ pub struct Record<'script> {
     pub fields: Fields<'script>,
 }
 impl_expr!(Record);
-impl<'script> Record<'script> {
+impl Record<'_> {
     /// Gets the expression for a given name
     /// Attention: Clones its values!
     /// used only in the test suite
@@ -614,7 +613,7 @@ impl<'script> Expr<'script> {
     }
 }
 
-impl<'script> Expression for Expr<'script> {
+impl Expression for Expr<'_> {
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
         match self {
             Expr::Assign { path, expr, mid } => match expr.as_ref() {
@@ -749,7 +748,11 @@ impl<'script> ImutExpr<'script> {
             Ok(v)
         } else {
             let e = self.extent();
-            Err(ErrorKind::NotConstant(e, e.expand_lines(2)).into())
+            Err(ParserError::NotConstant {
+                inner: e,
+                expr: e.expand_lines(2),
+            }
+            .into())
         }
     }
     /// Tries to borrow the expression as a list
@@ -763,7 +766,7 @@ impl<'script> ImutExpr<'script> {
     }
 }
 
-impl<'script> Expression for ImutExpr<'script> {
+impl Expression for ImutExpr<'_> {
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
         if let ImutExpr::Match(m) = self {
             // In each pattern we can replace the use in the last assign
@@ -891,7 +894,7 @@ impl<'script> StringLit<'script> {
                             )?);
                         }
                     }
-                };
+                }
             }
             Ok(Cow::from(res))
         } else {
@@ -910,7 +913,7 @@ pub enum StrLitElement<'script> {
     Expr(ImutExpr<'script>),
 }
 
-impl<'script> StrLitElement<'script> {
+impl StrLitElement<'_> {
     pub(crate) fn is_lit(&self) -> bool {
         match self {
             StrLitElement::Lit(_) => true,
@@ -1271,7 +1274,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         {
             if n > Self::MAX_OPT_RUNS {
                 return;
-            };
+            }
             let mut first_key = None;
 
             // if all patterns
@@ -1639,7 +1642,7 @@ pub enum Pattern<'script> {
     DoNotCare,
 }
 
-impl<'script> Pattern<'script> {
+impl Pattern<'_> {
     fn is_default(&self) -> bool {
         matches!(self, Pattern::DoNotCare)
             || if let Pattern::Assign(AssignPattern { pattern, .. }) = self {
@@ -1885,7 +1888,7 @@ pub struct RecordPattern<'script> {
     pub fields: PatternFields<'script>,
 }
 
-impl<'script> RecordPattern<'script> {
+impl RecordPattern<'_> {
     fn is_exclusive_to(&self, other: &Self) -> bool {
         if self.fields.len() == 1 && other.fields.len() == 1 {
             self.fields
@@ -1912,7 +1915,7 @@ pub enum ArrayPredicatePattern<'script> {
     Ignore,
 }
 
-impl<'script> ArrayPredicatePattern<'script> {
+impl ArrayPredicatePattern<'_> {
     fn is_exclusive_to(&self, other: &Self) -> bool {
         match (self, other) {
             (ArrayPredicatePattern::Record(r1), ArrayPredicatePattern::Record(r2)) => {
@@ -2121,7 +2124,7 @@ impl<'script> ReservedPath<'script> {
     }
 }
 
-impl<'script> BaseExpr for ReservedPath<'script> {
+impl BaseExpr for ReservedPath<'_> {
     fn meta(&self) -> &NodeMeta {
         match self {
             ReservedPath::Args { mid, .. }

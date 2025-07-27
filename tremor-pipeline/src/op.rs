@@ -25,18 +25,9 @@ pub mod trickle;
 use self::prelude::OUT;
 use super::NodeConfig;
 use crate::errors::Result;
-use regex::Regex;
 use tremor_common::{ids::OperatorId, ports::Port};
 use tremor_system::event::Event;
 use tremor_value::{Object, Value};
-
-lazy_static::lazy_static! {
-    static ref LINE_REGEXP: Regex = {
-        #[allow(clippy::unwrap_used)]
-         // ALLOW: we tested this
-        Regex::new(r" at line \d+ column \d+$").unwrap()
-    };
-}
 
 /// Response type for operator callbacks returning both events and insights
 #[derive(Default, Clone, PartialEq, Debug)]
@@ -88,7 +79,6 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
 
     /// Defines if the operatoir shold be called on the singalflow, defaults
     /// to `false`. If set to `true`, `on_signal` should also be implemented.
-
     fn handles_signal(&self) -> bool {
         false
     }
@@ -109,7 +99,6 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
 
     /// Defines if the operatoir shold be called on the contraflow, defaults
     /// to `false`. If set to `true`, `on_contraflow` should also be implemented.
-
     fn handles_contraflow(&self) -> bool {
         false
     }
@@ -132,7 +121,6 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     }
 
     /// An operator is skippable and doesn't need to be executed
-
     fn skippable(&self) -> bool {
         false
     }

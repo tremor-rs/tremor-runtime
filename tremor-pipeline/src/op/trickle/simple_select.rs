@@ -80,10 +80,10 @@ impl Operator for SimpleSelect {
             if let Some(test) = test.as_bool() {
                 if !test {
                     return Ok(EventAndInsights::default());
-                };
+                }
             } else {
                 return query_guard_not_bool(stmt, guard, &test)?;
-            };
+            }
         }
 
         if let Some(guard) = &stmt.maybe_having {
@@ -93,10 +93,10 @@ impl Operator for SimpleSelect {
             if let Some(test) = test.as_bool() {
                 if !test {
                     return Ok(EventAndInsights::default());
-                };
+                }
             } else {
                 return query_guard_not_bool(stmt, guard, &test)?;
-            };
+            }
         }
 
         Ok(event.into())

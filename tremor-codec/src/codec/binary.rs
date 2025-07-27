@@ -23,7 +23,7 @@ pub struct Binary {}
 
 #[async_trait::async_trait]
 impl Codec for Binary {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "bytes"
     }
 

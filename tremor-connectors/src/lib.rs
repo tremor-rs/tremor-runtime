@@ -23,6 +23,7 @@
     clippy::pedantic,
     clippy::mod_module_files
 )]
+
 /// connectors
 pub mod impls;
 
@@ -470,7 +471,7 @@ async fn connector_task(
                         .into());
                         let res = result_tx.send(e).await;
                         log_error!(res, "{ctx} Error sending connect result: {e}");
-                    };
+                    }
                 }
                 Msg::ConnectionLost => {
                     // react on the connection being lost

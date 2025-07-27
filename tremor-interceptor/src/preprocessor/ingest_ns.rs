@@ -29,7 +29,7 @@ pub enum Error {
     MessageTooSmall,
 }
 impl Preprocessor for ExtractIngestTs {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "ingest-ts"
     }
 

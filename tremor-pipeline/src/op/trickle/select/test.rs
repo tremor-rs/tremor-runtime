@@ -162,7 +162,7 @@ fn parse_query(query: &str) -> Result<crate::op::trickle::select::Select> {
             Stmt::SelectStmt(s) => Some(s),
             _ => None,
         })
-        .ok_or_else(|| Error::from("Invalid query"))?;
+        .ok_or_else(|| Error::Msg("Invalid query: No select query found."))?;
     Ok(test_select(test_uid(), &stmt))
 }
 
@@ -208,7 +208,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         .iter()
         .find_map(as_select)
         .cloned()
-        .ok_or_else(|| Error::from("Invalid query, expected 1 select statement"))?;
+        .ok_or_else(|| Error::Msg("Invalid query, expected 1 select statement"))?;
     let h = Helper::new(&reg, &aggr_reg);
     let windows: Vec<(String, window::Impl)> = stmt
         .stmt
@@ -221,7 +221,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
                 .content
                 .windows
                 .get(win_defn.id.id())
-                .ok_or("no data")?
+                .ok_or(Error::Msg("no data"))?
                 .clone();
             let mut f = ConstFolder { helper: &h };
             f.walk_window_defn(&mut window_defn)?;
@@ -494,7 +494,7 @@ fn test_transactional_single_window() -> Result<()> {
     let id2 = event2.id.clone();
     let mut res = op.on_event(uid, &Port::In, &mut state, event2)?;
     assert_eq!(1, res.events.len());
-    let (_, event) = res.events.pop().ok_or("no data")?;
+    let (_, event) = res.events.pop().expect("data");
     assert!(event.transactional);
     assert!(event.id.is_tracking(&id1));
     assert!(event.id.is_tracking(&id2));
@@ -508,7 +508,7 @@ fn test_transactional_single_window() -> Result<()> {
     let id4 = event4.id.clone();
     let mut res = op.on_event(uid, &Port::In, &mut state, event4)?;
     assert_eq!(1, res.events.len());
-    let (_, event) = res.events.pop().ok_or("no data")?;
+    let (_, event) = res.events.pop().expect("data");
     assert!(!event.transactional);
     assert!(event.id.is_tracking(&id3));
     assert!(event.id.is_tracking(&id4));
@@ -548,7 +548,7 @@ fn test_transactional_multiple_windows() -> Result<()> {
     let id2 = event2.id.clone();
     let mut res = op.on_event(uid, &Port::In, &mut state, event2)?;
     assert_eq!(1, res.len());
-    let (_, event) = res.events.pop().ok_or("no data")?;
+    let (_, event) = res.events.pop().expect("data");
     assert!(event.transactional);
     assert!(event.id.is_tracking(&id0));
     assert!(event.id.is_tracking(&id2));
@@ -809,25 +809,25 @@ fn tumbling_window_on_time_emit() -> Result<()> {
             include: false,
             emit: false
         },
-        window.on_event(&mut vm, ingest_ns(5), &None)?
+        window.on_event(&mut vm, ingest_ns(5), None)?
     );
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&mut vm, ingest_ns(10), &None)?
+        window.on_event(&mut vm, ingest_ns(10), None)?
     );
     assert_eq!(
         Actions {
             include: false,
             emit: true
         },
-        window.on_event(&mut vm, ingest_ns(15), &None)? // exactly on time
+        window.on_event(&mut vm, ingest_ns(15), None)? // exactly on time
     );
     assert_eq!(
         Actions {
             include: false,
             emit: true
         },
-        window.on_event(&mut vm, ingest_ns(26), &None)? // exactly on time
+        window.on_event(&mut vm, ingest_ns(26), None)? // exactly on time
     );
     Ok(())
 }
@@ -873,13 +873,13 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
             include: false,
             emit: false
         },
-        window.on_event(&mut json1, 1, &None)?
+        window.on_event(&mut json1, 1, None)?
     );
     let mut json2 = literal!({
         "timestamp": 1_999_999_999
     })
     .into();
-    assert_eq!(Actions::all_false(), window.on_event(&mut json2, 2, &None)?);
+    assert_eq!(Actions::all_false(), window.on_event(&mut json2, 2, None)?);
     let mut json3 = literal!({
         "timestamp": 2_000_000_000
     })
@@ -891,7 +891,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
             include: false,
             emit: true
         },
-        window.on_event(&mut json3, 3, &None)?
+        window.on_event(&mut json3, 3, None)?
     );
     Ok(())
 }
@@ -915,7 +915,7 @@ fn tumbling_window_on_time_on_tick() -> Result<()> {
         window.on_tick(100)?
     );
     let mut v = ValueAndMeta::default();
-    assert_eq!(Actions::all_false(), window.on_event(&mut v, 101, &None)?);
+    assert_eq!(Actions::all_false(), window.on_event(&mut v, 101, None)?);
     assert_eq!(Actions::all_false(), window.on_tick(102)?);
     assert_eq!(
         Actions {
@@ -946,7 +946,7 @@ fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
         window.on_tick(100)?
     );
     let mut v = ValueAndMeta::default();
-    assert_eq!(Actions::all_false(), window.on_event(&mut v, 101, &None)?);
+    assert_eq!(Actions::all_false(), window.on_event(&mut v, 101, None)?);
     assert_eq!(Actions::all_false(), window.on_tick(102)?);
     assert_eq!(
         Actions {
@@ -970,12 +970,12 @@ fn no_window_emit() -> Result<()> {
 
     assert_eq!(
         Actions::all_true(),
-        window.on_event(&mut vm, ingest_ns(0), &None)?
+        window.on_event(&mut vm, ingest_ns(0), None)?
     );
     assert_eq!(Actions::all_false(), window.on_tick(0)?);
     assert_eq!(
         Actions::all_true(),
-        window.on_event(&mut vm, ingest_ns(1), &None)?
+        window.on_event(&mut vm, ingest_ns(1), None)?
     );
     assert_eq!(Actions::all_false(), window.on_tick(1)?);
     Ok(())
@@ -993,24 +993,24 @@ fn tumbling_window_on_number_emit() -> Result<()> {
     // do not emit yet
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&mut vm, ingest_ns(0), &None)?
+        window.on_event(&mut vm, ingest_ns(0), None)?
     );
     assert_eq!(Actions::all_false(), window.on_tick(1_000_000_000)?);
     // do not emit yet
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&mut vm, ingest_ns(1), &None)?
+        window.on_event(&mut vm, ingest_ns(1), None)?
     );
     assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000)?);
     // emit and open on the third event
     assert_eq!(
         Actions::all_true(),
-        window.on_event(&mut vm, ingest_ns(2), &None)?
+        window.on_event(&mut vm, ingest_ns(2), None)?
     );
     // no emit here, next window
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&mut vm, ingest_ns(3), &None)?
+        window.on_event(&mut vm, ingest_ns(3), None)?
     );
 
     Ok(())

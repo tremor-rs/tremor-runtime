@@ -20,7 +20,7 @@ use hyper::StatusCode;
 use hyper::{service::service_fn, Response};
 use hyper_util::rt::TokioIo;
 use log::error;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{rng, seq::IndexedRandom};
 use std::net::ToSocketAddrs;
 use tokio::net::TcpListener;
 use tokio::task::{spawn, JoinHandle};
@@ -46,7 +46,7 @@ pub(crate) async fn find_free_tcp_endpoint_str() -> Result<String> {
 }
 
 fn host_to_sockaddr(hostport: &str) -> Result<std::net::SocketAddr, String> {
-    let mut rng = thread_rng();
+    let mut rng = rng();
     let socket_addrs: Vec<_> = hostport
         .to_socket_addrs()
         .map_err(|e| e.to_string())?

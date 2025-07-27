@@ -153,16 +153,20 @@ where
     T: Copy + Ord + Display + FromStr,
 {
     #[inline]
-    fn from_tape(tape: &mut simd_json_derive::Tape<'input>) -> simd_json::Result<Self>
+    fn from_tape(
+        tape: &mut simd_json_derive::Tape<'input>,
+    ) -> Result<Self, simd_json_derive::de::Error>
     where
         Self: std::marker::Sized + 'input,
     {
         if let Some(simd_json::Node::String(s)) = tape.next() {
             Ok(PrimStr(FromStr::from_str(s).map_err(|_e| {
-                simd_json::Error::generic(simd_json::ErrorType::Serde("not a number".into()))
+                simd_json_derive::de::Error::Json(simd_json::ErrorType::Serde(
+                    "not a number".into(),
+                ))
             })?))
         } else {
-            Err(simd_json::Error::generic(
+            Err(simd_json_derive::de::Error::Json(
                 simd_json::ErrorType::ExpectedNull,
             ))
         }
@@ -230,7 +234,6 @@ pub mod report {
     impl Status {
         /// create a new status report
         #[must_use]
-
         pub fn new(
             state: State,
             inputs: Vec<Input>,

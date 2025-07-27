@@ -23,12 +23,6 @@
     clippy::pedantic
 )]
 
-#[macro_use]
-extern crate serde;
-
-#[macro_use]
-extern crate log;
-
 use crate::errors::Result;
 use anyhow::Context;
 use clap::Parser;

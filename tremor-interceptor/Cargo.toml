@@ -1,35 +1,37 @@
 [package]
 name = "tremor-interceptor"
-edition = "2021"
-authors = ["The Tremor Team"]
 description = "Tremor Preprocessors, Postprocessors, and maybe soon: Interceptors"
-documentation = "https://docs.tremor.rs"
-homepage = "https://www.tremor.rs"
-license = "Apache-2.0"
-repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.13.0-rc.33"
-rust-version = "1.76"
+authors.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tremor-value = { path = "../tremor-value", version = "0.13.0-rc.33" }
-tremor-config = { path = "../tremor-config", version = "0.13.0-rc.33" }
-tremor-common = { path = "../tremor-common", version = "0.13.0-rc.33" }
+tremor-value.workspace = true
+tremor-config.workspace = true
+tremor-common.workspace = true
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 byteorder = "1"
-value-trait = "0.8"
+value-trait = "0.11"
 memchr = "2.7"
 anyhow = { version = "1.0", default-features = true }
-thiserror = { version = "1.0", default-features = false }
+thiserror = { version = "2.0", default-features = false }
 
 #gelf
-rand = { version = "0.8", optional = true, default-features = false, features =  [] }
+rand = { version = "0.9", optional = true, default-features = false, features = [
+  "thread_rng",
+] }
 
 # Compression
-brotli = { version = "6", optional = true, default-features = false, features = [
-    "std",
+brotli = { version = "8", optional = true, default-features = false, features = [
+  "std",
 ] }
 xz2 = { version = "0.1", optional = true, default-features = false, features = [
 ] }
@@ -40,17 +42,17 @@ snap = { version = "1", optional = true, default-features = false, features = [
 zstd = { version = "0.13", optional = true, default-features = false, features = [
 ] }
 libflate = { version = "2", optional = true, default-features = false, features = [
-    "std",
+  "std",
 ] }
 
 # Length Prefix
 bytes = { version = "1.6.1", optional = true, default-features = false, features = [
 ] }
 ringbuf-blocking = { version = "0.1.0-rc.3", optional = true, default-features = false, features = [
-    "std",
+  "std",
 ] }
 ringbuf = { version = "0.4.0-rc.3", optional = true, default-features = false, features = [
-    "std",
+  "std",
 ] }
 
 
@@ -64,12 +66,12 @@ length-prefix = ["dep:bytes"]
 gelf = ["dep:rand"]
 base64 = []
 compression = [
-    "dep:brotli",
-    "dep:xz2",
-    "dep:lz4",
-    "dep:snap",
-    "dep:zstd",
-    "dep:libflate",
-    "dep:ringbuf-blocking",
-    "dep:ringbuf",
+  "dep:brotli",
+  "dep:xz2",
+  "dep:lz4",
+  "dep:snap",
+  "dep:zstd",
+  "dep:libflate",
+  "dep:ringbuf-blocking",
+  "dep:ringbuf",
 ]

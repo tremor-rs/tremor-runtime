@@ -17,13 +17,17 @@ use crate::{
     utils::{AuthInterceptor, ChannelFactory},
 };
 use futures::{stream, StreamExt};
-use googapis::google::cloud::bigquery::storage::v1::{
-    append_rows_request::{self, ProtoData},
-    append_rows_response::{AppendResult, Response},
-    big_query_write_client::BigQueryWriteClient,
-    table_field_schema::{self, Type as TableType},
-    write_stream, AppendRowsRequest, CreateWriteStreamRequest, ProtoRows, ProtoSchema,
-    TableFieldSchema, WriteStream,
+use gcloud_sdk::{
+    google::cloud::bigquery::storage::v1::{
+        append_rows_request::{self, MissingValueInterpretation, ProtoData},
+        append_rows_response::{AppendResult, Response},
+        big_query_write_client::BigQueryWriteClient,
+        table_field_schema::{self, Type as TableType},
+        write_stream::{self, WriteMode},
+        AppendRowsRequest, CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema,
+        WriteStream,
+    },
+    prost, prost_types, tonic,
 };
 use log::{error, info, warn};
 use prost::encoding::WireType;
@@ -47,7 +51,7 @@ pub(crate) struct TonicChannelFactory;
 impl ChannelFactory<Channel> for TonicChannelFactory {
     async fn make_channel(&self, connect_timeout: Duration) -> anyhow::Result<Channel> {
         let tls_config = ClientTlsConfig::new()
-            .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
+            .ca_certificate(Certificate::from_pem(gcloud_sdk::CERTIFICATES))
             .domain_name("bigquerystorage.googleapis.com");
 
         Ok(
@@ -110,7 +114,7 @@ fn map_field(
         let mut type_name = None;
         let mut subfields = HashMap::with_capacity(raw_field.fields.len());
 
-        let Some(table_type) = table_field_schema::Type::from_i32(raw_field.r#type) else {
+        let Ok(table_type) = table_field_schema::Type::try_from(raw_field.r#type) else {
             warn!("{ctx} Found a field of unknown type: {}", raw_field.name);
             continue;
         };
@@ -137,6 +141,7 @@ fn map_field(
             // [sign]Y-M [sign]D [sign]H:M:S[.F]
             | TableType::Interval
             | TableType::Json
+            | TableType::Range
             // YYYY-[M]M-[D]D[( |T)[H]H:[M]M:[S]S[.F]][time zone]
             | TableType::Timestamp => field_descriptor_proto::Type::String,
             TableType::Struct => {
@@ -226,7 +231,8 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<(), 
         // String, because it has decimal precision, f32/f64 would lose precision
         | TableType::Numeric
         | TableType::Bignumeric
-        | TableType::Geography => {
+        | TableType::Geography
+        | TableType::Range => {
             prost::encoding::string::encode(
                 tag,
                 &val.try_as_str()?.to_string()
@@ -244,8 +250,7 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<(), 
                     encode_field(v, subfield_description, &mut struct_buf)?;
                 } else {
                     warn!(
-                        "Passed field {} as struct field, not present in definition",
-                        k
+                        "Passed field {k} as struct field, not present in definition",
                     );
                 }
             }
@@ -373,13 +378,13 @@ where
                                     format!(
                                         "{}: {:?}",
                                         f.name,
-                                        TableType::from_i32(f.r#type).unwrap_or_default()
+                                        TableType::try_from(f.r#type).unwrap_or_default()
                                     )
                                 })
                                 .collect::<Vec<_>>()
                                 .join("\n");
 
-                            info!("{ctx} GBQ Schema was updated: {}", fields);
+                            info!("{ctx} GBQ Schema was updated: {fields}");
                         }
                         if let Some(res) = res.response {
                             match res {
@@ -392,7 +397,7 @@ where
                         }
                     }
                     Some(Err(e)) => {
-                        error!("{ctx} GBQ Error: {}", e);
+                        error!("{ctx} GBQ Error: {e}");
                         return Ok(SinkReply::FAIL);
                     }
                     None => return Ok(SinkReply::NONE),
@@ -434,8 +439,8 @@ where
 
 pub trait GbqChannel<TChannelError>:
     tonic::codegen::Service<
-        http::Request<tonic::body::BoxBody>,
-        Response = http::Response<tonic::transport::Body>,
+        http::Request<tonic::body::Body>,
+        Response = http::Response<tonic::body::Body>,
         Error = TChannelError,
     > + Send
     + Clone
@@ -456,8 +461,8 @@ impl<T> GbqChannelError for T where
 impl<T, TChannelError> GbqChannel<TChannelError> for T
 where
     T: tonic::codegen::Service<
-            http::Request<tonic::body::BoxBody>,
-            Response = http::Response<tonic::transport::Body>,
+            http::Request<tonic::body::Body>,
+            Response = http::Response<tonic::body::Body>,
             Error = TChannelError,
         > + Send
         + Clone,
@@ -515,6 +520,9 @@ where
                             rows: Some(ProtoRows { serialized_rows }),
                         })),
                         trace_id: String::new(),
+                        missing_value_interpretations: HashMap::new(),
+                        default_missing_value_interpretation:
+                            MissingValueInterpretation::DefaultValue as i32,
                     });
                     size = 0;
                     serialized_rows = Vec::with_capacity(data_len - last_len);
@@ -534,6 +542,10 @@ where
                         rows: Some(ProtoRows { serialized_rows }),
                     })),
                     trace_id: String::new(),
+
+                    missing_value_interpretations: HashMap::new(),
+                    default_missing_value_interpretation: MissingValueInterpretation::DefaultValue
+                        as i32,
                 });
             }
         }
@@ -570,11 +582,19 @@ where
                         parent: table_id.clone(),
                         write_stream: Some(WriteStream {
                             // The stream name here will be ignored and a generated value will be set in the response
+                            // output only
                             name: String::new(),
                             r#type: i32::from(write_stream::Type::Committed),
+                            // output only
                             create_time: None,
+                            // output only
                             commit_time: None,
+                            // output only
                             table_schema: None,
+                            // output only
+                            location: String::new(),
+                            // output only
+                            write_mode: WriteMode::Insert as i32,
                         }),
                     })
                     .await?

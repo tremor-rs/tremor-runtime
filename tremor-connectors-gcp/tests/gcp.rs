@@ -14,12 +14,10 @@
 
 #![cfg(feature = "integration-harness")]
 
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body,
-};
-use log::info;
-use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
+use hyper::service::service_fn;
+use hyper_util::rt::TokioExecutor;
+use log::{error, info};
+use std::{io::Write, net::ToSocketAddrs};
 use tokio::task::JoinHandle;
 use tremor_connectors_test_helpers::free_port;
 
@@ -75,7 +73,7 @@ struct TokenResponse {
 
 pub struct GouthMock {
     file: tempfile::TempPath,
-    server_handle: JoinHandle<Result<(), hyper::Error>>,
+    server_handle: JoinHandle<Result<(), anyhow::Error>>,
 }
 impl GouthMock {
     pub fn cert_file(&self) -> String {
@@ -104,17 +102,15 @@ pub async fn gouth_token() -> anyhow::Result<GouthMock> {
     let sa_str = simd_json::serde::to_string_pretty(&sa)?;
     file.as_file_mut().write_all(sa_str.as_bytes())?;
 
-    let service_fn = make_service_fn(|_| async {
-        Ok::<_, Infallible>(service_fn(|_| async {
-            info!("serving token");
-            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(hyper::Response::builder().body(
-                Body::from(simd_json::serde::to_vec(&TokenResponse {
-                    token_type: "snot".to_string(),
-                    access_token: "access_token".to_string(),
-                    expires_in: 100_000_000,
-                })?),
-            )?)
-        }))
+    let gouth_service_fn = service_fn(|_| async {
+        info!("serving token");
+        Ok::<_, anyhow::Error>(hyper::Response::builder().body(http_body_util::Full::new(
+            bytes::Bytes::from(simd_json::serde::to_vec(&TokenResponse {
+                token_type: "snot".to_string(),
+                access_token: "access_token".to_string(),
+                expires_in: 100_000_000,
+            })?),
+        ))?)
     });
 
     let addr = ("127.0.0.1", port)
@@ -123,9 +119,22 @@ pub async fn gouth_token() -> anyhow::Result<GouthMock> {
         .expect("no address");
 
     let server_handle = tokio::task::spawn(async move {
-        info!("starting mock oauth serverat {addr:?}");
-        let listener = hyper::Server::bind(&addr).serve(service_fn);
-        listener.await
+        info!("starting mock oauth server at {addr:?}");
+        let builder = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new());
+        let graceful = hyper_util::server::graceful::GracefulShutdown::new();
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        loop {
+            let (stream, _addr) = listener.accept().await?;
+            let stream = hyper_util::rt::TokioIo::new(Box::pin(stream));
+            let conn = builder.serve_connection_with_upgrades(stream, gouth_service_fn);
+            let conn = graceful.watch(conn.into_owned());
+            // handle each connection in its own task
+            tokio::spawn(async move {
+                if let Err(e) = conn.await {
+                    error!("Error handling GOUTH HTTP connections {e}");
+                }
+            });
+        }
     });
 
     Ok(GouthMock {

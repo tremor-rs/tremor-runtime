@@ -122,7 +122,7 @@ impl Gelf {
         // let id = self.id;
         if n > 128 {
             return Err(Error::ChunkCount(n));
-        };
+        }
 
         let gelf_message_id = generate_message_id(epoch_timestamp, self.auto_increment_id);
 
@@ -159,7 +159,7 @@ impl Postprocessor for Gelf {
     fn is_streaming(&self) -> bool {
         false
     }
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "gelf"
     }
 

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(rustdoc::invalid_codeblock_attributes)]
 //! The `metrics` connector collects and forwards system metrics and can be used by user defined
 //! logic to expand on the set of metrics collected.
 //!
@@ -274,7 +275,7 @@ impl Source for MetricsSource {
                         port: None,
                     })
                 }
-                Err(RecvError::Lagged(_)) => continue, // try again, this is expected
+                Err(RecvError::Lagged(_)) => {} // try again, this is expected
                 Err(e) => {
                     break Err(e.into());
                 }

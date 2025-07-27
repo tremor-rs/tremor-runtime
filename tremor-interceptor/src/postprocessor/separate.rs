@@ -60,7 +60,7 @@ impl Separate {
         let separator = if let Some(raw_config) = config {
             let config = Config::new(raw_config)
                 .map_err(|e| super::Error::InvalidConfig("seperate", e.into()))?;
-            if config.separator.bytes().len() != 1 {
+            if config.separator.len() != 1 {
                 return Err(super::Error::InvalidConfig(
                     "seperate",
                     Error::InvalidSeparator(config.separator).into(),
@@ -75,7 +75,7 @@ impl Separate {
 }
 
 impl Stateless for Separate {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "join"
     }
 

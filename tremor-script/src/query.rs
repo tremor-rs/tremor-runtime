@@ -34,16 +34,19 @@ pub struct Query {
     pub aid: crate::arena::Index,
 }
 
-impl<'run, 'event, 'script> Query
-where
-    'script: 'event,
-    'event: 'run,
-{
+impl Query {
     /// Removes a deploy from the arena, freeing the memory and marking it valid for reause
     /// this function generally should not ever be used. It is a special case for the language
     /// server where we know that we really only parse the script to check for errors and
     /// warnings.
     /// That's also why it's behind a feature falg
+    ///
+    /// # Errors
+    /// if the arena cannot be locked for writing
+    ///
+    /// # Safety
+    ///
+    /// this is not safe and will shoot you in the foot if it can.
     #[cfg(feature = "arena-delete")]
     pub unsafe fn consume_and_free(self) -> Result<()> {
         let Query { aid, query, .. } = self;
@@ -89,7 +92,6 @@ where
     ///
     /// # Errors
     /// if the query can not be parsed
-
     pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
     where
         S: ToString + ?Sized,

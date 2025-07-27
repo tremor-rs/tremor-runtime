@@ -61,7 +61,7 @@ pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
 /// Preprocessor trait
 pub trait Preprocessor: Sync + Send {
     /// Canonical name for this preprocessor
-    fn name(&self) -> &str;
+    fn name(&self) -> &'static str;
     /// process data
     ///
     /// # Errors
@@ -264,6 +264,7 @@ mod test {
     #[test]
     fn test_filter_empty() {
         let mut pre = remove_empty::RemoveEmpty::default();
+
         assert_eq!(
             pre.process(&mut 0_u64, &[], Value::object()).ok(),
             Some(vec![])

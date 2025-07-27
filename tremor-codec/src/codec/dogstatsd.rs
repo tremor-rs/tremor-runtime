@@ -114,7 +114,7 @@ pub struct DogStatsD {
 
 #[async_trait::async_trait]
 impl Codec for DogStatsD {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "dogstatsd"
     }
 
@@ -147,7 +147,7 @@ fn encode(data: &Value, w: &mut impl Write) -> Result<()> {
     } else if let Some(service_check) = data.get("service_check") {
         encode_service_check(service_check, w)
     } else {
-        Err(ErrorKind::InvalidDogStatsD.into())
+        Err(Error::InvalidDogStatsD)
     }
 }
 
@@ -157,13 +157,11 @@ fn encode_metric(value: &Value, r: &mut impl Write) -> Result<()> {
     r.write_all(
         value
             .get_str("metric")
-            .ok_or(ErrorKind::InvalidDogStatsD)?
+            .ok_or(Error::InvalidDogStatsD)?
             .as_bytes(),
     )?;
-    let t = value.get_str("type").ok_or(ErrorKind::InvalidDogStatsD)?;
-    let values = value
-        .get_array("values")
-        .ok_or(ErrorKind::InvalidDogStatsD)?;
+    let t = value.get_str("type").ok_or(Error::InvalidDogStatsD)?;
+    let values = value.get_array("values").ok_or(Error::InvalidDogStatsD)?;
     let mut values = values.iter().filter_map(ValueAsScalar::as_f64);
 
     r.write_all(b":")?;
@@ -194,7 +192,7 @@ fn encode_metric(value: &Value, r: &mut impl Write) -> Result<()> {
             r.write_all(b"|@")?;
             r.write_all(val.encode().as_bytes())?;
         } else {
-            return Err(ErrorKind::InvalidDogStatsD.into());
+            return Err(Error::InvalidDogStatsD);
         }
     }
 
@@ -210,8 +208,8 @@ fn encode_metric(value: &Value, r: &mut impl Write) -> Result<()> {
 
 fn encode_event(value: &Value, r: &mut impl Write) -> Result<()> {
     let mut buf = itoa::Buffer::new();
-    let title = value.get_str("title").ok_or(ErrorKind::InvalidDogStatsD)?;
-    let text = value.get_str("text").ok_or(ErrorKind::InvalidDogStatsD)?;
+    let title = value.get_str("title").ok_or(Error::InvalidDogStatsD)?;
+    let text = value.get_str("text").ok_or(Error::InvalidDogStatsD)?;
 
     r.write_all(b"_e{")?;
     r.write_all(buf.format(title.len()).as_bytes())?;
@@ -264,8 +262,8 @@ fn encode_event(value: &Value, r: &mut impl Write) -> Result<()> {
 
 fn encode_service_check(value: &Value, r: &mut impl Write) -> Result<()> {
     let mut buf = itoa::Buffer::new();
-    let name = value.get_str("name").ok_or(ErrorKind::InvalidDogStatsD)?;
-    let status = value.get_i32("status").ok_or(ErrorKind::InvalidDogStatsD)?;
+    let name = value.get_str("name").ok_or(Error::InvalidDogStatsD)?;
+    let status = value.get_i32("status").ok_or(Error::InvalidDogStatsD)?;
 
     r.write_all(b"_sc|")?;
     r.write_all(name.as_bytes())?;
@@ -329,7 +327,9 @@ fn decode_metric(data: &str) -> Result<Value> {
     let mut m = Object::with_capacity_and_hasher(6, ObjectHasher::default());
 
     let (metric, data) = data.split_once(':').ok_or_else(invalid)?;
-    m.insert_nocheck("metric".into(), Value::from(metric));
+    unsafe {
+        m.insert_nocheck("metric".into(), Value::from(metric));
+    }
 
     // Value(s) - <VALUE1>:<VALUE2>
 
@@ -344,14 +344,20 @@ fn decode_metric(data: &str) -> Result<Value> {
         })
         .collect::<Result<Vec<Value>>>()?;
 
-    m.insert_nocheck("values".into(), Value::from(values));
+    unsafe {
+        m.insert_nocheck("values".into(), Value::from(values));
+    }
 
     let data = if data.starts_with(['c', 'd', 'g', 'h', 's']) {
         let (t, data) = data.split_at(1);
-        m.insert_nocheck("type".into(), t.into());
+        unsafe {
+            m.insert_nocheck("type".into(), t.into());
+        }
         data
     } else if data.starts_with("ms") {
-        m.insert_nocheck("type".into(), "ms".into());
+        unsafe {
+            m.insert_nocheck("type".into(), "ms".into());
+        }
         data.get(2..).ok_or_else(invalid)?
     } else {
         data
@@ -361,15 +367,17 @@ fn decode_metric(data: &str) -> Result<Value> {
     for section in data.split('|') {
         if let Some(sample_rate) = section.strip_prefix('@') {
             let sample_rate_float: f64 = lexical::parse(sample_rate)?;
-            m.insert_nocheck("sample_rate".into(), Value::from(sample_rate_float));
+            m.insert("sample_rate".into(), Value::from(sample_rate_float));
         } else if let Some(tags) = section.strip_prefix('#') {
             let tags: Vec<&str> = tags.split(',').collect();
-            m.insert_nocheck("tags".into(), Value::from(tags));
+            m.insert("tags".into(), Value::from(tags));
         } else if let Some(container_id) = section.strip_prefix("c:") {
-            m.insert_nocheck("container_id".into(), Value::from(container_id));
+            m.insert("container_id".into(), Value::from(container_id));
         }
     }
-    map.insert_nocheck("metric".into(), Value::from(m));
+    unsafe {
+        map.insert_nocheck("metric".into(), Value::from(m));
+    }
 
     Ok(Value::from(map))
 }
@@ -390,34 +398,37 @@ fn decode_event(data: &str) -> Result<Value> {
     let data = data.strip_prefix('|').ok_or_else(invalid)?;
 
     let (text, data) = data.split_at(text_len);
-    m.insert_nocheck("title".into(), Value::from(title));
-    m.insert_nocheck("text".into(), Value::from(text));
+    unsafe {
+        m.insert_nocheck("title".into(), Value::from(title));
+        m.insert_nocheck("text".into(), Value::from(text));
+    }
 
     // Optional Sections
 
     for section in data.split('|') {
         if let Some(s) = section.strip_prefix("d:") {
             let timestamp: u32 = lexical::parse(s)?;
-            m.insert_nocheck("timestamp".into(), Value::from(timestamp));
+            m.insert("timestamp".into(), Value::from(timestamp));
         } else if let Some(s) = section.strip_prefix("h:") {
-            m.insert_nocheck("hostname".into(), Value::from(s));
+            m.insert("hostname".into(), Value::from(s));
         } else if let Some(s) = section.strip_prefix("p:") {
-            m.insert_nocheck("priority".into(), Value::from(s));
+            m.insert("priority".into(), Value::from(s));
         } else if let Some(s) = section.strip_prefix("s:") {
-            m.insert_nocheck("source".into(), Value::from(s));
+            m.insert("source".into(), Value::from(s));
         } else if let Some(s) = section.strip_prefix("t:") {
-            m.insert_nocheck("type".into(), Value::from(s));
+            m.insert("type".into(), Value::from(s));
         } else if let Some(s) = section.strip_prefix("k:") {
-            m.insert_nocheck("aggregation_key".into(), Value::from(s));
+            m.insert("aggregation_key".into(), Value::from(s));
         } else if let Some(s) = section.strip_prefix('#') {
             let tags: Vec<&str> = s.split(',').collect();
-            m.insert_nocheck("tags".into(), Value::from(tags));
+            m.insert("tags".into(), Value::from(tags));
         } else if let Some(s) = section.strip_prefix("c:") {
-            m.insert_nocheck("container_id".into(), Value::from(s));
+            m.insert("container_id".into(), Value::from(s));
         }
     }
-
-    map.insert_nocheck("event".into(), Value::from(m));
+    unsafe {
+        map.insert_nocheck("event".into(), Value::from(m));
+    }
     Ok(Value::from(map))
 }
 
@@ -427,36 +438,42 @@ fn decode_service_check(data: &str) -> Result<Value> {
     let mut m = Object::with_capacity_and_hasher(7, ObjectHasher::default());
 
     let (name, data) = data.split_once('|').ok_or_else(invalid)?;
-    m.insert_nocheck("name".into(), Value::from(name));
+    unsafe {
+        m.insert_nocheck("name".into(), Value::from(name));
+    }
 
     let (status_str, data) = data.split_once('|').unwrap_or((data, ""));
     let status: u8 = lexical::parse(status_str)?;
     if status > 3 {
         return Err(invalid());
     }
-    m.insert_nocheck("status".into(), Value::from(status));
+    unsafe {
+        m.insert_nocheck("status".into(), Value::from(status));
+    }
     for section in data.split('|') {
         if let Some(s) = section.strip_prefix("d:") {
             let timestamp: u32 = lexical::parse(s)?;
-            m.insert_nocheck("timestamp".into(), Value::from(timestamp));
+            m.insert("timestamp".into(), Value::from(timestamp));
         } else if let Some(s) = section.strip_prefix("h:") {
-            m.insert_nocheck("hostname".into(), Value::from(s));
+            m.insert("hostname".into(), Value::from(s));
         } else if let Some(s) = section.strip_prefix('#') {
             let tags: Vec<&str> = s.split(',').collect();
-            m.insert_nocheck("tags".into(), Value::from(tags));
+            m.insert("tags".into(), Value::from(tags));
         } else if let Some(s) = section.strip_prefix("c:") {
-            m.insert_nocheck("container_id".into(), Value::from(s));
+            m.insert("container_id".into(), Value::from(s));
         } else if let Some(s) = section.strip_prefix("m:") {
-            m.insert_nocheck("message".into(), Value::from(s));
+            m.insert("message".into(), Value::from(s));
         }
     }
 
-    map.insert_nocheck("service_check".into(), Value::from(m));
+    unsafe {
+        map.insert_nocheck("service_check".into(), Value::from(m));
+    }
     Ok(Value::from(map))
 }
 
 fn invalid() -> Error {
-    Error::from(ErrorKind::InvalidDogStatsD)
+    Error::InvalidDogStatsD
 }
 
 #[cfg(test)]

@@ -73,7 +73,7 @@ pub fn load(registry: &mut Registry) {
         .insert(tremor_const_fn!(array|zip(_context, _left: Array, _right: Array) {
             if _left.len() != _right.len() {
                 return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Zipping two arrays requires them to have the same length, but the first array provided has {} elements while the second one has {} elements", _left.len(), _right.len())});
-            };
+            }
             // TODO: Dear rust this is stupi! I don't want to call to_owned I just want consume values
             Ok(Value::from(_left.iter()
                 .zip(_right.iter())

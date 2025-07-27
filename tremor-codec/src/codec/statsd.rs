@@ -62,7 +62,7 @@ pub struct StatsD {
 
 #[async_trait::async_trait]
 impl Codec for StatsD {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "statsd"
     }
 
@@ -94,14 +94,14 @@ fn encode(value: &Value, r: &mut impl Write) -> Result<()> {
     r.write_all(
         value
             .get_str("metric")
-            .ok_or(ErrorKind::InvalidStatsD)?
+            .ok_or(Error::InvalidStatsD)?
             .as_bytes(),
     )?;
-    let t = value.get_str("type").ok_or(ErrorKind::InvalidStatsD)?;
-    let val = value.get("value").ok_or(ErrorKind::InvalidStatsD)?;
+    let t = value.get_str("type").ok_or(Error::InvalidStatsD)?;
+    let val = value.get("value").ok_or(Error::InvalidStatsD)?;
     if !val.is_number() {
-        return Err(ErrorKind::InvalidStatsD.into());
-    };
+        return Err(Error::InvalidStatsD);
+    }
 
     r.write_all(b":")?;
     if t == "g" {
@@ -110,7 +110,7 @@ fn encode(value: &Value, r: &mut impl Write) -> Result<()> {
             Some("sub") => r.write_all(b"-")?,
             _ => (),
         }
-    };
+    }
 
     r.write_all(val.encode().as_bytes())?;
     r.write_all(b"|")?;
@@ -139,7 +139,9 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
     let mut m = Object::with_capacity_and_hasher(4, ObjectHasher::default());
 
     let (metric, data) = data.split_once(':').ok_or_else(invalid)?;
-    m.insert_nocheck("metric".into(), Value::from(metric));
+    unsafe {
+        m.insert_nocheck("metric".into(), Value::from(metric));
+    }
 
     let (sign, data) = if let Some(data) = data.strip_prefix('+') {
         (Sign::Plus, data)
@@ -167,14 +169,20 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
 
     let data = if data.starts_with(['c', 'h', 's']) {
         let (t, data) = data.split_at(1);
-        m.insert_nocheck("type".into(), t.into());
+        unsafe {
+            m.insert_nocheck("type".into(), t.into());
+        }
         data
     } else if data.starts_with("ms") {
-        m.insert_nocheck("type".into(), "ms".into());
+        unsafe {
+            m.insert_nocheck("type".into(), "ms".into());
+        }
         data.get(2..).ok_or_else(invalid)?
     } else if data.starts_with('g') {
         let (t, data) = data.split_at(1);
-        m.insert_nocheck("type".into(), t.into());
+        unsafe {
+            m.insert_nocheck("type".into(), t.into());
+        }
         match sign {
             Sign::Plus => {
                 m.insert("action".into(), "add".into());
@@ -191,7 +199,7 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
                 m.insert("action".into(), "sub".into());
             }
             Sign::None => (),
-        };
+        }
         data
     } else {
         data
@@ -201,14 +209,14 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
         m.insert("sample_rate".into(), Value::from(v));
     } else if !data.is_empty() {
         return Err(invalid());
-    };
+    }
 
     m.insert("value".into(), value);
     Ok(Value::from(m))
 }
 
 fn invalid() -> Error {
-    Error::from(ErrorKind::InvalidStatsD)
+    Error::InvalidStatsD
 }
 
 #[cfg(test)]
