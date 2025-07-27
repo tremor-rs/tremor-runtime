@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_markdown, rustdoc::invalid_codeblock_attributes)]
 //! :::note
 //!    Authentication happens over the [GCP autentication](./index.md#GCP)
 //! :::

@@ -17,10 +17,11 @@ mod sink;
 
 use self::sink::{GclSink, TonicChannelFactory};
 use crate::utils::TokenSrc;
-use googapis::google::{api::MonitoredResource, logging::r#type::LogSeverity};
+
+use gcloud_sdk::google::{api::MonitoredResource, logging::r#type::LogSeverity};
+use gcloud_sdk::tonic::transport::Channel;
 use serde::Deserialize;
 use std::collections::HashMap;
-use tonic::transport::Channel;
 use tremor_connectors::{
     config,
     sink::{prelude::*, SinkContext, SinkManagerBuilder},
@@ -164,7 +165,7 @@ impl Config {
         if let Some(has_meta) = meta {
             if let Some(log_severity) = has_meta.get("log_severity") {
                 return log_severity.try_as_i32();
-            };
+            }
         }
 
         Ok(self.default_severity)

@@ -19,13 +19,17 @@ use crate::{
 };
 use anyhow::Result;
 use futures::future::Ready;
-use googapis::google::{
-    cloud::bigquery::storage::v1::{
-        append_rows_response, table_field_schema::Mode, AppendRowsResponse, TableSchema,
+use gcloud_sdk::{
+    google::{
+        cloud::bigquery::storage::v1::{
+            append_rows_response, table_field_schema::Mode, AppendRowsResponse, TableSchema,
+        },
+        rpc::Status,
     },
-    rpc::Status,
+    prost, tonic,
 };
 use http::{HeaderMap, HeaderValue};
+use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 use prost::Message;
 use std::collections::VecDeque;
@@ -33,7 +37,6 @@ use std::fmt::{Display, Formatter};
 use std::sync::{Arc, RwLock};
 use std::task::Poll;
 use tokio::sync::mpsc::channel;
-use tonic::body::BoxBody;
 use tonic::codegen::Service;
 use tremor_common::ids::SinkId;
 use tremor_connectors::{
@@ -84,11 +87,10 @@ struct MockService {
     responses: Arc<RwLock<VecDeque<Vec<u8>>>>,
 }
 
-impl Service<http::Request<BoxBody>> for MockService {
-    type Response = http::Response<tonic::transport::Body>;
+impl<T> Service<http::Request<T>> for MockService {
+    type Response = http::Response<tonic::body::Body>;
     type Error = MockServiceError;
-    type Future =
-        Ready<std::result::Result<http::Response<tonic::transport::Body>, MockServiceError>>;
+    type Future = Ready<std::result::Result<http::Response<tonic::body::Body>, MockServiceError>>;
 
     fn poll_ready(
         &mut self,
@@ -98,32 +100,31 @@ impl Service<http::Request<BoxBody>> for MockService {
     }
 
     #[allow(clippy::unwrap_used, clippy::cast_possible_truncation)] // We don't control the return type here
-    fn call(&mut self, _request: http::Request<BoxBody>) -> Self::Future {
-        let buffer = self.responses.write().unwrap().pop_front().unwrap();
+    fn call(&mut self, request: http::Request<T>) -> Self::Future {
+        dbg!(request.headers());
+        let mut buffer = self.responses.write().unwrap().pop_front().unwrap();
+        let mut len: Vec<u8> = (buffer.len() as u32).to_be_bytes().to_vec();
 
-        let (mut tx, body) = tonic::transport::Body::channel();
-        let jh = tokio::task::spawn(async move {
-            let len: [u8; 4] = (buffer.len() as u32).to_be_bytes();
+        let mut response_buffer = Vec::with_capacity(5 + buffer.len());
+        response_buffer.push(0);
+        response_buffer.append(&mut len);
+        response_buffer.append(&mut buffer);
+        dbg!(&response_buffer);
 
-            let mut response_buffer = vec![0u8];
-            response_buffer.append(&mut len.to_vec());
-            response_buffer.append(&mut buffer.clone());
+        let mut trailers = HeaderMap::with_capacity(2);
 
-            tx.send_data(Bytes::from(response_buffer)).await.unwrap();
-
-            let mut trailers = HeaderMap::new();
-            trailers.insert(
-                "content-type",
-                HeaderValue::from_static("application/grpc+proto"),
-            );
-            trailers.insert("grpc-status", HeaderValue::from_static("0"));
-
-            tx.send_trailers(trailers).await.unwrap();
-        });
-        tokio::task::spawn_blocking(|| jh);
-
-        let response = http::Response::new(body);
-
+        trailers.insert("grpc-status", HeaderValue::from_static("0"));
+        let mut response = http::Response::new(tonic::body::Body::new(
+            Full::<Bytes>::from(response_buffer)
+                .with_trailers(futures::future::ready(Some(Ok(trailers)))),
+        ));
+        response
+            .headers_mut()
+            .append("grpc-encoding", HeaderValue::from_static("identity"));
+        response.headers_mut().append(
+            "content-type",
+            HeaderValue::from_static("application/grpc+proto"),
+        );
         futures::future::ready(Ok(response))
     }
 }
@@ -143,6 +144,8 @@ fn skips_unknown_field_types() {
             max_length: 0,
             precision: 0,
             scale: 0,
+            default_value_expression: String::new(),
+            range_element_type: None,
         }],
         &SinkContext::new(
             SinkId::default(),
@@ -173,6 +176,8 @@ fn skips_fields_of_unspecified_type() {
             max_length: 0,
             precision: 0,
             scale: 0,
+            default_value_expression: String::new(),
+            range_element_type: None,
         }],
         &SinkContext::new(
             SinkId::default(),
@@ -212,6 +217,8 @@ fn can_map_simple_field() {
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             }],
             &SinkContext::new(
                 SinkId::default(),
@@ -248,11 +255,15 @@ fn can_map_a_struct() {
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             }],
             description: String::new(),
             max_length: 0,
             precision: 0,
             scale: 0,
+            default_value_expression: String::new(),
+            range_element_type: None,
         }],
         &SinkContext::new(
             SinkId::default(),
@@ -496,6 +507,8 @@ pub fn mapping_generates_a_correct_descriptor() {
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             },
             TableFieldSchema {
                 name: "b".to_string(),
@@ -506,6 +519,8 @@ pub fn mapping_generates_a_correct_descriptor() {
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             },
         ],
         &ctx,
@@ -546,6 +561,8 @@ pub fn can_map_json_to_protobuf() -> anyhow::Result<()> {
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             },
             TableFieldSchema {
                 name: "b".to_string(),
@@ -556,6 +573,8 @@ pub fn can_map_json_to_protobuf() -> anyhow::Result<()> {
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             },
         ],
         &ctx,
@@ -592,6 +611,8 @@ fn map_field_ignores_fields_that_are_not_in_definition() -> anyhow::Result<()> {
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             },
             TableFieldSchema {
                 name: "b".to_string(),
@@ -602,6 +623,8 @@ fn map_field_ignores_fields_that_are_not_in_definition() -> anyhow::Result<()> {
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             },
         ],
         &ctx,
@@ -642,11 +665,15 @@ fn map_field_ignores_struct_fields_that_are_not_in_definition() -> anyhow::Resul
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             }],
             description: String::new(),
             max_length: 0,
             precision: 0,
             scale: 0,
+            default_value_expression: String::new(),
+            range_element_type: None,
         }],
         &ctx,
     );
@@ -683,6 +710,8 @@ fn fails_on_bytes_type_mismatch() {
             max_length: 0,
             precision: 0,
             scale: 0,
+            default_value_expression: String::new(),
+            range_element_type: None,
         }],
         &ctx,
     );
@@ -721,6 +750,8 @@ fn fails_if_the_event_is_not_an_object() {
             max_length: 0,
             precision: 0,
             scale: 0,
+            default_value_expression: String::new(),
+            range_element_type: None,
         }],
         &ctx,
     );
@@ -829,8 +860,9 @@ pub async fn fails_on_error_response() -> anyhow::Result<()> {
     let mut buffer_append_rows_response = vec![];
 
     let alias = alias::Connector::new("flow", "connector");
+    let write_stream_name = "test".to_string();
     WriteStream {
-        name: "test".to_string(),
+        name: write_stream_name.clone(),
         r#type: i32::from(write_stream::Type::Committed),
         create_time: None,
         commit_time: None,
@@ -844,13 +876,18 @@ pub async fn fails_on_error_response() -> anyhow::Result<()> {
                 max_length: 10,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             }],
         }),
+        location: String::new(),
+        write_mode: WriteMode::Insert as i32,
     }
     .encode(&mut buffer_write_stream)
     .expect("encode failed");
 
     AppendRowsResponse {
+        write_stream: write_stream_name,
         updated_schema: Some(TableSchema {
             fields: vec![TableFieldSchema {
                 name: "newfield".to_string(),
@@ -861,8 +898,11 @@ pub async fn fails_on_error_response() -> anyhow::Result<()> {
                 max_length: 10,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             }],
         }),
+        row_errors: vec![],
         response: Some(append_rows_response::Response::Error(Status {
             code: 1024,
             message: "test failure".to_string(),
@@ -922,9 +962,10 @@ pub async fn splits_large_requests() -> anyhow::Result<()> {
     let mut buffer_append_rows_response = vec![];
     let alias = alias::Connector::new("flow", "connector");
     let mock = gouth_token().await?;
+    let write_stream_name = "test".to_string();
 
     WriteStream {
-        name: "test".to_string(),
+        name: write_stream_name.clone(),
         r#type: i32::from(write_stream::Type::Committed),
         create_time: None,
         commit_time: None,
@@ -938,13 +979,19 @@ pub async fn splits_large_requests() -> anyhow::Result<()> {
                 max_length: 0,
                 precision: 0,
                 scale: 0,
+                default_value_expression: String::new(),
+                range_element_type: None,
             }],
         }),
+        location: String::new(),
+        write_mode: WriteMode::Insert as i32,
     }
     .encode(&mut buffer_write_stream)
     .expect("encode failed");
 
     AppendRowsResponse {
+        write_stream: write_stream_name,
+        row_errors: vec![],
         updated_schema: None,
         response: Some(append_rows_response::Response::AppendResult(AppendResult {
             offset: None,

@@ -18,17 +18,29 @@ use super::Error;
 
 #[cfg(not(test))]
 use gouth::Token;
-use hyper::body::HttpBody as BodyTrait;
-use hyper::{header, Body, Method, Request, Response, StatusCode};
+use http_body_util::combinators::BoxBody;
+use http_body_util::BodyExt as _;
+use hyper::{header, Method, Request, Response, StatusCode};
 use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use log::{debug, error, warn};
+use std::pin::pin;
 use std::time::Duration;
 use tokio::time::sleep;
 use tremor_common::url::{HttpsDefaults, Url};
 use tremor_connectors_object_storage::{BufferPart, ObjectId};
 
-pub(crate) type GcsHttpClient =
-    hyper::Client<hyper_rustls::HttpsConnector<hyper::client::HttpConnector>>;
+/// custom generic body type for resumable upload client
+pub(crate) type RBody = BoxBody<bytes::Bytes, Error>;
+pub(crate) type GcsHttpClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, RBody>;
+
+fn empty_rbody() -> RBody {
+    BoxBody::new(http_body_util::Empty::new().map_err(|_| Error::Impossible))
+}
+
+fn full_rbody<B: Into<bytes::Bytes>>(data: B) -> RBody {
+    BoxBody::new(http_body_util::Full::new(data.into()).map_err(|_| Error::Impossible))
+}
 
 #[async_trait::async_trait]
 pub(crate) trait ResumableUploadClient {
@@ -79,12 +91,12 @@ impl BackoffStrategy for ExponentialBackoffRetryStrategy {
 async fn retriable_request<
     TClient: HttpClientTrait,
     TBackoffStrategy: BackoffStrategy,
-    TMakeRequest: Fn() -> anyhow::Result<hyper::Request<hyper::Body>>,
+    TMakeRequest: Fn() -> anyhow::Result<hyper::Request<RBody>>,
 >(
     backoff_strategy: &TBackoffStrategy,
     client: &mut TClient,
     make_request: TMakeRequest,
-) -> anyhow::Result<Response<Body>> {
+) -> anyhow::Result<Response<RBody>> {
     let max_retries = backoff_strategy.max_retries();
     for i in 1..=max_retries {
         let request = make_request();
@@ -95,17 +107,20 @@ async fn retriable_request<
                 let result = client.request(request).await;
 
                 match result {
-                    Ok(mut response) => {
+                    Ok(response) => {
                         if response.status().is_server_error() {
                             let mut response_body: Vec<u8> = Vec::new();
-                            while let Some(chunk) = response.data().await.transpose()? {
-                                response_body.extend_from_slice(&chunk);
+                            let mut body = pin!(response.into_body());
+
+                            while let Some(chunk) = body.frame().await.transpose()? {
+                                if let Ok(data) = chunk.into_data() {
+                                    response_body.extend_from_slice(data.as_ref());
+                                }
                             }
                             let response_body = String::from_utf8(response_body)?;
 
                             warn!(
-                                "Request {}/{} failed - Server error: {}",
-                                i, max_retries, response_body
+                                "Request {i}/{max_retries} failed - Server error: {response_body}",
                             );
                             sleep(error_wait_time).await;
                             continue;
@@ -114,19 +129,14 @@ async fn retriable_request<
                         return Ok(response);
                     }
                     Err(error) => {
-                        warn!("Request {}/{} failed: {}", i, max_retries, error);
+                        warn!("Request {i}/{max_retries} failed: {error}");
                         sleep(error_wait_time).await;
-                        continue;
                     }
                 }
             }
             Err(error) => {
-                warn!(
-                    "Request {}/{} failed to be created: {}",
-                    i, max_retries, error
-                );
+                warn!("Request {i}/{max_retries} failed to be created: {error}",);
                 sleep(error_wait_time).await;
-                continue;
             }
         }
     }
@@ -150,18 +160,21 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
         url: &Url<HttpsDefaults>,
         bucket: &str,
     ) -> anyhow::Result<bool> {
-        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+        let response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let url = url.join("b/")?.join(bucket)?.to_string();
             Ok(Request::builder()
                 .method(Method::GET)
                 .uri(url)
-                .body(Body::empty())?)
+                .body(empty_rbody())?)
         })
         .await?;
         let status = response.status();
         let mut data: Vec<u8> = Vec::new();
-        while let Some(chunk) = response.data().await.transpose()? {
-            data.extend_from_slice(&chunk);
+        let mut body = pin!(response.into_body());
+        while let Some(chunk) = body.frame().await.transpose()? {
+            if let Ok(chunk_data) = chunk.into_data() {
+                data.extend_from_slice(chunk_data.as_ref());
+            }
         }
         if status == StatusCode::NOT_FOUND {
             Ok(false)
@@ -182,7 +195,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
         url: &Url<HttpsDefaults>,
         file_id: ObjectId,
     ) -> anyhow::Result<url::Url> {
-        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+        let response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             Self::create_upload_start_request(
                 #[cfg(not(test))]
                 &self.token,
@@ -191,16 +204,21 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
             )
         })
         .await?;
+        let status = response.status();
 
-        if response.status().is_server_error() {
+        if status.is_server_error() {
             let mut data: Vec<u8> = Vec::new();
-            while let Some(chunk) = response.data().await.transpose()? {
-                data.extend_from_slice(&chunk);
+            let mut body = response.into_body();
+
+            while let Some(chunk) = body.frame().await.transpose()? {
+                if let Ok(chunk_data) = chunk.into_data() {
+                    data.extend_from_slice(chunk_data.as_ref());
+                }
             }
             let body_string = String::from_utf8(data)?;
             error!("Error from Google Cloud Storage: {body_string}",);
 
-            return Err(Error::Upload(response.status()).into());
+            return Err(Error::Upload(status).into());
         }
 
         Ok(url::Url::parse(
@@ -213,7 +231,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
     }
 
     async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> anyhow::Result<usize> {
-        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+        let response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let request = Request::builder()
                 .method(Method::PUT)
                 .uri(url.to_string())
@@ -228,20 +246,24 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
                 )
                 .header(header::USER_AGENT, "Tremor")
                 .header(header::ACCEPT, "*/*")
-                .body(Body::from(part.data().to_vec()))?;
+                .body(full_rbody(part.data().to_vec()))?;
 
             Ok(request)
         })
         .await?;
+        let status = response.status();
 
-        if response.status().is_server_error() {
+        if status.is_server_error() {
             let mut data: Vec<u8> = Vec::new();
-            while let Some(chunk) = response.data().await.transpose()? {
-                data.extend_from_slice(&chunk);
+            let mut body = response.into_body();
+            while let Some(chunk) = body.frame().await.transpose()? {
+                if let Ok(chunk_data) = chunk.into_data() {
+                    data.extend_from_slice(&chunk_data);
+                }
             }
             let body_string = String::from_utf8(data)?;
             error!("Error from Google Cloud Storage: {body_string}",);
-            return Err(Error::Upload(response.status()).into());
+            return Err(Error::Upload(status).into());
         }
 
         let raw_range = response
@@ -263,32 +285,35 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
     }
 
     async fn delete_upload(&mut self, url: &url::Url) -> anyhow::Result<()> {
-        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+        let response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let request = Request::builder()
                 .method(Method::DELETE)
                 .uri(url.to_string())
-                .body(Body::empty())?;
+                .body(empty_rbody())?;
             Ok(request)
         })
         .await?;
         // dont ask me, see: https://cloud.google.com/storage/docs/performing-resumable-uploads#cancel-upload
-        let status = response.status().as_u16();
-        if status == 499 || status == 204 {
+        let status = response.status();
+        if status.as_u16() == 499 || status == StatusCode::NO_CONTENT {
             Ok(())
         } else {
             let mut data: Vec<u8> = Vec::new();
-            while let Some(chunk) = response.data().await.transpose()? {
-                data.extend_from_slice(&chunk);
+            let mut body = response.into_body();
+            while let Some(chunk) = body.frame().await.transpose()? {
+                if let Ok(chunk_data) = chunk.into_data() {
+                    data.extend_from_slice(&chunk_data);
+                }
             }
             let body_string = String::from_utf8(data)?;
 
             error!("Error from Google Cloud Storage while cancelling an upload: {body_string}",);
-            Err(Error::Delete(response.status()).into())
+            Err(Error::Delete(status).into())
         }
     }
 
     async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> anyhow::Result<()> {
-        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+        let response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let request = Request::builder()
                 .method(Method::PUT)
                 .uri(url.to_string())
@@ -302,22 +327,26 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy + Send + Sync>
                         part.end()
                     ),
                 )
-                .body(Body::from(part.data().to_vec()))?;
+                .body(full_rbody(part.data().to_vec()))?;
 
             Ok(request)
         })
         .await?;
 
-        if response.status().is_server_error() {
+        let status = response.status();
+        if status.is_server_error() {
             let mut data: Vec<u8> = Vec::new();
-            while let Some(chunk) = response.data().await.transpose()? {
-                data.extend_from_slice(&chunk);
+            let mut body = response.into_body();
+            while let Some(chunk) = body.frame().await.transpose()? {
+                if let Ok(chunk_data) = chunk.into_data() {
+                    data.extend_from_slice(&chunk_data);
+                }
             }
             let body_string = String::from_utf8(data)?;
 
             error!("Error from Google Cloud Storage: {body_string}");
 
-            return Err(Error::Upload(response.status()).into());
+            return Err(Error::Upload(status).into());
         }
 
         Ok(())
@@ -346,7 +375,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy>
     fn create_upload_start_request(
         url: &Url<HttpsDefaults>,
         file: &ObjectId,
-    ) -> anyhow::Result<Request<Body>> {
+    ) -> anyhow::Result<Request<RBody>> {
         let url = format!(
             "{}/b/{}/o?name={}&uploadType=resumable",
             url,
@@ -356,7 +385,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy>
         let request = Request::builder()
             .method(Method::POST)
             .uri(url)
-            .body(Body::empty())?;
+            .body(empty_rbody())?;
 
         Ok(request)
     }
@@ -366,7 +395,7 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy>
         token: &Token,
         url: &Url<HttpsDefaults>,
         file: &ObjectId,
-    ) -> anyhow::Result<Request<Body>> {
+    ) -> anyhow::Result<Request<RBody>> {
         let url = format!(
             "{}/b/{}/o?name={}&uploadType=resumable",
             url,
@@ -380,32 +409,37 @@ impl<TClient: HttpClientTrait, TBackoffStrategy: BackoffStrategy>
                 hyper::header::AUTHORIZATION,
                 token.header_value()?.to_string(),
             )
-            .body(Body::empty())?;
+            .body(empty_rbody())?;
 
         Ok(request)
     }
 }
 
-pub(crate) fn create_client(_connect_timeout: Duration) -> GcsHttpClient {
+pub(crate) fn create_client(_connect_timeout: Duration) -> Result<GcsHttpClient, std::io::Error> {
     let https = HttpsConnectorBuilder::new()
-        .with_native_roots()
+        .with_native_roots()?
         .https_or_http()
         .enable_http1()
         .enable_http2()
         .build();
 
-    hyper::Client::builder().build(https)
+    Ok(
+        hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+            .build(https),
+    )
 }
 
 #[async_trait::async_trait]
 pub(crate) trait HttpClientTrait: Send + Sync {
-    async fn request(&self, req: hyper::Request<Body>) -> anyhow::Result<hyper::Response<Body>>;
+    async fn request(&self, req: hyper::Request<RBody>) -> anyhow::Result<hyper::Response<RBody>>;
 }
 
 #[async_trait::async_trait]
 impl HttpClientTrait for GcsHttpClient {
-    async fn request(&self, req: Request<Body>) -> anyhow::Result<Response<Body>> {
-        Ok(self.request(req).await?)
+    async fn request(&self, req: Request<RBody>) -> anyhow::Result<Response<RBody>> {
+        let (parts, body) = self.request(req).await?.into_parts();
+        let resp = Response::from_parts(parts, BoxBody::new(body.map_err(Error::Http)));
+        Ok(resp)
     }
 }
 
@@ -420,7 +454,7 @@ mod tests {
 
     pub(crate) struct MockHttpClient {
         pub handle_request:
-            Box<dyn Fn(Request<Body>) -> anyhow::Result<Response<Body>> + Send + Sync>,
+            Box<dyn Fn(Request<RBody>) -> anyhow::Result<Response<RBody>> + Send + Sync>,
         pub simulate_failure: Arc<AtomicBool>,
         pub simulate_transport_failure: Arc<AtomicBool>,
     }
@@ -433,20 +467,20 @@ mod tests {
 
     #[async_trait::async_trait]
     impl HttpClientTrait for MockHttpClient {
-        async fn request(&self, req: Request<Body>) -> anyhow::Result<Response<Body>> {
+        async fn request(&self, req: Request<RBody>) -> anyhow::Result<Response<RBody>> {
             if self
                 .simulate_transport_failure
                 .swap(false, Ordering::AcqRel)
             {
                 return Ok(Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::empty())?);
+                    .body(empty_rbody())?);
             }
 
             if self.simulate_failure.swap(false, Ordering::AcqRel) {
                 return Ok(Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::empty())?);
+                    .body(empty_rbody())?);
             }
 
             (self.handle_request)(req)
@@ -462,7 +496,7 @@ mod tests {
 
                 let response = Response::builder()
                     .status(StatusCode::OK)
-                    .body(Body::empty())?;
+                    .body(empty_rbody())?;
                 Ok(response)
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
@@ -498,7 +532,7 @@ mod tests {
                 let response = Response::builder()
                     .status(StatusCode::PERMANENT_REDIRECT)
                     .header("Location", "http://example.com/upload_session")
-                    .body(Body::empty())?;
+                    .body(empty_rbody())?;
                 Ok(response)
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
@@ -531,7 +565,7 @@ mod tests {
 
                 let response = Response::builder()
                     .status(StatusCode::NO_CONTENT)
-                    .body(Body::empty())?;
+                    .body(empty_rbody())?;
                 Ok(response)
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
@@ -557,24 +591,27 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     pub async fn can_upload_data() -> anyhow::Result<()> {
         let client = MockHttpClient {
-            handle_request: Box::new(|mut req| {
-                let mut body: Vec<u8> = Vec::new();
-                while let Some(chunk) = futures::executor::block_on(req.data()).transpose()? {
-                    body.extend_from_slice(&chunk);
-                }
-
-                assert_eq!(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9], body);
+            handle_request: Box::new(|req| {
                 assert_eq!(
                     req.headers()
                         .get(header::CONTENT_RANGE)
                         .and_then(|h| h.to_str().ok()),
                     Some("bytes 0-9/*")
                 );
+                let mut body_data: Vec<u8> = Vec::new();
+                let mut body = req.into_body();
+                while let Some(chunk) = futures::executor::block_on(body.frame()).transpose()? {
+                    if let Ok(chunk_data) = chunk.into_data() {
+                        body_data.extend_from_slice(&chunk_data);
+                    }
+                }
+
+                assert_eq!(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9], body_data);
 
                 let response = Response::builder()
                     .status(StatusCode::OK)
                     .header("Range", "bytes=0-10")
-                    .body(Body::empty())?;
+                    .body(empty_rbody())?;
                 Ok(response)
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
@@ -601,7 +638,7 @@ mod tests {
             handle_request: Box::new(|_req| {
                 Ok(Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::empty())?)
+                    .body(empty_rbody())?)
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
@@ -633,7 +670,7 @@ mod tests {
                     Some("bytes 10-12/13")
                 );
 
-                Ok(Response::new(Body::empty()))
+                Ok(Response::new(empty_rbody()))
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
@@ -664,7 +701,7 @@ mod tests {
                 handle_request: Box::new(move |_req| {
                     request_handled_clone.swap(true, Ordering::Acquire);
 
-                    Ok(Response::new(Body::empty()))
+                    Ok(Response::new(empty_rbody()))
                 }),
                 simulate_failure: Arc::new(AtomicBool::new(true)),
                 simulate_transport_failure: Arc::default(),
@@ -673,7 +710,7 @@ mod tests {
                 Ok(Request::builder()
                     .method(Method::GET)
                     .uri("http://example.com")
-                    .body(Body::empty())?)
+                    .body(empty_rbody())?)
             },
         )
         .await?;
@@ -691,7 +728,7 @@ mod tests {
                 handle_request: Box::new(move |_req| {
                     Ok(Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(Body::empty())?)
+                        .body(empty_rbody())?)
                 }),
                 simulate_failure: Arc::new(AtomicBool::new(true)),
                 simulate_transport_failure: Arc::default(),
@@ -700,7 +737,7 @@ mod tests {
                 Ok(Request::builder()
                     .method(Method::GET)
                     .uri("http://example.com")
-                    .body(Body::empty())?)
+                    .body(empty_rbody())?)
             },
         )
         .await;
@@ -716,7 +753,7 @@ mod tests {
         let response = retriable_request(
             &ExponentialBackoffRetryStrategy::new(3, Duration::from_nanos(1)),
             &mut MockHttpClient {
-                handle_request: Box::new(move |_req| Ok(Response::new(Body::empty()))),
+                handle_request: Box::new(move |_req| Ok(Response::new(empty_rbody()))),
                 simulate_failure: Arc::new(AtomicBool::new(true)),
                 simulate_transport_failure: Arc::default(),
             },
@@ -728,7 +765,7 @@ mod tests {
                 Ok(Request::builder()
                     .method(Method::GET)
                     .uri("http://example.com")
-                    .body(Body::empty())?)
+                    .body(empty_rbody())?)
             },
         )
         .await?;

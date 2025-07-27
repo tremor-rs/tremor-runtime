@@ -18,11 +18,13 @@ use crate::{gcl, utils::tests::gouth_token};
 use super::*;
 use anyhow::Result;
 use futures::future::Ready;
-use googapis::google::logging::r#type::LogSeverity;
-use googapis::google::logging::v2::WriteLogEntriesResponse;
+use gcloud_sdk::{
+    google::logging::{r#type::LogSeverity, v2::WriteLogEntriesResponse},
+    prost, prost_types, tonic,
+};
 use http::{HeaderMap, HeaderValue};
+use http_body_util::{BodyExt as _, Full};
 use hyper::body::Bytes;
-use hyper::body::HttpBody;
 use prost::Message;
 use std::task::Poll;
 use std::{
@@ -30,8 +32,7 @@ use std::{
     fmt::{Debug, Display, Formatter},
 };
 use tokio::sync::mpsc::{channel, unbounded_channel};
-use tonic::body::BoxBody;
-use tonic::codegen::Service;
+use tonic::{body::Body, codegen::Service};
 use tremor_common::ids::SinkId;
 use tremor_connectors::{
     harness::Harness,
@@ -64,11 +65,10 @@ impl ChannelFactory<MockService> for MockChannelFactory {
 #[derive(Clone)]
 struct MockService {}
 
-impl Service<http::Request<BoxBody>> for MockService {
-    type Response = http::Response<tonic::transport::Body>;
+impl Service<http::Request<Body>> for MockService {
+    type Response = http::Response<Body>;
     type Error = MockServiceError;
-    type Future =
-        Ready<std::result::Result<http::Response<tonic::transport::Body>, MockServiceError>>;
+    type Future = Ready<std::result::Result<http::Response<Body>, MockServiceError>>;
 
     fn poll_ready(
         &mut self,
@@ -78,35 +78,27 @@ impl Service<http::Request<BoxBody>> for MockService {
     }
 
     #[allow(clippy::unwrap_used, clippy::cast_possible_truncation)] // We don't control the return type here
-    fn call(&mut self, _request: http::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, _request: http::Request<Body>) -> Self::Future {
         let mut buffer = vec![];
 
         WriteLogEntriesResponse {}
             .encode_length_delimited(&mut buffer)
             .unwrap();
 
-        let mut response = tonic::transport::Body::from(buffer);
-        let (mut tx, body) = tonic::transport::Body::channel();
-
-        let jh = tokio::task::spawn(async move {
-            let response = response.data().await.unwrap().unwrap();
-            let len: [u8; 4] = (response.len() as u32).to_ne_bytes();
-            let len = Bytes::from(len.to_vec());
-            tx.send_data(len).await.unwrap();
-            tx.send_data(response).await.unwrap();
-            let mut trailers = HeaderMap::new();
-            trailers.insert(
-                "content-type",
-                HeaderValue::from_static("application/grpc+proto"),
-            );
-            trailers.insert("grpc-status", HeaderValue::from_static("0"));
-            tx.send_trailers(trailers).await.unwrap();
-        });
-        tokio::task::spawn_blocking(|| jh);
-
-        let response = http::Response::new(body);
-
-        futures::future::ready(Ok(response))
+        let mut len: Vec<u8> = (buffer.len() as u32).to_be_bytes().to_vec();
+        let mut response_buffer = Vec::with_capacity(4 + buffer.len());
+        response_buffer.append(&mut len);
+        response_buffer.append(&mut buffer);
+        let mut trailers = HeaderMap::with_capacity(2);
+        trailers.insert(
+            "content-type",
+            HeaderValue::from_static("application/grpc+proto"),
+        );
+        trailers.insert("grpc-status", HeaderValue::from_static("0"));
+        futures::future::ready(Ok(http::Response::new(tonic::body::Body::new(
+            Full::<Bytes>::from(response_buffer)
+                .with_trailers(futures::future::ready(Some(Ok(trailers)))),
+        ))))
     }
 }
 

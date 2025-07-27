@@ -13,12 +13,10 @@
 // limitations under the License.
 
 use super::*;
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body,
-};
-use std::{convert::Infallible, io::Write, net::ToSocketAddrs};
-use tokio::task::JoinHandle;
+use hyper::service::service_fn;
+use hyper_util::rt::{TokioExecutor, TokioIo};
+use std::{io::Write, net::ToSocketAddrs};
+use tokio::{net::TcpListener, task::JoinHandle};
 use tremor_connectors_test_helpers::free_port;
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -68,7 +66,7 @@ PX8efvDMhv16QqDFF0k80d0=
 
 pub struct GouthMock {
     file: tempfile::TempPath,
-    server_handle: JoinHandle<Result<(), hyper::Error>>,
+    server_handle: JoinHandle<Result<(), anyhow::Error>>,
 }
 impl GouthMock {
     pub fn cert_file(&self) -> String {
@@ -99,27 +97,39 @@ pub async fn gouth_token() -> anyhow::Result<GouthMock> {
     let sa_str = simd_json::serde::to_string_pretty(&sa)?;
     file.as_file_mut().write_all(sa_str.as_bytes())?;
 
-    let service_fn = make_service_fn(|_| async {
-        Ok::<_, Infallible>(service_fn(|_| async {
-            println!("serving");
-            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(hyper::Response::builder().body(
-                Body::from(simd_json::serde::to_vec(&TokenResponse {
-                    token_type: "snot".to_string(),
-                    access_token: "access_token".to_string(),
-                    expires_in: 100_000_000,
-                })?),
-            )?)
-        }))
-    });
-
     let addr = ("127.0.0.1", port)
         .to_socket_addrs()?
         .next()
         .expect("no address");
+
     let server_handle = tokio::task::spawn(async move {
         println!("starting server on {addr:?}");
-        let listener = hyper::Server::bind(&addr).serve(service_fn);
-        dbg!(listener.await)
+        let listener = TcpListener::bind(addr).await?;
+        let service = service_fn(|_req: hyper::http::Request<hyper::body::Incoming>| async {
+            println!("serving");
+            let response = simd_json::serde::to_vec(&TokenResponse {
+                token_type: "snot".to_string(),
+                access_token: "access_token".to_string(),
+                expires_in: 100_000_000,
+            })?;
+            Ok::<_, anyhow::Error>(hyper::Response::builder().body(http_body_util::Full::new(
+                hyper::body::Bytes::from(response),
+            ))?)
+        });
+        loop {
+            let (tcp_stream, _peer_addr) = listener.accept().await?;
+            let io = TokioIo::new(tcp_stream);
+            tokio::spawn(async move {
+                if let Err(e) = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+                    .http2()
+                    .serve_connection_with_upgrades(io, service)
+                    .await
+                {
+                    log::error!("Error serving gouth mock token: {e}");
+                }
+                Result::<(), anyhow::Error>::Ok(())
+            });
+        }
     });
 
     Ok(GouthMock {

@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(clippy::doc_markdown)]
-
+#![allow(clippy::doc_markdown, rustdoc::invalid_codeblock_attributes)]
 //! ## `gcs_streamer`
 //!
 //! This connector provides the ability to stream events into Google Cloud Storage.
@@ -153,6 +152,10 @@ enum Error {
     MissingLocationHeader,
     #[error("Missing or invalid range header")]
     MissingOrInvalidRangeHeader,
+    #[error(transparent)]
+    Http(#[from] hyper::Error),
+    #[error("Should never happen")]
+    Impossible,
 }
 
 #[cfg(test)]

@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use gcloud_sdk::tonic;
 use gouth::Token;
 use log::error;
 use simd_json_derive::Serialize;
-use std::sync::Arc;
-use std::time::Duration;
-use tonic::metadata::MetadataValue;
-use tonic::service::Interceptor;
-use tonic::{Request, Status};
+use std::{sync::Arc, time::Duration};
+use tonic::{metadata::MetadataValue, service::Interceptor, Request, Status};
 use tremor_value::value::StaticValue;
 
 #[cfg(test)]
@@ -28,8 +26,8 @@ pub(crate) mod tests;
 #[async_trait::async_trait]
 pub(crate) trait ChannelFactory<
     TChannel: tonic::codegen::Service<
-            http::Request<tonic::body::BoxBody>,
-            Response = http::Response<tonic::transport::Body>,
+            http::Request<tonic::body::Body>,
+            Response = http::Response<tonic::body::Body>,
         > + Clone,
 >
 {
@@ -118,10 +116,10 @@ impl AuthInterceptor {
 impl Interceptor for AuthInterceptor {
     fn call(&mut self, mut request: Request<()>) -> ::std::result::Result<Request<()>, Status> {
         let header_value = self.get_token()?;
-        let metadata_value = match MetadataValue::from_str(header_value.as_str()) {
+        let metadata_value = match MetadataValue::try_from(header_value.as_bytes()) {
             Ok(val) => val,
             Err(e) => {
-                error!("Failed to get token: {}", e);
+                error!("Failed to get token: {e}");
 
                 return Err(Status::unavailable(
                     "Failed to retrieve authentication token.",

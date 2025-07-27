@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use crate::gouth_token;
-use googapis::google::pubsub::v1::publisher_client::PublisherClient;
-use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{
-    GetSubscriptionRequest, PublishRequest, PubsubMessage, Subscription, Topic,
+use gcloud_sdk::{
+    google::pubsub::v1::{
+        publisher_client::PublisherClient, subscriber_client::SubscriberClient,
+        GetSubscriptionRequest, PublishRequest, PubsubMessage, Subscription, Topic,
+    },
+    tonic,
 };
 use serial_test::serial;
 use std::collections::HashMap;
@@ -69,6 +71,9 @@ async fn create_subscription(
             schema_settings: None,
             satisfies_pzs: false,
             message_retention_duration: None,
+            ingestion_data_source_settings: None,
+            message_transforms: vec![],
+            state: 0,
         })
         .await?;
 
@@ -89,6 +94,12 @@ async fn create_subscription(
             retry_policy: None,
             detached: false,
             topic_message_retention_duration: None,
+            analytics_hub_subscription_info: None,
+            bigquery_config: None,
+            cloud_storage_config: None,
+            enable_exactly_once_delivery: false,
+            message_transforms: vec![],
+            state: 0,
         })
         .await?;
     // assert the system knows about our subscription now

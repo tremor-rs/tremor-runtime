@@ -13,9 +13,12 @@
 // limitations under the License.
 
 use crate::gouth_token;
-use googapis::google::pubsub::v1::{
-    publisher_client::PublisherClient, subscriber_client::SubscriberClient, PullRequest,
-    Subscription, Topic,
+use gcloud_sdk::{
+    google::pubsub::v1::{
+        publisher_client::PublisherClient, subscriber_client::SubscriberClient, PullRequest,
+        Subscription, Topic,
+    },
+    tonic,
 };
 use serial_test::serial;
 use std::collections::{HashMap, HashSet};
@@ -113,6 +116,9 @@ async fn simple_publish() -> anyhow::Result<()> {
             schema_settings: None,
             satisfies_pzs: false,
             message_retention_duration: None,
+            state: 0, // output only
+            ingestion_data_source_settings: None,
+            message_transforms: vec![],
         })
         .await?;
     subscriber
@@ -131,6 +137,12 @@ async fn simple_publish() -> anyhow::Result<()> {
             retry_policy: None,
             detached: false,
             topic_message_retention_duration: None,
+            analytics_hub_subscription_info: None,
+            bigquery_config: None,
+            cloud_storage_config: None,
+            enable_exactly_once_delivery: true,
+            message_transforms: vec![],
+            state: 0, // output only
         })
         .await?;
 
@@ -212,6 +224,9 @@ async fn simple_publish_with_timeout() -> anyhow::Result<()> {
             schema_settings: None,
             satisfies_pzs: false,
             message_retention_duration: None,
+            state: 0, // output only
+            ingestion_data_source_settings: None,
+            message_transforms: vec![],
         })
         .await?;
     subscriber
@@ -230,6 +245,12 @@ async fn simple_publish_with_timeout() -> anyhow::Result<()> {
             retry_policy: None,
             detached: false,
             topic_message_retention_duration: None,
+            analytics_hub_subscription_info: None,
+            bigquery_config: None,
+            cloud_storage_config: None,
+            enable_exactly_once_delivery: true,
+            message_transforms: vec![],
+            state: 0, // output only
         })
         .await?;
 

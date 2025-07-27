@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use googapis::google::logging::{
-    r#type::HttpRequest,
-    v2::{LogEntryOperation, LogEntrySourceLocation},
+use gcloud_sdk::{
+    google::logging::{
+        r#type::HttpRequest,
+        v2::{LogEntryOperation, LogEntrySourceLocation},
+    },
+    prost_types,
 };
 use prost_types::Timestamp;
 use tremor_value::prelude::*;
@@ -83,7 +86,9 @@ pub(crate) fn http_request(meta: Option<&Value>) -> Option<HttpRequest> {
             .to_string(),
         latency: match http_request.get("latency").as_u64().unwrap_or(0) {
             0 => None,
-            otherwise => Some(std::time::Duration::from_nanos(otherwise).into()),
+            otherwise => {
+                prost_types::Duration::try_from(std::time::Duration::from_nanos(otherwise)).ok()
+            }
         },
         cache_lookup: http_request.get("cache_lookup").as_bool().unwrap_or(false),
         cache_hit: http_request.get("cache_hit").as_bool().unwrap_or(false),
@@ -128,7 +133,7 @@ pub(crate) fn trace_sampled(meta: Option<&Value>) -> Result<bool, TryTypeError> 
     // Override for a specific per event severity
     if let Some(trace_sampled) = meta.get("trace_sampled") {
         return trace_sampled.try_as_bool();
-    };
+    }
 
     Ok(false)
 }
@@ -155,7 +160,7 @@ mod test {
     use super::super::Config;
     use super::*;
 
-    use googapis::google::logging::r#type::LogSeverity;
+    use gcloud_sdk::google::logging::r#type::LogSeverity;
     use std::collections::HashMap as StdHashMap;
     use tremor_config::Impl;
 
@@ -323,7 +328,7 @@ mod test {
             assert_eq!(0, http_request.cache_fill_bytes);
             assert_eq!("websocket", http_request.protocol);
             ok_count += 1;
-        };
+        }
 
         let meta = literal!({
             "http_request": {
