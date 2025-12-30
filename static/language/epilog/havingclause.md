@@ -5,7 +5,7 @@ having present event.important
 into out
 ```
 
-The `having` filters events __after__ computations has occured within them in operators
+The `having` filters events __after__ computations has occurred within them in operators
 that support the clause. Any predicate ( boolean ) expression can be used
 in a `having` filter.
 
