@@ -273,7 +273,7 @@
 - Add support for `chunked` requests and responses for the HTTP connectors
 - Add the `gbq` connector for Google BigQuery
 - Add support for `tuple patterns` inside of record patterns.
-- Refactor visitors to seperate walker and visitor and visit all nodes.
+- Refactor visitors to separate walker and visitor and visit all nodes.
 - Add support for modular subqueries in Trickle
 - Add `check_topic_metadata` configuration flag to kafka source to bypass topic metadata fetch
 - port `json!` improvements to `literal!`
@@ -370,7 +370,7 @@
 - Fix GCS go-auth token refresh
 - Fix `create script` syntax for aliased scripts with overridden `params`
 - Add benchmark names to benchmark tags
-- Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
+- Kafka onramp: Remove failing metadata fetch in order to verify topic existence. Instead detect subscription errors and stop the onramp in that case.
 - Unix offramp: Add the missing StartStream message
 - tremor-script: Add more details about Unicode in the documentation of the `string` module
 - Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
@@ -391,7 +391,7 @@
 
 ### Fixes
 
-- Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
+- Kafka onramp: Remove failing metadata fetch in order to verify topic existence. Instead detect subscription errors and stop the onramp in that case.
 
 
 ## [0.11.8]

@@ -8,7 +8,7 @@ Commands are separated with a `;`. This can be seen in top-level troy, trickle, 
 
 ## data
 
-Data is seperated by `,` this can be seen in arrays and records as well as in the window declerators for select and the with and args part of troy and trickle defines and creates
+Data is separated by `,` this can be seen in arrays and records as well as in the window declerators for select and the with and args part of troy and trickle defines and creates
 
 
 # order of arguments in commands
